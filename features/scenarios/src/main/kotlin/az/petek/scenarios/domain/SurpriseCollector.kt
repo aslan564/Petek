@@ -208,28 +208,31 @@ class SurpriseCollector(
 
         private fun stepFact(step: StepRecord): String =
             buildString {
-                append("[${step.stepId}] ${step.kind} ${clip(step.action, MAX_FIELD)} -> ${step.status} (${step.durationMs} ms)")
-                step.llmReason?.takeIf { it.isNotBlank() }?.let { append("; agent's reason: ").append(clip(it, MAX_FIELD)) }
-                step.detail?.takeIf { it.isNotBlank() }?.let { append("; observed: ").append(clip(it, MAX_FIELD)) }
+                append("[${step.stepId}] ${step.kind} ${field(step.action)} -> ${step.status} (${step.durationMs} ms)")
+                step.llmReason?.takeIf { it.isNotBlank() }?.let { append("; agent's reason: ").append(field(it)) }
+                step.detail?.takeIf { it.isNotBlank() }?.let { append("; observed: ").append(field(it)) }
             }
 
         private fun assertionFact(assertion: AssertionRecord): String =
             buildString {
                 append("[${assertion.stepId}] assertion ${assertion.type} (${assertion.source}) -> ${assertion.verdict}")
-                append("; expected: ").append(clip(assertion.expected, MAX_FIELD))
-                append("; observed: ").append(clip(assertion.observed ?: "-", MAX_FIELD))
+                append("; expected: ").append(field(assertion.expected))
+                append("; observed: ").append(field(assertion.observed ?: "-"))
                 assertion.latencyMs?.let { append("; latency: $it ms") }
-                assertion.note?.takeIf { it.isNotBlank() }?.let { append("; note: ").append(clip(it, MAX_FIELD)) }
+                assertion.note?.takeIf { it.isNotBlank() }?.let { append("; note: ").append(field(it)) }
             }
 
         private fun findingFact(finding: FindingRecord): String =
             buildString {
                 append("[${finding.findingId}] finding ${finding.findingClass}")
-                finding.a?.let { append("; A (sender): ").append(clip(it, MAX_FIELD)) }
-                finding.b?.let { append("; B (receiver): ").append(clip(it, MAX_FIELD)) }
-                finding.c?.let { append("; C (oracle): ").append(clip(it, MAX_FIELD)) }
-                append("; note: ").append(clip(finding.note, MAX_FIELD))
+                finding.a?.let { append("; A (sender): ").append(field(it)) }
+                finding.b?.let { append("; B (receiver): ").append(field(it)) }
+                finding.c?.let { append("; C (oracle): ").append(field(it)) }
+                append("; note: ").append(field(finding.note))
             }
+
+        /** Redacted before it is clipped, so a secret cut at the limit cannot leak partly. */
+        private fun field(text: String): String = clip(redactor.redact(text), MAX_FIELD)
 
         private fun artifactFact(id: ArtifactId): String {
             val record = artifactsById[id] ?: return "[$id] artifact"

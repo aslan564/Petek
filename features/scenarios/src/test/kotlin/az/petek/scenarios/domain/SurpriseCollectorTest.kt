@@ -297,6 +297,16 @@ class SurpriseCollectorTest {
                             StepStatus.FAILED,
                             "login_failed: password=Gizli-Parol-2026",
                         ),
+                        // A secret right at the clipping limit must not survive in part.
+                        step(
+                            "stp_x3",
+                            "a03",
+                            "announce",
+                            StepKind.DO,
+                            "click [1]",
+                            StepStatus.PASSED,
+                            "x".repeat(SurpriseCollector.MAX_FIELD - 8) + " Gizli-Parol-2026",
+                        ),
                     ),
                 assertions = emptyList(),
                 findings = emptyList(),
@@ -306,7 +316,7 @@ class SurpriseCollectorTest {
         val surprise = secretCollector.collect(RUN, MINI_CAMPAIGN, leaky).surprises.single()
 
         (surprise.evidence.facts + surprise.text).forEach {
-            it shouldNotContain "Gizli-Parol-2026"
+            it shouldNotContain "Gizli-Par"
             it shouldNotContain "abcdef"
         }
     }

@@ -38,7 +38,7 @@ flowchart TD
   verification --> browser & oracle & evidence & campaign
   reporting --> evidence
   identity & evidence & scenarios --> sqlite
-  campaign & identity & evidence & mail & oracle & browser & llm --> core[core/domain]
+  campaign & identity & evidence & mail & oracle & browser & llm & scenarios --> core[core/domain]
 ```
 
 Inside a feature, `domain` imports nothing from `application` or `infrastructure`, and nothing from frameworks.

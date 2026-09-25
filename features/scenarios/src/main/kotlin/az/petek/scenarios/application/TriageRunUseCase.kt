@@ -231,17 +231,7 @@ class TriageRunUseCase(
         artifactsByStep: Map<StepId, List<String>>,
     ): List<EvidenceRef> {
         val known = surprise.evidence.refs.associateBy { it.id }
-        val refs =
-            cited
-                .mapNotNull {
-                    known[
-                        it
-                            .trim()
-                            .removePrefix("[")
-                            .removeSuffix("]")
-                            .trim(),
-                    ]
-                }.distinct()
+        val refs = cited.mapNotNull { known[bareId(it)] }.distinct()
         if (refs.isEmpty()) return surprise.evidence.refs
         val artifacts =
             refs
@@ -250,6 +240,14 @@ class TriageRunUseCase(
                 .mapNotNull { known[it] }
         return (refs + artifacts).distinct()
     }
+
+    /** `[stp_3]` or ` stp_3 ` as the model may write it -> `stp_3`. */
+    private fun bareId(ref: String): String =
+        ref
+            .trim()
+            .removePrefix("[")
+            .removeSuffix("]")
+            .trim()
 
     private suspend fun proposal(
         context: TriageContext,
