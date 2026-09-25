@@ -5,6 +5,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -67,47 +68,60 @@ internal class BrowserServerProcess private constructor(
         /**
          * Starts [command] and waits until it prints its endpoint. Fails with a [BrowserActionException] that carries
          * the process output when it exits first or stays silent past [startupTimeout]; the process tree is killed
-         * in every failure case, including cancellation of the caller.
+         * in every failure case, including cancellation of the caller (even once the server was already ready).
          */
         suspend fun start(
             command: ProcessBuilder,
             startupTimeout: Duration,
-        ): BrowserServerProcess =
-            withContext(Dispatchers.IO) {
-                val process =
-                    try {
-                        command.start()
-                    } catch (e: IOException) {
-                        throw BrowserActionException("could not start the browser server process: ${e.message}", e)
-                    }
-                val output = OutputTail()
-                val endpoint = CompletableDeferred<String?>()
-                val stderrReader = drain("browser-server-stderr", process.errorStream) { output.add(it) }
-                drain("browser-server-stdout", process.inputStream, onEnd = { endpoint.complete(null) }) { line ->
-                    if (line.startsWith(ENDPOINT_PREFIX)) {
-                        endpoint.complete(line.removePrefix(ENDPOINT_PREFIX).trim())
-                    } else {
-                        output.add(line)
-                    }
-                }
+        ): BrowserServerProcess {
+            var ready: BrowserServerProcess? = null
+            try {
+                return withContext(Dispatchers.IO) { startAndAwaitEndpoint(command, startupTimeout).also { ready = it } }
+            } catch (e: CancellationException) {
+                // Cancelled while the ready server was being handed back: nobody else will ever stop it.
+                ready?.let { server -> withContext(NonCancellable + Dispatchers.IO) { server.stop() } }
+                throw e
+            }
+        }
+
+        private suspend fun startAndAwaitEndpoint(
+            command: ProcessBuilder,
+            startupTimeout: Duration,
+        ): BrowserServerProcess {
+            val process =
                 try {
-                    val ws = withTimeout(startupTimeout) { endpoint.await() }
-                    if (ws != null) return@withContext BrowserServerProcess(process, ws)
-                    process.awaitExit(ESCALATION_WAIT)
-                    stderrReader.join(ESCALATION_WAIT.inWholeMilliseconds)
-                    val status = if (process.isAlive) "closed its output" else "exited with code ${process.exitValue()}"
-                    throw BrowserActionException("the browser server $status before it was ready:\n$output")
-                } catch (e: TimeoutCancellationException) {
-                    killAll(process.tree())
-                    throw BrowserActionException("the browser server did not become ready within $startupTimeout:\n$output", e)
-                } catch (e: CancellationException) {
-                    killAll(process.tree())
-                    throw e
-                } catch (e: BrowserActionException) {
-                    killAll(process.tree())
-                    throw e
+                    command.start()
+                } catch (e: IOException) {
+                    throw BrowserActionException("could not start the browser server process: ${e.message}", e)
+                }
+            val output = OutputTail()
+            val endpoint = CompletableDeferred<String?>()
+            val stderrReader = drain("browser-server-stderr", process.errorStream) { output.add(it) }
+            drain("browser-server-stdout", process.inputStream, onEnd = { endpoint.complete(null) }) { line ->
+                if (line.startsWith(ENDPOINT_PREFIX)) {
+                    endpoint.complete(line.removePrefix(ENDPOINT_PREFIX).trim())
+                } else {
+                    output.add(line)
                 }
             }
+            try {
+                val ws = withTimeout(startupTimeout) { endpoint.await() }
+                if (ws != null) return BrowserServerProcess(process, ws)
+                process.awaitExit(ESCALATION_WAIT)
+                stderrReader.join(ESCALATION_WAIT.inWholeMilliseconds)
+                val status = if (process.isAlive) "closed its output" else "exited with code ${process.exitValue()}"
+                throw BrowserActionException("the browser server $status before it was ready:\n$output")
+            } catch (e: TimeoutCancellationException) {
+                killAll(process.tree())
+                throw BrowserActionException("the browser server did not become ready within $startupTimeout:\n$output", e)
+            } catch (e: CancellationException) {
+                killAll(process.tree())
+                throw e
+            } catch (e: BrowserActionException) {
+                killAll(process.tree())
+                throw e
+            }
+        }
 
         private fun drain(
             name: String,

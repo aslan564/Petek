@@ -9,9 +9,16 @@ import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Request
 import com.microsoft.playwright.Response
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlin.time.DurationUnit
+import kotlin.time.Duration
 
 private val logger = KotlinLogging.logger {}
+
+/**
+ * This duration as a Playwright timeout in milliseconds: at least 1 ms, because Playwright reads 0 as "never time
+ * out", and at most [Int.MAX_VALUE] ms, because the Node.js driver's timers fire at once for longer delays (so a
+ * [Duration.INFINITE] wait would otherwise end immediately).
+ */
+internal fun Duration.toPlaywrightTimeout(): Double = inWholeMilliseconds.coerceIn(1L, Int.MAX_VALUE.toLong()).toDouble()
 
 /**
  * The Playwright objects owned by one session: its own [Playwright] instance (driver process), the browser it got
@@ -53,7 +60,7 @@ internal class PlaywrightHandles private constructor(
             try {
                 val browser = connector.connect(playwright)
                 val context = browser.newContext(contextOptions(options))
-                context.setDefaultTimeout(options.defaultTimeout.toDouble(DurationUnit.MILLISECONDS))
+                context.setDefaultTimeout(options.defaultTimeout.toPlaywrightTimeout())
                 val page = context.newPage()
                 observeRealtimeTraffic(page, traffic, clock)
                 return PlaywrightHandles(playwright, browser, context, page)

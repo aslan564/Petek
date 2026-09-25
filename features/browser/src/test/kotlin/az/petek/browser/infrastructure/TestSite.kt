@@ -66,6 +66,12 @@ internal class TestSite : AutoCloseable {
                 get("/ws") { call.respondText(WEBSOCKET_PAGE, ContentType.Text.Html) }
                 get("/slow") { call.respondText(SLOW_PAGE, ContentType.Text.Html) }
                 get("/env") { call.respondText(ENV_PAGE, ContentType.Text.Html) }
+                get("/csp") {
+                    call.response.headers.append("Content-Security-Policy", "default-src 'self'; script-src 'self'")
+                    call.respondText(CSP_PAGE, ContentType.Text.Html)
+                }
+                get("/csp.js") { call.respondText(CSP_SCRIPT, ContentType.Text.JavaScript) }
+                get("/shadow") { call.respondText(SHADOW_PAGE, ContentType.Text.Html) }
             }
         }.start(wait = false)
 
@@ -136,6 +142,15 @@ internal class TestSite : AutoCloseable {
             <label>Köhnə şifrə <input id="old" type="password" value="server-rendered-secret"></label>
             <label>Yeni şifrə <input id="new" type="text" autocomplete="new-password"></label>
             <label>Şifrə <input id="current" type="password"></label>
+            <button id="reveal" onclick="reveal()">Şifrəni göstər</button>
+            <p id="echo"></p>
+            <script>
+              function reveal() {
+                var field = document.getElementById('current');
+                field.type = 'text';
+                document.getElementById('echo').textContent = 'Daxil etdiyiniz şifrə: ' + field.value;
+              }
+            </script>
             </body></html>
             """.trimIndent()
 
@@ -218,6 +233,48 @@ internal class TestSite : AutoCloseable {
             <script>
               document.getElementById('env').textContent =
                 navigator.language + '|' + Intl.DateTimeFormat().resolvedOptions().timeZone;
+            </script>
+            </body></html>
+            """.trimIndent()
+
+        /** Served with a Content-Security-Policy that forbids inline scripts and `eval`, as hardened sites do. */
+        val CSP_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>CSP</title></head><body>
+            <p>Salam</p>
+            <script src="/csp.js"></script>
+            </body></html>
+            """.trimIndent()
+
+        val CSP_SCRIPT =
+            """
+            setTimeout(function () {
+              var late = document.createElement('p');
+              late.id = 'late';
+              late.textContent = 'Gec mətn';
+              document.body.appendChild(late);
+            }, 300);
+            """.trimIndent()
+
+        /** A web component: its text lives in an open shadow root, as in design-system toasts and badges. */
+        val SHADOW_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Kölgə</title></head><body>
+            <p>Adi mətn</p>
+            <petek-toast message="Kölgədə bildiriş"></petek-toast>
+            <petek-toast message="Gizli kölgə" style="display:none"></petek-toast>
+            <script>
+              customElements.define('petek-toast', class extends HTMLElement {
+                connectedCallback() {
+                  const root = this.attachShadow({ mode: 'open' });
+                  const message = this.getAttribute('message');
+                  setTimeout(function () {
+                    root.innerHTML = '<style>div { color: teal }</style><div class="toast">' + message + '</div><button>Bağla</button>';
+                  }, 300);
+                }
+              });
             </script>
             </body></html>
             """.trimIndent()

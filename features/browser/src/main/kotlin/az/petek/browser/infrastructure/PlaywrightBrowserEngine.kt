@@ -105,9 +105,10 @@ class PlaywrightBrowserEngine internal constructor(
 
     private suspend fun startSharedServer(config: BrowserEngineConfig): RunningEngine {
         val options = BrowserServerOptions(headless = config.headless, executablePath = settings.chromiumExecutable)
+        val command = withContext(Dispatchers.IO) { driver.browserServerCommand(options.toJson()) }
         val server =
             try {
-                BrowserServerProcess.start(driver.browserServerCommand(options.toJson()), settings.serverStartTimeout)
+                BrowserServerProcess.start(command, settings.serverStartTimeout)
             } catch (e: BrowserActionException) {
                 throw BrowserActionException("could not start the shared Chromium browser server: ${e.message}", e)
             }

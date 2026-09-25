@@ -19,11 +19,14 @@ import com.microsoft.playwright.options.SelectOption
 import com.microsoft.playwright.options.WaitForSelectorState
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.exists
 import kotlin.time.Duration
@@ -46,9 +49,11 @@ private val logger = KotlinLogging.logger {}
  *   `getByText(...).waitFor()`, whose retries back off to 500 ms and would blur a real-time latency (t1 − t0).
  *   Text matching follows `getByText`: case-insensitive, whitespace-normalized substring of the rendered text.
  *   Selectors that are plain CSS are probed the same way; Playwright-only syntax (`text=…`) uses a locator wait.
+ * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
- *   text typed with [fill] is masked in error messages.
+ *   text typed with [fill] is masked in error messages. Text typed into a password field is remembered and masked
+ *   in every later snapshot and [readText], even after the page reveals the field or echoes the value.
  * - Failures surface as [BrowserActionException] with a short reason. After [close], calls fail the same way.
  */
 internal class PlaywrightBrowserSession private constructor(
@@ -62,20 +67,26 @@ internal class PlaywrightBrowserSession private constructor(
     private val closed = AtomicBoolean(false)
     private val page: Page get() = handles.page
 
+    /** Text this session typed into secret fields; masked in everything read back later. Session thread only. */
+    private val typedSecrets = LinkedHashSet<String>()
+
     override val label: String get() = options.label
 
     /** Name of the thread every Playwright call of this session runs on. */
     val threadName: String get() = thread.name
 
     override suspend fun navigate(pathOrUrl: String) {
+        requireWebAddress(pathOrUrl)
         perform("navigate to $pathOrUrl") { page.navigate(pathOrUrl) }
     }
 
     override suspend fun snapshot(): PageSnapshot =
         perform("snapshot") {
-            surviveNavigation {
-                SnapshotParser.parse(page.evaluate(BundledScripts.pageIndexer, SnapshotLimits().asScriptArgument()))
-            }
+            val snapshot =
+                surviveNavigation {
+                    SnapshotParser.parse(page.evaluate(BundledScripts.pageIndexer, SnapshotLimits().asScriptArgument()))
+                }
+            SecretRedactor.redactSnapshot(snapshot, typedSecrets)
         }
 
     override suspend fun click(ref: Int) {
@@ -89,7 +100,7 @@ internal class PlaywrightBrowserSession private constructor(
     ) {
         perform("fill [$ref]", typedText = text) {
             val element = elementByRef(ref)
-            element.fill(text)
+            fillInto(element, text)
             if (submit) element.press("Enter")
         }
     }
@@ -109,7 +120,7 @@ internal class PlaywrightBrowserSession private constructor(
         selector: String,
         text: String,
     ) {
-        perform("fill $selector", typedText = text) { firstVisible(selector).fill(text) }
+        perform("fill $selector", typedText = text) { fillInto(firstVisible(selector), text) }
     }
 
     override suspend fun selectSelector(
@@ -122,7 +133,7 @@ internal class PlaywrightBrowserSession private constructor(
     override suspend fun readText(selector: String): String? =
         perform("read text of $selector") {
             val matches = page.locator(selector)
-            if (matches.count() == 0) null else matches.first().innerText().trim()
+            if (matches.count() == 0) null else SecretRedactor.redactText(matches.first().innerText().trim(), typedSecrets)
         }
 
     override suspend fun readAttribute(
@@ -144,7 +155,7 @@ internal class PlaywrightBrowserSession private constructor(
         timeout: Duration,
     ): WaitOutcome =
         perform("wait for $selector") {
-            if (page.evaluate(BundledScripts.isCssSelector, selector) == true) {
+            if (surviveNavigation { page.evaluate(BundledScripts.isCssSelector, selector) } == true) {
                 awaitProbe(mapOf("selector" to selector), timeout)
             } else {
                 awaitLocator(page.locator(selector), timeout)
@@ -164,12 +175,18 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun accessibilitySnapshot(): String =
         perform("accessibility snapshot") {
-            surviveNavigation { SecretRedactor.redactAriaSnapshot(page.locator("body").ariaSnapshot(), secretValues()) }
+            surviveNavigation {
+                val (aria, secrets) = withSecretValues { page.locator("body").ariaSnapshot() }
+                SecretRedactor.redactAriaSnapshot(aria, secrets)
+            }
         }
 
     override suspend fun domSnapshot(): String =
         perform("DOM snapshot") {
-            surviveNavigation { SecretRedactor.redactText(page.evaluate(BundledScripts.domSnapshot) as? String ?: "", secretValues()) }
+            surviveNavigation {
+                val (html, secrets) = withSecretValues { page.evaluate(BundledScripts.domSnapshot) as? String ?: "" }
+                SecretRedactor.redactText(html, secrets)
+            }
         }
 
     override suspend fun saveStorageState(path: Path) {
@@ -207,13 +224,16 @@ internal class PlaywrightBrowserSession private constructor(
             traffic.observation()
         }
 
-    /** Idempotent. Releases the context, the browser connection (or own browser) and the Playwright driver. */
+    /**
+     * Idempotent. Releases the context, the browser connection (or own browser) and the Playwright driver once the
+     * call already running on the session thread (if any) has finished; calls still queued fail as closed.
+     */
     override suspend fun close() {
         if (!closed.compareAndSet(false, true)) return
         try {
             thread.runToCompletion { handles.release() }
         } finally {
-            thread.close()
+            withContext(NonCancellable + Dispatchers.IO) { thread.close() }
             onClosed(this)
             logger.debug { "browser session '$label' closed" }
         }
@@ -226,14 +246,35 @@ internal class PlaywrightBrowserSession private constructor(
     ): T {
         if (closed.get()) throw closedFailure()
         return try {
-            thread.run { translatingFailures(action, typedText, block) }
-        } catch (e: CancellationException) {
-            // A session closed while this call was being dispatched rejects it; the caller itself was not cancelled.
-            if (closed.get() && currentCoroutineContext().isActive) throw closedFailure() else throw e
+            thread.run {
+                // Queued before close() but reached only after it: the handles are being released.
+                if (closed.get()) throw closedFailure()
+                translatingFailures(action, typedText, block)
+            }
+        } catch (e: RejectedExecutionException) {
+            throw closedFailure()
         }
     }
 
     private fun closedFailure() = BrowserActionException("browser session '$label' is closed")
+
+    /**
+     * Refuses addresses that are not web pages. A `file:` (or `chrome:`, `view-source:`, …) address would put local
+     * files such as `.env` into snapshots that reach the LLM (CLAUDE.md rule 10), e.g. when a page talks an agent
+     * into opening one. The address is read the way the browser's URL parser reads it: surrounding control
+     * characters and spaces are ignored and tabs or line breaks inside it are dropped.
+     */
+    private fun requireWebAddress(pathOrUrl: String) {
+        val normalized = pathOrUrl.trim { it <= ' ' }.filterNot { it == '\t' || it == '\n' || it == '\r' }
+        val scheme =
+            URL_SCHEME
+                .find(normalized)
+                ?.groupValues
+                ?.get(1)
+                ?.lowercase() ?: return
+        if (scheme in WEB_SCHEMES || normalized.equals(BLANK_PAGE, ignoreCase = true)) return
+        throw BrowserActionException("cannot open \"$pathOrUrl\": only http(s) addresses and paths are allowed")
+    }
 
     private fun elementByRef(ref: Int): Locator {
         val element = page.locator("[$REF_ATTRIBUTE=\"$ref\"]")
@@ -242,6 +283,18 @@ internal class PlaywrightBrowserSession private constructor(
     }
 
     private fun firstVisible(selector: String): Locator = page.locator(selector).filter(visibleOnly()).first()
+
+    /**
+     * Fills [element], remembering [text] as a secret first when the element is a password field: once typed, a
+     * password stays masked even if the page later reveals the field ("show password") or echoes the value.
+     */
+    private fun fillInto(
+        element: Locator,
+        text: String,
+    ) {
+        if (text.isNotEmpty() && element.evaluate(BundledScripts.isSecretField) == true) typedSecrets += text
+        element.fill(text)
+    }
 
     private fun selectOption(
         element: Locator,
@@ -285,7 +338,8 @@ internal class PlaywrightBrowserSession private constructor(
     ): WaitOutcome {
         if (!timeout.isPositive()) return if (probe(target)) WaitOutcome(true, clock.now()) else WaitOutcome(false, null)
         return try {
-            val options = Page.WaitForFunctionOptions().setPollingInterval(PROBE_POLLING_INTERVAL_MS).setTimeout(timeoutMillis(timeout))
+            val limit = timeout.toPlaywrightTimeout()
+            val options = Page.WaitForFunctionOptions().setPollingInterval(PROBE_POLLING_INTERVAL_MS).setTimeout(limit)
             val handle = page.waitForFunction(BundledScripts.visibilityProbe, target, options)
             val observedAt = clock.now()
             handle.dispose()
@@ -304,7 +358,7 @@ internal class PlaywrightBrowserSession private constructor(
         val candidate = target.filter(visibleOnly()).first()
         if (!timeout.isPositive()) return if (candidate.count() > 0) WaitOutcome(true, clock.now()) else WaitOutcome(false, null)
         return try {
-            candidate.waitFor(Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(timeoutMillis(timeout)))
+            candidate.waitFor(Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(timeout.toPlaywrightTimeout()))
             WaitOutcome(true, clock.now())
         } catch (e: TimeoutError) {
             logger.debug { "wait in session '$label' timed out after $timeout" }
@@ -312,10 +366,17 @@ internal class PlaywrightBrowserSession private constructor(
         }
     }
 
-    /** Playwright treats 0 as "no timeout", so a positive wait never goes below 1 ms. */
-    private fun timeoutMillis(timeout: Duration): Double = timeout.inWholeMilliseconds.coerceAtLeast(1).toDouble()
+    /**
+     * Captures text from the page together with the values its secret fields had before *and* after the capture
+     * (see [BundledScripts.secretValues]), so a script clearing a password field meanwhile (as sign-in forms do on
+     * submit) cannot leave the typed value unmasked in the captured text.
+     */
+    private fun <T> withSecretValues(capture: () -> T): Pair<T, Set<String>> {
+        val before = secretValues()
+        val captured = capture()
+        return captured to typedSecrets + before + secretValues()
+    }
 
-    /** The current values of the page's secret fields, for [SecretRedactor]; see [BundledScripts.secretValues]. */
     private fun secretValues(): List<String> = (page.evaluate(BundledScripts.secretValues) as? List<*>).orEmpty().filterIsInstance<String>()
 
     companion object {
@@ -324,6 +385,10 @@ internal class PlaywrightBrowserSession private constructor(
 
         /** How often a wait re-checks the page: the resolution of every measured latency (t1). */
         const val PROBE_POLLING_INTERVAL_MS = 50.0
+
+        private val URL_SCHEME = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*):")
+        private val WEB_SCHEMES = setOf("http", "https")
+        private const val BLANK_PAGE = "about:blank"
 
         /** Playwright's message when the document an evaluation ran in was replaced by a navigation. */
         private const val CONTEXT_DESTROYED = "Execution context was destroyed"

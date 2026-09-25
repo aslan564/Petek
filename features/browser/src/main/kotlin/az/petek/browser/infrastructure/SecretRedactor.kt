@@ -1,5 +1,7 @@
 package az.petek.browser.infrastructure
 
+import az.petek.browser.domain.PageSnapshot
+
 /**
  * Removes the current values of a page's secret fields from text captured from that page (CLAUDE.md rule 10).
  * Needed because Playwright's ARIA snapshot prints every textbox value, password fields included
@@ -28,6 +30,30 @@ internal object SecretRedactor {
                 if (unquoted(value) in wanted) prefix + MASK else line
             }
         return redactText(maskedValues, wanted)
+    }
+
+    /**
+     * Masks [secrets] in everything a snapshot shows the agent: an element value that *is* a secret, however short,
+     * and longer secrets anywhere in names, values, the title, the URL and the visible text.
+     */
+    fun redactSnapshot(
+        snapshot: PageSnapshot,
+        secrets: Collection<String>,
+    ): PageSnapshot {
+        val wanted = secrets.filter { it.isNotEmpty() }.toSet()
+        if (wanted.isEmpty()) return snapshot
+        return snapshot.copy(
+            url = redactText(snapshot.url, wanted),
+            title = redactText(snapshot.title, wanted),
+            elements =
+                snapshot.elements.map { element ->
+                    element.copy(
+                        name = redactText(element.name, wanted),
+                        value = element.value?.let { value -> if (value in wanted) MASK else redactText(value, wanted) },
+                    )
+                },
+            visibleText = redactText(snapshot.visibleText, wanted),
+        )
     }
 
     fun redactText(

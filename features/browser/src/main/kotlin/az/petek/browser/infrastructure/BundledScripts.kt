@@ -14,6 +14,9 @@ internal object BundledScripts {
     /** Page function returning the current non-empty values of secret inputs, for redaction. */
     val secretValues: String = load("secret-values.js")
 
+    /** Element predicate: is this a secret (password) field? See [PlaywrightBrowserSession.fill]. */
+    val isSecretField: String = load("is-secret-field.js")
+
     /** Page predicate: is a text (`{text}`) or a CSS selector match (`{selector}`) visible? Polled in the page. */
     val visibilityProbe: String = load("visibility-probe.js")
 

@@ -28,13 +28,17 @@
   const clip = (text, max) => (text.length > max ? text.slice(0, max - 1) + '…' : text);
 
   const candidates = [];
+  const shadowRoots = [];
   const walk = (root) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     for (let node = walker.currentNode; node; node = walker.nextNode()) {
       if (node.nodeType !== Node.ELEMENT_NODE) continue;
       if (node.hasAttribute(REF)) node.removeAttribute(REF);
       if (node.matches(INTERACTIVE)) candidates.push(node);
-      if (node.shadowRoot) walk(node.shadowRoot);
+      if (node.shadowRoot) {
+        shadowRoots.push(node.shadowRoot);
+        walk(node.shadowRoot);
+      }
     }
   };
   if (document.documentElement) walk(document.documentElement);
@@ -142,7 +146,31 @@
     });
   }
 
-  const visibleText = (document.body ? document.body.innerText : '')
+  // `document.body.innerText` never includes shadow trees; their rendered text follows the body's.
+  const hasBox = (el) => typeof el.checkVisibility !== 'function' || el.checkVisibility();
+  const renderedText = (nodes) => {
+    const parts = [];
+    for (const node of nodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        parts.push(node.textContent);
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === 'SLOT') {
+          if (node.assignedNodes().length === 0) parts.push(renderedText(node.childNodes));
+        } else if (hasBox(node)) {
+          parts.push(node.innerText ?? node.textContent ?? '');
+        } else if (getComputedStyle(node).display === 'contents') {
+          parts.push(renderedText(node.childNodes));
+        }
+      }
+    }
+    return parts.join('\n');
+  };
+  const shadowText = shadowRoots
+    .filter((root) => hasBox(root.host) || getComputedStyle(root.host).display === 'contents')
+    .map((root) => renderedText(root.childNodes));
+
+  const visibleText = [document.body ? document.body.innerText : '', ...shadowText]
+    .join('\n')
     .split('\n')
     .map(collapse)
     .filter((line) => line.length > 0)

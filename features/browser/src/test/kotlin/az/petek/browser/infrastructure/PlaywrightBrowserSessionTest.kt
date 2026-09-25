@@ -21,7 +21,11 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -35,6 +39,7 @@ import kotlin.io.path.exists
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 
 /** Real Chromium through one shared browser server; pages come from [TestSite]. */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -122,7 +127,7 @@ class PlaywrightBrowserSessionTest {
             session.fillSelector("#new", "brand-new-secret-7")
 
             val snapshot = session.snapshot()
-            snapshot.elements.map { it.value } shouldContainExactly listOf("******", "******", "******")
+            snapshot.elements.map { it.value } shouldContainExactly listOf("******", "******", "******", null)
             val everything =
                 listOf(snapshot.render(), snapshot.visibleText, session.domSnapshot(), session.accessibilitySnapshot())
                     .joinToString("\n")
@@ -130,6 +135,34 @@ class PlaywrightBrowserSessionTest {
             everything shouldNotContain "brand-new-secret-7"
             everything shouldNotContain "server-rendered-secret"
             session.accessibilitySnapshot() shouldContain "textbox \"Şifrə\": ******"
+        }
+
+    @Test
+    fun `a typed password stays masked after the page reveals or echoes it`() =
+        withSession { session ->
+            session.navigate("/secret")
+            session.fillSelector("#current", "typed-secret-42")
+            session.clickSelector("#reveal")
+
+            val snapshot = session.snapshot()
+
+            snapshot.elements.single { it.name == "Şifrə" }.value shouldBe "******"
+            snapshot.visibleText shouldContain "Daxil etdiyiniz şifrə: ******"
+            val everything =
+                listOf(snapshot.render(), session.domSnapshot(), session.accessibilitySnapshot(), session.readText("#echo"))
+                    .joinToString("\n")
+            everything shouldNotContain "typed-secret-42"
+        }
+
+    @Test
+    fun `text typed into ordinary fields is shown as it is`() =
+        withSession { session ->
+            session.navigate("/form")
+            session.snapshot()
+            session.fill(1, "Aysel")
+
+            session.snapshot().elements[0].value shouldBe "Aysel"
+            session.domSnapshot() shouldContain "Qeydiyyat"
         }
 
     @Test
@@ -318,6 +351,59 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `waits work on a page whose content security policy forbids eval`() =
+        withSession { session ->
+            session.navigate("/csp")
+
+            session.waitForText("Salam", 2.seconds).found shouldBe true
+            session.waitForText("Gec mətn", 3.seconds).found shouldBe true
+            session.waitForSelector("#late", 1.seconds).found shouldBe true
+            session.waitForText("heç vaxt", 200.milliseconds).found shouldBe false
+            session.isTextVisible("Gec mətn") shouldBe true
+            session.snapshot().visibleText shouldContain "Gec mətn"
+        }
+
+    @Test
+    fun `text inside an open shadow root is seen like any other text`() =
+        withSession { session ->
+            session.navigate("/shadow")
+
+            session.waitForText("Kölgədə bildiriş", 3.seconds).found shouldBe true
+            session.isTextVisible("Kölgədə bildiriş") shouldBe true
+            session.waitForSelector(".toast", 1.seconds).found shouldBe true
+            session.isTextVisible("Gizli kölgə") shouldBe false
+            session.isTextVisible("color: teal") shouldBe false
+            val snapshot = session.snapshot()
+            snapshot.elements.map { it.name } shouldContainExactly listOf("Bağla")
+            snapshot.visibleText shouldBe "Adi mətn\nKölgədə bildiriş\nBağla"
+        }
+
+    @Test
+    fun `a caller cancelled during a long wait is released at once and the session keeps working`() =
+        withSession { session ->
+            session.navigate("/form")
+
+            val took =
+                measureTime {
+                    shouldThrow<TimeoutCancellationException> {
+                        withTimeout(300.milliseconds) { session.waitForText("heç vaxt görünməyəcək", 2.seconds) }
+                    }
+                }
+
+            took shouldBeLessThan 1.seconds
+            session.isTextVisible("Qeydiyyat") shouldBe true
+        }
+
+    @Test
+    fun `an unbounded wait still waits instead of timing out at once`() =
+        withSession { session ->
+            session.navigate("/slow")
+
+            session.waitForText("Hazırdır", Duration.INFINITE).found shouldBe true
+            session.waitForSelector("#ready", Duration.INFINITE).found shouldBe true
+        }
+
+    @Test
     fun `two sessions have separate cookies and local storage`() =
         runBlocking<Unit> {
             val ali = sessions.open(SessionOptions("ali", site.baseUrl))
@@ -473,6 +559,23 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `only web pages can be opened so local files never reach a snapshot`() =
+        withSession { session ->
+            listOf("file:///etc/hostname", " FILE:///etc/hostname", "fi\tle:///etc/hostname", "chrome://version", "view-source:/form")
+                .forEach { address ->
+                    shouldThrow<BrowserActionException> { session.navigate(address) }.message shouldContain
+                        "only http(s) addresses and paths are allowed"
+                }
+            session.currentUrl() shouldBe "about:blank"
+
+            session.navigate("/form")
+            session.navigate("${site.baseUrl}/me")
+            session.navigate("about:blank")
+            session.navigate("//127.0.0.1:${site.baseUrl.port}/form")
+            session.currentUrl() shouldBe "${site.baseUrl}/form"
+        }
+
+    @Test
     fun `navigation failures are reported as browser action failures`() =
         withSession { session ->
             val closedPort = ServerSocket(0).use { it.localPort }
@@ -510,6 +613,21 @@ class PlaywrightBrowserSessionTest {
 
             shouldThrow<BrowserActionException> { session.snapshot() }.message shouldBe "browser session 'closing' is closed"
             liveThreadNames().filter { it == "browser-closing" }.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a call still queued when the session closes fails as closed`() =
+        runBlocking<Unit> {
+            val session = sessions.open(SessionOptions("queued", site.baseUrl))
+            session.navigate("/form")
+            // UNDISPATCHED hands each call to the session thread in this order: the wait runs, the snapshot queues.
+            val waiting = async(start = CoroutineStart.UNDISPATCHED) { session.waitForText("heç vaxt", 500.milliseconds) }
+            val queued = async(start = CoroutineStart.UNDISPATCHED) { runCatching { session.snapshot() } }
+
+            session.close()
+
+            waiting.await().found shouldBe false
+            queued.await().exceptionOrNull()?.message shouldBe "browser session 'queued' is closed"
         }
 
     private suspend fun login(
