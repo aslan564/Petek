@@ -295,12 +295,9 @@ internal class AccountService(
 
             is Outcome.Ok -> {
                 val (user, next) = outcome.value
-                if (!user.emailVerified) {
-                    mailer.sendVerificationCode(MailAddress(user.name, normalized), code)
-                    NextStep.VerifyEmail(normalized).ok()
-                } else {
-                    next.ok()
-                }
+                // An unverified e-mail gets a fresh code, since the first one may be long gone.
+                if (next is NextStep.VerifyEmail) mailer.sendVerificationCode(MailAddress(user.name, normalized), code)
+                next.ok()
             }
         }
     }

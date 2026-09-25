@@ -3,6 +3,7 @@ package az.petek.faketarget.mail
 import java.time.Clock
 import java.time.Instant
 
+/** A mailbox with its display name, as Mailpit reports `From`/`To`. */
 data class MailAddress(
     val name: String,
     val address: String,

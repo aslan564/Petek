@@ -7,6 +7,7 @@ import java.time.Instant
  * and never changes, exactly like the test API reports them.
  */
 
+/** Role inside a company; [key] is the wire and UI form (`admin`, `manager`, `employee`). */
 enum class UserRole(
     val key: String,
     /** Azerbaijani label shown in the UI. */
@@ -22,6 +23,7 @@ enum class UserRole(
     }
 }
 
+/** A tenant. Only companies owned by a test-domain e-mail are `is_test` and may be seeded or deleted. */
 data class Company(
     val id: String,
     val name: String,
@@ -32,12 +34,14 @@ data class Company(
     val createdAt: Instant,
 )
 
+/** A department of one company; names are unique within the company. */
 data class Department(
     val id: String,
     val companyId: String,
     val name: String,
 )
 
+/** A member of one company. A session exists only once the required verifications are done. */
 data class User(
     val id: String,
     val companyId: String,
@@ -52,6 +56,7 @@ data class User(
     val createdAt: Instant,
 )
 
+/** A pending or accepted invitation; the token is the last path segment of the e-mailed `/invite/{token}` link. */
 data class Invitation(
     val token: String,
     val companyId: String,
@@ -64,6 +69,7 @@ data class Invitation(
     val acceptedAt: Instant?,
 )
 
+/** An admin's announcement, always `published` once created. */
 data class Announcement(
     val id: String,
     val companyId: String,
@@ -79,12 +85,14 @@ data class Announcement(
     val status: String get() = "published"
 }
 
+/** First time a recipient read an announcement (list, detail page or notification list). */
 data class Receipt(
     val announcementId: String,
     val email: String,
     val readAt: Instant,
 )
 
+/** What a notification is about; [key] is the test API form. */
 enum class NotificationType(
     val key: String,
 ) {
@@ -94,6 +102,7 @@ enum class NotificationType(
     TICKET_STATUS("ticket_status"),
 }
 
+/** One notification of one recipient, stored and pushed live over `/events`. */
 data class Notification(
     /** `n<sequence>`. */
     val id: String,
@@ -111,6 +120,7 @@ data class Notification(
     val readAt: Instant?,
 )
 
+/** Ticket workflow `open -> in_progress -> approved | rejected`; [key] is the wire form, [label] the UI text. */
 enum class TicketStatus(
     val key: String,
     val label: String,
@@ -124,6 +134,7 @@ enum class TicketStatus(
     val isDecided: Boolean get() = this == APPROVED || this == REJECTED
 }
 
+/** One status change, as `/test/tickets/{id}` reports it in `history`. */
 data class TicketHistoryEntry(
     val from: TicketStatus,
     val to: TicketStatus,
@@ -131,6 +142,7 @@ data class TicketHistoryEntry(
     val at: Instant,
 )
 
+/** A request raised by any member for one department. */
 data class Ticket(
     val id: String,
     val companyId: String,
