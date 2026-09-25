@@ -117,7 +117,7 @@ data class ReportModel(
     val failedAgents: List<FailedAgentRow>,
     /** Present when the run belongs to a `--repeat` group. */
     val stability: List<StabilityRow>?,
-    /** Paths relative to the report directory, keyed by artifact id. */
+    /** Paths relative to the report directory, keyed by artifact id; an artifact that cannot be linked safely has none. */
     val artifactLinks: Map<String, String>,
     /** Token and cost accounting per agent, as recorded by the LLM metering (never estimated). */
     val usage: List<UsageRecord> = emptyList(),

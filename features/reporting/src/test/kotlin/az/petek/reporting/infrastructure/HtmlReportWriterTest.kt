@@ -1,5 +1,6 @@
 package az.petek.reporting.infrastructure
 
+import az.petek.reporting.domain.StepRow
 import io.kotest.matchers.paths.shouldExist
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -118,6 +119,44 @@ class HtmlReportWriterTest {
     @Test
     fun `links with a scheme are never written`() {
         writer.render(SampleReport.model()) shouldNotContain "javascript"
+    }
+
+    @Test
+    fun `absolute network and backslash links are never written`() {
+        val model = SampleReport.model()
+        val odd =
+            model.copy(
+                artifactLinks =
+                    model.artifactLinks +
+                        mapOf("art_1" to "\\\\attacker\\share\\x.png", "art_2" to "//attacker/x.json", "art_evil" to "/etc/passwd"),
+            )
+
+        val html = writer.render(odd)
+
+        html shouldNotContain "attacker"
+        html shouldNotContain "/etc/passwd"
+    }
+
+    @Test
+    fun `a refusal the forbidden step expected is shown as refused not as stuck`() {
+        val model = SampleReport.model()
+        val refused = StepRow("forbidden", "a12", null, "DO", "BLOCKED", 3_000, "permission_denied: no approve button", null)
+
+        val html = writer.render(model.copy(steps = model.steps + refused))
+
+        html shouldContain "<span class=\"pill muted\">icazə verilmədi</span>"
+        html shouldContain "<span class=\"pill bad\">ilişdi</span>"
+    }
+
+    @Test
+    fun `rewriting the page replaces it and leaves no temporary file behind`() {
+        val directory = root.resolve("report")
+        writer.write(SampleReport.model(campaignName = "first"), directory)
+
+        writer.write(SampleReport.model(campaignName = "second"), directory)
+
+        Files.readString(directory.resolve("index.html")) shouldContain "Pətək hesabatı: second"
+        Files.list(directory).use { files -> files.map { it.fileName.toString() }.toList() } shouldBe listOf("index.html")
     }
 
     @Test

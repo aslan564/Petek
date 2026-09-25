@@ -12,6 +12,7 @@ import az.petek.evidence.domain.EvidenceSource.RECEIVER
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
+import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
@@ -151,6 +152,31 @@ class FinalizeRunUseCaseTest {
         }
 
     @Test
+    fun `a run still running is reported with provisional findings that are not recorded`() =
+        runTest {
+            evidence.create(run(endedAt = null, result = RunResult.RUNNING))
+            evidence.assertion(assertion("read_announce", "a02", RECEIVER, FAILED))
+            evidence.assertion(assertion("read_announce", "a02", ORACLE, PASSED))
+            val useCase = useCase()
+
+            useCase.finalize(RUN_ID)
+
+            evidence.findingList.shouldBeEmpty()
+            markdown.models
+                .single()
+                .findings
+                .map { it.findingClass } shouldContainExactly listOf(FindingClass.DELIVERY_UI)
+
+            // Evidence that arrives later still counts once the run has finished.
+            evidence.step(step("join", "a07", StepStatus.FAILED, StepKind.RUN, detail = "mail_timeout: none", stepId = "stp_join_a07"))
+            evidence.finish(RUN_ID, RunResult.FAILED, run().endedAt!!)
+            useCase.finalize(RUN_ID)
+
+            evidence.findingList.map { it.findingClass } shouldContainExactly listOf(FindingClass.DELIVERY_UI, FindingClass.BACKEND)
+            markdown.models.last().findings shouldContainExactly evidence.findingList
+        }
+
+    @Test
     fun `a run that passed gets a report without findings`() =
         runTest {
             evidence.create(run())
@@ -172,6 +198,32 @@ class FinalizeRunUseCaseTest {
 
             markdown.models.shouldBeEmpty()
             judge.calls.get() shouldBe 0
+        }
+
+    @Test
+    fun `a failing writer does not cost the other formats and its failure is reported`() =
+        runTest {
+            seedFailingRun()
+            val broken = FailingWriter("broken.html")
+            val useCase =
+                FinalizeRunUseCase(
+                    runs = evidence,
+                    query = evidence,
+                    recorder = evidence,
+                    artifacts = store,
+                    judge = judge,
+                    builder = BuildReportUseCase(evidence, evidence, store),
+                    writers = listOf(broken, markdown, html),
+                    ioDispatcher = StandardTestDispatcher(testScheduler),
+                )
+
+            val error = shouldThrow<IllegalStateException> { useCase.finalize(RUN_ID) }
+
+            error.message shouldBe "disk full"
+            markdown.models shouldHaveSize 1
+            html.models shouldHaveSize 1
+            root.resolve("run_test/report/report.md").shouldExist()
+            evidence.findingList shouldHaveSize 2
         }
 
     @Test
@@ -201,6 +253,15 @@ class FinalizeRunUseCaseTest {
             models += model
             return Files.writeString(directory.resolve(fileName), "findings=${model.findings.size}")
         }
+    }
+
+    private class FailingWriter(
+        override val fileName: String,
+    ) : ReportWriter {
+        override fun write(
+            model: ReportModel,
+            directory: Path,
+        ): Path = error("disk full")
     }
 
     private class CountingJudge(

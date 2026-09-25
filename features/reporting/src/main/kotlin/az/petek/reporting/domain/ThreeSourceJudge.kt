@@ -18,6 +18,10 @@ import az.petek.evidence.domain.Verdict
  *
  * Rule order matters and is the contract: a failing oracle with a sender that did its part blames the backend,
  * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human.
+ *
+ * The step overload adds one finding per (scenario step, agent, failure key) for agent actions that failed with a
+ * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), any other key AGENT_FAILURE. An expected
+ * refusal (`permission_denied` in a forbidden-action test) is not a failure and yields none.
  */
 class ThreeSourceJudge(
     private val ids: IdGenerator,
@@ -103,7 +107,7 @@ class ThreeSourceJudge(
     ): List<FindingRecord> =
         steps
             .asSequence()
-            .filter { it.runId == run.runId && it.agentId != null && it.kind != StepKind.ASSERT }
+            .filter { it.runId == run.runId && it.agentId != null && it.kind !in NOT_AGENT_ACTIONS }
             .mapNotNull { step -> FailureKeys.of(step)?.let { key -> step to key } }
             .distinctBy { (step, key) -> Triple(step.scenarioStep, step.agentId, key) }
             .map { (step, key) -> stepFinding(run, step, key) }
@@ -179,6 +183,13 @@ class ThreeSourceJudge(
         const val NONE = "(none)"
         const val MAX_VALUE_LENGTH = 200
         val WHITESPACE = Regex("\\s+")
+
+        /**
+         * Records that are not the agent's own action: an ASSERT is judged through its assertion records, and a
+         * WAIT that timed out (`not_received`) is the harness waiting for an event its emitter never published,
+         * which the emitter's own failure and the latency table's missing receivers already explain.
+         */
+        val NOT_AGENT_ACTIONS = setOf(StepKind.ASSERT, StepKind.WAIT)
 
         const val NO_EMAIL_SENT = "no e-mail sent"
         const val NOTE_BACKEND = "The target (C) contradicts what the sender did (A): backend error."

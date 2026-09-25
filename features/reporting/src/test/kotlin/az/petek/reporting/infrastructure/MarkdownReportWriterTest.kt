@@ -1,5 +1,6 @@
 package az.petek.reporting.infrastructure
 
+import az.petek.reporting.domain.StepRow
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.paths.shouldExist
 import io.kotest.matchers.shouldBe
@@ -109,6 +110,30 @@ class MarkdownReportWriterTest {
     @Test
     fun `links with a scheme are never written`() {
         writer.render(SampleReport.model()) shouldNotContain "javascript"
+    }
+
+    @Test
+    fun `absolute network and backslash links are never written`() {
+        val model = SampleReport.model()
+        val odd =
+            model.copy(
+                artifactLinks = mapOf("art_1" to "\\\\attacker\\x.png", "art_2" to "//attacker/x", "art_evil" to "/etc/passwd"),
+            )
+
+        val md = writer.render(odd)
+
+        md shouldNotContain "attacker"
+        md shouldNotContain "/etc/passwd"
+    }
+
+    @Test
+    fun `a refusal the forbidden step expected is shown as refused not as stuck`() {
+        val model = SampleReport.model()
+        val refused = StepRow("forbidden", "a12", null, "DO", "BLOCKED", 3_000, "permission_denied: no approve button", null)
+
+        val md = writer.render(model.copy(steps = listOf(refused)))
+
+        md shouldContain "| forbidden | a12 | do | icazə verilmədi | 3,0 san | permission_denied: no approve button | — |"
     }
 
     @Test

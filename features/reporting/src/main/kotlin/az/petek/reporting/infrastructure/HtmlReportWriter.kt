@@ -200,7 +200,7 @@ class HtmlReportWriter : ReportWriter {
                         td { +row.scenarioStep }
                         td { +ReportFormat.agent(row.agentId, row.agentName) }
                         td { +row.kind.lowercase() }
-                        td { pill(ReportFormat.stepStatus(row.status), ReportFormat.stepTone(row.status)) }
+                        td { pill(ReportFormat.stepStatus(row), ReportFormat.stepTone(row)) }
                         td("num") { +ReportFormat.duration(row.durationMs) }
                         td("detail") { +(row.detail ?: NONE) }
                         td {

@@ -52,11 +52,11 @@ class BuildReportUseCase(
         val artifactRecords = query.artifacts(runId)
         val usage = query.usage(runId)
         val names = agents.names(runId)
-        val stepRows = stepRows(steps, artifactRecords, names)
+        val tableSteps = steps.filter { it.kind in TABLE_KINDS }
         return ReportModel(
             run = run,
-            summary = summary(run, steps, stepRows, assertions, usage),
-            steps = stepRows,
+            summary = summary(run, steps, tableSteps, assertions, usage),
+            steps = stepRows(tableSteps, steps, artifactRecords, names),
             assertions = assertions,
             latency = LatencyStatistics.compute(query.events(runId), query.receipts(runId)),
             findings = query.findings(runId),
@@ -68,42 +68,38 @@ class BuildReportUseCase(
     }
 
     private fun stepRows(
-        steps: List<StepRecord>,
+        tableSteps: List<StepRecord>,
+        allSteps: List<StepRecord>,
         artifactRecords: List<ArtifactRecord>,
         names: Map<AgentId, String>,
     ): List<StepRow> {
-        val lastScreenshot =
-            artifactRecords
-                .filter { it.type == ArtifactType.SCREENSHOT }
-                .associateBy { it.stepId }
-        return steps
-            .filter { it.kind in TABLE_KINDS }
-            .map { step ->
-                StepRow(
-                    scenarioStep = step.scenarioStep,
-                    agentId = step.agentId?.value,
-                    agentName = step.agentId?.let { names[it] },
-                    kind = step.kind.name,
-                    status = step.status.name,
-                    durationMs = step.durationMs,
-                    detail = step.detail,
-                    screenshot = lastScreenshot[step.stepId]?.artifactId?.value,
-                )
-            }
+        val screenshots = Screenshots(allSteps, artifactRecords)
+        return tableSteps.map { step ->
+            StepRow(
+                scenarioStep = step.scenarioStep,
+                agentId = step.agentId?.value,
+                agentName = step.agentId?.let { names[it] },
+                kind = step.kind.name,
+                status = step.status.name,
+                durationMs = step.durationMs,
+                detail = step.detail,
+                screenshot = screenshots.lastFor(step)?.artifactId?.value,
+            )
+        }
     }
 
     private fun summary(
         run: RunRecord,
         steps: List<StepRecord>,
-        rows: List<StepRow>,
+        tableSteps: List<StepRecord>,
         assertions: List<AssertionRecord>,
         usage: List<UsageRecord>,
     ): ReportSummary {
-        val failingStatuses = FailureKeys.FAILING_STATUSES.map { it.name }.toSet()
         val agents = steps.mapNotNull { it.agentId } + assertions.mapNotNull { it.agentId } + usage.map { it.agentId }
         return ReportSummary(
-            stepsPassed = rows.count { it.status == StepStatus.PASSED.name },
-            stepsFailed = rows.count { it.status in failingStatuses },
+            // An expected refusal is the outcome the forbidden-action step asked for.
+            stepsPassed = tableSteps.count { it.status == StepStatus.PASSED || FailureKeys.isExpectedRefusal(it) },
+            stepsFailed = tableSteps.count(FailureKeys::isFailure),
             assertionsPassed = assertions.count { it.verdict == Verdict.PASSED },
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             assertionsSkipped = assertions.count { it.verdict == Verdict.SKIPPED },
@@ -138,7 +134,7 @@ class BuildReportUseCase(
         names: Map<AgentId, String>,
     ): List<FailedAgentRow> =
         steps
-            .filter { it.agentId != null && it.kind != StepKind.ASSERT && it.status in FailureKeys.FAILING_STATUSES }
+            .filter { it.agentId != null && it.kind != StepKind.ASSERT && FailureKeys.isFailure(it) }
             .groupBy { requireNotNull(it.agentId) to it.scenarioStep }
             .map { (key, failures) ->
                 val (agentId, scenarioStep) = key
@@ -176,20 +172,59 @@ class BuildReportUseCase(
         records: List<ArtifactRecord>,
     ): Map<String, String> {
         val reportDirectory = ReportLayout.directory(artifacts, runId).normalize()
-        return records.associate { it.artifactId.value to link(reportDirectory, runId, it) }
+        return records
+            .mapNotNull { record -> link(reportDirectory, runId, record)?.let { record.artifactId.value to it } }
+            .toMap()
     }
 
-    /** Relative from the report directory to the file; falls back to the store's own layout rule. */
+    /**
+     * Relative from the report directory to the file. When the store cannot resolve the record, or its path cannot
+     * be related to the report directory, the store's layout rule (`<runId>/<owner>/<file>`) is applied to the
+     * recorded path; a recorded path that does not follow it (another run, `..` segments) gets no link at all.
+     */
     private fun link(
         reportDirectory: Path,
         runId: RunId,
         record: ArtifactRecord,
-    ): String =
+    ): String? =
         try {
             reportDirectory.relativize(artifacts.resolve(record).normalize()).invariantSeparatorsPathString
         } catch (_: IllegalArgumentException) {
-            "../" + record.relativePath.replace('\\', '/').removePrefix("$runId/")
+            layoutLink(runId, record.relativePath)
         }
+
+    private fun layoutLink(
+        runId: RunId,
+        relativePath: String,
+    ): String? {
+        val path = relativePath.replace('\\', '/')
+        val prefix = "$runId/"
+        if (!path.startsWith(prefix)) return null
+        val inRun = path.removePrefix(prefix)
+        val segments = inRun.split('/')
+        return if (segments.any { it.isEmpty() || it == "." || it == ".." }) null else "../$inRun"
+    }
+
+    /**
+     * The screenshot a step row links to: the last one taken in that step record or, for a record without one of its
+     * own (the orchestrator's per-actor summary of an action, a wait), the last one the same agent took in the same
+     * scenario step up to that record's end. So every row with an outcome points at evidence (CLAUDE.md rule 5).
+     */
+    private class Screenshots(
+        steps: List<StepRecord>,
+        artifacts: List<ArtifactRecord>,
+    ) {
+        private val shots = artifacts.filter { it.type == ArtifactType.SCREENSHOT }
+        private val lastOfStep = shots.associateBy { it.stepId }
+        private val takenIn = steps.associateBy { it.stepId }
+        private val byActorStep = shots.filter { it.stepId in takenIn }.groupBy { takenIn.getValue(it.stepId).actorStep() }
+
+        fun lastFor(step: StepRecord): ArtifactRecord? =
+            lastOfStep[step.stepId]
+                ?: byActorStep[step.actorStep()]?.lastOrNull { !takenIn.getValue(it.stepId).endedAt.isAfter(step.endedAt) }
+
+        private fun StepRecord.actorStep() = agentId to scenarioStep
+    }
 
     private companion object {
         val TABLE_KINDS = setOf(StepKind.DO, StepKind.RUN, StepKind.WAIT)

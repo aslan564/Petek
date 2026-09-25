@@ -91,18 +91,50 @@ class StabilityAnalyzerTest {
     }
 
     @Test
-    fun `skipped assertions and skipped steps do not fail a step`() {
+    fun `skipped assertions and skipped steps next to passing evidence do not fail a step`() {
         val runs =
             listOf(
                 evidence(
                     1,
-                    steps = listOf(step("announce", "a01", StepStatus.SKIPPED)),
+                    steps = listOf(step("announce", "a01"), step("announce", "a09", StepStatus.SKIPPED, StepKind.SYSTEM)),
                     assertions = listOf(assertion("announce", "a01", EvidenceSource.ORACLE, Verdict.SKIPPED)),
                 ),
                 evidence(2, steps = listOf(step("announce", "a01"))),
             )
 
         analyzer.analyze(runs).single() shouldBe StabilityRow("announce", runs = 2, passed = 2)
+    }
+
+    @Test
+    fun `a step that was only skipped in a run did not pass there`() {
+        val runs =
+            listOf(
+                evidence(
+                    1,
+                    steps = listOf(step("read_announce", null, StepStatus.SKIPPED, StepKind.SYSTEM)),
+                    assertions = listOf(assertion("read_announce", "a02", EvidenceSource.ORACLE, Verdict.SKIPPED)),
+                ),
+                evidence(2, steps = listOf(step("read_announce", "a02")), assertions = listOf(visible("a02", Verdict.PASSED))),
+            )
+
+        val row = analyzer.analyze(runs).single()
+
+        row shouldBe StabilityRow("read_announce", runs = 2, passed = 1)
+        row.flaky shouldBe true
+    }
+
+    @Test
+    fun `a forbidden action the target refused passes when its assertions pass`() {
+        val runs =
+            (1..2).map {
+                evidence(
+                    it,
+                    steps = listOf(step("forbidden", "a12", StepStatus.BLOCKED, detail = "permission_denied: no approve button")),
+                    assertions = listOf(assertion("forbidden", "a12", EvidenceSource.HARNESS, Verdict.PASSED, type = "http_status")),
+                )
+            }
+
+        analyzer.analyze(runs).single() shouldBe StabilityRow("forbidden", runs = 2, passed = 2)
     }
 
     @Test

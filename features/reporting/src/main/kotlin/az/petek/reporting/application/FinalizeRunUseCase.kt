@@ -9,9 +9,12 @@ import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
+import az.petek.evidence.domain.RunResult
 import az.petek.reporting.domain.Judge
+import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportWriter
 import az.petek.reporting.domain.RunNotFoundException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -25,9 +28,11 @@ import java.nio.file.Path
  * the findings are stored, and every [writers] format is written into `<runDir>/report/`.
  *
  * Idempotent: a run that already has findings is not judged again, so `finalize` after a crash, or `petek report`
- * on a finished run, only rewrites the report. Calls are serialized so two concurrent finalizations of the same run
- * cannot both record findings. A finding without evidence of its own (a failed agent action) is linked to the
- * artifacts of its step (CLAUDE.md rule 5). The app adapts [finalize] to orchestration's `RunFinalizer`.
+ * on a finished run, only rewrites the report; a run that has not finished yet is never judged into the store.
+ * Calls are serialized so two concurrent finalizations of the same run cannot both record findings. A finding
+ * without evidence of its own (a failed agent action) is linked to the artifacts of its step (CLAUDE.md rule 5).
+ * Every writer is attempted even when another one fails; the failure is rethrown afterwards. The app adapts
+ * [finalize] to orchestration's `RunFinalizer`.
  */
 class FinalizeRunUseCase(
     private val runs: RunRepository,
@@ -47,26 +52,54 @@ class FinalizeRunUseCase(
         require(names.size == names.toSet().size) { "Report writers must write distinct files, got $names" }
     }
 
-    /** Judges (once) and writes the report of [runId]; returns the report directory. */
+    /**
+     * Judges (once) and writes the report of [runId]; returns the report directory. Findings are recorded only for a
+     * finished run: a run that is still RUNNING (a `petek report` while it runs, or a crashed process) gets provisional
+     * findings in its report but none in the store, so its real finalization still judges the complete evidence.
+     */
     suspend fun finalize(runId: RunId): Path =
         mutex.withLock {
             val run = runs.find(runId) ?: throw RunNotFoundException(runId)
-            if (query.findings(runId).isEmpty()) recordFindings(run)
-            val model = builder.build(runId)
+            val judged = if (query.findings(runId).isEmpty()) judge(run) else emptyList()
+            val finished = run.result != RunResult.RUNNING
+            if (finished) judged.forEach { recorder.finding(it) }
+            val built = builder.build(runId)
+            val model = if (finished || judged.isEmpty()) built else built.copy(findings = built.findings + judged)
             val directory = ReportLayout.directory(artifacts, runId)
             withContext(ioDispatcher) {
                 Files.createDirectories(directory)
-                writers.forEach { it.write(model, directory) }
+                writeAll(model, directory)
             }
             directory
         }
 
-    private suspend fun recordFindings(run: RunRecord) {
+    /** Every format is attempted, so one broken writer cannot cost the others; the first failure is then rethrown. */
+    private fun writeAll(
+        model: ReportModel,
+        directory: Path,
+    ) {
+        val failures =
+            writers.mapNotNull { writer ->
+                try {
+                    writer.write(model, directory)
+                    null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    e
+                }
+            }
+        failures.firstOrNull()?.let { first ->
+            failures.drop(1).forEach(first::addSuppressed)
+            throw first
+        }
+    }
+
+    private suspend fun judge(run: RunRecord): List<FindingRecord> {
         val evidenceByStep = query.artifacts(run.runId).groupBy { it.stepId }
-        judge
+        return judge
             .findings(run, query.assertions(run.runId), query.steps(run.runId))
             .map { it.withStepEvidence(evidenceByStep) }
-            .forEach { recorder.finding(it) }
     }
 
     private fun FindingRecord.withStepEvidence(evidenceByStep: Map<StepId, List<ArtifactRecord>>): FindingRecord {

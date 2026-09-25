@@ -1,6 +1,7 @@
 package az.petek.reporting.application
 
 import az.petek.core.ids.AgentId
+import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.StepId
 import az.petek.evidence.domain.ArtifactRecord
@@ -138,6 +139,61 @@ class BuildReportUseCaseTest {
             steps[1].screenshot shouldBe join.artifactId.value
             steps[2].screenshot.shouldBeNull()
             steps[2].agentName.shouldBeNull()
+        }
+
+    @Test
+    fun `a row without its own screenshot links the last one its agent took in that scenario step up to its end`() =
+        runTest {
+            evidence.create(run())
+            listOf(
+                step("read_announce", "a02", StepStatus.PASSED, StepKind.WAIT, stepId = "wait", startOffsetMs = 0, durationMs = 500),
+                step("read_announce", "a02", StepStatus.PASSED, StepKind.DO, stepId = "act_1", startOffsetMs = 1_000),
+                step("read_announce", "a02", StepStatus.PASSED, StepKind.DO, stepId = "act_2", startOffsetMs = 2_000),
+                // The orchestrator's per-actor summary spans the whole action and has no screenshot of its own.
+                step("read_announce", "a02", StepStatus.PASSED, StepKind.DO, stepId = "summary", startOffsetMs = 900, durationMs = 2_500),
+                step("read_announce", "a03", StepStatus.FAILED, StepKind.DO, stepId = "other_agent", startOffsetMs = 1_000),
+                step("announce", "a02", StepStatus.PASSED, StepKind.DO, stepId = "other_step", startOffsetMs = 5_000),
+            ).forEach { evidence.step(it) }
+            artifact("act_1", "a02")
+            val last = artifact("act_2", "a02")
+            artifact("act_2", "a02", ArtifactType.A11Y)
+            artifact("other_step", "a02")
+
+            val shots = useCase.build(RUN_ID).steps.associate { it.scenarioStep + "/" + it.agentId + "/" + it.durationMs to it.screenshot }
+
+            shots["read_announce/a02/2500"] shouldBe last.artifactId.value
+            // A wait that ended before any action has no screenshot yet; another agent never borrows one.
+            shots["read_announce/a02/500"].shouldBeNull()
+            shots["read_announce/a03/1000"].shouldBeNull()
+        }
+
+    @Test
+    fun `a forbidden action the target refused counts as passed and is no failed agent`() =
+        runTest {
+            evidence.create(run())
+            evidence.step(step("forbidden", "a12", StepStatus.BLOCKED, detail = "permission_denied: no approve button", stepId = "f1"))
+            evidence.step(step("forbidden", "a13", StepStatus.BLOCKED, detail = "no progress for 120s", stepId = "f2"))
+
+            val model = useCase.build(RUN_ID)
+
+            model.summary.stepsPassed shouldBe 1
+            model.summary.stepsFailed shouldBe 1
+            model.failedAgents shouldContainExactly listOf(FailedAgentRow("a13", "a13", "forbidden", "blocked"))
+        }
+
+    @Test
+    fun `a recorded path outside the run layout gets no link`() =
+        runTest {
+            val odd = RelativeResolvingStore(store)
+            evidence.create(run())
+            val good = odd.write(RUN_ID, StepId("stp_1"), "a01", ArtifactType.SCREENSHOT, byteArrayOf(1))
+            val climbing = good.copy(artifactId = ArtifactId("art_climb"), relativePath = "$RUN_ID/../../etc/passwd")
+            val foreign = good.copy(artifactId = ArtifactId("art_foreign"), relativePath = "run_other/a01/0001-screenshot.png")
+            listOf(good, climbing, foreign).forEach { evidence.artifact(it) }
+
+            val links = BuildReportUseCase(evidence, evidence, odd).build(RUN_ID).artifactLinks
+
+            links shouldContainExactly mapOf(good.artifactId.value to "../a01/0001-screenshot.png")
         }
 
     @Test

@@ -414,6 +414,35 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a forbidden action the target refused is the expected outcome and no finding`() {
+            val steps =
+                listOf(
+                    step("forbidden", "a12", StepStatus.BLOCKED, detail = "permission_denied: no approve button", stepId = "stp_1"),
+                    step(
+                        "forbidden",
+                        "a13",
+                        StepStatus.BLOCKED,
+                        detail = null,
+                        action = "report_problem permission_denied",
+                        stepId = "stp_2",
+                    ),
+                )
+
+            judge.findings(run, emptyList(), steps).shouldBeEmpty()
+        }
+
+        @Test
+        fun `a wait that timed out is not an agent failure`() {
+            val steps =
+                listOf(
+                    step("read_announce", "a05", StepStatus.FAILED, StepKind.WAIT, detail = "not_received: announcement_created in 300s"),
+                    step("read_announce", "a06", StepStatus.FAILED, StepKind.WAIT, detail = "timeout"),
+                )
+
+            judge.findings(run, emptyList(), steps).shouldBeEmpty()
+        }
+
+        @Test
         fun `repeated failures of one agent in one step collapse into one finding`() {
             val steps =
                 listOf(

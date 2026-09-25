@@ -113,7 +113,7 @@ class MarkdownReportWriter : ReportWriter {
                     md(row.scenarioStep),
                     md(ReportFormat.agent(row.agentId, row.agentName)),
                     row.kind.lowercase(),
-                    ReportFormat.stepStatus(row.status),
+                    ReportFormat.stepStatus(row),
                     ReportFormat.duration(row.durationMs),
                     md(row.detail ?: NONE),
                     link(model, row.screenshot) ?: NONE,

@@ -1,5 +1,6 @@
 package az.petek.reporting.domain
 
+import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.reporting.ReportTestData.step
 import io.kotest.matchers.nulls.shouldBeNull
@@ -41,6 +42,12 @@ class FailureKeysTest {
     }
 
     @Test
+    fun `a leading key wins over a known key in the free text after it`() {
+        FailureKeys.find("otp_expired: timeout while waiting for a new code") shouldBe "otp_expired"
+        FailureKeys.find("login_failed: session timeout") shouldBe "login_failed"
+    }
+
+    @Test
     fun `free text without a key has none`() {
         FailureKeys.find("element not found").shouldBeNull()
         FailureKeys.find("note: something").shouldBeNull()
@@ -66,5 +73,32 @@ class FailureKeysTest {
         FailureKeys.of(step("join", "a02", StepStatus.BLOCKED, detail = "no progress for 120s")) shouldBe FailureKeys.BLOCKED
         FailureKeys.of(step("join", "a02", StepStatus.BLOCKED, detail = null)) shouldBe FailureKeys.BLOCKED
         FailureKeys.of(step("join", "a02", StepStatus.BLOCKED, detail = "mail_timeout while blocked")) shouldBe "mail_timeout"
+    }
+
+    @Test
+    fun `a blocked action the target refused on purpose is an expected refusal and no failure`() {
+        val refused = step("forbidden", "a12", StepStatus.BLOCKED, detail = "permission_denied: no approve button for an employee")
+
+        FailureKeys.isExpectedRefusal(refused) shouldBe true
+        FailureKeys.isFailure(refused) shouldBe false
+        FailureKeys.of(refused).shouldBeNull()
+    }
+
+    @Test
+    fun `the refusal key is also read from the action when the detail names none`() {
+        val refused = step("forbidden", "a12", StepStatus.BLOCKED, detail = null, action = "report_problem permission_denied")
+
+        FailureKeys.isExpectedRefusal(refused) shouldBe true
+    }
+
+    @Test
+    fun `permission denied is only expected as a blocked outcome`() {
+        val failed = step("forbidden", "a12", StepStatus.FAILED, StepKind.DO, detail = "permission_denied: manager could not approve")
+        val stuck = step("forbidden", "a12", StepStatus.BLOCKED, detail = "no progress for 120s", action = "click [4] \"Təsdiqlə\"")
+
+        FailureKeys.isFailure(failed) shouldBe true
+        FailureKeys.of(failed) shouldBe FailureKeys.PERMISSION_DENIED
+        FailureKeys.isFailure(stuck) shouldBe true
+        FailureKeys.of(stuck) shouldBe FailureKeys.BLOCKED
     }
 }
