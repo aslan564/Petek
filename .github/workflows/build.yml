@@ -1,10 +1,30 @@
 name: Build
 
+# Minutes are spent deliberately (the repository is public, so standard runners are free, but a run is still
+# a run): a push to an integration branch runs once, never again as the pull request it belongs to; pull
+# requests run only for feature branches heading into develop; the expensive end-to-end job runs only on a
+# push to develop or by hand; a newer push cancels the run in progress.
 on:
   push:
     branches: [develop, petek-mvp]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
   pull_request:
-    branches: [develop, petek-mvp]
+    branches: [develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
+  workflow_dispatch:
+    inputs:
+      e2e:
+        description: Also run the end-to-end job
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -17,7 +37,7 @@ jobs:
   build:
     name: Compile, lint, licence headers, unit and architecture tests
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
@@ -34,21 +54,24 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           validate-wrappers: true
+          # develop is the integration branch, so it writes the dependency cache every other run reads.
+          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
 
       - name: Install the Chromium Playwright needs (browser tests run in the normal build)
         run: |
-          PW=$(grep -E '^playwright = ' gradle/libs.versions.toml | cut -d'"' -f2)
+          PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
+          echo "Playwright ${PW}"
           npx --yes "playwright@${PW}" install --with-deps chromium
 
       - name: Build
-        # Chromium was installed above with the exact Playwright version; the Java driver must not fetch every browser again.
-        # (The variable stays out of the install step: the Playwright CLI honours it too and would skip the download.)
+        # Chromium is already installed with the exact version; the Java driver must not fetch every browser again.
+        # (Kept out of the install step: the Playwright CLI honours the variable too and would skip the download.)
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: ./gradlew build --no-daemon --console=plain
 
       - name: Upload test reports
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
@@ -61,7 +84,10 @@ jobs:
     name: End-to-end against the fake target (real Chromium)
     runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 40
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'workflow_dispatch' && inputs.e2e)
+    timeout-minutes: 30
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
@@ -72,9 +98,11 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
       - name: Install the Chromium Playwright needs
         run: |
-          PW=$(grep -E '^playwright = ' gradle/libs.versions.toml | cut -d'"' -f2)
+          PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
           npx --yes "playwright@${PW}" install --with-deps chromium
       - name: End-to-end runs against the fake target
         env:
@@ -84,7 +112,7 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: ./gradlew :features:orchestration:test :features:browser:isolationTest -Dpetek.isolation.testers=5000 --no-daemon --console=plain
-      - if: always()
+      - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-reports

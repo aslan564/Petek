@@ -25,8 +25,12 @@ for a reviewer to notice.
 - **Tests without mocks.** Fakes in `testFixtures` (`FakeBrowserSession`, `ScriptedLlmClient`, `InMemoryEvidence`,
   `FakeMailbox`, `FakeTargetOracle`, `FakeHarnessClock`) keep tests honest about ports.
 - **CI.** `.github/workflows/build.yml` runs `./gradlew build` (with the Chromium the browser tests need) on every push
-  and pull request to `develop`/`petek-mvp`, then `:e2e:e2eTest`. `CODEOWNERS` routes every change to the owner; the
-  PR template asks for the requirement, the architecture check and the docs.
+  to `develop`/`petek-mvp` and on pull requests into `develop`; documentation-only changes skip it. The end-to-end job
+  (`:e2e:e2eTest`, then the isolation proofs with 5 000 testers and 30 real Chromium contexts) runs only on a push to
+  `develop` or by hand (`workflow_dispatch`), so runner minutes are spent once per integration commit, never twice for
+  the same commit as push and pull request. A newer push cancels the run in progress; `develop` writes the Gradle
+  dependency cache the other runs read. `CODEOWNERS` routes every change to the owner; the PR template asks for the
+  requirement, the architecture check and the docs.
 - **Rules for agents.** `CLAUDE.md` is the single page every AI coding agent reads first; it points to the plan, the
   architecture, the contract and the eleven never-break rules.
 
