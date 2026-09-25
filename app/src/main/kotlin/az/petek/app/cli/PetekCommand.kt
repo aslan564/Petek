@@ -28,6 +28,7 @@ class PetekCommand(
             SmokeCommand(),
             DoctorCommand(),
             ProbeCommand(),
+            PanelCommand(),
         )
     }
 

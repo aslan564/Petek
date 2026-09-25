@@ -30,10 +30,10 @@ class PetekCliTest {
         }
 
     @Test
-    fun `no command at all prints the help with a getting-started guide and exits with 0`() =
-        runBlocking<Unit> {
-            cli.execute(emptyList()) shouldBe ExitCodes.OK
-        }
+    fun `no command at all opens the web panel`() {
+        PetekCli.effectiveArguments(emptyList()) shouldBe listOf(PanelCommand.NAME)
+        PetekCli.effectiveArguments(listOf("doctor")) shouldBe listOf("doctor")
+    }
 
     @Test
     fun `help of a command exits with 0`() =

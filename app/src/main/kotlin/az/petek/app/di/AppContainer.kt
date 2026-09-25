@@ -119,9 +119,9 @@ class AppContainer(
 
     private val evidenceStore: SqliteEvidenceStore by lazy { SqliteEvidenceStore(database) }
 
-    val runs: RunRepository get() = evidenceStore
+    val runs: RunRepository by lazy { overrides.runsDecorator?.invoke(evidenceStore) ?: evidenceStore }
     val evidenceQuery: EvidenceQuery get() = evidenceStore
-    val recorder: EvidenceRecorder get() = evidenceStore
+    val recorder: EvidenceRecorder by lazy { overrides.recorderDecorator?.invoke(evidenceStore) ?: evidenceStore }
 
     val artifacts: ArtifactStore by lazy { FileSystemArtifactStore(config.evidenceDir, ids) }
 
@@ -142,7 +142,9 @@ class AppContainer(
         )
     }
 
-    val identities: IdentityRepository by lazy { SqliteIdentityRepository(database) }
+    val identities: IdentityRepository by lazy {
+        SqliteIdentityRepository(database).let { overrides.identitiesDecorator?.invoke(it) ?: it }
+    }
 
     val planIdentities: PlanIdentitiesUseCase by lazy { PlanIdentitiesUseCase(identityGenerator, identities) }
 

@@ -2,6 +2,9 @@ package az.petek.app.di
 
 import az.petek.browser.domain.BrowserEngine
 import az.petek.core.time.HarnessClock
+import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.RunRepository
+import az.petek.identity.domain.IdentityRepository
 import az.petek.llm.domain.LlmClient
 import az.petek.orchestration.domain.MonitorView
 
@@ -18,4 +21,10 @@ data class AppOverrides(
     val monitor: MonitorView? = null,
     val clock: HarnessClock? = null,
     val browser: BrowserEngine? = null,
+    /** Wraps the evidence recorder (outermost), e.g. so the web panel sees every step as it is recorded. */
+    val recorderDecorator: ((EvidenceRecorder) -> EvidenceRecorder)? = null,
+    /** Wraps the run repository, e.g. so the web panel learns when a run starts and ends. */
+    val runsDecorator: ((RunRepository) -> RunRepository)? = null,
+    /** Wraps the identity repository, e.g. so the web panel knows the testers of a run. */
+    val identitiesDecorator: ((IdentityRepository) -> IdentityRepository)? = null,
 )

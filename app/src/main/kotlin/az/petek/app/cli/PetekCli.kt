@@ -10,27 +10,16 @@ class PetekCli(
     private val runtime: CliRuntime = CliRuntime(),
 ) {
     suspend fun execute(argv: List<String>): Int {
-        // Started without a command (e.g. IntelliJ's run icon next to main): offer the start menu; without any
-        // input (a script, CI) fall back to the help and the getting-started guide instead of failing.
-        if (argv.isEmpty()) return StartMenu(runtime, execute = { execute(it) }, noInput = { gettingStarted() }).run()
+        // Started without a command (IntelliJ's run icon next to main): open the web panel, where the owner chooses
+        // everything. Nothing is ever read from the terminal.
         val command = PetekCommand(runtime)
         return try {
-            command.parse(argv)
+            command.parse(effectiveArguments(argv))
             ExitCodes.OK
         } catch (e: CliktError) {
             command.echoFormattedHelp(e)
             exitCodeOf(e)
         }
-    }
-
-    private suspend fun gettingStarted() {
-        val command = PetekCommand(runtime)
-        try {
-            command.parse(listOf("--help"))
-        } catch (e: CliktError) {
-            command.echoFormattedHelp(e)
-        }
-        command.echo(GETTING_STARTED)
     }
 
     /**
@@ -44,16 +33,9 @@ class PetekCli(
             error is PrintHelpMessage && error.error -> ExitCodes.CONFIG_OR_ABORTED
             else -> error.statusCode
         }
+
+    companion object {
+        /** No command means the web panel: IntelliJ's run icon starts `petek` without arguments. */
+        fun effectiveArguments(argv: List<String>): List<String> = argv.ifEmpty { listOf(PanelCommand.NAME) }
+    }
 }
-
-private val GETTING_STARTED =
-    """
-
-    Getting started (local demo against the fake KadroHR):
-      1. Start the fake target:   ./gradlew :testing:fake-target:run          (IntelliJ: "1. Fake KadroHR")
-      2. Check the setup:         petek --env-file .env.fake-target doctor     (IntelliJ: "2. Pətək doctor")
-      3. Run a live campaign:     petek --env-file .env.fake-target run scenarios/kadrohr.yaml --agents 12 --headful
-                                                                               (IntelliJ: "3. Pətək run")
-    In IntelliJ, start Pətək with one of the shared run configurations rather than the run icon next to main():
-    they pass the command and the JVM options (--enable-native-access).
-    """.trimIndent()
