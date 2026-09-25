@@ -6,16 +6,23 @@ import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.StepId
 import az.petek.core.security.Secret
+import az.petek.evidence.domain.AssertionRecord
+import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.StepKind
+import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.Verdict
 import az.petek.scenarios.testing.RunStories
 import az.petek.scenarios.testing.RunStories.plus
 import az.petek.scenarios.testing.ScenarioTestKit.MINI_CAMPAIGN
 import az.petek.scenarios.testing.ScenarioTestKit.RUN
+import az.petek.scenarios.testing.ScenarioTestKit.assertion
 import az.petek.scenarios.testing.ScenarioTestKit.finding
 import az.petek.scenarios.testing.ScenarioTestKit.step
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
@@ -353,5 +360,209 @@ class SurpriseCollectorTest {
 
         collection.surprises.map { it.agentId } shouldContainExactlyInAnyOrder listOf(AgentId("a03"), AgentId("a04"))
         collection.surprises.map { it.kind }.distinct() shouldBe listOf(SurpriseKind.PROBLEM_REPORTED)
+    }
+
+    // ---- consequences of failures that are no surprise of their own ------------------------------------------------
+
+    private fun evidenceOf(
+        steps: List<StepRecord>,
+        assertions: List<AssertionRecord> = emptyList(),
+        findings: List<FindingRecord> = emptyList(),
+    ) = RunEvidence(steps, assertions, findings, emptyList())
+
+    private fun notReceived(
+        id: String,
+        agent: String,
+    ) = step(
+        id,
+        agent,
+        "read_announce",
+        StepKind.WAIT,
+        "wait_for announcement_created",
+        StepStatus.FAILED,
+        "not_received: announcement_created was not published within 30s",
+    )
+
+    @Test
+    fun `checks run after an action the environment broke are left out with it`() {
+        val broken =
+            evidenceOf(
+                steps =
+                    listOf(
+                        step(
+                            "stp_e1",
+                            "a01",
+                            "announce",
+                            StepKind.DO,
+                            "do: Elan yarat",
+                            StepStatus.ERROR,
+                            "llm_unavailable: not logged in",
+                        ),
+                    ),
+                assertions =
+                    listOf(
+                        assertion("stp_e1", "a01", "announce", "oracle", Verdict.FAILED, source = EvidenceSource.ORACLE),
+                    ),
+                findings =
+                    listOf(
+                        finding("fnd_e1", "stp_e1", "announce", "a01", FindingClass.AGENT_FAILURE, "Agent failure: llm_unavailable."),
+                        finding("fnd_e2", "stp_e1", "announce", "a01", FindingClass.BACKEND, "The target (C) contradicts the sender (A)."),
+                    ),
+            )
+
+        val collection = collect(broken)
+
+        collection.surprises.shouldBeEmpty()
+        collection.ignored.map { it.ref.id to it.reason } shouldBe
+            listOf(
+                "stp_e1" to IgnoreReason.ENVIRONMENT,
+                "fnd_e1" to IgnoreReason.ENVIRONMENT,
+                "fnd_e2" to IgnoreReason.ENVIRONMENT,
+                "stp_e1" to IgnoreReason.ENVIRONMENT,
+            )
+        collection.ignored.last().detail shouldContain "oracle not meaningful"
+    }
+
+    @Test
+    fun `a reception check that failed before the environment broke the action is still a surprise`() {
+        val evidence =
+            evidenceOf(
+                steps =
+                    listOf(
+                        step(
+                            "stp_w",
+                            "a03",
+                            "read_announce",
+                            StepKind.WAIT,
+                            "wait_for announcement_created",
+                            StepStatus.PASSED,
+                            "received",
+                        ),
+                        step(
+                            "stp_c",
+                            "a03",
+                            "read_announce",
+                            StepKind.DO,
+                            "do: Bildirişləri aç",
+                            StepStatus.ERROR,
+                            "llm_unavailable: not logged in",
+                            second = 6,
+                        ),
+                    ),
+                assertions = listOf(assertion("stp_w", "a03", "read_announce", "visible_text", Verdict.FAILED)),
+                findings = listOf(finding("fnd_r", "stp_w", "read_announce", "a03", FindingClass.DELIVERY_UI, "Receiver did not see it.")),
+            )
+
+        val collection = collect(evidence)
+
+        val surprise = collection.surprises.single()
+        surprise.kind shouldBe SurpriseKind.FINDING
+        surprise.evidence.findingIds shouldBe listOf(FindingId("fnd_r"))
+        collection.ignored.shouldBeEmpty()
+    }
+
+    @Test
+    fun `receivers of an event nobody published are left out and the emitter's failure is the surprise`() {
+        val evidence =
+            evidenceOf(
+                listOf(
+                    step("stp_a", "a01", "announce", StepKind.DO, "do: Elan yarat", StepStatus.FAILED, "step_limit: not finished"),
+                    notReceived("stp_r3", "a03"),
+                    notReceived("stp_r4", "a04"),
+                ),
+            )
+
+        val collection = collect(evidence)
+
+        collection.surprises.map { it.scenarioStep to it.agentId } shouldBe listOf("announce" to AgentId("a01"))
+        collection.ignored.map { it.ref.id to it.reason } shouldBe
+            listOf("stp_r3" to IgnoreReason.NOT_PUBLISHED, "stp_r4" to IgnoreReason.NOT_PUBLISHED)
+    }
+
+    @Test
+    fun `an environment failure of the emitter asks nothing about it or its receivers`() {
+        val evidence = RunStories.environmentFailure() + evidenceOf(listOf(notReceived("stp_r3", "a03")))
+
+        val collection = collect(evidence)
+
+        collection.surprises.shouldBeEmpty()
+        collection.ignored.map { it.reason }.toSet() shouldBe setOf(IgnoreReason.ENVIRONMENT, IgnoreReason.NOT_PUBLISHED)
+    }
+
+    @Test
+    fun `receivers waiting for an event whose emitter was refused on purpose reveal a scenario bug`() {
+        val evidence =
+            evidenceOf(
+                listOf(
+                    step(
+                        "stp_a",
+                        "a01",
+                        "announce",
+                        StepKind.DO,
+                        "do: Elan yarat",
+                        StepStatus.BLOCKED,
+                        "permission_denied: permission_denied: no rights",
+                    ),
+                    notReceived("stp_r3", "a03"),
+                ),
+            )
+
+        val collection = collect(evidence)
+
+        collection.surprises.map { it.agentId to it.kind } shouldBe listOf(AgentId("a03") to SurpriseKind.FAILED_STEP)
+        collection.ignored.map { it.ref.id to it.reason } shouldBe listOf("stp_a" to IgnoreReason.EXPECTED_REFUSAL)
+    }
+
+    @Test
+    fun `a receiver whose event was published too late for it is a surprise`() {
+        val evidence =
+            evidenceOf(
+                listOf(
+                    step("stp_p", "a01", "announce", StepKind.EMIT, "emit announcement_created", StepStatus.PASSED, "id=17", second = 40),
+                    notReceived("stp_r3", "a03"),
+                ),
+            )
+
+        val surprise = collect(evidence).surprises.single()
+
+        surprise.kind shouldBe SurpriseKind.FAILED_STEP
+        surprise.agentId shouldBe AgentId("a03")
+        surprise.text shouldContain "not_received"
+    }
+
+    @Test
+    fun `a receiver that never got its event did not lose a race`() {
+        val late =
+            evidenceOf(
+                listOf(
+                    step("stp_p", "a01", "announce", StepKind.EMIT, "emit announcement_created", StepStatus.PASSED, "id=17"),
+                    step(
+                        "stp_rw",
+                        "a04",
+                        "race",
+                        StepKind.WAIT,
+                        "wait_for announcement_created",
+                        StepStatus.FAILED,
+                        "not_received: announcement_created was not published within 30s",
+                    ),
+                ),
+            )
+
+        val collection = collect(RunStories.race(won = true) + late)
+
+        collection.surprises.map { it.agentId } shouldBe listOf(AgentId("a04"))
+        collection.ignored.map { it.reason }.distinct() shouldBe listOf(IgnoreReason.LOST_RACE)
+    }
+
+    @Test
+    fun `shown evidence is what the facts name`() {
+        val turns =
+            (1..30).map { i -> step("stp_t$i", "a01", "announce", StepKind.DO, "click [$i]", StepStatus.PASSED, second = i.toLong()) } +
+                step("stp_t31", "a01", "announce", StepKind.DO, "do: Elan yarat", StepStatus.FAILED, "step_limit: x", second = 31)
+
+        val evidence = collect(evidenceOf(turns)).surprises.single().evidence
+
+        evidence.refs.map { it.id } shouldContain "stp_t1"
+        evidence.shownRefs.map { it.id } shouldBe (7..31).map { "stp_t$it" }
     }
 }

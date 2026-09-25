@@ -26,6 +26,7 @@ import az.petek.scenarios.domain.ScenarioHash
 import az.petek.scenarios.domain.ScenarioValidator
 import az.petek.scenarios.infrastructure.CampaignScenarioValidator
 import kotlinx.coroutines.runBlocking
+import java.net.URI
 import java.nio.file.Path
 import java.time.Instant
 
@@ -94,10 +95,13 @@ object ScenarioTestKit {
     /** [MINI_YAML] loaded by the real campaign loader. */
     val MINI_CAMPAIGN: Campaign by lazy { runBlocking { validator().check(MINI_YAML, "mini.yaml").validCampaign() } }
 
+    /** The real loader and validator; [targetOverride] plays `PETEK_TARGET`, which replaces `campaign.target`. */
     fun validator(
         workDirectory: Path? = null,
         runFunctions: Set<String> = RUN_FUNCTIONS,
-    ): ScenarioValidator = CampaignScenarioValidator(YamlCampaignSource(), DefaultCampaignValidator(), runFunctions, workDirectory)
+        targetOverride: URI? = null,
+    ): ScenarioValidator =
+        CampaignScenarioValidator(YamlCampaignSource(targetOverride), DefaultCampaignValidator(), runFunctions, workDirectory)
 
     // ---- evidence builders -----------------------------------------------------------------------------------------
 
@@ -108,6 +112,7 @@ object ScenarioTestKit {
         hash: String = MINI_SHA,
         name: String = "mini",
         runId: RunId = RUN,
+        result: RunResult = RunResult.FAILED,
     ) = RunRecord(
         runId = runId,
         runTag = RunTag("k7x2"),
@@ -116,8 +121,8 @@ object ScenarioTestKit {
         seed = 7,
         target = "https://staging.kadrohr.test",
         startedAt = T0,
-        endedAt = T0.plusSeconds(600),
-        result = RunResult.FAILED,
+        endedAt = T0.plusSeconds(600).takeIf { result != RunResult.RUNNING },
+        result = result,
     )
 
     fun step(

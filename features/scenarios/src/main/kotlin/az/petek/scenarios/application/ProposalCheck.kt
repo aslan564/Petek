@@ -23,10 +23,15 @@ internal class ProposalCheck(
         ) : Outcome
     }
 
+    /**
+     * Applies [edits] to [base] and checks the result. [parent] (loaded from [parentYaml]) is the version the proposal
+     * was made for; [base] is [parentYaml] itself or a triage draft already built on it.
+     */
     suspend fun check(
         base: String,
         edits: List<YamlEdit>,
         parent: Campaign,
+        parentYaml: String,
         fileName: String,
     ): Outcome {
         val yaml =
@@ -40,7 +45,7 @@ internal class ProposalCheck(
                 ?: return Outcome.Unusable(
                     "the changed scenario does not pass the campaign validator: " + check.issues.joinToString("; ") { it.toString() },
                 )
-        val violations = ProposalRules.violations(parent, child)
+        val violations = ProposalRules.violations(parent, parentYaml, child, yaml)
         return if (violations.isEmpty()) Outcome.Usable(yaml) else Outcome.Unusable(violations.joinToString("; "))
     }
 }

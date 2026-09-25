@@ -33,9 +33,12 @@ data class RunEvidence(
  *
  * Expected outcomes are left out and listed as [IgnoredSignal]s instead: `permission_denied` refusals in main steps
  * (forbidden-action tests expect them; in setup a refusal is a real surprise), the losers of a race whose
- * `only_one_succeeds` check passed, and failures of the test environment itself (test inbox or LLM unreachable).
- * The judge's agent-failure finding for such a step is left out with it. A failed assertion or a finding about the
- * target is never left out: an expected refusal whose `http_status` check failed is still a surprise.
+ * `only_one_succeeds` check passed, failures of the test environment itself (test inbox or LLM unreachable) and
+ * receivers waiting in vain for an event nobody published (the emitter's failure is the surprise). The judge's
+ * agent-failure finding for such a step is left out with it. A failed assertion or a finding about the target is
+ * otherwise never left out: an expected refusal whose `http_status` check failed is still a surprise. The one
+ * exception is a check run after an action the environment broke: that action never happened, so the check (and the
+ * judge's finding about it) says nothing; a reception check evaluated before the action still counts.
  *
  * All text is passed through the [redactor] and clipped, because it goes to the model and into the panel.
  */
@@ -60,6 +63,22 @@ class SurpriseCollector(
                 .groupBy { it.scenarioStep }
                 .filterValues { records -> records.all { it.verdict == Verdict.PASSED } }
                 .keys
+        private val publishedEvents: Set<String> =
+            evidence.steps.filter { it.runId == runId }.mapNotNullTo(HashSet(), StepConventions::emittedEvent)
+
+        /**
+         * Events whose emitting step was refused as a forbidden-action test expects. Waiting for such an event is a
+         * contradiction in the scenario, so its receivers stay surprises instead of being explained by the emitter.
+         */
+        private val refusedEvents: Set<String> =
+            campaign.allSteps
+                .mapNotNull { step -> step.emits?.let { step.id to it.event } }
+                .toMap()
+                .let { emitted ->
+                    evidence.steps
+                        .filter { it.runId == runId && StepConventions.failing(it) && expectedRefusal(it) }
+                        .mapNotNullTo(HashSet()) { emitted[it.scenarioStep] }
+                }
         private val runArtifacts: List<ArtifactRecord> = evidence.artifacts.filter { it.runId == runId }
         private val artifactsById: Map<ArtifactId, ArtifactRecord> = runArtifacts.associateBy { it.artifactId }
         private val artifactsByStep: Map<StepId, List<ArtifactId>> =
@@ -93,10 +112,13 @@ class SurpriseCollector(
         private fun judge(group: Group): GroupOutcome {
             val triggers = mutableListOf<Trigger>()
             val ignored = mutableListOf<IgnoredSignal>()
+            // Concluding actions the environment broke: the checks recorded against them (same step id) are moot.
+            val brokenActions = mutableSetOf<StepId>()
             group.steps.filter(StepConventions::failing).forEach { step ->
                 val role = StepConventions.roleOf(step)
                 if (role == Role.INTERMEDIATE) return@forEach
                 val reason = ignoreReason(group, step)
+                if (reason == IgnoreReason.ENVIRONMENT) brokenActions += step.stepId
                 when {
                     reason != null -> {
                         ignored +=
@@ -112,15 +134,30 @@ class SurpriseCollector(
                     }
                 }
             }
+            val (moot, failedChecks) = group.assertions.filter { it.verdict == Verdict.FAILED }.partition { it.stepId in brokenActions }
             group.findings.forEach { finding ->
-                val reason = if (finding.findingClass == FindingClass.AGENT_FAILURE) ignoreReason(group, sourceOf(group, finding)) else null
+                val reason =
+                    when {
+                        finding.findingClass == FindingClass.AGENT_FAILURE -> ignoreReason(group, sourceOf(group, finding))
+                        failedChecks.isEmpty() && finding.stepId in brokenActions -> IgnoreReason.ENVIRONMENT
+                        else -> null
+                    }
                 if (reason != null) {
                     ignored += signal(group, EvidenceRef(EvidenceRefType.FINDING, finding.findingId.value), reason, finding.note)
                 } else {
                     triggers += Trigger.Finding(finding)
                 }
             }
-            group.assertions.filter { it.verdict == Verdict.FAILED }.forEach { triggers += Trigger.FailedAssertion(it) }
+            moot.forEach {
+                ignored +=
+                    signal(
+                        group,
+                        EvidenceRef(EvidenceRefType.STEP, it.stepId.value),
+                        IgnoreReason.ENVIRONMENT,
+                        "${it.type} not meaningful: the action it checks failed in the test environment",
+                    )
+            }
+            failedChecks.forEach { triggers += Trigger.FailedAssertion(it) }
             if (triggers.isEmpty()) return GroupOutcome.Expected(ignored)
             return GroupOutcome.Surprising(surprise(group, triggers))
         }
@@ -131,17 +168,22 @@ class SurpriseCollector(
             step: StepRecord?,
         ): IgnoreReason? {
             val key = step?.let(StepConventions::failureKey)
+            val awaited = step?.let(StepConventions::awaitedEvent)
             return when {
                 key in StepConventions.ENVIRONMENT_KEYS -> {
                     IgnoreReason.ENVIRONMENT
                 }
 
-                key == StepConventions.PERMISSION_DENIED && step.status == StepStatus.BLOCKED &&
-                    phases[step.scenarioStep] == StepPhase.MAIN -> {
+                step != null && expectedRefusal(step) -> {
                     IgnoreReason.EXPECTED_REFUSAL
                 }
 
-                group.agentId != null && group.scenarioStep in wonRaces -> {
+                key == StepConventions.NOT_RECEIVED && awaited != null && awaited !in publishedEvents && awaited !in refusedEvents -> {
+                    IgnoreReason.NOT_PUBLISHED
+                }
+
+                // A receiver that never got the event did not take part in the race; that is no lost race.
+                group.agentId != null && group.scenarioStep in wonRaces && awaited == null -> {
                     IgnoreReason.LOST_RACE
                 }
 
@@ -150,6 +192,12 @@ class SurpriseCollector(
                 }
             }
         }
+
+        /** `permission_denied` in a main step: what forbidden-action tests expect; their assertions decide. */
+        private fun expectedRefusal(step: StepRecord): Boolean =
+            step.status == StepStatus.BLOCKED &&
+                StepConventions.failureKey(step) == StepConventions.PERMISSION_DENIED &&
+                phases[step.scenarioStep] == StepPhase.MAIN
 
         private fun sourceOf(
             group: Group,

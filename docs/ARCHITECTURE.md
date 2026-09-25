@@ -102,15 +102,19 @@ finished run's surprises into explainable verdicts. The web panel (Faza 8) is bu
   Texts are exported byte-exact, so a run's `campaign_hash` points back to the version it executed.
 - **Surprises.** Per actor and scenario step, a run's `report_problem` steps, failed concluding steps and findings
   form one surprise with all of that actor's evidence. `permission_denied` in a main step (an expected refusal), the
-  losers of a race whose `only_one_succeeds` passed and environment failures (`mail_unavailable`, `llm_unavailable`)
-  are listed as ignored instead.
-- **Triage.** `TriageRunUseCase` asks the LLM one structured question per surprise (redacted evidence facts plus the
-  scenario YAML) and validates the answer in code: `SYSTEM_BUG` (the target is wrong), `MODEL_GAP` (our knowledge of
-  the site is wrong), `SCENARIO_BUG` (the scenario is wrong). Each verdict links to the steps, artifacts and findings it
-  is based on. A proposed change is a list of exact text edits; it is kept only if the edited YAML passes the campaign
-  validator and keeps the campaign's identity settings, otherwise it is rejected with the reason and the verdict stays.
-  The usable changes of one run become a single v2 `DRAFT` (source `TRIAGE`, parent = the executed version) for the
-  owner to review as a diff. Re-running triage resumes: decided surprises are not asked again.
+  losers of a race whose `only_one_succeeds` passed, environment failures (`mail_unavailable`, `llm_unavailable`)
+  together with the checks run after the action they broke, and receivers whose `wait_for` timed out for an event
+  nobody published (the emitter's failure is the surprise) are listed as ignored instead.
+- **Triage.** `TriageRunUseCase` works on finished runs only and asks the LLM one structured question per surprise
+  (redacted evidence facts plus the scenario YAML, both marked as data) and validates the answer in code:
+  `SYSTEM_BUG` (the target is wrong), `MODEL_GAP` (our knowledge of the site is wrong), `SCENARIO_BUG` (the scenario is
+  wrong). Each verdict links only to the steps, artifacts and findings the question showed. A proposed change is a
+  list of exact text edits; it is kept only if the edited YAML passes the campaign validator and keeps the campaign's
+  identity settings (the target also as written, since `PETEK_TARGET` hides it once loaded), otherwise it is rejected
+  with the reason and the verdict stays. The usable changes of a run become one `DRAFT` (source `TRIAGE`, parent = the
+  executed version) for the owner to review as a diff; a later execution of the same run (deferred or retried
+  questions) builds its draft on top of that one, so the newest triage draft of a run carries all of its changes.
+  Re-running triage resumes: decided surprises are not asked again.
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 

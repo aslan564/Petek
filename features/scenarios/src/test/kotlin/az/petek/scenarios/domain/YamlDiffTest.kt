@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import kotlin.random.Random
 
 class YamlDiffTest {
     private fun lines(vararg lines: String): String = lines.joinToString("") { "$it\n" }
@@ -212,6 +213,47 @@ class YamlDiffTest {
         diff.removed shouldBe 2_500
         diff.added shouldBe 2_500
         patch(old, diff) shouldBe new
+    }
+
+    @Test
+    fun `random texts always patch back and the edit script is as short as the longest common subsequence allows`() {
+        val random = Random(20260925)
+        repeat(400) { round ->
+            val old = randomText(random)
+            val new = randomText(random)
+            val context = round % 4
+
+            val diff = YamlDiff.of(old, new, context = context)
+
+            patch(old, diff) shouldBe new
+            val oldLines = TextLine.split(old)
+            val newLines = TextLine.split(new)
+            (diff.added + diff.removed) shouldBe oldLines.size + newLines.size - 2 * lcs(oldLines, newLines)
+            diff.hunks.forEach { hunk ->
+                hunk.lines.count { it.type != DiffLineType.ADDED } shouldBe hunk.oldCount
+                hunk.lines.count { it.type != DiffLineType.REMOVED } shouldBe hunk.newCount
+            }
+        }
+    }
+
+    /** Up to 15 lines over a tiny alphabet (many repeats, as in YAML), sometimes without a final line break. */
+    private fun randomText(random: Random): String {
+        val lines = List(random.nextInt(0, 16)) { listOf("a", "b", "c", "- x", "  y: 1")[random.nextInt(5)] }
+        if (lines.isEmpty()) return ""
+        return lines.joinToString("\n") + if (random.nextInt(4) == 0) "" else "\n"
+    }
+
+    private fun lcs(
+        a: List<TextLine>,
+        b: List<TextLine>,
+    ): Int {
+        val table = Array(a.size + 1) { IntArray(b.size + 1) }
+        for (i in a.indices.reversed()) {
+            for (j in b.indices.reversed()) {
+                table[i][j] = if (a[i] == b[j]) table[i + 1][j + 1] + 1 else maxOf(table[i + 1][j], table[i][j + 1])
+            }
+        }
+        return table[0][0]
     }
 
     @Test

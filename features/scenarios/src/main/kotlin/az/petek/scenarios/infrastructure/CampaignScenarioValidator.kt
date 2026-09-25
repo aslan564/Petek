@@ -3,8 +3,10 @@ package az.petek.scenarios.infrastructure
 import az.petek.campaign.application.CampaignSource
 import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.CampaignValidator
+import az.petek.campaign.domain.ValidationIssue
 import az.petek.scenarios.domain.ScenarioCheck
 import az.petek.scenarios.domain.ScenarioValidator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
@@ -18,6 +20,10 @@ import java.nio.file.Path
  * [workDirectory] (the system temp directory by default) as [ScenarioValidator.check]'s file name, and removed
  * afterwards. The loaded campaign's `sourceHash` therefore equals the version's SHA-256.
  * Constructed by the composition root with the run functions the agent feature knows.
+ *
+ * The text is untrusted (a model writes triage proposals), so a loader or validator that crashes on it (e.g. a stack
+ * overflow on absurdly nested YAML) yields an issue, never an exception: invalid text is a result, as the port says.
+ * Failing to write the temporary file is still an exception, because it says nothing about the text.
  */
 class CampaignScenarioValidator(
     private val source: CampaignSource,
@@ -39,13 +45,34 @@ class CampaignScenarioValidator(
                         source.load(file)
                     } catch (e: CampaignValidationException) {
                         return@withContext ScenarioCheck(null, e.issues)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: StackOverflowError) {
+                        return@withContext ScenarioCheck(null, listOf(ValidationIssue(null, TOO_DEEP)))
+                    } catch (e: RuntimeException) {
+                        return@withContext ScenarioCheck(null, listOf(crashed("campaign loader", e)))
                     }
-                ScenarioCheck(campaign, validator.validate(campaign, knownRunFunctions))
+                val issues =
+                    try {
+                        validator.validate(campaign, knownRunFunctions)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: StackOverflowError) {
+                        listOf(ValidationIssue(null, TOO_DEEP))
+                    } catch (e: RuntimeException) {
+                        listOf(crashed("campaign validator", e))
+                    }
+                ScenarioCheck(campaign, issues)
             } finally {
                 Files.deleteIfExists(file)
                 Files.deleteIfExists(directory)
             }
         }
+
+    private fun crashed(
+        what: String,
+        e: RuntimeException,
+    ) = ValidationIssue(null, "the $what failed on this text: ${e::class.simpleName}: ${e.message ?: "no message"}")
 
     private fun createIn(parent: Path): Path {
         Files.createDirectories(parent)
@@ -54,6 +81,7 @@ class CampaignScenarioValidator(
 
     internal companion object {
         private const val PREFIX = "petek-scenario-"
+        private const val TOO_DEEP = "the YAML is nested too deeply to be loaded"
         private const val FALLBACK = "scenario.yaml"
         private val UNSAFE = Regex("[^\\p{L}\\p{N}._-]")
 

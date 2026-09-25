@@ -1,7 +1,9 @@
 package az.petek.scenarios.infrastructure
 
 import az.petek.campaign.application.CampaignSource
+import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.CampaignValidationException
+import az.petek.campaign.domain.CampaignValidator
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.infrastructure.YamlCampaignSource
@@ -156,5 +158,44 @@ class CampaignScenarioValidatorTest {
                 .check("x: [", "x.yaml")
                 .issues
                 .shouldNotBeEmpty()
+        }
+
+    @Test
+    fun `absurdly nested text is an issue, never a crash`() =
+        runTest {
+            val check = validator.check("x: " + "[".repeat(5_000) + "]".repeat(5_000) + "\n", "deep.yaml")
+
+            check.campaign.shouldBeNull()
+            check.issues.single().message shouldContain "nested too deeply"
+            dir.resolve("work").listDirectoryEntries().shouldBeEmpty()
+        }
+
+    @Test
+    fun `a loader or validator that crashes on the text yields an issue`() =
+        runTest {
+            val crashingLoader = CampaignSource { error("mapper bug") }
+            val loaded = ScenarioTestKit.MINI_CAMPAIGN
+            val crashingValidator =
+                object : CampaignValidator {
+                    override fun validate(
+                        campaign: Campaign,
+                        knownRunFunctions: Set<String>,
+                    ): List<ValidationIssue> = throw IllegalArgumentException("validator bug")
+                }
+
+            CampaignScenarioValidator(crashingLoader, DefaultCampaignValidator(), emptySet(), dir)
+                .check(MINI_YAML, "mini.yaml")
+                .issues
+                .single()
+                .message shouldBe "the campaign loader failed on this text: IllegalStateException: mapper bug"
+            val check =
+                CampaignScenarioValidator(
+                    CampaignSource { loaded },
+                    crashingValidator,
+                    emptySet(),
+                    dir,
+                ).check(MINI_YAML, "mini.yaml")
+            check.valid shouldBe false
+            check.issues.single().message shouldContain "the campaign validator failed on this text: IllegalArgumentException"
         }
 }

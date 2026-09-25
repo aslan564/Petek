@@ -2,6 +2,7 @@ package az.petek.scenarios.application
 
 import az.petek.core.time.HarnessClock
 import az.petek.scenarios.domain.ConcurrentScenarioChangeException
+import az.petek.scenarios.domain.FrozenScenarioException
 import az.petek.scenarios.domain.ScenarioFiles
 import az.petek.scenarios.domain.ScenarioHash
 import az.petek.scenarios.domain.ScenarioIdGenerator
@@ -149,7 +150,11 @@ class ScenarioCatalog(
         return version
     }
 
-    /** Computes and applies a review transition, recomputing it when a concurrent review changed the versions. */
+    /**
+     * Computes and applies a review transition, recomputing it when a concurrent review changed the versions. A
+     * [FrozenScenarioException] is such a change too: a transition is never computed on a FROZEN version, so a frozen
+     * one in the batch was frozen meanwhile (e.g. the approved version this approval was about to supersede).
+     */
     private suspend fun reviewed(
         id: ScenarioVersionId,
         transition: suspend (ScenarioVersion) -> List<ScenarioVersionUpdate>,
@@ -162,6 +167,8 @@ class ScenarioCatalog(
                 repository.update(updates)
                 return get(id)
             } catch (e: ConcurrentScenarioChangeException) {
+                if (attempt == REVIEW_ATTEMPTS - 1) throw e
+            } catch (e: FrozenScenarioException) {
                 if (attempt == REVIEW_ATTEMPTS - 1) throw e
             }
         }

@@ -61,3 +61,11 @@ class ScenarioNotInCatalogException(
 class TriageRunNotFoundException(
     val runId: RunId,
 ) : PetekException("Run $runId does not exist")
+
+/**
+ * Triage stores what it collects for good (surprises are write-once, decided ones are not asked again), so it only
+ * works on a finished run; a RUNNING run (still going, or its process died) has incomplete evidence and no findings.
+ */
+class TriageRunNotFinishedException(
+    val runId: RunId,
+) : PetekException("Run $runId has not finished; triage needs its complete evidence and findings (preview works meanwhile)")

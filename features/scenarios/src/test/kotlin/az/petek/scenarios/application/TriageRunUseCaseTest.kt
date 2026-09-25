@@ -4,6 +4,7 @@ import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.security.Secret
 import az.petek.core.testing.FakeHarnessClock
+import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.testing.InMemoryEvidence
@@ -25,6 +26,7 @@ import az.petek.scenarios.domain.ScenarioVersionId
 import az.petek.scenarios.domain.SecretRedactor
 import az.petek.scenarios.domain.SurpriseId
 import az.petek.scenarios.domain.TriageCategory
+import az.petek.scenarios.domain.TriageRunNotFinishedException
 import az.petek.scenarios.domain.TriageRunNotFoundException
 import az.petek.scenarios.domain.TriageVerdict
 import az.petek.scenarios.domain.YamlEdit
@@ -42,6 +44,7 @@ import az.petek.scenarios.testing.SequentialScenarioIds
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContainAnyOf
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -56,6 +59,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
 
@@ -616,5 +620,166 @@ class TriageRunUseCaseTest {
 
             report.items.map { it.surprise.agentId?.value } shouldBe agents
             report.items.all { it.verdict != null } shouldBe true
+        }
+
+    // ---- review fixes ------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a run that has not finished is previewed but never triaged`() =
+        runTest {
+            catalog.createDraft(MINI_YAML, ScenarioSource.USER)
+            evidence.create(ScenarioTestKit.run(result = RunResult.RUNNING))
+            RunStories.problemReported("a03").into(evidence)
+            val llm = fixed()
+
+            useCase(llm).preview(RUN).surprises shouldHaveSize 1
+            shouldThrow<TriageRunNotFinishedException> { useCase(llm).execute(RUN) }.message shouldContain "has not finished"
+
+            llm.requests.shouldBeEmpty()
+            triage.surprises(RUN).shouldBeEmpty()
+        }
+
+    /** [agent] clicks 30 times, then its action runs out of steps; only the latest 25 steps are shown to the model. */
+    private fun longAction(agent: String) =
+        RunEvidence(
+            steps =
+                (1..30).map { i ->
+                    step("stp_${agent}_t$i", agent, "read_announce", StepKind.DO, "click [$i]", StepStatus.PASSED, second = i.toLong())
+                } +
+                    step(
+                        "stp_${agent}_t31",
+                        agent,
+                        "read_announce",
+                        StepKind.DO,
+                        "do: Bildirişləri aç və yeni elanı oxu",
+                        StepStatus.FAILED,
+                        "step_limit: not finished",
+                        second = 31,
+                    ),
+            assertions = emptyList(),
+            findings = emptyList(),
+            artifacts = listOf(ScenarioTestKit.artifact("art_$agent", "stp_${agent}_t31")),
+        )
+
+    @Test
+    fun `a verdict links only to evidence the question showed`() =
+        runTest {
+            givenRun(longAction("a03"), longAction("a04"))
+            val llm =
+                fixed(
+                    srp("read_announce", "a03") to answer(TriageCategory.MODEL_GAP, listOf("stp_a03_t1")),
+                    srp("read_announce", "a04") to answer(TriageCategory.MODEL_GAP, listOf("stp_a04_t1", "[stp_a04_t31]")),
+                )
+
+            val report = useCase(llm).execute(RUN)
+
+            val onlyHidden = report.items[0].verdict.shouldNotBeNull()
+            onlyHidden.basedOn shouldBe
+                report.items[0]
+                    .surprise.evidence.shownRefs
+            onlyHidden.basedOn.map { it.id } shouldNotContainAnyOf listOf("stp_a03_t1", "stp_a03_t6")
+            report.items[1]
+                .verdict
+                .shouldNotBeNull()
+                .basedOn shouldBe
+                listOf(EvidenceRef(EvidenceRefType.STEP, "stp_a04_t31"), EvidenceRef(EvidenceRefType.ARTIFACT, "art_a04"))
+            llm.requests.forEach { it.messages.single().content shouldNotContain "[stp_a03_t1]" }
+        }
+
+    @Test
+    fun `a change of the target line is refused even when a target override hides it`() =
+        runTest {
+            givenRun(RunStories.problemReported("a03"), RunStories.failedJoin("a04"))
+            val overridden = ScenarioTestKit.validator(dir.resolve("work"), targetOverride = URI("https://override.kadrohr.test"))
+            val llm =
+                fixed(
+                    srp("read_announce", "a03") to
+                        answer(TriageCategory.MODEL_GAP, edits = listOf("https://staging.kadrohr.test" to "https://www.kadrohr.test")),
+                    srp("join", "a04") to answer(TriageCategory.SCENARIO_BUG, edits = listOf(readTask to readTaskFixed)),
+                )
+            val useCase = TriageRunUseCase(llm, evidence, evidence, scenarios, triage, overridden, clock, ids)
+
+            val report = useCase.execute(RUN)
+
+            val target =
+                report.items[0]
+                    .verdict
+                    ?.proposedChange
+                    .shouldNotBeNull()
+            target.status shouldBe ProposalStatus.REJECTED
+            target.rejection.shouldNotBeNull() shouldContain "must keep: target"
+            report.draft.shouldNotBeNull().yaml shouldBe MINI_YAML.replace(readTask, readTaskFixed)
+        }
+
+    @Test
+    fun `a later execution of the same run builds on its first draft so the newest draft carries every change`() =
+        runTest {
+            givenRun(RunStories.problemReported("a03"), RunStories.failedJoin("a04"))
+            val llm =
+                fixed(
+                    srp("read_announce", "a03") to answer(TriageCategory.SCENARIO_BUG, edits = listOf(readTask to readTaskFixed)),
+                    srp("join", "a04") to answer(TriageCategory.MODEL_GAP, edits = listOf(announceTask to announceTaskFixed)),
+                )
+            val v2 = useCase(llm, TriageOptions(maxQuestions = 1)).execute(RUN).draft.shouldNotBeNull()
+
+            val second = useCase(llm, TriageOptions(maxQuestions = 1)).execute(RUN)
+
+            val v3 = second.draft.shouldNotBeNull()
+            v3.parentId shouldBe v2.id
+            v3.yaml shouldBe MINI_YAML.replace(readTask, readTaskFixed).replace(announceTask, announceTaskFixed)
+            v3.note shouldContain "on top of mini v2"
+            second.items.map { it.verdict?.proposedChange?.draftId } shouldBe listOf(v2.id, v3.id)
+            val increment = catalog.diffFromParent(v3.id).shouldNotBeNull()
+            increment.added shouldBe 1
+            increment.unified() shouldContain "+    $announceTaskFixed"
+            scenarios.history("mini").map { it.version } shouldBe listOf(1, 2, 3)
+        }
+
+    @Test
+    fun `a change an earlier execution already drafted is linked to that draft, not drafted twice`() =
+        runTest {
+            givenRun(RunStories.problemReported("a03"), RunStories.problemReported("a04"))
+            val llm = ScriptedLlmClient { answer(TriageCategory.SCENARIO_BUG, edits = listOf(readTask to readTaskFixed)) }
+            val v2 = useCase(llm, TriageOptions(maxQuestions = 1)).execute(RUN).draft.shouldNotBeNull()
+
+            val second = useCase(llm, TriageOptions(maxQuestions = 1)).execute(RUN)
+
+            second.draft shouldBe v2
+            second.items.map { it.verdict?.proposedChange?.draftId } shouldBe listOf(v2.id, v2.id)
+            TriageResults(triage).forDraft(v2.id) shouldHaveSize 2
+            scenarios.history("mini").map { it.version } shouldBe listOf(1, 2)
+        }
+
+    @Test
+    fun `a draft stored by an interrupted execution is reused, not duplicated`() =
+        runTest {
+            val v1 = givenRun(RunStories.problemReported("a03"))
+            val surprise = useCase(fixed()).preview(RUN).surprises.single()
+            triage.addSurprises(listOf(surprise))
+            triage.saveVerdict(
+                TriageVerdict(
+                    surprise.id,
+                    RUN,
+                    v1.id,
+                    TriageCategory.SCENARIO_BUG,
+                    "əvvəlki cavab",
+                    0.7,
+                    surprise.evidence.refs,
+                    ProposedChange("s", listOf(YamlEdit(readTask, readTaskFixed)), ProposalStatus.PENDING),
+                    "scripted",
+                    clock.now().wall,
+                ),
+            )
+            val stored = catalog.createDraft(MINI_YAML.replace(readTask, readTaskFixed), ScenarioSource.TRIAGE, v1.id, "interrupted")
+
+            val report = useCase(fixed()).execute(RUN)
+
+            report.draft shouldBe stored
+            report.items
+                .single()
+                .verdict
+                ?.proposedChange
+                ?.draftId shouldBe stored.id
+            scenarios.history("mini").map { it.version } shouldBe listOf(1, 2)
         }
 }

@@ -9,8 +9,9 @@ fun interface TextRedactor {
 
 /**
  * Masks every known [secrets] value (test token, API keys, test passwords), then values that look secret whatever
- * they are: `password=…`, `token: …`, `Authorization: Bearer …`, Anthropic keys. The producers of evidence already
- * redact what they know (the agent types `{self.password}`); this is the last line before text reaches the model.
+ * they are: `password=…`, `token: …`, `"token": "…"` (JSON), `Authorization: Bearer …`, Anthropic keys. The producers
+ * of evidence already redact what they know (the agent types `{self.password}`); this is the last line before text
+ * reaches the model.
  * Secrets shorter than [MIN_SECRET_LENGTH] are ignored, because masking them would mangle ordinary words.
  */
 class SecretRedactor(
@@ -39,7 +40,7 @@ class SecretRedactor(
                 Regex("sk-ant-[A-Za-z0-9_-]{8,}") to MASK,
                 Regex(
                     "(?i)\\b(password|passwd|pwd|token|x-test-token|api[_-]?key|secret|authorization)" +
-                        "(\\s*[:=]\\s*)([\"']?)(?!\\*\\*\\*)(?!\\{)[^\\s\"',;]+",
+                        "([\"']?\\s*[:=]\\s*)([\"']?)(?!\\*\\*\\*)(?!\\{)[^\\s\"',;]+",
                 ) to "$1$2$3$MASK",
             )
     }

@@ -80,6 +80,13 @@ data class SurpriseEvidence(
             stepIds.map { EvidenceRef(EvidenceRefType.STEP, it.value) } +
                 artifactIds.map { EvidenceRef(EvidenceRefType.ARTIFACT, it.value) } +
                 findingIds.map { EvidenceRef(EvidenceRefType.FINDING, it.value) }
+
+    /**
+     * The [refs] whose `[id]` appears in the [facts], i.e. the evidence the triage question actually showed. A long
+     * action shows only its latest steps and artifacts, so a verdict may only rest on this subset.
+     */
+    val shownRefs: List<EvidenceRef>
+        get() = refs.filter { ref -> facts.any { fact -> fact.contains("[${ref.id}]") } }
 }
 
 enum class EvidenceRefType { STEP, ARTIFACT, FINDING }
@@ -100,8 +107,17 @@ enum class IgnoreReason {
     /** A loser of a race whose `only_one_succeeds` check passed: exactly one actor was supposed to win. */
     LOST_RACE,
 
-    /** The test environment failed (test inbox or LLM unreachable); that says nothing about target, model or scenario. */
+    /**
+     * The test environment failed (test inbox or LLM unreachable); that says nothing about target, model or scenario.
+     * The checks run after such a failed action are left out with it: the action they check never happened.
+     */
     ENVIRONMENT,
+
+    /**
+     * A receiver's `wait_for` timed out for an event no actor published in the whole run: the emitter's own failure
+     * explains it and is triaged (or ignored) on its own, so the receivers add nothing but cost.
+     */
+    NOT_PUBLISHED,
 }
 
 /** A failing record left out of triage, with the reason, so the owner can see that nothing was silently dropped. */

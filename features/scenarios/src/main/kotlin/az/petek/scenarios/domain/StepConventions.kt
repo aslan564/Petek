@@ -11,13 +11,17 @@ import az.petek.evidence.domain.StepStatus
  *   conclusions of their own;
  * - inside a `do`, every LLM decision is a DO step (`click [12] "…"`, `report_problem <kind> "<note>"`), the last one
  *   with `| outcome: <STATUS> <failure key>: <summary>` in its detail;
- * - inside a `run`, sub-actions are `<function>: <what>` RUN steps and the function's own conclusion is `run <function>`.
+ * - inside a `run`, sub-actions are `<function>: <what>` RUN steps and the function's own conclusion is `run <function>`;
+ * - a publication is an EMIT step `emit <event>` (recorded even when the object id could not be read), a receiver's
+ *   wait is a WAIT step `wait_for <event>` that fails with `not_received: …` when the event did not come in time.
  */
 internal object StepConventions {
     const val PERMISSION_DENIED = "permission_denied"
 
     /** Keys of test-environment failures (inbox or model unreachable), mirrored from the agent's failure reasons. */
     val ENVIRONMENT_KEYS: Set<String> = setOf("mail_unavailable", "llm_unavailable")
+
+    const val NOT_RECEIVED = "not_received"
 
     const val ONLY_ONE_SUCCEEDS = "only_one_succeeds"
 
@@ -26,6 +30,25 @@ internal object StepConventions {
     private const val REPORT_PROBLEM = "report_problem "
     private const val DO_CONCLUSION = "do:"
     private const val RUN_CONCLUSION = "run "
+    private const val EMIT = "emit "
+    private const val WAIT_FOR = "wait_for "
+
+    /** The event an EMIT step published, or null for any other step. */
+    fun emittedEvent(step: StepRecord): String? = eventOf(step, StepKind.EMIT, EMIT)
+
+    /** The event a WAIT step waited for, or null for any other step. */
+    fun awaitedEvent(step: StepRecord): String? = eventOf(step, StepKind.WAIT, WAIT_FOR)
+
+    private fun eventOf(
+        step: StepRecord,
+        kind: StepKind,
+        prefix: String,
+    ): String? =
+        step.action
+            .takeIf { step.kind == kind && it.startsWith(prefix) }
+            ?.removePrefix(prefix)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     private val leadingKey = Regex("^\\s*\\[?([a-z][a-z0-9]*(?:_[a-z0-9]+)+)]?\\s*:")
     private val outcomeKey = Regex("\\|\\s*outcome:\\s*[A-Z]+\\s+([a-z][a-z0-9]*(?:_[a-z0-9]+)*)\\s*:")

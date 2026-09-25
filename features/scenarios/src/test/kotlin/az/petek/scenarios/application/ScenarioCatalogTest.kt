@@ -5,6 +5,7 @@ import az.petek.core.testing.FakeHarnessClock
 import az.petek.scenarios.domain.DiffLineType
 import az.petek.scenarios.domain.ScenarioHash
 import az.petek.scenarios.domain.ScenarioInvalidException
+import az.petek.scenarios.domain.ScenarioLifecycle
 import az.petek.scenarios.domain.ScenarioNotFoundException
 import az.petek.scenarios.domain.ScenarioNotRunnableException
 import az.petek.scenarios.domain.ScenarioRepository
@@ -13,6 +14,7 @@ import az.petek.scenarios.domain.ScenarioStatus
 import az.petek.scenarios.domain.ScenarioTransitionException
 import az.petek.scenarios.domain.ScenarioValidator
 import az.petek.scenarios.domain.ScenarioVersionId
+import az.petek.scenarios.domain.ScenarioVersionUpdate
 import az.petek.scenarios.infrastructure.FileSystemScenarioFiles
 import az.petek.scenarios.infrastructure.SqliteScenarioRepository
 import az.petek.scenarios.testing.InMemoryScenarioRepository
@@ -35,6 +37,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import kotlin.time.Duration.Companion.minutes
 
 class ScenarioCatalogTest {
@@ -308,4 +311,37 @@ class ScenarioCatalogTest {
                 drafts.map { it.id } shouldContainExactlyInAnyOrder sqlite.history("mini").map { it.id }
             }
         }
+
+    @Test
+    fun `an approval that races with freezing the version it supersedes still succeeds`() =
+        runTest {
+            val v1 = catalog().createDraft(MINI_YAML, ScenarioSource.USER)
+            catalog().approve(v1.id)
+            val v2 = catalog().createDraft(v2Yaml, ScenarioSource.USER, v1.id)
+            val racing = FreezeBeforeFirstUpdate(repository, v1.id, clock.now().wall)
+
+            val approved = catalog(repo = racing).approve(v2.id)
+
+            approved.status shouldBe ScenarioStatus.APPROVED
+            repository.find(v1.id)?.status shouldBe ScenarioStatus.FROZEN
+            repository.history("mini").count { it.status == ScenarioStatus.APPROVED } shouldBe 1
+            catalog().current("mini")?.id shouldBe v2.id
+        }
+
+    /** Freezes [victim], as a concurrent reviewer would, right before the first batch of updates is applied. */
+    private class FreezeBeforeFirstUpdate(
+        private val delegate: ScenarioRepository,
+        private val victim: ScenarioVersionId,
+        private val at: Instant,
+    ) : ScenarioRepository by delegate {
+        private var fired = false
+
+        override suspend fun update(updates: List<ScenarioVersionUpdate>) {
+            if (!fired) {
+                fired = true
+                delegate.update(ScenarioLifecycle.freeze(delegate.find(victim).shouldNotBeNull(), at))
+            }
+            delegate.update(updates)
+        }
+    }
 }

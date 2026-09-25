@@ -29,6 +29,12 @@ class SecretRedactorTest {
     }
 
     @Test
+    fun `secret looking JSON fields are masked too`() {
+        SecretRedactor().redact("{\"password\": \"hunter22\", \"token\":\"abc123\", \"name\": \"Əli\"}") shouldBe
+            "{\"password\": \"***\", \"token\":\"***\", \"name\": \"Əli\"}"
+    }
+
+    @Test
     fun `bearer tokens and Anthropic keys are masked`() {
         val text = SecretRedactor().redact("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.x.y and sk-ant-api03-AbCdEf123456")
 
