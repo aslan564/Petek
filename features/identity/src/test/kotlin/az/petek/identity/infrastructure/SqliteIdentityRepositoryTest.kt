@@ -194,6 +194,36 @@ class SqliteIdentityRepositoryTest {
         }
 
     @Test
+    fun `a unique violation raised by the database itself is still a conflict without secrets`() =
+        runBlocking<Unit> {
+            val db = open()
+            val repository = repository(db)
+            // Another writer takes a01's e-mail between the pre-check and the insert.
+            db.write {
+                exec(
+                    """
+                    CREATE TRIGGER take_email BEFORE INSERT ON identity
+                    WHEN NEW.run_id = '${runId.value}' AND NEW.agent_id = 'a01'
+                    BEGIN
+                        INSERT INTO identity (run_id, agent_id, display_name, email, password, phone, role,
+                            department, registration, status)
+                        VALUES ('intruder', 'a01', 'Intruder', NEW.email, 'x', '+994500000000', 'admin',
+                            NULL, 'owner', 'planned');
+                    END
+                    """.trimIndent(),
+                )
+            }
+
+            val error = shouldThrow<IdentityConflictException> { repository.replaceAll(runId, plan) }
+
+            error.message.orEmpty() shouldContain "e-mail already used by another run"
+            error.message.orEmpty() shouldContain runId.value
+            plan.identities.forEach { error.message.orEmpty() shouldNotContain it.password.reveal() }
+            error.cause shouldBe null
+            repository.findByRun(runId).shouldBeEmpty()
+        }
+
+    @Test
     fun `a plan repeating an e-mail, display name or agent id is rejected before writing`() =
         runBlocking<Unit> {
             val repository = repository()

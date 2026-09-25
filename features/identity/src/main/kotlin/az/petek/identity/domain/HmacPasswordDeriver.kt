@@ -63,8 +63,12 @@ class HmacPasswordDeriver(
     companion object {
         const val LENGTH = 16
 
-        /** The only non-alphanumeric characters a password contains (exactly one of them). */
-        const val SYMBOLS = "!@#%*-_"
+        /**
+         * The only non-alphanumeric characters a password contains (exactly one of them). A subset of the allowed
+         * `!@#%*-_`: `_` is a word character (sign-up forms checking `(?=.*\W)` would not count it) and `-`/`_` are
+         * missing from the widespread `[!@#$%^&*]` rule, so either could make a target reject the password.
+         */
+        const val SYMBOLS = "!@#%*"
 
         private const val ALGORITHM = "HmacSHA256"
         private const val UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"

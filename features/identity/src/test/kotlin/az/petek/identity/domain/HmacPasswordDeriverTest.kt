@@ -32,6 +32,15 @@ class HmacPasswordDeriverTest {
     }
 
     @Test
+    fun `the symbol satisfies every common special-character rule`() {
+        val rules = listOf(Regex("\\W"), Regex("[!@#$%^&*]"), Regex("[^A-Za-z0-9]"), Regex("\\p{Punct}"))
+        passwords().forEach { password ->
+            rules.forEach { rule -> rule.containsMatchIn(password) shouldBe true }
+            password.count { it in "!@#%*-_" } shouldBe 1
+        }
+    }
+
+    @Test
     fun `passwords start with a letter and leave out look-alike characters`() {
         passwords().forEach { password ->
             password.first().isUpperCase() shouldBe true
@@ -87,6 +96,6 @@ class HmacPasswordDeriverTest {
     }
 
     private companion object {
-        const val KNOWN_A07 = "KLb5#NiUN53Nf8BX"
+        const val KNOWN_A07 = "KLb5!NiUN53Nf8BX"
     }
 }
