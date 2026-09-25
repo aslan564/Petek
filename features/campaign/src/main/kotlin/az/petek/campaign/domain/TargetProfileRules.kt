@@ -8,7 +8,7 @@ import kotlin.time.Duration
  * Checks the parts of a [TargetProfile] that describe the site's flows (see [Flow]), and the campaign's pacing:
  *
  * - `api_prefix` is empty or `/segment[/segment…]` without a trailing slash, so `{api}/x` stays one path;
- * - `local_storage` keys and `dismiss` selectors are not blank;
+ * - `local_storage` keys and `dismiss` selectors are not blank, and `dismiss` selectors are not templates;
  * - flows have a known name ([FlowNames]) and steps; `verify_identity` contains an `assert_identity`;
  * - every selector reference is not blank, and one shaped like a key of a known group (`login.emial`) must be a key;
  * - `goto` is a path key, a `/path` on the target or a template; regular expressions compile; timeouts are positive
@@ -34,7 +34,7 @@ internal class TargetProfileRules(
         target.localStorage.keys.filter { it.isBlank() }.forEach {
             report("$PROFILE.local_storage", "$PROFILE.local_storage has a blank key")
         }
-        target.dismiss.forEachIndexed { index, ref -> checkSelector(ref, "$PROFILE.dismiss[$index]") }
+        target.dismiss.forEachIndexed { index, ref -> checkDismiss(ref, "$PROFILE.dismiss[$index]") }
         target.flows.forEach { (name, flow) -> checkFlow(name, flow) }
     }
 
@@ -54,6 +54,17 @@ internal class TargetProfileRules(
                 "$PROFILE.api_prefix",
                 "$PROFILE.api_prefix must be empty or a path like /api/v1 (no trailing '/', no query), was '${target.apiPrefix}'",
             )
+        }
+    }
+
+    /** An overlay is looked for before every flow step, so it is a key or a literal selector, never a template. */
+    private fun checkDismiss(
+        ref: String,
+        at: String,
+    ) {
+        checkSelector(ref, at)
+        if (PLACEHOLDER.containsMatchIn(ref)) {
+            report(at, "$at: overlay selectors are checked before every flow step as written; they cannot use placeholders")
         }
     }
 

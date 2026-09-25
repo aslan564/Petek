@@ -295,6 +295,14 @@ class TargetProfileRulesTest {
     }
 
     @Test
+    fun `dismiss selectors are used as written, so a placeholder in one is reported`() {
+        val target = TargetProfile.DEFAULT.copy(dismiss = listOf("role=button[name=\"Qəbul edirəm\"]", "#hi-{self.agent_id}"))
+
+        single(target, "target_profile.dismiss[1]: overlay selectors are checked before every flow step as written")
+        messages(TargetProfile.DEFAULT.copy(dismiss = listOf("role=button[name=\"Qəbul edirəm\"]", "session.logout"))).shouldBeEmpty()
+    }
+
+    @Test
     fun `pacing needs a non-negative stagger and at least one parallel actor`() {
         issues(TargetProfile.DEFAULT, Pacing(1500.milliseconds, 3)).shouldBeEmpty()
         issues(TargetProfile.DEFAULT, Pacing((-1).milliseconds, 0)) shouldHaveSize 2

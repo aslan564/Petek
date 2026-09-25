@@ -284,10 +284,11 @@ xəta mesajlarında `{url}`. `{self.password}` yalnız `fill` dəyərində ola b
 selektorunun mətni mesaja əlavə olunur.
 
 Profilin digər açarları: `local_storage` (hər brauzer kontekstinə, səhifə skriptlərindən əvvəl, yalnız hədəf origin-ə
-yazılır, məs. `kadro:domain_dialog_dismissed: "1"`), `dismiss` (hər addımdan əvvəl görünən overlay-lər bağlanır),
+yazılır, məs. `kadro:domain_dialog_dismissed: "1"`), `dismiss` (hər addımdan əvvəl görünən overlay-lər bağlanır;
+selektor olduğu kimi işlənir, şablon ola bilməz),
 `api_prefix` (`{api}` → `/api/v1`, fayl yüklənəndə açılır). `campaign.pacing: {start_stagger_ms, max_parallel_actors}`
 bir addımın aktorlarını agent id sırası ilə aralıqla və ən çox N paralel başladır (IP limitləri üçün); `parallel: true`
-addımları bundan asılı deyil. Poçt mənbəyi Mailpit və ya hədəfin test API-si (`GET /test/emails?to=`) ola bilər.
+addımları və yalnız yoxlama edən (`do`/`run`-suz) addımlar bundan asılı deyil. Poçt mənbəyi Mailpit və ya hədəfin test API-si (`GET /test/emails?to=`) ola bilər.
 
 ## Texnologiya seçimi və repo strukturu
 
