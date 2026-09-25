@@ -6,21 +6,24 @@ import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
 import az.petek.agent.domain.StepContext
+import az.petek.campaign.domain.FlowNames
 import az.petek.core.model.RegistrationMode
 import az.petek.oracle.domain.OracleException
 import az.petek.oracle.domain.TargetOracle
 import az.petek.oracle.domain.TestCompany
 
 /**
- * `register_owner` (admin; arg `company`, default [DEFAULT_COMPANY]): the owner sign-up without the LLM.
- * `/register` form -> e-mail code -> phone code when asked -> signed in -> identity check -> storage state saved.
- * With the test API available, the new company's id and code are published to [SharedRunState] for the others.
+ * `register_owner` (admin; arg `company`, default [DEFAULT_COMPANY], the flows' `{campaign.company}`): the owner
+ * sign-up without the LLM. The target profile's `register_owner` flow (contract: `/register` form -> e-mail code ->
+ * phone code when asked -> signed in -> identity check -> storage state saved); with the test API available, the new
+ * company's id and code are then published to [SharedRunState] for the others. A site whose sign-up does not end
+ * signed in is signed in with the `login` flow afterwards, which may use the published `{shared.company_code}`.
  */
 internal class RegisterOwnerRunFunction(
     private val engine: RunEngine,
-    private val flows: TargetFlows,
+    private val flows: FlowRunner,
+    private val targetFlows: TargetFlows,
     private val oracle: TargetOracle,
-    private val settings: RunFunctionSettings,
 ) : RunFunction {
     override val name: String = RunFunctions.REGISTER_OWNER
 
@@ -38,15 +41,11 @@ internal class RegisterOwnerRunFunction(
                 )
             }
             val company = args[ARG_COMPANY]?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_COMPANY
-            submitSignUp(company)
-            val state = flows.awaitTransition(this, PageState.OTHER)
-            if (state == PageState.OTHER) {
-                throw RunFailure(FailureReason.REGISTRATION_FAILED, "The sign-up form was not accepted (still on ${currentUrl()}).")
-            }
-            flows.signIn(this, state)
-            val shown = flows.verifyIdentity(this)
-            saveStorageState()
+            val progress = FlowProgress()
+            flows.run(this, FlowNames.REGISTER_OWNER, progress, FailureReason.REGISTRATION_FAILED, company)
             val published = publishCompany()
+            flows.completeSignIn(this, progress)
+            val shown = progress.identityShown ?: "The session was checked"
             succeeded("Registered ${identity.email} as owner of '$company'. $shown.${published.note}", objectId = published.company?.id)
         }
 
@@ -55,20 +54,6 @@ internal class RegisterOwnerRunFunction(
         val company: TestCompany?,
         val note: String,
     )
-
-    private suspend fun RunTrace.submitSignUp(company: String) {
-        val identity = runtime.identity
-        open("register")
-        if (!waitFor("register.name", settings.uiTimeout)) {
-            throw RunFailure(FailureReason.REGISTRATION_FAILED, "The sign-up page shows no form (${currentUrl()}).")
-        }
-        fill("register.name", identity.displayName)
-        fill("register.email", identity.email)
-        fill("register.phone", identity.phone)
-        fillPassword("register.password")
-        fill("register.company", company)
-        click("register.submit")
-    }
 
     /**
      * Publishes the new company for the other testers. The sign-up itself already succeeded at this point, so a test
@@ -80,7 +65,7 @@ internal class RegisterOwnerRunFunction(
         val email = runtime.identity.email
         val company =
             try {
-                lookup("look up the company owned by $email") { flows.retryOracle { oracle.companyByOwner(email) } }
+                lookup("look up the company owned by $email") { targetFlows.retryOracle { oracle.companyByOwner(email) } }
             } catch (e: OracleException) {
                 return Publication(null, " The company was not published: the test API failed (${e.message}).")
             } ?: return Publication(null, " The company was not published: the test API does not know it yet.")

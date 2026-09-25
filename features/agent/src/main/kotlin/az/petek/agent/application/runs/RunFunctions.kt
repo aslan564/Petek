@@ -25,7 +25,9 @@ object RunFunctions {
 
     /**
      * Builds the registry with every built-in function. The functions share nothing but their stateless
-     * collaborators, so one registry serves all agents of a run.
+     * collaborators, so one registry serves all agents of a run. The sign-up and sign-in functions execute the flows of
+     * the campaign's target profile ([az.petek.campaign.domain.FlowNames]), so they work for any site the profile
+     * describes; the defaults follow docs/TARGET_CONTRACT.md.
      */
     fun standard(
         oracle: TargetOracle,
@@ -37,15 +39,16 @@ object RunFunctions {
         settings: RunFunctionSettings = RunFunctionSettings(),
     ): RunFunctionRegistry {
         val engine = RunEngine(StepEvidence(recorder, artifacts, clock, ids))
-        val flows = TargetFlows(oracle, verification, settings)
+        val flows = TargetFlows(verification, settings)
+        val runner = FlowRunner(oracle, verification, flows, settings)
         return RunFunctionRegistry(
             listOf(
-                LoginRunFunction(engine, flows),
-                VerifyIdentityRunFunction(engine, flows),
+                LoginRunFunction(engine, runner),
+                VerifyIdentityRunFunction(engine, runner),
                 ReadEmailCodeRunFunction(engine, flows),
-                RegisterOwnerRunFunction(engine, flows, oracle, settings),
+                RegisterOwnerRunFunction(engine, runner, flows, oracle),
                 SeedCompanyRunFunction(engine, flows, oracle, settings),
-                RegisterAndLoginRunFunction(engine, flows, verification, settings),
+                RegisterAndLoginRunFunction(engine, runner, settings),
                 LogoutRunFunction(engine, settings),
             ),
         )
