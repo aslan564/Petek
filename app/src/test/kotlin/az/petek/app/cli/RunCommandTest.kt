@@ -177,7 +177,7 @@ class RunCommandTest {
             val result = cli.run("run", "tiny.yaml", "--agents", "3")
 
             result.statusCode shouldBe 0
-            result.stdout shouldContain "Running 'tiny (3 of 6 agents)' with 3 agents"
+            result.stdout shouldContain "Running 'tiny (3 testers, scaled from 6)' with 3 agents"
             val latest = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
             cli.evidence { it.identities.findByRun(latest.runId) } shouldHaveSize 3
         }
@@ -214,16 +214,17 @@ class RunCommandTest {
         }
 
     @Test
-    fun `--agents above the campaign's testers is refused`() =
+    fun `--agents above the campaign's testers runs a bigger version of it`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write("tiny.yaml", tinyCampaign())
 
             val result = cli.run("run", "tiny.yaml", "--agents", "5")
 
-            result.statusCode shouldBe 2
-            result.stderr shouldContain "only reduce"
-            cli.browser.configs.shouldBeEmpty()
+            result.statusCode shouldBe 0
+            result.stdout shouldContain "Running 'tiny (5 testers, scaled from 2)' with 5 agents"
+            val latest = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
+            cli.evidence { it.identities.findByRun(latest.runId) } shouldHaveSize 5
         }
 
     @Test

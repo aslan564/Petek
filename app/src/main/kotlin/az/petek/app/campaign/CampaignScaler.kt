@@ -9,11 +9,13 @@ import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.ActorResolver
 
 /**
- * `petek run --agents N`: shrinks a campaign to N testers for a quick trial while keeping its shape. The admin stays
- * (there is exactly one), and the other seats are shared out in the campaign's manager/employee and
- * invite/company-code ratios by largest remainder, so `30 → 12` keeps about one manager per five employees and an
- * even invite/code split. A role or registration mode the campaign uses keeps at least one seat whenever there are
- * enough seats, so steps written for it still have someone to run them. Names beyond N are dropped.
+ * `petek run --agents N` and the panel's tester count: resizes a campaign to N testers while keeping its shape, fewer
+ * for a quick trial or more for load. The admin stays (there is exactly one), and the other seats are shared out in the
+ * campaign's manager/employee and invite/company-code ratios by largest remainder, so `30 → 12` keeps about one manager
+ * per five employees and an even invite/code split, and `30 → 60` doubles both. A role or registration mode the campaign
+ * uses keeps at least one seat whenever there are enough seats, so steps written for it still have someone to run them,
+ * and managers are always invited (the company-code form has no role field). Given names beyond N are dropped; testers
+ * beyond the given names get catalog names from the identity generator.
  *
  * Steps whose actors can no longer match anyone would be skipped silently by the runner; [uncoveredSteps] finds them
  * so the command can warn before the run starts.
@@ -25,17 +27,19 @@ object CampaignScaler {
     ): Campaign {
         val settings = campaign.settings
         if (agents < 1) throw ScalingException("--agents must be at least 1, was $agents")
-        if (agents > settings.testers) {
-            throw ScalingException("--agents $agents is more than the campaign's ${settings.testers} testers; it can only reduce them")
-        }
         if (agents == settings.testers) return campaign
         val admins = minOf(settings.roles.admin, 1)
         if (agents < admins + 1 && settings.roles.manager + settings.roles.employee > 0) {
             throw ScalingException("--agents $agents leaves no tester besides the admin; use at least ${admins + 1}")
         }
         val others = agents - admins
+        if (others > 0 && settings.roles.manager + settings.roles.employee == 0) {
+            throw ScalingException("--agents $agents: the campaign has only the admin, so there is no role to give more testers")
+        }
         val (managers, employees) = apportion(others, listOf(settings.roles.manager, settings.roles.employee))
-        val (invite, companyCode) = apportion(others, listOf(settings.registration.invite, settings.registration.companyCode))
+        val invited = apportion(others, listOf(settings.registration.invite, settings.registration.companyCode)).first()
+        val invite = maxOf(invited, managers)
+        val companyCode = others - invite
         return campaign.copy(
             settings =
                 settings.copy(
@@ -43,7 +47,7 @@ object CampaignScaler {
                     roles = RoleQuota(admin = admins, manager = managers, employee = employees),
                     registration = RegistrationQuota(invite = invite, companyCode = companyCode),
                     names = settings.names.take(agents),
-                    name = "${settings.name} ($agents of ${settings.testers} agents)",
+                    name = "${settings.name} ($agents testers, scaled from ${settings.testers})",
                 ),
         )
     }

@@ -37,7 +37,7 @@ class RunCommand : PetekSubcommand("run") {
     private val headful by option("--headful", help = "show the browser windows").flag()
     private val agents by option(
         "--agents",
-        help = "use only N testers for a quick trial (1 admin, role and registration ratios kept)",
+        help = "use N testers instead of the campaign's count, fewer or more (1 admin, role and registration ratios kept)",
     ).int().restrictTo(min = 1)
 
     override fun help(context: Context): String = "Run a campaign with its tester agents and write the report."
@@ -79,7 +79,7 @@ class RunCommand : PetekSubcommand("run") {
         val scaled = CampaignScaler.scale(campaign, agents)
         val issues = DefaultCampaignValidator(container.templateRenderer).validate(scaled, container.knownRunFunctions)
         if (issues.isNotEmpty()) {
-            throw CampaignValidationException(issues + ValidationIssue(null, "--agents $agents is too small for this campaign"))
+            throw CampaignValidationException(issues + ValidationIssue(null, "--agents $agents does not fit this campaign"))
         }
         val spec = IdentitySpecs.of(scaled.settings, container.config.mailDomain)
         val preview = container.identityGenerator.generate(spec, RunTags.forPlan(scaled.sourceHash, scaled.settings.seed))

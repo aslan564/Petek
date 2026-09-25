@@ -1,6 +1,7 @@
 package az.petek.app.panel
 
 import az.petek.app.campaign.CampaignScaler
+import az.petek.app.campaign.ScalingException
 import az.petek.app.di.AppContainer
 import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.campaign.domain.Campaign
@@ -216,11 +217,16 @@ internal class AppPanelBackend(
                 throw PanelRequestException(listOf(FieldProblem(RunRequest.SCENARIO, "Ssenari yüklənmədi: ${e.message}")))
             }
         if (testers == null || testers == loaded.settings.testers) return loaded
-        val scaled = CampaignScaler.scale(loaded, testers)
+        val scaled =
+            try {
+                CampaignScaler.scale(loaded, testers)
+            } catch (e: ScalingException) {
+                throw PanelRequestException(listOf(FieldProblem(PanelInstructions.TESTERS, "$testers tester alınmır: ${e.message}")))
+            }
         val issues = DefaultCampaignValidator(container.templateRenderer).validate(scaled, container.knownRunFunctions)
         if (issues.isNotEmpty()) {
             throw PanelRequestException(
-                listOf(FieldProblem(PanelInstructions.TESTERS, "$testers tester bu ssenari üçün azdır: ${issues.first().message}")),
+                listOf(FieldProblem(PanelInstructions.TESTERS, "$testers tester bu ssenariyə uyğun gəlmir: ${issues.first().message}")),
             )
         }
         return scaled

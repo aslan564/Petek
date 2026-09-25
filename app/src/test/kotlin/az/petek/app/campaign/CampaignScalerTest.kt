@@ -87,7 +87,7 @@ class CampaignScalerTest {
         scaled.testers shouldBe 12
         scaled.roles shouldBe RoleQuota(admin = 1, manager = 2, employee = 9)
         scaled.registration shouldBe RegistrationQuota(invite = 6, companyCode = 5)
-        scaled.name shouldBe "kadrohr-core (12 of 30 agents)"
+        scaled.name shouldBe "kadrohr-core (12 testers, scaled from 30)"
     }
 
     @Test
@@ -122,8 +122,58 @@ class CampaignScalerTest {
     }
 
     @Test
-    fun `more agents than testers is refused`() {
-        shouldThrow<ScalingException> { CampaignScaler.scale(kadrohrLike(), 31) }.message shouldContain "only reduce"
+    fun `more testers than the campaign has keeps the same shape`() {
+        val scaled = CampaignScaler.scale(kadrohrLike(), 33).settings
+
+        scaled.testers shouldBe 33
+        scaled.roles shouldBe RoleQuota(admin = 1, manager = 6, employee = 26)
+        scaled.registration shouldBe RegistrationQuota(invite = 17, companyCode = 15)
+        scaled.names shouldContainExactly listOf("Əli", "Vəli", "Sahil", "Cəmil", "Amil")
+        scaled.name shouldBe "kadrohr-core (33 testers, scaled from 30)"
+    }
+
+    @Test
+    fun `every tester count stays a valid campaign with every manager invited`() {
+        val original = kadrohrLike()
+        val validator = DefaultCampaignValidator()
+
+        (2..240).forEach { testers ->
+            val scaled = CampaignScaler.scale(original, testers)
+
+            validator.validate(scaled, emptySet()).shouldBeEmpty()
+            (scaled.settings.registration.invite >= scaled.settings.roles.manager) shouldBe true
+        }
+    }
+
+    @Test
+    fun `a scaled-up campaign gets a generated identity for every tester`() {
+        val campaign = CampaignScaler.scale(kadrohrLike(), 45)
+        val generator = DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
+
+        val identities =
+            generator
+                .generate(IdentitySpecs.of(campaign.settings, "test.kadrohr.com"), RunTags.forPlan(campaign.sourceHash, 42))
+                .identities
+
+        identities.size shouldBe 45
+        identities.map { it.displayName.lowercase() }.distinct().size shouldBe 45
+    }
+
+    @Test
+    fun `a campaign with only the admin cannot grow`() {
+        val adminOnly =
+            kadrohrLike().let {
+                it.copy(
+                    settings =
+                        it.settings.copy(
+                            testers = 1,
+                            roles = RoleQuota(admin = 1, manager = 0, employee = 0),
+                            registration = RegistrationQuota(invite = 0, companyCode = 0),
+                        ),
+                )
+            }
+
+        shouldThrow<ScalingException> { CampaignScaler.scale(adminOnly, 4) }.message shouldContain "only the admin"
     }
 
     @Test
