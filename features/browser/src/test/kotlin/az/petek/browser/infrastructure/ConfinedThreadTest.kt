@@ -2,12 +2,14 @@ package az.petek.browser.infrastructure
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -17,6 +19,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 
 class ConfinedThreadTest {
     @Test
@@ -43,23 +47,42 @@ class ConfinedThreadTest {
                 val started = CountDownLatch(1)
                 val release = CountDownLatch(1)
                 val finished = CountDownLatch(1)
-
-                shouldThrow<TimeoutCancellationException> {
-                    withTimeout(200.milliseconds) {
+                val call =
+                    async(start = CoroutineStart.UNDISPATCHED) {
                         thread.run {
                             started.countDown()
                             release.await(10, TimeUnit.SECONDS)
                             finished.countDown()
                         }
                     }
-                }
+                started.await(10, TimeUnit.SECONDS) shouldBe true
 
-                // The caller got its timeout while the block is still running; the thread then finishes it.
-                started.count shouldBe 0
+                call.cancelAndJoin()
+
+                // The caller is released while the block is still blocked; the thread then finishes it.
+                call.isCancelled shouldBe true
                 finished.count shouldBe 1
                 release.countDown()
                 thread.run { "next" } shouldBe "next"
                 finished.count shouldBe 0
+            }
+        }
+
+    @Test
+    fun `a timeout around a call fires on time`() =
+        runBlocking<Unit> {
+            ConfinedThread("browser-timeout").use { thread ->
+                val release = CountDownLatch(1)
+
+                val took =
+                    measureTime {
+                        shouldThrow<TimeoutCancellationException> {
+                            withTimeout(100.milliseconds) { thread.run { release.await(10, TimeUnit.SECONDS) } }
+                        }
+                    }
+
+                took shouldBeLessThan 5.seconds
+                release.countDown()
             }
         }
 

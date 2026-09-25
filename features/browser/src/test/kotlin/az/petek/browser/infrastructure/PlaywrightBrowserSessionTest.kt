@@ -155,6 +155,24 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `a typed password submitted in the address is masked in the URL`() =
+        withSession { session ->
+            session.navigate("/secret")
+            val password =
+                session
+                    .snapshot()
+                    .elements
+                    .single { it.name == "Şifrə" }
+                    .ref
+
+            session.fill(password, "typed-secret-42", submit = true)
+
+            session.waitForText("Forma göndərildi", 3.seconds).found shouldBe true
+            session.currentUrl() shouldBe "${site.baseUrl}/secret?password=******"
+            session.snapshot().url shouldBe "${site.baseUrl}/secret?password=******"
+        }
+
+    @Test
     fun `text typed into ordinary fields is shown as it is`() =
         withSession { session ->
             session.navigate("/form")

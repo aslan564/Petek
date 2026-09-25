@@ -53,7 +53,7 @@ private val logger = KotlinLogging.logger {}
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
  *   text typed with [fill] is masked in error messages. Text typed into a password field is remembered and masked
- *   in every later snapshot and [readText], even after the page reveals the field or echoes the value.
+ *   in every later snapshot, [readText] and [currentUrl], even after the page reveals the field or echoes the value.
  * - Failures surface as [BrowserActionException] with a short reason. After [close], calls fail the same way.
  */
 internal class PlaywrightBrowserSession private constructor(
@@ -169,7 +169,7 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun count(selector: String): Int = perform("count $selector") { page.locator(selector).count() }
 
-    override suspend fun currentUrl(): String = perform("read the URL") { page.url() }
+    override suspend fun currentUrl(): String = perform("read the URL") { SecretRedactor.redactText(page.url(), typedSecrets) }
 
     override suspend fun screenshot(): ByteArray = perform("screenshot") { page.screenshot() }
 

@@ -157,7 +157,13 @@ class PlaywrightBrowserEngine internal constructor(
             coroutineScope {
                 val closing = launch { supervisorScope { open.forEach { session -> launch { session.close() } } } }
                 if (withTimeoutOrNull(sessionCloseGrace) { closing.join() } == null) {
-                    logger.warn { "browser sessions still busy after $sessionCloseGrace; stopping the browser under them" }
+                    logger.warn {
+                        if (server != null) {
+                            "browser sessions still busy after $sessionCloseGrace; stopping the browser under them"
+                        } else {
+                            "browser sessions still busy after $sessionCloseGrace; waiting for their current calls to time out"
+                        }
+                    }
                 }
                 if (server != null) withContext(Dispatchers.IO) { server.stop() }
                 closing.join()

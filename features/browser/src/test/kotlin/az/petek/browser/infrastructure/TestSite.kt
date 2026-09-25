@@ -31,7 +31,11 @@ internal class TestSite : AutoCloseable {
             routing {
                 get("/form") { call.respondText(FORM_PAGE, ContentType.Text.Html) }
                 get("/dynamic") { call.respondText(DYNAMIC_PAGE, ContentType.Text.Html) }
-                get("/secret") { call.respondText(SECRET_PAGE, ContentType.Text.Html) }
+                get("/secret") {
+                    val submitted = call.request.queryParameters["password"] != null
+                    val page = if (submitted) SECRET_PAGE.replace("<body>", "<body><p>Forma göndərildi</p>") else SECRET_PAGE
+                    call.respondText(page, ContentType.Text.Html)
+                }
                 get("/login") { call.respondText(LOGIN_PAGE, ContentType.Text.Html) }
                 get("/do-login") {
                     val user = call.request.queryParameters["user"].orEmpty()
@@ -141,7 +145,9 @@ internal class TestSite : AutoCloseable {
             <html><head><title>Sirr</title></head><body>
             <label>Köhnə şifrə <input id="old" type="password" value="server-rendered-secret"></label>
             <label>Yeni şifrə <input id="new" type="text" autocomplete="new-password"></label>
-            <label>Şifrə <input id="current" type="password"></label>
+            <form action="/secret" method="get">
+              <label>Şifrə <input id="current" name="password" type="password"></label>
+            </form>
             <button id="reveal" onclick="reveal()">Şifrəni göstər</button>
             <p id="echo"></p>
             <script>
