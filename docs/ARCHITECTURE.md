@@ -22,6 +22,7 @@ feature follows **clean architecture** (domain → application → infrastructur
 | `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds) | `AssertionEvaluator`, `VerifyStepUseCase` | — |
 | `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
+| `features/dashboard` | Local web panel: live agent board, instructions, explorer, scenarios, orchestrator task matrix, reports | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS) |
 | `app` | CLI (`plan`, `run`, `report`, `teardown`, `smoke`, `doctor`), `.env` config, composition root, logging | — | Clikt, logback |
 | `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
@@ -30,7 +31,8 @@ feature follows **clean architecture** (domain → application → infrastructur
 
 ```mermaid
 flowchart TD
-  app --> orchestration & reporting & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
+  app --> dashboard & orchestration & reporting & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
+  dashboard --> orchestration & identity & evidence
   orchestration --> agent & verification & identity & evidence & campaign
   agent --> browser & llm & mail & oracle & evidence & identity & campaign
   verification --> browser & oracle & evidence & campaign
@@ -86,6 +88,32 @@ sequenceDiagram
    that are not `is_test`.
 6. **Finalize.** The judge turns assertion records into findings. The report (Markdown + HTML) is written to
    `evidence/<run_id>/report/`.
+
+## Web panel (`features/dashboard`)
+
+One JVM process serves the panel on `127.0.0.1` while it runs. The page is a single self-contained SPA (Azerbaijani,
+light/dark, responsive) with six screens in a left sidebar: **Təlimat** (target, instructions, team, budget, live
+capacity advice; "Kəşf et", "Ssenari yarat", "Run et"), **Kəşfiyyat** (the explorer live: phases, current page, visited
+pages, site model with OBSERVED/INFERRED, findings, questions, test ideas, draft YAML, model diff), **Ssenarilər**
+(versions, YAML, diff, approve/freeze, triage verdicts and v2 proposals), **Orkestrator** (plan lanes, live task matrix
+steps × agents, events with receiver latencies), **Agentlər** (the live board) and **Hesabatlar** (runs, reports,
+stability, cost).
+
+- **Live state** comes from `LiveDashboard`: a pure reducer (`DashboardState`) fed without blocking by the monitor port,
+  by `DashboardEvidenceRecorder` (outermost evidence decorator), by `DashboardRunRepository` /
+  `DashboardIdentityRepository`, and by the orchestrator's `planReady` / `taskUpdated`. `snapshotFromEvidence` rebuilds
+  a finished run for `petek dashboard <run_id>`.
+- **Everything else** goes through the `PanelBackend` port, which `app` implements by adapting the capacity, explorer,
+  scenarios, orchestration and reporting use cases; the dashboard depends on none of them. `UnavailablePanelBackend`
+  serves the board alone.
+- **Transport:** REST for reads and actions, one Server-Sent Events stream per page with the topics its screen needs
+  (`board`, `run`, `orchestrator`, `exploration`, `jobs`), throttled to four updates per second.
+- **Security:** loopback bind; `Host` and `Origin` must be local (DNS rebinding); every POST carries the per-process
+  token the page holds in a `<meta>` tag (`X-Petek-Token`); no CORS; a nonce-bound Content-Security-Policy; all text
+  rendered with `textContent`; artifacts are served by id only when the run on the board or the current exploration
+  recorded them, captured pages as plain text; reports with path-traversal and symlink protection; no secrets or tester
+  contact data in any payload.
+- `./gradlew :features:dashboard:panelDemo` serves the whole panel with simulated data (`DemoPanelBackend`).
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 
