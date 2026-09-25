@@ -45,8 +45,10 @@ internal class IdentitySpecValidator(
                 "company code count" to spec.companyCodeCount,
             )
         counts.filter { it.second < 0 }.forEach { (label, value) -> problems += "$label must not be negative, was $value" }
-        if (spec.testers !in 1..MAX_TESTERS) {
-            problems += "testers must be between 1 and $MAX_TESTERS (agent ids a01..a$MAX_TESTERS), was ${spec.testers}"
+        if (spec.testers < 1) problems += "testers must be at least 1, was ${spec.testers}"
+        if (spec.testers > FakePhoneNumbers.CAPACITY) {
+            problems += "testers must not exceed ${FakePhoneNumbers.CAPACITY}, the number of distinct fake phone numbers " +
+                "(one per tester), was ${spec.testers}"
         }
         if (spec.admins != 1) problems += "exactly 1 admin is supported, was ${spec.admins}"
         val roles = spec.admins + spec.managers + spec.employees
@@ -99,8 +101,8 @@ internal class IdentitySpecValidator(
         problems: MutableList<String>,
     ) {
         val missing = testers - givenNames.size
-        if (missing > 0 && names.capacity < missing) {
-            problems += "the name catalog offers only ${names.capacity} unique names but $missing more are needed"
+        if (missing > 0 && !names.canInventNames) {
+            problems += "the name catalog has no first names or no surnames, but $missing more names are needed"
         }
         val needsSurname = givenNames.any { it.isNotEmpty() && !NameAllocator.isFullName(it) }
         if (needsSurname && !names.hasSurnames) {
@@ -118,9 +120,6 @@ internal class IdentitySpecValidator(
             .map { it.first() }
 
     companion object {
-        /** Agent ids are `a01`..`a999`. */
-        const val MAX_TESTERS = 999
-
         /** Keeps names and departments readable on screen and within the target's form limits. */
         const val MAX_TEXT_LENGTH = 100
 

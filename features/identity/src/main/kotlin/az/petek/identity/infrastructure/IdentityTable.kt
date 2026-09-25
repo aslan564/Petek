@@ -10,7 +10,7 @@ import org.jetbrains.exposed.v1.core.Table
  */
 internal object IdentityTable : Table("identity") {
     val runId = varchar("run_id", 128)
-    val agentId = varchar("agent_id", 8)
+    val agentId = varchar("agent_id", AGENT_ID_LENGTH)
     val displayName = varchar("display_name", 255)
     val email = varchar("email", 320, collate = "NOCASE").uniqueIndex("identity_email_unique")
     val password = varchar("password", 128)
@@ -27,4 +27,10 @@ internal object IdentityTable : Table("identity") {
     init {
         uniqueIndex("identity_run_display_name_unique", runId, displayName)
     }
+
+    /**
+     * Room for every agent id a registry can have (`a` + up to 10 digits of an [Int] index). SQLite does not enforce
+     * the declared length, so databases created with the earlier, narrower column keep working.
+     */
+    private const val AGENT_ID_LENGTH = 16
 }

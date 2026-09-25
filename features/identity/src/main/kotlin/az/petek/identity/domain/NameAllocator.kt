@@ -9,25 +9,25 @@ import kotlin.random.Random
  * Every choice comes from `Random(seed)`, so the same inputs always produce the same people, independent of the run.
  * Display names are unique case-insensitively; catalog first names not already used are preferred, so the same
  * first name only repeats once the catalog is exhausted.
+ *
+ * Names never run out, whatever the number of testers. Candidates come in tiers ([Variant]): first name + surname;
+ * then the same pairs with a patronymic for each of the catalog's fathers (`Əli Vüqar oğlu Məmmədov`); then the
+ * plain pairs with an ordinal (`Əli Məmmədov II`, `III`, ...), written in Roman numerals so a name stays letters
+ * only, as sign-up forms often require. Candidates are generated lazily and a taken one is skipped; only names
+ * given by the campaign (and a patronymic after the person's own first name) are ever skipped, so the time grows
+ * linearly with the number of testers, with no retries.
  */
 internal class NameAllocator(
     private val catalog: NameCatalog,
 ) {
-    private val firstNames =
-        catalog.firstNames
-            .map(::normalize)
-            .filter { it.isNotEmpty() }
-            .distinctBy(::key)
-    private val surnames =
-        catalog.surnames
-            .map(::normalize)
-            .filter { it.isNotEmpty() }
-            .distinctBy(::key)
+    private val firstNames = distinctNames(catalog.firstNames)
+    private val surnames = distinctNames(catalog.surnames)
+    private val fatherNames = distinctNames(catalog.fatherNames)
 
     val hasSurnames: Boolean get() = surnames.isNotEmpty()
 
-    /** How many distinct first-name/surname pairs the catalog can produce. */
-    val capacity: Long get() = firstNames.size.toLong() * surnames.size
+    /** Whether the catalog can name testers the campaign gave no name for (it needs first names and surnames). */
+    val canInventNames: Boolean get() = firstNames.isNotEmpty() && surnames.isNotEmpty()
 
     /** [given] must already be normalized and free of duplicates (see [IdentitySpecValidator]). */
     fun allocate(
@@ -38,6 +38,8 @@ internal class NameAllocator(
         val random = Random(seed)
         val surnameOrder = surnames.shuffled(random)
         val firstNameOrder = firstNames.shuffled(random)
+        // Drawn after the other two, so adding tiers left the names of smaller registries unchanged.
+        val fatherOrder = fatherNames.shuffled(random)
         val taken = given.filter(::isFullName).mapTo(HashSet(), ::key)
         var singles = 0
         val chosen =
@@ -45,31 +47,37 @@ internal class NameAllocator(
                 if (isFullName(name)) {
                     PersonName(firstName = name.substringBefore(' '), displayName = name)
                 } else {
-                    withCatalogSurname(name, surnameOrder, singles++, taken)
+                    withCatalogSurname(name, surnameOrder, fatherOrder, singles++, taken)
                 }
             }
-        val catalogOrder = CatalogOrder(firstNameOrder, surnameOrder, surnameOffset = singles)
+        val catalogOrder = CatalogOrder(firstNameOrder, surnameOrder, fatherOrder, surnameOffset = singles)
         return chosen + fromCatalog(total - chosen.size, catalogOrder, chosen, taken)
     }
 
+    /** The first free name for a given first name: its surnames in order, tier by tier. */
     private fun withCatalogSurname(
         firstName: String,
         surnameOrder: List<String>,
+        fatherOrder: List<String>,
         offset: Int,
         taken: MutableSet<String>,
     ): PersonName {
-        for (step in surnameOrder.indices) {
-            val candidate = person(firstName, surnameOrder[(offset + step) % surnameOrder.size])
-            if (taken.add(key(candidate.displayName))) return candidate
+        if (surnameOrder.isEmpty()) {
+            throw IdentityConflictException("$CANNOT_BUILD the name catalog has no surnames for the given name '$firstName'")
         }
-        throw IdentityConflictException(
-            "$CANNOT_BUILD the name catalog has no unused surname left for the given name '$firstName'",
-        )
+        for (variant in variants(fatherOrder)) {
+            for (step in surnameOrder.indices) {
+                val candidate = person(firstName, surnameOrder[(offset + step) % surnameOrder.size], variant) ?: continue
+                if (taken.add(key(candidate.displayName))) return candidate
+            }
+        }
+        error("the ordinal tier never ends")
     }
 
     /**
-     * Walks all first-name/surname pairs, one round of first names per surname shift, skipping taken names.
-     * Surnames start after the ones given first names took, so surnames only repeat once the catalog wraps around.
+     * Walks all first-name/surname pairs, one round of first names per surname shift, skipping taken names, and
+     * repeats the walk for every tier. Surnames start after the ones given first names took, so within a tier
+     * surnames only repeat once the catalog wraps around.
      */
     private fun fromCatalog(
         count: Int,
@@ -78,35 +86,79 @@ internal class NameAllocator(
         taken: MutableSet<String>,
     ): List<PersonName> {
         if (count <= 0) return emptyList()
+        if (order.firstNames.isEmpty() || order.surnames.isEmpty()) {
+            throw IdentityConflictException(
+                "$CANNOT_BUILD the name catalog has no first names or no surnames, but $count more names are needed",
+            )
+        }
         val usedFirstNames = chosen.mapTo(HashSet()) { key(it.firstName) }
         val (fresh, reused) = order.firstNames.partition { key(it) !in usedFirstNames }
         val firstNames = fresh + reused
         val surnames = order.surnames
         val result = ArrayList<PersonName>(count)
-        for (shift in surnames.indices) {
-            for ((i, firstName) in firstNames.withIndex()) {
-                val candidate = person(firstName, surnames[(order.surnameOffset + i + shift) % surnames.size])
-                if (taken.add(key(candidate.displayName))) {
-                    result += candidate
-                    if (result.size == count) return result
+        for (variant in variants(order.fathers)) {
+            for (shift in surnames.indices) {
+                for ((i, firstName) in firstNames.withIndex()) {
+                    val candidate = person(firstName, surnames[(order.surnameOffset + i + shift) % surnames.size], variant)
+                    if (candidate != null && taken.add(key(candidate.displayName))) {
+                        result += candidate
+                        if (result.size == count) return result
+                    }
                 }
             }
         }
-        throw IdentityConflictException(
-            "$CANNOT_BUILD the name catalog is too small: $count more unique names are needed but only " +
-                "${result.size} are left",
-        )
+        error("the ordinal tier never ends")
     }
 
+    /** The tiers in the order they are used: plain, one per father, then ordinals II, III, ... without end. */
+    private fun variants(fathers: List<String>): Sequence<Variant> =
+        sequenceOf(Variant.Plain) +
+            fathers.asSequence().map(Variant::Patronymic) +
+            generateSequence(FIRST_ORDINAL) { it + 1 }.map(Variant::Ordinal)
+
+    /** The display name of [firstName] + [surname] in [variant]; null for a patronymic after the person's own name. */
     private fun person(
         firstName: String,
         surname: String,
-    ) = PersonName(firstName = firstName, displayName = "$firstName ${catalog.surnameFor(firstName, surname)}")
+        variant: Variant,
+    ): PersonName? {
+        val family = catalog.surnameFor(firstName, surname)
+        val displayName =
+            when (variant) {
+                Variant.Plain -> {
+                    "$firstName $family"
+                }
+
+                is Variant.Patronymic -> {
+                    if (key(variant.father) == key(firstName)) return null
+                    "$firstName ${catalog.patronymic(firstName, variant.father)} $family"
+                }
+
+                is Variant.Ordinal -> {
+                    "$firstName $family ${roman(variant.number)}"
+                }
+            }
+        return PersonName(firstName = firstName, displayName = displayName)
+    }
+
+    /** How a first name and a surname are combined in one tier of candidates. */
+    private sealed interface Variant {
+        data object Plain : Variant
+
+        data class Patronymic(
+            val father: String,
+        ) : Variant
+
+        data class Ordinal(
+            val number: Int,
+        ) : Variant
+    }
 
     /** The seeded order in which catalog names are tried. */
     private class CatalogOrder(
         val firstNames: List<String>,
         val surnames: List<String>,
+        val fathers: List<String>,
         val surnameOffset: Int,
     )
 
@@ -120,7 +172,27 @@ internal class NameAllocator(
         /** Common prefix of every registry conflict message. */
         const val CANNOT_BUILD = "Identity registry cannot be built:"
 
+        /** The first ordinal written after a name: the second person of that name is `II`. */
+        private const val FIRST_ORDINAL = 2
+
         private val WHITESPACE = Regex("\\s+")
+
+        private val ROMAN =
+            listOf(
+                1000 to "M",
+                900 to "CM",
+                500 to "D",
+                400 to "CD",
+                100 to "C",
+                90 to "XC",
+                50 to "L",
+                40 to "XL",
+                10 to "X",
+                9 to "IX",
+                5 to "V",
+                4 to "IV",
+                1 to "I",
+            )
 
         /** Trims and collapses inner whitespace, so `" Əli   Kərimov "` and `"Əli Kərimov"` are the same name. */
         fun normalize(raw: String): String =
@@ -145,5 +217,21 @@ internal class NameAllocator(
         private const val I_LETTERS = "Iİı"
 
         fun isFullName(normalized: String): Boolean = ' ' in normalized
+
+        /** [number] (at least 1) in Roman numerals; thousands beyond 3999 simply repeat `M`. */
+        fun roman(number: Int): String {
+            require(number >= 1) { "Roman numerals start at 1, was $number" }
+            var rest = number
+            return buildString {
+                for ((value, letters) in ROMAN) {
+                    while (rest >= value) {
+                        append(letters)
+                        rest -= value
+                    }
+                }
+            }
+        }
+
+        private fun distinctNames(names: List<String>): List<String> = names.map(::normalize).filter { it.isNotEmpty() }.distinctBy(::key)
     }
 }

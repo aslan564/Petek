@@ -83,4 +83,24 @@ class AzerbaijaniNameCatalogTest {
             catalog.surnames.map { catalog.surnameFor(first, it) }.shouldNotContainDuplicates()
         }
     }
+
+    @Test
+    fun `fathers are named from the male first names only`() {
+        catalog.fatherNames shouldBe catalog.maleFirstNames
+    }
+
+    @Test
+    fun `the patronymic says son of or daughter of the father`() {
+        catalog.patronymic("Əli", "Vüqar") shouldBe "Vüqar oğlu"
+        catalog.patronymic("Günel", "Vüqar") shouldBe "Vüqar qızı"
+        catalog.patronymic("İLAHƏ", "Rəşad") shouldBe "Rəşad qızı"
+        catalog.patronymic("Sahil", "Rəşad") shouldBe "Rəşad oğlu"
+    }
+
+    @Test
+    fun `distinct fathers give distinct patronymics for every first name`() {
+        catalog.firstNames.forEach { first ->
+            catalog.fatherNames.map { catalog.patronymic(first, it) }.shouldNotContainDuplicates()
+        }
+    }
 }

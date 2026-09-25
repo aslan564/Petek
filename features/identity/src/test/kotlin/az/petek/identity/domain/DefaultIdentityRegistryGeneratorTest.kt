@@ -18,6 +18,7 @@ import io.kotest.matchers.collections.shouldBeIn
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContainDuplicates
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -25,6 +26,8 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldMatch
 import io.kotest.matchers.string.shouldStartWith
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTimedValue
 
 class DefaultIdentityRegistryGeneratorTest {
     private val catalog = AzerbaijaniNameCatalog
@@ -300,12 +303,69 @@ class DefaultIdentityRegistryGeneratorTest {
     }
 
     @Test
-    fun `the largest registry keeps every value unique`() {
-        val many = generator().generate(spec(testers = 999, managers = 20), RUN_TAG).identities
-        many.last().agentId shouldBe AgentId("a999")
+    fun `five thousand testers get unique names, e-mails and phones in well under two seconds`() {
+        val generator = generator()
+        generator.generate(spec(testers = 200), RUN_TAG) // warm-up, so the measurement is the algorithm, not class loading
+
+        val (many, took) = measureTimedValue { generator.generate(spec(testers = 5_000, managers = 100), RUN_TAG).identities }
+
+        took shouldBeLessThan 2.seconds
+        many shouldHaveSize 5_000
+        many.map { it.agentId } shouldBe (1..5_000).map(AgentId::of)
+        many.last().agentId shouldBe AgentId("a5000")
         many.map { NameAllocator.key(it.displayName) }.shouldNotContainDuplicates()
         many.map { it.email }.shouldNotContainDuplicates()
         many.map { it.phone }.shouldNotContainDuplicates()
+        many.forEach { it.phone shouldMatch Regex("\\+99450[01]\\d{6}") }
+    }
+
+    @Test
+    fun `the catalog pairs come first, then patronymics, so small registries keep their plain names`() {
+        val pairs = catalog.firstNames.size * catalog.surnames.size
+        val many = generator().generate(spec(testers = pairs + 400, names = emptyList(), managers = 20), RUN_TAG).identities
+
+        many.take(pairs).forEach { it.displayName.split(' ') shouldHaveSize 2 }
+        many.drop(pairs).forEach { identity ->
+            val words = identity.displayName.split(' ')
+            words shouldHaveSize 4
+            words[0] shouldBeIn catalog.firstNames
+            words[1] shouldBeIn catalog.maleFirstNames
+            words[1] shouldNotBe words[0]
+            val female = words[0] in catalog.femaleFirstNames
+            words[2] shouldBe if (female) "qızı" else "oğlu"
+        }
+    }
+
+    @Test
+    fun `adding testers never renames the ones a smaller registry already had`() {
+        val small = generator().generate(spec(testers = 30), RUN_TAG).identities
+        val large = generator().generate(spec(testers = 4_000, managers = 5), RUN_TAG).identities
+
+        large.take(30).map { it.displayName } shouldBe small.map { it.displayName }
+    }
+
+    @Test
+    fun `a tiny catalog still names any number of testers with patronymics and then ordinals`() {
+        val tiny = SmallCatalog(firstNames = listOf("Anar", "Emin"), surnames = listOf("Kərimov"))
+
+        val names =
+            generator(
+                tiny,
+            ).generate(spec(testers = 8, managers = 1, names = emptyList()), RUN_TAG).identities.map { it.displayName }
+
+        names.map(NameAllocator::key).shouldNotContainDuplicates()
+        names.take(2) shouldContainExactlyInAnyOrder listOf("Anar Kərimov", "Emin Kərimov")
+        // The default patronymic is the father's name as a middle name; nobody is their own father.
+        names.drop(2).take(2) shouldContainExactlyInAnyOrder listOf("Anar Emin Kərimov", "Emin Anar Kərimov")
+        names.drop(4) shouldContainExactlyInAnyOrder listOf("Anar Kərimov II", "Emin Kərimov II", "Anar Kərimov III", "Emin Kərimov III")
+    }
+
+    @Test
+    fun `ordinals are written in Roman numerals so names stay letters only`() {
+        listOf(1 to "I", 2 to "II", 4 to "IV", 9 to "IX", 14 to "XIV", 40 to "XL", 90 to "XC", 400 to "CD", 1994 to "MCMXCIV")
+            .forEach { (number, roman) -> NameAllocator.roman(number) shouldBe roman }
+        NameAllocator.roman(5_000) shouldBe "MMMMM"
+        shouldThrow<IllegalArgumentException> { NameAllocator.roman(0) }
     }
 
     @Test
@@ -364,28 +424,41 @@ class DefaultIdentityRegistryGeneratorTest {
     }
 
     @Test
-    fun `a catalog without an unused surname for a given name is a conflict`() {
+    fun `a given first name whose surnames are all taken gets a patronymic instead of failing`() {
         val small = SmallCatalog(firstNames = listOf("Anar"), surnames = listOf("Kərimov"))
-        val error =
-            shouldThrow<IdentityConflictException> {
-                generator(small).generate(
-                    spec(testers = 2, managers = 1, employees = 0, names = listOf("Əli", "Əli Kərimov")),
-                    RunTag("aaaa"),
-                )
-            }
-        error.message shouldContain "no unused surname left for the given name 'Əli'"
+
+        val result =
+            generator(small).generate(
+                spec(testers = 2, managers = 1, employees = 0, names = listOf("Əli", "Əli Kərimov")),
+                RunTag("aaaa"),
+            )
+
+        result.identities.map { it.displayName } shouldBe listOf("Əli Anar Kərimov", "Əli Kərimov")
+        result.identities[0].email shouldStartWith "eli."
     }
 
     @Test
-    fun `a catalog exhausted by given full names is a conflict`() {
+    fun `given full names that use up the catalog pairs push the rest to the next tiers`() {
         val small = SmallCatalog(firstNames = listOf("Anar"), surnames = listOf("Kərimov", "Əliyev"))
-        val error =
-            shouldThrow<IdentityConflictException> {
-                generator(small).generate(
-                    spec(testers = 3, managers = 1, employees = 1, names = listOf("Anar Kərimov")),
-                    RUN_TAG,
-                )
-            }
-        error.message shouldContain "the name catalog is too small"
+
+        val result =
+            generator(small).generate(spec(testers = 4, managers = 1, employees = 2, names = listOf("Anar Kərimov")), RUN_TAG)
+
+        val names = result.identities.map { it.displayName }
+        names.first() shouldBe "Anar Kərimov"
+        names.map(NameAllocator::key).shouldNotContainDuplicates()
+        names shouldContainExactlyInAnyOrder listOf("Anar Kərimov", "Anar Əliyev", "Anar Kərimov II", "Anar Əliyev II")
+    }
+
+    @Test
+    fun `a campaign name that looks like a generated one is never handed out twice`() {
+        val small = SmallCatalog(firstNames = listOf("Anar", "Emin"), surnames = listOf("Kərimov"))
+        val given = listOf("Anar Kərimov II", "Emin Anar Kərimov", "Anar Kərimov")
+
+        val result = generator(small).generate(spec(testers = 7, managers = 1, names = given), RUN_TAG)
+
+        val names = result.identities.map { it.displayName }
+        names.take(3) shouldBe given
+        names.map(NameAllocator::key).shouldNotContainDuplicates()
     }
 }

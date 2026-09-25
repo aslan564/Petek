@@ -12,8 +12,12 @@ import kotlin.random.Random
  * - Non-admins are dealt to departments in one round-robin: manager `i` gets `departments[i % d]` (one manager per
  *   department when the counts match) and employees continue the rotation, so every department ends up within
  *   ±1 of the others, for employees and for head count.
- * - Names: the spec's names first, then the catalog ([NameAllocator]).
+ * - Names: the spec's names first, then the catalog ([NameAllocator]), which never runs out.
  * - E-mail `<ascii first name>.<run tag>.<agent id>@<mail domain>`, unique because the agent id is.
+ * - Phones: distinct fake numbers outside the allocated subscriber ranges ([FakePhoneNumbers]).
+ *
+ * There is no fixed maximum of testers (agent ids grow past `a999`); every part is generated in time linear in
+ * the number of testers, so thousands of identities take well under a second.
  * - Registration modes: every manager joins by invitation, because the target's company-code form (`/join`) has no
  *   role field and makes everyone who uses it an employee. The remaining `inviteCount - managers` invitations go to
  *   employees: the employees of each department are shuffled, departments are interleaved and the first ones are
@@ -110,15 +114,7 @@ class DefaultIdentityRegistryGenerator(
         count: Int,
         seed: Long,
         runTag: RunTag,
-    ): List<String> {
-        val random = Random(seed * PHONE_SEED_MULTIPLIER + runTag.value.hashCode())
-        val phones = LinkedHashSet<String>(count)
-        while (phones.size < count) {
-            val subscriber = random.nextInt(UNALLOCATED_SUBSCRIBERS).toString().padStart(SUBSCRIBER_DIGITS, '0')
-            phones += PHONE_PREFIX + subscriber
-        }
-        return phones.toList()
-    }
+    ): List<String> = FakePhoneNumbers.sample(count, Random(seed * PHONE_SEED_MULTIPLIER + runTag.value.hashCode()))
 
     private fun email(
         firstName: String,
@@ -134,15 +130,6 @@ class DefaultIdentityRegistryGenerator(
     )
 
     private companion object {
-        const val PHONE_PREFIX = "+99450"
-        const val SUBSCRIBER_DIGITS = 7
-
-        /**
-         * Subscriber numbers 0000000..1999999. Azerbaijani mobile subscriber numbers start with 2..9, so these are
-         * outside the allocated ranges and can never reach a real person, even if an SMS were sent by mistake.
-         */
-        const val UNALLOCATED_SUBSCRIBERS = 2_000_000
-
         /** Keeps the registration shuffle independent of the name choice, which also draws from the seed. */
         const val REGISTRATION_SALT = 0x5245_4749_5354_4552L
         const val PHONE_SEED_MULTIPLIER = 31L
