@@ -21,3 +21,8 @@ dependencies {
     testImplementation(libs.ktor.server.cio)
     testImplementation(libs.ktor.server.sse)
 }
+
+// BrowserIsolationAtScaleTest opens this many real Chromium contexts (default 30): -Dpetek.isolation.sessions=150
+tasks.withType<Test>().configureEach {
+    System.getProperty("petek.isolation.sessions")?.let { systemProperty("petek.isolation.sessions", it) }
+}
