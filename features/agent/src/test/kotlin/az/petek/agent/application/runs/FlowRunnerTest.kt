@@ -425,7 +425,8 @@ class FlowRunnerTest {
 
             outcome.status shouldBe ActionStatus.SUCCEEDED
             fixture.verification.calls shouldContainExactly listOf(invited.email to MailPurpose.LINK)
-            fixture.shared.get("last_invite") shouldBe INVITE_LINK
+            // Shared values are write-once: the tester used its own link, and the value another tester published stays.
+            fixture.shared.get("last_invite") shouldBe "https://api.kadrohr.test/api/v1/auth/set-password?token=someone-else"
         }
 
     @Test

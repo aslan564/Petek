@@ -353,8 +353,18 @@ internal class FlowRunner(
 
         private suspend fun setShared(step: FlowStep.SetShared) {
             val value = templates.render(step.value)
-            runtime.shared.put(step.sharedKey, value)
-            trace.note("publish shared.${step.sharedKey}", StepStatus.PASSED, quoted(value))
+            val stored = runtime.shared.put(step.sharedKey, value)
+            trace.note(
+                "publish shared.${step.sharedKey}",
+                StepStatus.PASSED,
+                if (stored) {
+                    quoted(
+                        value,
+                    )
+                } else {
+                    "already published as ${quoted(runtime.shared.get(step.sharedKey).orEmpty())}; kept (write-once)"
+                },
+            )
         }
 
         private suspend fun ifVisible(step: FlowStep.IfVisible) {

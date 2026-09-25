@@ -64,6 +64,40 @@ class DefaultCampaignValidatorTest {
         issues(campaign).shouldBeEmpty()
     }
 
+    @Test
+    fun `an event may be emitted by one step only, so wait_for and last_id cannot pick up an older step's object`() {
+        val campaign =
+            campaign(
+                step("first", emits = "ticket_created", line = 10),
+                step("second", actor = "employee[1]", emits = "ticket_created", line = 20),
+                step("flow", actor = "manager[*]", waitFor = "ticket_created", line = 30),
+            )
+
+        val problems = issues(campaign).filter { "emitted by more than one step" in it.message }
+
+        problems.map { it.line } shouldBe listOf(10, 20)
+        problems.first().message shouldContain "step 'first': event 'ticket_created' is emitted by more than one step"
+    }
+
+    @Test
+    fun `only the admin may create or seed the company`() {
+        val campaign =
+            campaign(
+                announce,
+                setup =
+                    listOf(
+                        step("owner_signup", actor = "employee[1]", action = StepAction.Run("register_owner"), phase = StepPhase.SETUP),
+                        step("seed", actor = "admin | manager[*]", action = StepAction.Run("seed_company"), phase = StepPhase.SETUP),
+                        step("join", actor = "employee[*]", action = StepAction.Run("register_and_login"), phase = StepPhase.SETUP),
+                    ),
+            )
+
+        val problems = issues(campaign).filter { "may only be performed by the admin" in it.message }
+
+        problems.map { it.message.substringBefore(':') } shouldBe listOf("step 'owner_signup'", "step 'seed'")
+        problems.first().message shouldContain "run register_owner may only be performed by the admin (the company owner)"
+    }
+
     @Nested
     inner class Settings {
         private val lines =

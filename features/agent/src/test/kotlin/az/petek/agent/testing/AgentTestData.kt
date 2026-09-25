@@ -12,6 +12,7 @@ package az.petek.agent.testing
 import az.petek.agent.application.InMemorySharedRunState
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariables
+import az.petek.agent.domain.Colleague
 import az.petek.agent.domain.SharedRunState
 import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserSession
@@ -74,7 +75,7 @@ object AgentTestData {
     ) = AgentRuntime(
         runId = RUN_ID,
         identity = identity,
-        roster = roster,
+        roster = roster.map(Colleague::of),
         session = session,
         target = target,
         variables = variables,

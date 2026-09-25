@@ -38,6 +38,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.exists
@@ -211,8 +212,24 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun saveStorageState(path: Path) {
         perform("save storage state") {
-            path.toAbsolutePath().parent?.let { Files.createDirectories(it) }
+            // The file holds live session cookies: only this user may read the directory and the file (POSIX; a no-op elsewhere).
+            path.toAbsolutePath().parent?.let { directory ->
+                Files.createDirectories(directory)
+                restrictToOwner(directory, OWNER_ONLY_DIRECTORY)
+            }
             handles.context.storageState(BrowserContext.StorageStateOptions().setPath(path))
+            restrictToOwner(path, OWNER_ONLY_FILE)
+        }
+    }
+
+    private fun restrictToOwner(
+        path: Path,
+        permissions: Set<PosixFilePermission>,
+    ) {
+        try {
+            Files.setPosixFilePermissions(path, permissions)
+        } catch (_: UnsupportedOperationException) {
+            // Not a POSIX file system (Windows): the user's own profile directory protects the file.
         }
     }
 
@@ -426,6 +443,12 @@ internal class PlaywrightBrowserSession private constructor(
 
         /** Playwright's message when the document an evaluation ran in was replaced by a navigation. */
         private const val CONTEXT_DESTROYED = "Execution context was destroyed"
+
+        /** `rw-------`: a saved storage state holds live session cookies. */
+        private val OWNER_ONLY_FILE: Set<PosixFilePermission> = setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)
+
+        /** `rwx------` for the directory that holds them. */
+        private val OWNER_ONLY_DIRECTORY: Set<PosixFilePermission> = OWNER_ONLY_FILE + PosixFilePermission.OWNER_EXECUTE
 
         /**
          * Opens a session: creates its thread, then on that thread its Playwright instance, browser (via

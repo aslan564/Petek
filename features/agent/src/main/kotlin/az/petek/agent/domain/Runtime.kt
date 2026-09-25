@@ -12,8 +12,11 @@ package az.petek.agent.domain
 import az.petek.browser.domain.BrowserSession
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.TemplateContext
+import az.petek.core.ids.AgentId
 import az.petek.core.ids.CorrelationId
 import az.petek.core.ids.RunId
+import az.petek.core.model.RegistrationMode
+import az.petek.core.model.Role
 import az.petek.identity.domain.Identity
 import java.nio.file.Path
 import java.time.Instant
@@ -38,15 +41,18 @@ class AgentVariables {
 
 /**
  * Values shared by all agents of one run and produced during setup: `company_id`, `company_code`,
- * `invite_link:<email>`. Readers can suspend until a value appears.
+ * `invite_link:<email>`. Readers can suspend until a value appears. Values are write-once: the first publisher of a
+ * key wins, and a later [put] of a different value is refused (returns false) so no agent can change what the others
+ * already act on; publishing the same value again is fine.
  */
 interface SharedRunState {
     fun get(key: String): String?
 
+    /** Stores [value] under [key] unless the key already holds a different value; returns whether [key] now holds [value]. */
     fun put(
         key: String,
         value: String,
-    )
+    ): Boolean
 
     suspend fun await(
         key: String,
@@ -61,12 +67,39 @@ interface SharedRunState {
     }
 }
 
+/**
+ * What one agent may know about another tester of the run: who they are and how they join, never how they sign in.
+ * There is no password and no phone here, so a colleague's credentials cannot reach another agent's runtime, prompt
+ * or evidence by construction (least privilege; CLAUDE.md rules 7 and 10).
+ */
+data class Colleague(
+    val agentId: AgentId,
+    val displayName: String,
+    val email: String,
+    val role: Role,
+    /** Null for the admin. */
+    val department: String?,
+    val registration: RegistrationMode,
+) {
+    companion object {
+        fun of(identity: Identity): Colleague =
+            Colleague(
+                agentId = identity.agentId,
+                displayName = identity.displayName,
+                email = identity.email,
+                role = identity.role,
+                department = identity.department,
+                registration = identity.registration,
+            )
+    }
+}
+
 /** Everything one agent owns during a run. The identity is read-only (CLAUDE.md rule 7). */
 data class AgentRuntime(
     val runId: RunId,
     val identity: Identity,
-    /** All identities of the run, read-only (the admin needs it to invite the others). */
-    val roster: List<Identity>,
+    /** Everyone of the run as [Colleague]s (the admin invites them, agents address them by name); never their secrets. */
+    val roster: List<Colleague>,
     val session: BrowserSession,
     val target: TargetProfile,
     val variables: AgentVariables,

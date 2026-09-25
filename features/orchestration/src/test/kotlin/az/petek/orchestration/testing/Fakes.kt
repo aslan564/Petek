@@ -59,6 +59,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
@@ -332,7 +333,7 @@ class TestSharedRunState : SharedRunState {
     override fun put(
         key: String,
         value: String,
-    ) = values.update { it + (key to value) }
+    ): Boolean = values.updateAndGet { if (key in it) it else it + (key to value) }[key] == value
 
     override suspend fun await(
         key: String,

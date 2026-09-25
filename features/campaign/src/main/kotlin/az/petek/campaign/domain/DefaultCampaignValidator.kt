@@ -57,6 +57,13 @@ class DefaultCampaignValidator(
         private val issues = mutableListOf<ValidationIssue>()
         private val emittedAnywhere: Set<String> = campaign.allSteps.mapNotNullTo(LinkedHashSet()) { it.emits?.event }
 
+        /** How many steps emit each event; `wait_for` and `{last_id}` are unambiguous only when it is one. */
+        private val emittingSteps: Map<String, Int> =
+            campaign.allSteps
+                .mapNotNull { it.emits?.event }
+                .groupingBy { it }
+                .eachCount()
+
         fun check(): List<ValidationIssue> {
             checkSettings()
             checkTargetProfile()
@@ -383,11 +390,25 @@ class DefaultCampaignValidator(
                 action.args.forEach { (key, value) ->
                     checkTemplate(value, "$path.run.args.$key", "$name, run argument '$key'", beforeScope, step.line)
                 }
+                if (action.function in ADMIN_ONLY_RUN_FUNCTIONS && step.actors.selectors.any { it.role != Role.ADMIN }) {
+                    report(
+                        "actor",
+                        "$name: run ${action.function} may only be performed by the admin (the company owner), " +
+                            "but actor '${step.actors.raw}' includes other roles",
+                    )
+                }
             }
 
             private fun checkEmits() {
                 val emits = step.emits ?: return
                 if (emits.event.isBlank()) report("emits", "$name: emits needs an event name")
+                if ((emittingSteps[emits.event] ?: 0) > 1) {
+                    report(
+                        "emits",
+                        "$name: event '${emits.event}' is emitted by more than one step; give every event exactly one emitting " +
+                            "step so wait_for and {last_id} cannot pick up an older step's object",
+                    )
+                }
                 emits.idSource?.let {
                     checkIdSource(it, "$path.emits.id_from", "$name, emits.id_from", beforeScope, step.line)
                 }
@@ -630,6 +651,9 @@ class DefaultCampaignValidator(
 
     private companion object {
         val WEB_SCHEMES = setOf("http", "https")
+
+        /** Run functions that create or seed the company: only the owner may perform them (isolation, rule 7). */
+        val ADMIN_ONLY_RUN_FUNCTIONS = setOf("register_owner", "seed_company")
         val HTTP_METHODS = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 
         /**

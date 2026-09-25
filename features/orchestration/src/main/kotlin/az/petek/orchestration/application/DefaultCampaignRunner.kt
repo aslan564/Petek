@@ -12,6 +12,7 @@ package az.petek.orchestration.application
 import az.petek.agent.application.TesterAgentFactory
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariables
+import az.petek.agent.domain.Colleague
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
 import az.petek.browser.domain.BrowserEngine
@@ -219,9 +220,11 @@ class DefaultCampaignRunner(
     ) {
         run.browserStarted = true
         val factory = browser.start(browserConfig)
+        // One roster for everyone: who the colleagues are, never their secrets (computed once, shared read-only).
+        val colleagues = run.identities.map(Colleague::of)
         coroutineScope {
             run.identities
-                .map { identity -> async(diagnostics.of(run.runId, identity.agentId)) { openAgent(run, factory, identity) } }
+                .map { identity -> async(diagnostics.of(run.runId, identity.agentId)) { openAgent(run, factory, identity, colleagues) } }
                 .awaitAll()
         }
         board.start(run.runId, run.identities)
@@ -234,6 +237,7 @@ class DefaultCampaignRunner(
         run: RunState,
         factory: BrowserSessionFactory,
         identity: Identity,
+        colleagues: List<Colleague>,
     ) {
         val agentId = identity.agentId
         try {
@@ -249,7 +253,7 @@ class DefaultCampaignRunner(
                 AgentRuntime(
                     runId = run.runId,
                     identity = identity,
-                    roster = run.identities,
+                    roster = colleagues,
                     session = ProgressReportingSession(session) { watchdog.progress(agentId) },
                     target = run.campaign.target,
                     variables = AgentVariables(),

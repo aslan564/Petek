@@ -30,13 +30,24 @@ class InMemorySharedRunStateTest {
     private val state = InMemorySharedRunState()
 
     @Test
-    fun `values can be read after they are put and a later put wins`() {
+    fun `values are write-once, the first publisher wins and a different later value is refused`() {
         state.get(SharedRunState.COMPANY_ID).shouldBeNull()
-        state.put(SharedRunState.COMPANY_ID, "c1")
-        state.put(SharedRunState.COMPANY_ID, "c2")
-        state.get(SharedRunState.COMPANY_ID) shouldBe "c2"
-        state.snapshot() shouldBe mapOf(SharedRunState.COMPANY_ID to "c2")
+        state.put(SharedRunState.COMPANY_ID, "c1") shouldBe true
+        state.put(SharedRunState.COMPANY_ID, "c2") shouldBe false
+        state.put(SharedRunState.COMPANY_ID, "c1") shouldBe true
+        state.get(SharedRunState.COMPANY_ID) shouldBe "c1"
+        state.snapshot() shouldBe mapOf(SharedRunState.COMPANY_ID to "c1")
     }
+
+    @Test
+    fun `thousands of agents publishing the same key at once cannot change what the first one published`() =
+        runTest {
+            val results = (1..5000).map { i -> async { state.put(SharedRunState.COMPANY_CODE, "CODE-$i") } }.awaitAll()
+
+            results.count { it } shouldBe 1
+            val winner = results.indexOfFirst { it } + 1
+            state.get(SharedRunState.COMPANY_CODE) shouldBe "CODE-$winner"
+        }
 
     @Test
     fun `await returns a value that is already there without waiting`() =

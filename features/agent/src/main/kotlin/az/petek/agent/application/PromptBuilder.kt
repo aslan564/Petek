@@ -10,6 +10,7 @@
 package az.petek.agent.application
 
 import az.petek.agent.domain.AgentRuntime
+import az.petek.agent.domain.Colleague
 import az.petek.agent.domain.DecisionProtocol
 import az.petek.browser.domain.PageSnapshot
 import az.petek.core.model.Role
@@ -87,7 +88,7 @@ class PromptBuilder(
     private fun StringBuilder.appendIdentity(identity: Identity) {
         appendLine("Your identity:")
         appendLine("- Name: ${identity.displayName}")
-        appendLine("- Role: ${roleDescription(identity)}")
+        appendLine("- Role: ${roleDescription(identity.role, identity.department)}")
         appendLine("- E-mail: ${identity.email}")
         appendLine("- Phone: ${identity.phone}")
         appendLine("- Password: secret and never shown to you; type {self.password} wherever it is needed.")
@@ -95,7 +96,7 @@ class PromptBuilder(
     }
 
     private fun StringBuilder.appendCompany(runtime: AgentRuntime) {
-        val roster = runtime.roster.ifEmpty { listOf(runtime.identity) }
+        val roster = runtime.roster.ifEmpty { listOf(Colleague.of(runtime.identity)) }
         val departments = roster.mapNotNull { it.department }.distinct()
         appendLine("Company context:")
         appendLine("- You and your colleagues below work in the same company on the site under test; all accounts are test accounts.")
@@ -105,7 +106,7 @@ class PromptBuilder(
         val listed = mostRelevant(roster, runtime.identity)
         listed.forEach { person ->
             val you = if (person.agentId == runtime.identity.agentId) " (you)" else ""
-            appendLine("  - ${person.displayName} - ${roleDescription(person)} - ${person.email}$you")
+            appendLine("  - ${person.displayName} - ${roleDescription(person.role, person.department)} - ${person.email}$you")
         }
         val unlisted = roster.size - listed.size
         if (unlisted > 0) appendLine("  - … and $unlisted more colleagues, not listed here")
@@ -113,13 +114,13 @@ class PromptBuilder(
 
     /** At most [rosterLimit] people, the ones [self] most likely deals with first, listed in agent-id order. */
     private fun mostRelevant(
-        roster: List<Identity>,
+        roster: List<Colleague>,
         self: Identity,
-    ): List<Identity> {
+    ): List<Colleague> {
         if (roster.size <= rosterLimit) return roster
         val department = self.department
 
-        fun rank(person: Identity): Int =
+        fun rank(person: Colleague): Int =
             when {
                 person.agentId == self.agentId -> 0
                 person.role == Role.ADMIN -> 1
@@ -129,7 +130,7 @@ class PromptBuilder(
                 else -> 5
             }
         return roster
-            .sortedWith(compareBy<Identity>(::rank).thenBy { it.agentId })
+            .sortedWith(compareBy<Colleague>(::rank).thenBy { it.agentId })
             .take(rosterLimit)
             .sortedBy { it.agentId }
     }
@@ -145,11 +146,14 @@ class PromptBuilder(
         recent.forEach { appendLine("${it.number}. ${it.action} -> ${it.observation}") }
     }
 
-    private fun roleDescription(identity: Identity): String =
-        when (identity.role) {
+    private fun roleDescription(
+        role: Role,
+        department: String?,
+    ): String =
+        when (role) {
             Role.ADMIN -> "admin (company owner)"
-            Role.MANAGER -> "manager of the ${identity.department ?: "unassigned"} department"
-            Role.EMPLOYEE -> "employee in the ${identity.department ?: "unassigned"} department"
+            Role.MANAGER -> "manager of the ${department ?: "unassigned"} department"
+            Role.EMPLOYEE -> "employee in the ${department ?: "unassigned"} department"
         }
 
     companion object {

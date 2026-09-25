@@ -125,8 +125,17 @@ internal class StepExecutor(
     private val board: AgentBoard get() = services.board
     private val tasks: TaskBoard get() = services.tasks
 
+    /**
+     * The object id of the newest event before the current step began: what `{last_id}` means for an actor that neither
+     * waited for nor emitted an event in this step. Taken once per step, so concurrent actors of one step never see each
+     * other's ids through it (an actor whose own action failed does not inherit a colleague's object).
+     */
+    @Volatile
+    private var lastIdBeforeStep: String? = null
+
     suspend fun execute(step: ScenarioStep): StepResult {
         board.stepStarted(step.id)
+        lastIdBeforeStep = run.bus.latestAny()?.objectId
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors[step.id] = chosen.map { it.agentId }
@@ -665,7 +674,8 @@ internal class StepExecutor(
         val started = clock.now()
         val stepId = ids.stepId()
         val correlationId = ids.correlationId()
-        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, null), null)
+        // The group verdict comes after every actor acted: `{last_id}` is the winner's object (the only emitted one).
+        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, run.bus.latestAny()?.objectId), null)
         val actorResults =
             results.map {
                 ActorResult(
@@ -792,7 +802,7 @@ internal class StepExecutor(
         lastIdOverride: String?,
     ): TemplateContext =
         TemplateContext(
-            lastId = lastIdOverride ?: run.bus.latestAny()?.objectId,
+            lastId = lastIdOverride ?: lastIdBeforeStep,
             self = identity?.let(::selfFields).orEmpty(),
             eventIds = latestEventIds(),
         )
