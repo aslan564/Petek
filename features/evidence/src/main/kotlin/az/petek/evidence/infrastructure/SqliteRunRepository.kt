@@ -82,6 +82,17 @@ internal class SqliteRunRepository(
                 ?.toRunRecord()
         }
 
+    override suspend fun list(limit: Int): List<RunRecord> {
+        require(limit > 0) { "limit must be positive, was $limit" }
+        return db.read {
+            RunTable
+                .selectAll()
+                .orderBy(RunTable.startedAt to SortOrder.DESC, RunTable.seq to SortOrder.DESC)
+                .limit(limit)
+                .map { it.toRunRecord() }
+        }
+    }
+
     override suspend fun byRepeatGroup(group: String): List<RunRecord> =
         db.read {
             RunTable

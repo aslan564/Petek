@@ -52,6 +52,12 @@ interface RunRepository {
 
     suspend fun latest(): RunRecord?
 
+    /**
+     * The [limit] most recent runs, newest first (by start time, then by creation order for equal starts), for run
+     * histories such as the web panel's report list. [limit] must be positive.
+     */
+    suspend fun list(limit: Int): List<RunRecord>
+
     suspend fun byRepeatGroup(group: String): List<RunRecord>
 
     suspend fun addResource(resource: RunResource)

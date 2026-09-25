@@ -381,6 +381,7 @@ internal object PanelJson {
             campaignPath = root.optionalString("campaignPath"),
             testers = root["testers"]?.takeUnless { it is JsonNull }?.let { root.int("testers") },
             headful = root.boolean("headful"),
+            target = root.optionalString("target"),
         )
     }
 

@@ -2,6 +2,8 @@ package az.petek.dashboard.domain
 
 import az.petek.core.ids.RunId
 import az.petek.evidence.domain.RunResult
+import java.net.URI
+import java.net.URISyntaxException
 import java.time.Instant
 
 // Past runs for the "Hesabatlar" screen: results, cost, reports and the stability of `--repeat` groups.
@@ -47,13 +49,22 @@ data class StepStabilityView(
     val flaky: Boolean get() = passed in 1 until runs
 }
 
-/** What the "Run et" button asks for: an approved scenario (or a campaign file), how many testers, visible browsers. */
+/**
+ * What the "Run et" button asks for: an approved scenario (or a campaign file), how many testers, visible browsers,
+ * and optionally the site to run against.
+ */
 data class RunRequest(
     val scenarioId: String?,
     val campaignPath: String? = null,
     /** Null keeps the scenario's own count. */
     val testers: Int? = null,
     val headful: Boolean = false,
+    /**
+     * The "Hədəf sayt" of the instruction screen. Null or blank runs against the scenario's own target (the configured
+     * `PETEK_TARGET`); another absolute http(s) URL runs against that site as if it were `PETEK_TARGET`, still subject to
+     * the backend's target policy.
+     */
+    val target: String? = null,
 ) {
     fun problems(): List<FieldProblem> =
         buildList {
@@ -63,7 +74,20 @@ data class RunRequest(
             if (testers != null && testers !in 1..PanelInstructions.MAX_TESTERS) {
                 add(FieldProblem(PanelInstructions.TESTERS, "Tester sayı 1 ilə ${PanelInstructions.MAX_TESTERS} arasında olmalıdır."))
             }
+            if (!target.isNullOrBlank() && !isWebUrl(target.trim())) {
+                add(FieldProblem(PanelInstructions.TARGET, "Hədəf http:// və ya https:// ilə başlayan tam ünvan olmalıdır."))
+            }
         }
+
+    private fun isWebUrl(text: String): Boolean {
+        val uri =
+            try {
+                URI(text)
+            } catch (_: URISyntaxException) {
+                return false
+            }
+        return uri.scheme?.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()
+    }
 
     companion object {
         const val SCENARIO = "scenario"

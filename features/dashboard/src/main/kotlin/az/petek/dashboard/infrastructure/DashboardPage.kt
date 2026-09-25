@@ -8,11 +8,15 @@ import java.util.Base64
  * start-up (no CDN, no second request). Its inline `<style>` and `<script>` carry a fresh nonce per response and the
  * Content-Security-Policy allows nothing else: no other script, no inline handlers, no foreign origin. The per-process
  * [token] for mutating requests is written into a `<meta>` tag only other pages of this origin can read. The page
- * escapes every value it renders (it only ever writes data with `textContent`).
+ * escapes every value it renders (it only ever writes data with `textContent`); [defaultTarget], the site the
+ * instruction form starts with, is written HTML-escaped into a `<meta>` tag as well.
  */
 internal class DashboardPage(
     private val token: String,
+    defaultTarget: String? = null,
 ) {
+    private val target: String = escape(defaultTarget.orEmpty())
+
     private val template: String =
         read("index.html")
             .replace(STYLE_MARK, read("panel.css"))
@@ -33,7 +37,7 @@ internal class DashboardPage(
     fun render(): Rendered {
         val nonce = nonce()
         return Rendered(
-            html = template.replace(NONCE_MARK, nonce).replace(TOKEN_MARK, token),
+            html = template.replace(NONCE_MARK, nonce).replace(TOKEN_MARK, token).replace(TARGET_MARK, target),
             contentSecurityPolicy =
                 "default-src 'none'; script-src 'nonce-$nonce'; style-src 'nonce-$nonce'; img-src 'self' data:; " +
                     "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
@@ -49,6 +53,7 @@ internal class DashboardPage(
         const val FOLDER = "/az/petek/dashboard/infrastructure/panel/"
         const val NONCE_MARK = "{{NONCE}}"
         const val TOKEN_MARK = "{{TOKEN}}"
+        const val TARGET_MARK = "{{TARGET}}"
         const val STYLE_MARK = "/*{{STYLE}}*/"
         const val SCRIPT_MARK = "/*{{SCRIPT}}*/"
         const val NONCE_BYTES = 18
@@ -65,6 +70,15 @@ internal class DashboardPage(
                 "screen-reports.js",
                 "app.js",
             )
+
+        /** Escapes text for a double-quoted HTML attribute. */
+        fun escape(text: String): String =
+            text
+                .replace("&", "&amp;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
 
         fun read(name: String): String =
             checkNotNull(DashboardPage::class.java.getResourceAsStream(FOLDER + name)) { "panel resource $name is missing" }
