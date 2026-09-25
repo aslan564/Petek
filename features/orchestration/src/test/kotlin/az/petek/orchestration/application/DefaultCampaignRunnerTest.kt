@@ -184,7 +184,7 @@ class DefaultCampaignRunnerTest {
             val runtimes = f.agents.runtimes.values
             runtimes shouldHaveSize 7
             runtimes.map { it.shared }.toSet() shouldHaveSize 1
-            runtimes.all { it.roster.size == 7 && it.session === f.browser.session(it.identity.agentId.value) } shouldBe true
+            runtimes.all { it.roster.size == 7 && it.session.label == it.identity.agentId.value } shouldBe true
             f.agents.runtimes
                 .getValue(AgentId("a03"))
                 .storageStatePath shouldBe Path.of("build", "storage", summary.runId.value, "a03.json")

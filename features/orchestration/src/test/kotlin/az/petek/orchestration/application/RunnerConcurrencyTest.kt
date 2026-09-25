@@ -255,6 +255,45 @@ class RunnerConcurrencyTest {
         }
 
     @Test
+    fun `an agent that keeps driving its browser counts as alive without recording evidence`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, runtime ->
+                when (call.agentId) {
+                    AgentId("a04") -> {
+                        // Observes and acts every 40 s for 4 minutes (like LLM decisions), never records anything itself.
+                        repeat(6) {
+                            delay(40.seconds)
+                            runtime.session.snapshot()
+                            runtime.session.click(1)
+                        }
+                        ok
+                    }
+
+                    AgentId("a05") -> {
+                        // Did one thing, then hangs outside the browser (e.g. an LLM request that never returns).
+                        runtime.session.navigate("/tickets")
+                        awaitCancellation()
+                    }
+
+                    else -> {
+                        ok
+                    }
+                }
+            }
+
+            val summary = f.runner().run(campaign(steps = listOf(step("work", employees()))), RunOptions(inactivityTimeout = 60.seconds))
+
+            f.step("work", StepKind.DO, "a04").status shouldBe StepStatus.PASSED
+            f.browser.session("a04").actions shouldHaveSize 6
+            val blocked = f.step("work", StepKind.DO, "a05")
+            blocked.status shouldBe StepStatus.BLOCKED
+            blocked.durationMs shouldBe 60_000
+            summary.stepsFailed shouldBe 1
+            currentTime shouldBe 240_000
+        }
+
+    @Test
     fun `an agent that throws gets an error record and the others carry on`() =
         runTest {
             val f = fixture()

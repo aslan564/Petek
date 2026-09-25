@@ -3,7 +3,6 @@ package az.petek.orchestration.application
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.FailureReason
-import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.StepAction
@@ -55,7 +54,7 @@ class RunnerEventsTest {
         runTest {
             val f = fixture()
             f.agents.script = { _, runtime ->
-                (runtime.session as FakeBrowserSession).url = "https://staging.example.test/tickets/42?tab=history"
+                f.browser.session(runtime.identity.agentId.value).url = "https://staging.example.test/tickets/42?tab=history"
                 ActionOutcome(ActionStatus.SUCCEEDED, "created", objectId = "llm-says-7")
             }
 
@@ -125,7 +124,7 @@ class RunnerEventsTest {
         runTest {
             val f = fixture()
             f.agents.script = { _, runtime ->
-                (runtime.session as FakeBrowserSession).url = "https://staging.example.test/announcements/77"
+                f.browser.session(runtime.identity.agentId.value).url = "https://staging.example.test/announcements/77"
                 ActionOutcome(ActionStatus.SUCCEEDED, "created", objectId = "r3")
             }
 
@@ -354,7 +353,7 @@ class RunnerEventsTest {
 
                     else -> {
                         // a06 only sees the text after its own action: that is not live delivery.
-                        (runtime.session as FakeBrowserSession).visibleTexts += "Elan"
+                        f.browser.session(runtime.identity.agentId.value).visibleTexts += "Elan"
                         ActionOutcome(ActionStatus.SUCCEEDED, "read")
                     }
                 }

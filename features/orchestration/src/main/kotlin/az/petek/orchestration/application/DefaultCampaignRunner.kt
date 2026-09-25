@@ -81,9 +81,11 @@ private val logger = KotlinLogging.logger {}
  * after cleanup). A `permission_denied` refusal in a main step is not a failure by itself: permission tests
  * expect it and their assertions decide.
  *
- * Wiring: the recorder given to the agent loop and run functions must be a [ProgressTrackingRecorder] reporting to
- * the same [watchdog], otherwise every agent looks idle to the watchdog. The run's [EventBus] comes from
- * [busFactory] (one per run); [sharedStateFactory] creates the run's [SharedRunState].
+ * Wiring: every browser call an agent makes counts as progress for [watchdog] (the runner hands each agent a
+ * progress-reporting view of its session). Wrap the recorder given to the agent loop and run functions in a
+ * [ProgressTrackingRecorder] reporting to the same [watchdog] as well, so that recorded evidence also counts (e.g. a
+ * run function that waits for an e-mail but records its sub-steps). The run's [EventBus] comes from [busFactory]
+ * (one per run); [sharedStateFactory] creates the run's [SharedRunState].
  */
 class DefaultCampaignRunner(
     identityGenerator: IdentityRegistryGenerator,
@@ -226,7 +228,7 @@ class DefaultCampaignRunner(
                     runId = run.runId,
                     identity = identity,
                     roster = run.identities,
-                    session = session,
+                    session = ProgressReportingSession(session) { watchdog.progress(agentId) },
                     target = run.campaign.target,
                     variables = AgentVariables(),
                     shared = run.shared,
