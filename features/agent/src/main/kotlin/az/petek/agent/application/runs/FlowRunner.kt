@@ -196,7 +196,7 @@ internal class FlowRunner(
                 }
             if (!found) {
                 val what = text?.let { "text ${quoted(it)}" } ?: selectors.joinToString(" or ") { trace.describe(it) }
-                fail(step.failure, "$what did not appear within $timeout (${trace.currentUrl()})")
+                fail(step.failure, step.key, "$what did not appear within $timeout (${trace.currentUrl()})")
             }
         }
 
@@ -210,6 +210,7 @@ internal class FlowRunner(
             if (!reached) {
                 fail(
                     step.failure,
+                    step.key,
                     "the page did not reach ${quoted(step.regex)} within $timeout (still on ${trace.currentUrl()})",
                 )
             }
@@ -347,8 +348,7 @@ internal class FlowRunner(
 
         private suspend fun ifVisible(step: FlowStep.IfVisible) {
             val selector = ref(step.selector)
-            val visible =
-                step.timeout?.let { runtime.session.waitForSelector(trace.selector(selector), it).found } ?: trace.isVisible(selector)
+            val visible = step.timeout?.let { anyVisibleWithin(listOf(selector), it) } ?: trace.isVisible(selector)
             trace.note("if ${trace.describe(selector)} is visible", StepStatus.PASSED, if (visible) "visible" else "not visible, skipped")
             if (visible) steps(step.then)
         }
@@ -374,19 +374,33 @@ internal class FlowRunner(
             }
         }
 
-        /** Fails the flow as [failure] says, or with [detail] under the default reason. */
+        /**
+         * Fails the flow at the step [stepKey] as [failure] says: its reason (else the default one), its message (else a
+         * sentence naming the flow, the step and [detail]) and, with an error element, what that element shows.
+         */
         private suspend fun fail(
             failure: FlowFailure?,
+            stepKey: String,
             detail: String,
         ): Nothing {
             val reason = failure?.reason?.let(::reasonOf) ?: defaultReason
             val message = failure?.message?.let { templates.render(it, allowUrl = true) }
-            val error = failure?.error?.let { errorText(ref(it)) }
+            val shown = failure?.error?.let { errorText(ref(it)) }
             val text =
                 when {
-                    message == null -> detail.replaceFirstChar { it.uppercase() } + "."
-                    failure.error != null -> "$message: ${error ?: detail}"
-                    else -> message
+                    message == null -> {
+                        "Flow '$flowName' failed at $stepKey: $detail" +
+                            (shown?.let { "; the page says ${quoted(it)}" } ?: "") +
+                            "."
+                    }
+
+                    failure.error != null -> {
+                        "$message: ${shown ?: detail}"
+                    }
+
+                    else -> {
+                        message
+                    }
                 }
             throw RunFailure(reason, text)
         }
@@ -430,7 +444,7 @@ internal class FlowRunner(
                     }
                     steps(page.steps)
                     val next = leave(page)
-                    if (next == State.On(page)) page.stuck?.let { fail(it, "still on ${page.label}") }
+                    if (next == State.On(page)) page.stuck?.let { fail(it, journey.key, "still on ${page.label}") }
                     state = next
                 }
             }

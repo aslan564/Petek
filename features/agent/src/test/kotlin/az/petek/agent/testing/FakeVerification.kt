@@ -29,8 +29,11 @@ class FakeVerification : AwaitVerificationUseCase {
     private val inbox = mutableListOf<Mail>()
     private val ids = AtomicInteger()
 
-    /** Every await call: address and purpose. */
+    /** Every await call: address and purpose ([awaitLink] counts as [MailPurpose.LINK]). */
     val calls = CopyOnWriteArrayList<Pair<String, MailPurpose>>()
+
+    /** The pattern of every [awaitLink] call. */
+    val linkPatterns = CopyOnWriteArrayList<String>()
 
     /** Set to make the inbox unreachable. */
     @Volatile
@@ -61,38 +64,57 @@ class FakeVerification : AwaitVerificationUseCase {
         pollInterval: Duration,
     ): VerificationCode {
         calls += to to purpose
+        return awaitMatching(to, timeout, pollInterval) { code ->
+            when (purpose) {
+                MailPurpose.CODE -> code.code != null
+                MailPurpose.LINK -> code.link != null
+                MailPurpose.ANY -> true
+            }
+        }
+    }
+
+    override suspend fun awaitLink(
+        to: String,
+        since: Instant,
+        pattern: Regex,
+        timeout: Duration,
+        pollInterval: Duration,
+    ): VerificationCode {
+        calls += to to MailPurpose.LINK
+        linkPatterns += pattern.pattern
+        return awaitMatching(to, timeout, pollInterval) { code -> code.link?.let { pattern.containsMatchIn(it.toString()) } == true }
+    }
+
+    private suspend fun awaitMatching(
+        to: String,
+        timeout: Duration,
+        pollInterval: Duration,
+        usable: (VerificationCode) -> Boolean,
+    ): VerificationCode {
         outage?.let { failure ->
             delay(timeout)
             throw failure
         }
-        return withTimeoutOrNull(timeout) { next(to.lowercase(), purpose, pollInterval) } ?: throw MailTimeoutException(to, timeout)
+        return withTimeoutOrNull(timeout) { next(to.lowercase(), pollInterval, usable) } ?: throw MailTimeoutException(to, timeout)
     }
 
     private suspend fun next(
         to: String,
-        purpose: MailPurpose,
         pollInterval: Duration,
+        usable: (VerificationCode) -> Boolean,
     ): VerificationCode {
         while (true) {
-            take(to, purpose)?.let { return it }
+            take(to, usable)?.let { return it }
             delay(pollInterval)
         }
     }
 
     private fun take(
         to: String,
-        purpose: MailPurpose,
+        usable: (VerificationCode) -> Boolean,
     ): VerificationCode? =
         synchronized(inbox) {
-            val mail =
-                inbox.lastOrNull { mail ->
-                    mail.to == to &&
-                        when (purpose) {
-                            MailPurpose.CODE -> mail.code.code != null
-                            MailPurpose.LINK -> mail.code.link != null
-                            MailPurpose.ANY -> true
-                        }
-                }
+            val mail = inbox.lastOrNull { mail -> mail.to == to && usable(mail.code) }
             mail?.also { inbox.remove(it) }?.code
         }
 }
