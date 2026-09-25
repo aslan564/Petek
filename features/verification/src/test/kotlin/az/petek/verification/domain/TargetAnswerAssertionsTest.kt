@@ -11,17 +11,21 @@ import az.petek.oracle.domain.OracleException
 import az.petek.oracle.domain.OracleResponse
 import az.petek.oracle.domain.TargetOracle
 import az.petek.oracle.testing.FakeTargetOracle
+import az.petek.verification.testing.DEFAULT_TEMPLATES
 import az.petek.verification.testing.FakeTemplateRenderer
 import az.petek.verification.testing.ScriptedSession
 import az.petek.verification.testing.SimpleJsonFieldSelector
 import az.petek.verification.testing.assertionInput
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 
 class TargetAnswerAssertionsTest {
     private val clock = FakeHarnessClock()
@@ -311,5 +315,99 @@ class TargetAnswerAssertionsTest {
 
             result.verdict shouldBe Verdict.PASSED
             result.rawEvidence shouldBe "404 "
+        }
+
+    // --- request paths ------------------------------------------------------------------------------------------------
+
+    private fun withLastId(lastId: String) = assertionInput(session, templates = DEFAULT_TEMPLATES.copy(lastId = lastId))
+
+    @Test
+    fun `an id carrying a path keeps to its own segment of the http_status path`() =
+        runTest {
+            session.fake.httpResponses["POST /api/tickets/42%2F..%2F..%2Fcompanies%2Fc1/approve"] = HttpProbeResult(404, "")
+
+            val result =
+                evaluator().evaluate(
+                    listOf(HttpStatus("/api/tickets/{last_id}/approve", "POST", 403)),
+                    withLastId("42/../../companies/c1"),
+                )
+
+            session.fake.actions shouldContainExactly listOf("request POST /api/tickets/42%2F..%2F..%2Fcompanies%2Fc1/approve")
+            result.single().verdict shouldBe Verdict.FAILED
+            result.single().observed shouldBe "404"
+        }
+
+    @Test
+    fun `a dot-segment id is refused before any request is sent`() =
+        runTest {
+            val result =
+                evaluator()
+                    .evaluate(
+                        listOf(HttpStatus("/api/tickets/{last_id}/approve", "DELETE", 403)),
+                        withLastId(".."),
+                    ).single()
+
+            result.verdict shouldBe Verdict.FAILED
+            result.source shouldBe EvidenceSource.ORACLE
+            result.expected shouldBe "DELETE /api/tickets/../approve -> 403"
+            result.note shouldBe "refused to request `/api/tickets/../approve`: the path must not contain '.' or '..' segments"
+            result.rawEvidence.shouldBeNull()
+            session.fake.actions.shouldBeEmpty()
+        }
+
+    @Test
+    fun `http_status refuses absolute and protocol-relative URLs that would leave the target`() =
+        runTest {
+            val results =
+                evaluator().evaluate(
+                    listOf(
+                        HttpStatus("https://kadrohr.com/api/tickets/{last_id}/approve", "POST", 403),
+                        HttpStatus("//kadrohr.com/api/tickets/{last_id}/approve", "POST", 403),
+                        HttpStatus("/api\\tickets/{last_id}", "GET", 200),
+                        HttpStatus("/api/tickets/{last_id} HTTP/1.1", "GET", 200),
+                    ),
+                    assertionInput(session),
+                )
+
+            results.map { it.verdict } shouldContainExactly List(4) { Verdict.FAILED }
+            results[0].note!! shouldEndWith "must start with '/' (absolute URLs are not allowed)"
+            results[1].note!! shouldEndWith "must not start with '//' (protocol-relative URL)"
+            results[2].note!! shouldEndWith "must not contain '\\'"
+            results[3].note!! shouldEndWith "must not contain spaces or control characters"
+            session.fake.actions.shouldBeEmpty()
+        }
+
+    @Test
+    fun `oracle paths encode placeholder values and refuse dot segments without asking the oracle`() =
+        runTest {
+            val requested = CopyOnWriteArrayList<String>()
+            val recording =
+                object : TargetOracle by oracle {
+                    override suspend fun get(path: String): OracleResponse {
+                        requested += path
+                        return oracle.get(path)
+                    }
+                }
+            val templates = DEFAULT_TEMPLATES.copy(self = DEFAULT_TEMPLATES.self + ("email" to "a01+k7x2@test.kadrohr.com"))
+            oracle.respond("/test/announcements/latest?by=a01%2Bk7x2@test.kadrohr.com", ticket)
+
+            val results =
+                evaluator(recording).evaluate(
+                    listOf(
+                        Oracle("/test/announcements/latest?by={self.email}", "status", "in_progress", null),
+                        Oracle("/test/tickets/%2e%2e/companies/{last_id}", null, null, null),
+                        Oracle("/test/tickets/{last_id}", "created_by", "{self.email}", null),
+                    ),
+                    assertionInput(session, templates = templates.copy(lastId = "../../companies")),
+                )
+
+            results[0].verdict shouldBe Verdict.PASSED
+            results[0].expected shouldBe "GET /test/announcements/latest?by=a01%2Bk7x2@test.kadrohr.com field `status` = \"in_progress\""
+            results[1].verdict shouldBe Verdict.FAILED
+            results[1].note!! shouldEndWith "must not contain '.' or '..' segments"
+            // Expected values are compared as they are; only the path is encoded.
+            results[2].expected shouldBe "GET /test/tickets/..%2F..%2Fcompanies field `created_by` = \"a01+k7x2@test.kadrohr.com\""
+            requested shouldContainExactly
+                listOf("/test/announcements/latest?by=a01%2Bk7x2@test.kadrohr.com", "/test/tickets/..%2F..%2Fcompanies")
         }
 }

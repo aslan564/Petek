@@ -16,6 +16,8 @@ import az.petek.verification.domain.AssertionResult
 import az.petek.verification.domain.AssertionText
 import az.petek.verification.domain.isGroupLevel
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -139,12 +141,22 @@ class RecordingVerifyStepUseCase(
             try {
                 session.screenshot()
             } catch (e: CancellationException) {
-                throw e
+                // Only the caller's own cancellation aborts; one leaking out of the session is a failed screenshot.
+                currentCoroutineContext().ensureActive()
+                return screenshotFailed(e, input, owner)
             } catch (e: Exception) {
-                logger.warn(e) { "screenshot failed for $owner at ${input.scenarioStep}" }
-                return Screenshot(null, "screenshot unavailable: ${AssertionText.error(e)}")
+                return screenshotFailed(e, input, owner)
             }
         return Screenshot(store(input, owner, ArtifactType.SCREENSHOT, bytes), null)
+    }
+
+    private fun screenshotFailed(
+        e: Exception,
+        input: AssertionInput,
+        owner: String,
+    ): Screenshot {
+        logger.warn(e) { "screenshot failed for $owner at ${input.scenarioStep}" }
+        return Screenshot(null, "screenshot unavailable: ${AssertionText.error(e)}")
     }
 
     private suspend fun store(

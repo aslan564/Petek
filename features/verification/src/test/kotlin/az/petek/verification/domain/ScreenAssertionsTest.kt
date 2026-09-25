@@ -1,12 +1,15 @@
 package az.petek.verification.domain
 
 import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.BrowserSession
+import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.AssertionSpec.Count
 import az.petek.campaign.domain.AssertionSpec.HttpStatus
 import az.petek.campaign.domain.AssertionSpec.NotVisible
 import az.petek.campaign.domain.AssertionSpec.VisibleText
 import az.petek.campaign.domain.TemplateContext
+import az.petek.campaign.domain.TemplateRenderer
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.Verdict
@@ -15,13 +18,17 @@ import az.petek.verification.testing.FakeTemplateRenderer
 import az.petek.verification.testing.ScriptedSession
 import az.petek.verification.testing.SimpleJsonFieldSelector
 import az.petek.verification.testing.assertionInput
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
@@ -185,13 +192,62 @@ class ScreenAssertionsTest {
         }
 
     @Test
-    fun `cancellation is never turned into a verdict`() =
+    fun `cancelling the caller is never turned into a verdict`() =
         runTest {
-            session.failure = CancellationException("watchdog")
+            val calls = CopyOnWriteArrayList<String>()
+            val stuck =
+                object : BrowserSession by FakeBrowserSession("a01") {
+                    override suspend fun count(selector: String): Int {
+                        calls += selector
+                        awaitCancellation()
+                    }
+                }
+            var results: List<AssertionResult>? = null
 
-            shouldThrow<CancellationException> {
-                evaluator.evaluate(listOf(Count("#x", 1)), assertionInput(session))
-            }
+            // UNDISPATCHED runs the evaluation until it suspends inside the browser call, like a watchdog would find it.
+            val job =
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    results = evaluator.evaluate(listOf(Count("#x", 1), Count("#y", 1)), assertionInput(stuck))
+                }
+            job.cancelAndJoin()
+
+            job.isCancelled shouldBe true
+            results.shouldBeNull()
+            calls shouldContainExactly listOf("#x")
+        }
+
+    @Test
+    fun `a cancellation exception leaking out of the browser while the caller is active fails only that check`() =
+        runTest {
+            session.failure = CancellationException("nested timeout inside the adapter")
+
+            val results = evaluator.evaluate(listOf(Count("#x", 1), NotVisible("Approve", null)), assertionInput(session))
+
+            results.map { it.verdict } shouldContainExactly List(2) { Verdict.FAILED }
+            results[0].note shouldBe "count check failed: CancellationException: nested timeout inside the adapter"
+            results[0].expected shouldBe "count of `#x` = 1"
+        }
+
+    @Test
+    fun `a renderer failing with an unexpected exception fails that assertion instead of throwing`() =
+        runTest {
+            val broken =
+                object : TemplateRenderer by FakeTemplateRenderer() {
+                    override fun render(
+                        template: String,
+                        context: TemplateContext,
+                    ): String = if ('{' in template) error("renderer bug") else template
+                }
+            val evaluator = DefaultAssertionEvaluator(FakeTargetOracle(), broken, SimpleJsonFieldSelector(), clock)
+            session.fake.counts["#x"] = 1
+
+            val results =
+                evaluator.evaluate(listOf(Count("#{last_id}", 1), Count("#x", 1)), assertionInput(session))
+
+            results[0].verdict shouldBe Verdict.FAILED
+            results[0].note shouldBe "count check failed: IllegalStateException: renderer bug"
+            results[0].expected shouldBe "count of `#{last_id}` = 1"
+            results[1].verdict shouldBe Verdict.PASSED
         }
 
     @Test

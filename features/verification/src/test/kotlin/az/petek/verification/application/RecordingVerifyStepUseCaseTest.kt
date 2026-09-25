@@ -57,6 +57,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -279,6 +280,19 @@ class RecordingVerifyStepUseCaseTest {
             content(visible.artifactIds.single()) shouldContain "screenshot unavailable"
             fromOracle.note.shouldBeNull()
             artifact(fromOracle.artifactIds.single()).type shouldBe ArtifactType.ORACLE
+        }
+
+    @Test
+    fun `a cancellation exception leaking out of the screenshot call is a failed screenshot, not an abort`() =
+        runTest {
+            session.fake.visibleTexts += "Salam"
+            session.screenshotFailure = CancellationException("nested timeout inside the adapter")
+
+            val record = useCase().verifyActor(listOf(VisibleText("Salam", 1.seconds)), assertionInput(session)).single()
+
+            record.verdict shouldBe Verdict.PASSED
+            record.note shouldBe "screenshot unavailable: CancellationException: nested timeout inside the adapter"
+            artifact(record.artifactIds.single()).type shouldBe ArtifactType.LOG
         }
 
     @Test

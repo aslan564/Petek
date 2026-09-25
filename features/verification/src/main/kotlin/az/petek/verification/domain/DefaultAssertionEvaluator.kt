@@ -10,6 +10,8 @@ import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.Verdict
 import az.petek.oracle.domain.JsonFieldSelector
 import az.petek.oracle.domain.TargetOracle
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -17,6 +19,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The code-only judge of typed assertions (CLAUDE.md rule 2): nothing here asks an LLM, and every time is taken
@@ -24,11 +27,15 @@ import kotlin.time.Duration
  *
  * Contract beyond [AssertionEvaluator]:
  * - It never throws for a failing target, browser, oracle or template: such problems become a FAILED result with a
- *   note, so one broken check cannot hide the others. Only coroutine cancellation propagates.
+ *   note, so one broken check cannot hide the others. Only cancellation of the calling coroutine propagates; a
+ *   `CancellationException` leaking out of a port while the caller is still active is a failed check.
  * - Templates in texts, selectors, paths and expected values are rendered with [AssertionInput.templates] before
- *   use; `expected` shows the rendered values.
- * - `visible_text` measured against t0 waits only for what is left of `t0 + within`. When that window has already
- *   elapsed it checks once without waiting and reports the latency as an upper bound.
+ *   use; `expected` shows the rendered values. In `oracle` and `http_status` paths the substituted values are
+ *   percent-encoded and the result must be a plain path on the target ([TargetPath]); anything else is FAILED
+ *   without sending a request.
+ * - `visible_text` measured against t0 waits only for what is left of `t0 + within`. When less than
+ *   [MIN_WAIT] is left it checks once without waiting (a zero browser timeout would mean "wait forever") and
+ *   reports the latency as an upper bound.
  * - Sources follow the three-source model: screen checks are RECEIVER, oracle and the target's own HTTP answers
  *   are ORACLE, `latency_max` is HARNESS and `only_one_succeeds` is SENDER.
  */
@@ -127,7 +134,7 @@ class DefaultAssertionEvaluator(
                 val t0 = input.eventEmittedAt
                 val remaining =
                     if (t0 == null) spec.within else (spec.within - t0.elapsedUntil(clock.now())).coerceAtMost(spec.within)
-                val waited = remaining.isPositive()
+                val waited = remaining >= MIN_WAIT
                 val outcome = if (waited) session.waitForText(rendered.text, remaining) else checkNow(session, rendered.text)
                 val latency =
                     if (t0 != null && outcome.found) {
@@ -173,7 +180,12 @@ class DefaultAssertionEvaluator(
         measuredFromT0: Boolean,
     ): String {
         if (!measuredFromT0) return "no wait window (within = ${AssertionText.ms(within)}); checked once"
-        val late = "the ${AssertionText.ms(within)} window had elapsed ${AssertionText.ms(-remaining)} before the check; checked once"
+        val late =
+            if (remaining.isPositive()) {
+                "less than ${AssertionText.ms(MIN_WAIT)} of the ${AssertionText.ms(within)} window was left; checked once"
+            } else {
+                "the ${AssertionText.ms(within)} window had elapsed ${AssertionText.ms(-remaining)} before the check; checked once"
+            }
         return if (found) "$late; latency is an upper bound" else late
     }
 
@@ -264,6 +276,7 @@ class DefaultAssertionEvaluator(
             return result(spec, Verdict.SKIPPED, expected = describeBestEffort(spec, input), observed = null, note = "no test API")
         }
         val rendered = spec.rendered(input)
+        TargetPath.problem(rendered.path)?.let { return unsafePath(spec, rendered, rendered.path, it) }
         val response = oracle.get(rendered.path)
         val match = matcher.match(rendered, response)
         return result(
@@ -281,6 +294,7 @@ class DefaultAssertionEvaluator(
         input: AssertionInput,
     ): AssertionResult {
         val rendered = spec.rendered(input)
+        TargetPath.problem(rendered.path)?.let { return unsafePath(spec, rendered, rendered.path, it) }
         val session = input.session ?: return noSession(spec, rendered)
         val response = session.request(rendered.method, rendered.path)
         val passed = response.status == spec.equals
@@ -302,6 +316,12 @@ class DefaultAssertionEvaluator(
         input: AssertionInput,
     ): String = renderer.render(value, input.templates)
 
+    /** Renders a request path with percent-encoded placeholder values, see [TargetPath]. */
+    private fun pathTemplate(
+        value: String,
+        input: AssertionInput,
+    ): String = renderer.render(value, TargetPath.encodeValues(input.templates))
+
     private fun AssertionSpec.VisibleText.rendered(input: AssertionInput) = copy(text = template(text, input))
 
     private fun AssertionSpec.NotVisible.rendered(input: AssertionInput) =
@@ -311,13 +331,13 @@ class DefaultAssertionEvaluator(
 
     private fun AssertionSpec.Oracle.rendered(input: AssertionInput) =
         copy(
-            path = template(path, input),
+            path = pathTemplate(path, input),
             equals = equals?.let { template(it, input) },
             contains = contains?.let { template(it, input) },
         )
 
     private fun AssertionSpec.HttpStatus.rendered(input: AssertionInput) =
-        copy(path = template(path, input), method = method.trim().uppercase())
+        copy(path = pathTemplate(path, input), method = method.trim().uppercase())
 
     /** `expected` for a result whose check could not run: rendered when possible, the raw templates otherwise. */
     private fun describeBestEffort(
@@ -334,7 +354,10 @@ class DefaultAssertionEvaluator(
                     is AssertionSpec.HttpStatus -> spec.rendered(input)
                     is AssertionSpec.LatencyMax, AssertionSpec.OnlyOneSucceeds -> spec
                 }
-            } catch (_: TemplateException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The renderer failing here already failed the check itself; show the raw templates instead.
                 spec
             }
         return AssertionText.describe(shown)
@@ -342,8 +365,12 @@ class DefaultAssertionEvaluator(
 
     // --- failures and result building ---------------------------------------------------------------------------------
 
-    /** Runs one check and turns any non-cancellation failure into a FAILED result with a note. */
-    private inline fun guarded(
+    /**
+     * Runs one check and turns any failure into a FAILED result with a note. A [CancellationException] propagates only
+     * when the calling coroutine itself was cancelled; one leaking out of a port (e.g. a nested `withTimeout`) while
+     * the caller is still active is that check failing, not a reason to abandon the remaining assertions.
+     */
+    private suspend inline fun guarded(
         spec: AssertionSpec,
         input: AssertionInput,
         check: () -> AssertionResult,
@@ -351,18 +378,40 @@ class DefaultAssertionEvaluator(
         try {
             check()
         } catch (e: CancellationException) {
-            throw e
+            currentCoroutineContext().ensureActive()
+            checkFailed(spec, input, e)
         } catch (e: TemplateException) {
             result(spec, Verdict.FAILED, expected = describeBestEffort(spec, input), observed = null, note = "template error: ${e.message}")
         } catch (e: Exception) {
-            result(
-                spec,
-                Verdict.FAILED,
-                expected = describeBestEffort(spec, input),
-                observed = null,
-                note = "${spec.type} check failed: ${AssertionText.error(e)}",
-            )
+            checkFailed(spec, input, e)
         }
+
+    private fun checkFailed(
+        spec: AssertionSpec,
+        input: AssertionInput,
+        error: Exception,
+    ): AssertionResult =
+        result(
+            spec,
+            Verdict.FAILED,
+            expected = describeBestEffort(spec, input),
+            observed = null,
+            note = "${spec.type} check failed: ${AssertionText.error(error)}",
+        )
+
+    private fun unsafePath(
+        spec: AssertionSpec,
+        rendered: AssertionSpec,
+        path: String,
+        problem: String,
+    ): AssertionResult =
+        result(
+            spec,
+            Verdict.FAILED,
+            expected = AssertionText.describe(rendered),
+            observed = null,
+            note = "refused to request `${AssertionText.clip(path, MAX_PATH_IN_NOTE)}`: the path $problem",
+        )
 
     private fun noSession(
         spec: AssertionSpec,
@@ -418,4 +467,14 @@ class DefaultAssertionEvaluator(
                 }
             }
         }.toString()
+
+    private companion object {
+        /**
+         * Shortest window handed to the browser. An adapter may round a timeout down to whole milliseconds and
+         * Playwright reads 0 ms as "no timeout", so a sub-millisecond remainder becomes a single check, never a wait.
+         */
+        val MIN_WAIT = 1.milliseconds
+
+        const val MAX_PATH_IN_NOTE = 200
+    }
 }

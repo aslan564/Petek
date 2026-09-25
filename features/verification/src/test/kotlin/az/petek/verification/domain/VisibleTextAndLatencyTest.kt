@@ -19,6 +19,7 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -119,6 +120,42 @@ class VisibleTextAndLatencyTest {
             session.immediateChecks shouldContainExactly listOf(announcement)
             result.verdict shouldBe Verdict.PASSED
             result.latency shouldBe 5.seconds
+        }
+
+    @Test
+    fun `visible_text with less than a millisecond left checks once instead of handing the browser a zero timeout`() =
+        runTest {
+            val t0 = clock.now()
+            clock.advance(5.seconds - 400.microseconds)
+            session.fake.visibleTexts += announcement
+
+            val result = evaluator.evaluate(listOf(VisibleText(announcement, 5.seconds)), assertionInput(session, t0)).single()
+
+            session.waits.shouldBeEmpty()
+            session.immediateChecks shouldContainExactly listOf(announcement)
+            result.verdict shouldBe Verdict.PASSED
+            result.note shouldBe "less than 1 ms of the 5000 ms window was left; checked once; latency is an upper bound"
+        }
+
+    @Test
+    fun `visible_text with a sub-millisecond window and no t0 checks once`() =
+        runTest {
+            val result = evaluator.evaluate(listOf(VisibleText(announcement, 500.microseconds)), assertionInput(session)).single()
+
+            session.waits.shouldBeEmpty()
+            session.immediateChecks shouldContainExactly listOf(announcement)
+            result.verdict shouldBe Verdict.FAILED
+        }
+
+    @Test
+    fun `visible_text with exactly one millisecond left still waits for it`() =
+        runTest {
+            val t0 = clock.now()
+            clock.advance(5.seconds - 1.milliseconds)
+
+            evaluator.evaluate(listOf(VisibleText(announcement, 5.seconds)), assertionInput(session, t0))
+
+            session.waits shouldContainExactly listOf(announcement to 1.milliseconds)
         }
 
     @Test
