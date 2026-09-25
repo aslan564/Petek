@@ -463,21 +463,21 @@ Hazır sayılır: elan ssenarisi 29/29 çatır və gecikmələr agent başına y
 
 Hazır sayılır: tək əmr → tam run → hesabat; 3 ardıcıl run eyni nəticə; staging-də artıq heç nə qalmır.
 
-**Faza 6 — Kəşfiyyatçı (MVP-dən sonra)**
+**Faza 6 — Kəşfiyyatçı (MVP-dən sonra)** — kodda: `features/explorer`, panelin "Kəşfiyyat" ekranı (`docs/ARCHITECTURE.md`)
 
-- [ ] Sayt modeli sxemi: `pages`, `roles`, `actions`, `realtime`, `unknowns`; `observed` / `inferred` ayrımı
-- [ ] Üç fazalı gəzinti: anonim, rol-əsaslı, sınaq toxunuşu; səhifə və vaxt büdcəsi
-- [ ] Test nümunələri kitabxanası: hər əməliyyat üçün uğurlu yol, icazə, yarış, real-time, sərhəd, idempotentlik
-- [ ] İnstruksiya verilibsə onu modelə bağlama (grounding)
+- [x] Sayt modeli sxemi: `pages`, `roles`, `actions`, `realtime`, `unknowns`; `observed` / `inferred` ayrımı (`SiteModel`, `Provenance`)
+- [x] Üç fazalı gəzinti: anonim, rol-əsaslı, sınaq toxunuşu; səhifə və vaxt büdcəsi (`ExploreSiteUseCase`, `ExplorationBudget`)
+- [x] Test nümunələri kitabxanası: hər əməliyyat üçün uğurlu yol, icazə, yarış, real-time, sərhəd, idempotentlik (`TestPatterns`)
+- [x] İnstruksiya verilibsə onu modelə bağlama (grounding) — sahibin təlimatı + cavab kitabı (`AnswerBook`)
 
-**Faza 7 — Sürpriz protokolu və əks-əlaqə**
+**Faza 7 — Sürpriz protokolu və əks-əlaqə** — kodda: `features/scenarios`, `CompareExplorationsUseCase`
 
-- [ ] `report_problem` → kəşfiyyatçı triajı: sistem xətası / model boşluğu / ssenari xətası
-- [ ] Model versiyalama; run sonrası hesabat v2 → ssenari v2 diff → sənin təsdiqin
-- [ ] Təsdiqlənmiş ssenarilər dondurulur; fərq kəşfiyyatı (release-dən release-ə nə dəyişib)
+- [x] `report_problem` → kəşfiyyatçı triajı: sistem xətası / model boşluğu / ssenari xətası (`TriageRunUseCase`)
+- [x] Model versiyalama; run sonrası hesabat v2 → ssenari v2 diff → sənin təsdiqin (`ScenarioCatalog`: draft → diff → approve)
+- [x] Təsdiqlənmiş ssenarilər dondurulur; fərq kəşfiyyatı (release-dən release-ə nə dəyişib) (`freeze`, `SiteModelDiff`)
 
-Qeyd (2026-09-25): Faza 6 və 7-nin çoxu kodda var (explorer, triaj, ssenari təsdiqi/dondurulması, web paneli), amma
-yuxarıdakı qutular işarələnməyib. Faza 8-in ilk tapşırığı bu siyahını kodla tutuşdurub işarələməkdir.
+Faza 6–7-nin bu siyahısı 2026-09-25-də kodla tutuşdurulub; qalan boşluqlar (kəşfiyyatçının öz girişi, öz hesablar,
+IMAP) aşağıda Faza 10-dadır.
 
 ## Pətək 2: universal alət planı (2026-09-25)
 
@@ -540,11 +540,12 @@ edir. 100 tester × hər addım isə bir IDE agentinin daşıyacağı yük deyil
 
 Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan biznes qərarları indi verilsin.
 
-- [ ] `RoleSessions.kt:276` boş `TargetProfile` ilə setup kampaniyası qurur → default kontrakt axınları; hədəfin
-  real profilini (kampaniya YAML-dan və ya hədəf profilindən) götürsün. Test: fake target-də fərqli axınla.
-- [ ] `PETEK_MAIL_SOURCE=mailpit|test-api` konfiqurasiya açarı; `AppContainer` `TestApiMailbox`-u seçə bilsin
-  (`docs/KADROHR_READINESS.md` açıq maddəsi).
-- [ ] Faza 6–7 qutularını kodla tutuşdurub işarələmək; `docs/ARCHITECTURE.md`-də boş "Explorer" bölməsini yazmaq.
+- [x] `RoleSessions.kt` boş `TargetProfile` ilə setup kampaniyası qururdu → default kontrakt axınları; indi saytın
+  öz ssenarisinin profilini götürür (`CatalogSetupProfiles`: təsdiqlənmiş/dondurulmuş versiya, yoxsa sahibin faylı,
+  yoxsa kontrakt default-u) və mənbəyini kəşfiyyat qeydində göstərir.
+- [x] `PETEK_MAIL_SOURCE=mailpit|test-api` və `PETEK_TEST_API_URL` konfiqurasiya açarları; `AppContainer`
+  `TestApiMailbox`-u seçir, oracle ayrıca API ünvanına gedir; `petek doctor` seçilmiş poçt qutusunu yoxlayır.
+- [x] Faza 6–7 qutularını kodla tutuşdurub işarələmək; `docs/ARCHITECTURE.md`-də boş "Explorer" bölməsini yazmaq.
 - [ ] `LICENSE` faylı (qərar: aşağıdakı "Qərar gözləyən suallar"); `NOTICE`; ad/marka: `petek` latın yazılışı ilə
   GitHub org, domen, npm/Maven adlarının tutulması (sahib).
 - [ ] `workspace_id` ID sisteminə əlavə olunur (qayda 4): `run`, `identity`, `finding` cədvəlləri və `ReportModel`;
@@ -741,7 +742,8 @@ hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
 | `PETEK_LLM_API_KEY` | — | `Secret`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` alias |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt` |
 | `PETEK_LLM_EFFORT` | provayderə görə | yalnız dəstəkləyən provayderə ötürülür |
-| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api`, `imap`, `manual` (hədəf profili üstünlük alır) |
+| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (Faza 8-də var), `imap`, `manual` (hədəf profili üstünlük alır) |
+| `PETEK_TEST_API_URL` | hədəf | `/test/...` API-nin ayrıca baza ünvanı (Faza 8-də var) |
 | `PETEK_TARGETS_DIR` | `targets` | hədəf profilləri qovluğu |
 | `PETEK_HOME` | repo kökü | dist rejimində iş qovluğu |
 

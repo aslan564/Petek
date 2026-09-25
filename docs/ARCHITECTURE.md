@@ -174,8 +174,10 @@ Selectors are profile keys or literal CSS/Playwright selectors. Values are templ
 `{self.*}` (with `first_name`/`last_name` split from the display name), `{shared.*}` (awaited until another tester
 publishes it), `{vars.*}`, `{campaign.company}`; `{self.password}` only in `fill` values, never shown (`***`), never in
 anything sent to the LLM. `{api}` in campaign paths is replaced by `target_profile.api_prefix` when the file is loaded.
-Test mail can come from Mailpit or from the target's own test API (`TestApiMailbox`), and an e-mail link can be picked
-by the site's own pattern (`set-password\?token=`).
+Test mail can come from Mailpit or from the target's own test API (`TestApiMailbox`; `PETEK_MAIL_SOURCE=mailpit|test-api`,
+chosen in `AppContainer`), and an e-mail link can be picked by the site's own pattern (`set-password\?token=`). The
+`/test/...` API (oracle and test-API mail) is addressed at `PETEK_TEST_API_URL` when it is not on the target's origin
+(KadroHR's `api.` host), else at the target; `petek doctor` checks whichever inbox is configured.
 
 `scenarios/contract-demo.yaml` is the campaign for the contract site (fake target, e2e); `scenarios/kadrohr.yaml`
 describes the real KadroHR.
@@ -223,6 +225,37 @@ finished run's surprises into explainable verdicts. The web panel (Faza 8) is bu
   Re-running triage resumes: decided surprises are not asked again.
 ## Web panel (`features/dashboard`)
 ## Explorer (`features/explorer`, PLAN.md Faza 6)
+
+The explorer builds a model of a site it has never seen and turns it into a campaign draft; the panel's "Kəşfiyyat"
+screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
+
+- **Site model.** `SiteModel` holds pages (forms and fields), actions (`ActionKind`: register, login, create, approve,
+  …), roles, realtime observations, unknowns and findings; every element carries its `Provenance` (`OBSERVED` from the
+  page, `INFERRED` by the model). Models are versioned per target (`SiteModelVersions`), every exploration is an event
+  log (`ExplorationEventLog`, replayed after a restart), both in SQLite (`SqliteExplorationRepository`);
+  `CompareExplorationsUseCase` diffs two versions (`SiteModelDiff`: pages, forms, actions added, changed, gone).
+- **Three-phase walk** (`ExploreSiteUseCase`, budget `ExplorationBudget`: pages and minutes). `ANONYMOUS` always
+  runs, through a `ReadOnlyBrowserSession` that cannot click, type or submit; `CrawlPass` follows same-site links
+  under `LinkPolicy`, `RobotsRules` and `UrlPatterns`, marks pages a 401/403 or a redirect to sign-in denies, and only
+  reads the sign-in and sign-up pages. `ROLE_BASED` walks with the logged-in sessions the caller hands in per role;
+  the panel gets them from `TestCompanyRoleSessions`, a setup-only campaign (owner sign-up, seeding, one manager and
+  one employee joining, by run functions over the site's own target profile from the scenario catalog) whose company
+  is torn down when the exploration ends. `TRIAL_TOUCH` (`TrialToucher`) submits harmless actions only with the
+  owner's "Sınaq toxunuşu" and a target the `TestTargetCheck` confirms as test data, and never touches login, sign-up,
+  verification, password or file forms. Without sessions the last two phases are skipped and the screen says why.
+- **Reading a page.** Code first: `HtmlScanner` (links, forms, fields, buttons), `PageHeuristics`, `FormClassifier` and
+  `Keywords` (English and Azerbaijani). Then one structured LLM question per page (`PageAnalyst`,
+  `PageAnalysisProtocol`: purpose, actions, unknowns) over a `PromptRedaction`-cleaned snapshot; the answer is
+  validated in code and merged by `SiteModelAccumulator`. Unknowns are questions to the owner; answers are kept per
+  site in the app's `AnswerBook` and ground the next exploration and the drafts.
+- **From model to campaign.** `TestPatterns` derive `TestIdea`s per action (happy path, permission, race, realtime,
+  boundary, idempotency); `GenerateScenarioUseCase` with `ScenarioComposer` writes a campaign (`CampaignYamlWriter`:
+  fixed setup, then the ideas as steps, `target_profile` paths, selectors and id sources, no flows) that must pass the
+  campaign validator and is stored as a `DRAFT` in the scenario catalog for the owner's review.
+- **Findings.** `ExplorationFinding` (`FindingKind`, `Severity`) records what the walk itself noticed, e.g. leaked error
+  text, and is shown with the model.
+- **Not yet** (PLAN.md Faza 10): the explorer has no credentials of its own, never signs up by itself and cannot fall
+  back to accounts the owner provides; logged-in exploration needs the target's test API.
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 
