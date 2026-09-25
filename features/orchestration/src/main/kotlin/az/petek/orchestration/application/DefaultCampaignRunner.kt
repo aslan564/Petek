@@ -77,9 +77,9 @@ private val logger = KotlinLogging.logger {}
  * can work, so the run is ABORTED. `on_fail: abort` (step or campaign level) aborts after a failed step.
  *
  * Result: PASSED when no step and no assertion failed, FAILED otherwise, ABORTED on abort, budget timeout,
- * cancellation or an infrastructure error (which is recorded, logged and not rethrown; cancellation is rethrown
- * after cleanup). A `permission_denied` refusal in a main step is not a failure by itself: permission tests
- * expect it and their assertions decide.
+ * cancellation or an infrastructure error (which is recorded, logged and not rethrown; cancellation of the caller
+ * and fatal [Error]s are rethrown after cleanup). A `permission_denied` refusal in a main step is not a failure by
+ * itself: permission tests expect it and their assertions decide.
  *
  * Wiring: every browser call an agent makes counts as progress for [watchdog] (the runner hands each agent a
  * progress-reporting view of its session). Wrap the recorder given to the agent loop and run functions in a
