@@ -31,8 +31,11 @@ fun repoFile(relativePath: String): Path =
         .of(requireNotNull(System.getProperty("petek.repoRoot")) { "system property petek.repoRoot is not set" })
         .resolve(relativePath)
 
-/** `scenarios/kadrohr.yaml` in the repository. */
+/** `scenarios/kadrohr.yaml` in the repository: the campaign for the real KadroHR. */
 fun kadrohrScenario(): Path = repoFile("scenarios/kadrohr.yaml")
+
+/** `scenarios/contract-demo.yaml` in the repository: the campaign for the contract site (the fake target). */
+fun contractDemoScenario(): Path = repoFile("scenarios/contract-demo.yaml")
 
 private val parser = DefaultActorExpressionParser()
 

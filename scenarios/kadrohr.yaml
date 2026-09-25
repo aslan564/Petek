@@ -1,75 +1,175 @@
-# KadroHR core campaign (docs/PLAN.md "Ssenari formatı"). `do` = natural language for the LLM agent;
-# `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
+# KadroHR campaign for the real site (docs/KADROHR_READINESS.md). KadroHR's sign-up, login and invitation flows differ
+# from docs/TARGET_CONTRACT.md (link verification, company code at login, first and last name, password confirmation,
+# overlays), so target_profile describes them as flows over its real markup; selectors use autocomplete attributes,
+# ids and Playwright role selectors until KadroHR ships data-testids. It needs KadroHR's test mode (P0 of the
+# readiness list): e-mail from the test API (PETEK_MAIL_SOURCE=test-api), company seeding and the oracle through
+# X-Test-Token, is_test companies with high plan limits and no rate limit for the test token.
+# The contract demo for the fake target is scenarios/contract-demo.yaml.
 campaign:
-  name: kadrohr-core
-  target: https://staging.kadrohr.com     # PETEK_TARGET in .env wins
+  name: kadrohr-real
+  target: https://kadrohr.com             # PETEK_TARGET in .env wins; a production host needs PETEK_ALLOW_PRODUCTION=true
   testers: 30
   seed: 42
   names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog
   roles: {admin: 1, manager: 5, employee: 24}
   departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
-  registration: {invite: 15, company_code: 14}   # how the 29 non-admins join; all 5 managers are among the invited
-  budget: {max_steps_per_agent: 60, max_minutes: 40}
+  registration: {invite: 15, company_code: 14}
+  budget: {max_steps_per_agent: 60, max_minutes: 60}
   on_fail: continue
+  pacing: {start_stagger_ms: 1500}        # per-IP limits (50 sign-ins a minute): the actors of a step start 1.5 s apart
 
-# Where the harness reads ids of created objects (never from the LLM when a better source exists).
 target_profile:
+  api_prefix: /api/v1
+  local_storage:
+    "kadro:domain_dialog_dismissed": "1"  # no "Use your own server?" dialog on the first visit
+    "kadro:lang": az                       # the labels below are the Azerbaijani UI
+  dismiss:
+    - 'role=button[name="Qəbul edirəm"]'  # the GDPR consent gate, whenever it blocks a page
+  selectors:
+    login.email: 'input[autocomplete="username"]'
+    login.password: 'input[autocomplete="current-password"]'
+    login.company_code: 'input[autocomplete="organization"]'
+    login.submit: 'form button[type="submit"]'
+    login.error: '[role="alert"], [role="dialog"]'
+    session.user_name: 'aside button[aria-label="Profil"] p.font-medium'
+    session.user_role: 'aside button[aria-label="Profil"] p.text-xs'
+    session.logout: 'aside button[aria-label="Çıxış"]'
+    register.first_name: 'input[autocomplete="given-name"]'
+    register.last_name: 'input[autocomplete="family-name"]'
+    register.email: 'input[autocomplete="email"]'
+    register.password: 'input[autocomplete="new-password"] >> nth=0'
+    register.confirm_password: 'input[autocomplete="new-password"] >> nth=1'
+    register.company: 'input[autocomplete="organization"]'
+    register.country: '#reg-country'
+    register.mode_hybrid: 'role=radio[name=/Hibrid/]'
+    register.submit: 'form button[type="submit"]'
+    invite.password: '#password'
+    invite.confirm_password: '#confirmPassword'
+    invite.submit: '#submitBtn'
+    join.first_name: 'input[autocomplete="given-name"]'
+    join.last_name: 'input[autocomplete="family-name"]'
+    join.email: 'input[autocomplete="email"]'
+    join.code: 'input[autocomplete="organization"]'
+    join.password: 'input[autocomplete="new-password"] >> nth=0'
+    join.confirm_password: 'input[autocomplete="new-password"] >> nth=1'
+    join.submit: 'form button[type="submit"]'
+  flows:
+    # Owner sign-up: the form, then the verification link from the e-mail (a backend page), then the SPA's status page
+    # until the registration saga has created the company. It ends signed out; register_owner then publishes the
+    # company code from the test API and signs in with the login flow below.
+    register_owner:
+      - goto: /register
+      - wait_for: {selector: register.first_name, timeout_s: 30, fail: {reason: registration_failed, message: "The sign-up page shows no form ({url})"}}
+      - fill: {selector: register.first_name, value: "{self.first_name}"}
+      - fill: {selector: register.last_name, value: "{self.last_name}"}
+      - fill: {selector: register.email, value: "{self.email}"}
+      - fill: {selector: register.password, value: "{self.password}"}
+      - fill: {selector: register.confirm_password, value: "{self.password}"}
+      - fill: {selector: register.company, value: "{campaign.company}"}
+      - select: {selector: register.country, option: Azərbaycan}
+      - check: register.mode_hybrid        # employees may join by invitation and with the company code
+      - click: register.submit
+      - expect_url:
+          regex: /register/verify
+          timeout_s: 30
+          fail: {reason: registration_failed, message: "The sign-up form was not accepted", error: '[role="alert"]'}
+      - account_created
+      - email_link: {purpose: verify, pattern: "registration/verify\\?token="}
+      - wait_for: {text: "Email Təsdiqləndi", timeout_s: 30, fail: {reason: registration_failed, message: "The verification link was refused ({url})"}}
+      - goto: /register/verify              # the SPA polls the registration status and moves on when it completes
+      - expect_url: {regex: /register/complete, timeout_s: 120, fail: {reason: registration_failed, message: "The company was not created ({url})"}}
+    # Invitation: the admin creates the employee (seed_company through the test API); the e-mail's link opens the
+    # backend's set-password form. It ends on that page; register_and_login then signs in with the login flow.
+    join_by_invite:
+      - email_link: {purpose: invite, pattern: "set-password\\?token="}
+      - wait_for: {selector: invite.password, timeout_s: 30, fail: {reason: registration_failed, message: "The invitation page shows no password form ({url})"}}
+      - fill: {selector: invite.password, value: "{self.password}"}
+      - fill: {selector: invite.confirm_password, value: "{self.password}"}
+      - click: invite.submit
+      - wait_for: {text: "uğurla təyin edildi", timeout_s: 30, fail: {reason: registration_failed, message: "The password was not set", error: "#msg"}}
+      - account_created
+    # Self-registration with the company code (the owner chose the hybrid mode); the address is confirmed by link.
+    join_by_code:
+      - goto: /register/employee
+      - wait_for: {selector: join.first_name, timeout_s: 30, fail: {reason: registration_failed, message: "The join page shows no form ({url})"}}
+      - fill: {selector: join.first_name, value: "{self.first_name}"}
+      - fill: {selector: join.last_name, value: "{self.last_name}"}
+      - fill: {selector: join.email, value: "{self.email}"}
+      - fill: {selector: join.code, value: "{shared.company_code}"}
+      - fill: {selector: join.password, value: "{self.password}"}
+      - fill: {selector: join.confirm_password, value: "{self.password}"}
+      - click: join.submit
+      - expect_url: {regex: /login, timeout_s: 30, fail: {reason: registration_failed, message: "The employee sign-up was not accepted", error: '[role="alert"]'}}
+      - account_created
+      - email_link: {purpose: verify, pattern: "verify-email\\?token="}
+      - wait_for: {text: "Email Təsdiqləndi", timeout_s: 30, fail: {reason: registration_failed, message: "The verification link was refused ({url})"}}
+    login:
+      - goto: /login
+      - wait_for: {selector: login.email, timeout_s: 30, fail: {reason: login_failed, message: "The login page shows no form ({url})"}}
+      - fill: {selector: login.email, value: "{self.email}"}
+      - fill: {selector: login.password, value: "{self.password}"}
+      - fill: {selector: login.company_code, value: "{shared.company_code}"}
+      - click: login.submit
+      - wait_for: {selector: session.user_name, timeout_s: 30, fail: {reason: login_failed, message: "Login as {self.email} failed", error: login.error}}
+      - save_session
+
+  # Where the harness reads ids of created objects: KadroHR's test API.
   id_sources:
     announcement_created:
       oracle: {path: "/test/announcements/latest?by={self.email}", field: id}
-    ticket_created:
-      oracle: {path: "/test/tickets/latest?by={self.email}", field: id}
+    leave_request_created:
+      oracle: {path: "/test/leave-requests/latest?by={self.email}", field: id}
 
 setup:
   - id: owner_signup
     actor: admin
-    do: "Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat"
+    run: {function: register_owner, args: {company: "Pətək Test MMC"}}
   - id: seed
     actor: admin
-    run: seed_company              # departments + invitations for invite-mode testers (test API)
+    run: seed_company              # departments + invitations through the test API; publishes the company code
   - id: join
     actor: employee[*] | manager[*]
-    run: register_and_login        # invite link or company code + e-mail code + phone OTP; saves storage_state
+    run: register_and_login        # invitation link or company code, e-mail link, then login with the company code
 
 steps:
   - id: announce
     actor: admin
-    do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
+    do: "Elanlar səhifəsində (/announcements) 'Yeni elan' ilə elan yarat: başlıq 'Sabah 10:00 ümumi iclas', mesaj 'Hamı iştirak etsin', hədəf bütün işçilər; yadda saxla"
     emits: announcement_created
     assert:
-      - oracle: {path: "/test/announcements/{last_id}", field: status, equals: published}
+      - oracle: {path: "/test/announcements/{last_id}", field: title, equals: "Sabah 10:00 ümumi iclas"}
 
+  # Only the bell badge is live on KadroHR (SSE); the notifications and announcement pages load once. The receipt is
+  # therefore checked in the test API and the text on the page after reading, not as a delivery latency.
   - id: read_announce
     actor: employee[*]
-    wait_for: announcement_created
-    do: "Bildirişləri aç və yeni elanı oxu"
+    wait_for: {event: announcement_created, timeout_s: 60}
+    do: "Yuxarıdakı bildiriş zənginə bax, elanlar səhifəsini (/announcements) aç, 'Sabah 10:00 ümumi iclas' elanını tap və 'Oxundu' ilə oxunmuş kimi qeyd et"
     assert:
-      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 5}
-      - latency_max: {ms: 5000}
       - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
 
-  - id: ticket
+  - id: announce_seen
+    actor: employee[*]
+    assert:
+      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 10}
+
+  - id: leave_request
     actor: employee[dept=IT, n=1]
-    do: "IT departamentinə ticket yaz: 'Noutbuk işləmir'"
-    emits: ticket_created
+    do: "Məzuniyyət səhifəsində (/leave) 'Yeni müraciət' ilə gələn həftə üçün 2 günlük illik məzuniyyət sorğusu yarat və göndər"
+    emits: leave_request_created
 
-  - id: ticket_flow
-    actor: manager[IT]
-    wait_for: ticket_created
-    do: "Ticketi in-progress et, sonra HR menecerinə assign et"
-    assert:
-      - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
-
-  - id: race
+  - id: leave_race
     actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
+    wait_for: leave_request_created
     parallel: true
-    do: "Eyni ticketi approve et"
+    do: "Məzuniyyət sorğusunu təsdiqlə: /leave/{last_id} səhifəsini aç və 'Təsdiqlə' düyməsini bas"
     assert:
-      - only_one_succeeds: true
+      - only_one_succeeds: true          # the loser's approve is answered 422 (already decided)
+      - oracle: {path: "/test/leave-requests/{last_id}", field: status, equals: APPROVED}
 
-  - id: forbidden
-    actor: employee[dept=IT, n=2]
-    do: "Ticketi approve etməyə çalış"
+  - id: forbidden_approval
+    actor: employee[n=2]
+    do: "Məzuniyyət sorğusunu (/leave/{last_id}) təsdiqləməyə çalış"
     assert:
-      - not_visible: {selector: "[data-testid=\"ticket-approve\"]"}
-      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}
+      - not_visible: {selector: 'role=button[name="Təsdiqlə"]'}
+      - http_status: {path: "{api}/leave-requests/{last_id}/approve", method: POST, equals: 403}

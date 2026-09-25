@@ -1,0 +1,76 @@
+# Contract demo campaign (docs/PLAN.md "Ssenari formatı"): the site of docs/TARGET_CONTRACT.md, which the fake target
+# implements (./gradlew :testing:fake-target:run). Its flows are the contract defaults, so target_profile names none.
+# `do` = natural language for the LLM agent; `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
+campaign:
+  name: contract-demo
+  target: https://staging.kadrohr.com     # PETEK_TARGET in .env wins
+  testers: 30
+  seed: 42
+  names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog
+  roles: {admin: 1, manager: 5, employee: 24}
+  departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
+  registration: {invite: 15, company_code: 14}   # how the 29 non-admins join; all 5 managers are among the invited
+  budget: {max_steps_per_agent: 60, max_minutes: 40}
+  on_fail: continue
+
+# Where the harness reads ids of created objects (never from the LLM when a better source exists).
+target_profile:
+  id_sources:
+    announcement_created:
+      oracle: {path: "/test/announcements/latest?by={self.email}", field: id}
+    ticket_created:
+      oracle: {path: "/test/tickets/latest?by={self.email}", field: id}
+
+setup:
+  - id: owner_signup
+    actor: admin
+    do: "Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat"
+  - id: seed
+    actor: admin
+    run: seed_company              # departments + invitations for invite-mode testers (test API)
+  - id: join
+    actor: employee[*] | manager[*]
+    run: register_and_login        # invite link or company code + e-mail code + phone OTP; saves storage_state
+
+steps:
+  - id: announce
+    actor: admin
+    do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
+    emits: announcement_created
+    assert:
+      - oracle: {path: "/test/announcements/{last_id}", field: status, equals: published}
+
+  - id: read_announce
+    actor: employee[*]
+    wait_for: announcement_created
+    do: "Bildirişləri aç və yeni elanı oxu"
+    assert:
+      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 5}
+      - latency_max: {ms: 5000}
+      - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
+
+  - id: ticket
+    actor: employee[dept=IT, n=1]
+    do: "IT departamentinə ticket yaz: 'Noutbuk işləmir'"
+    emits: ticket_created
+
+  - id: ticket_flow
+    actor: manager[IT]
+    wait_for: ticket_created
+    do: "Ticketi in-progress et, sonra HR menecerinə assign et"
+    assert:
+      - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
+
+  - id: race
+    actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
+    parallel: true
+    do: "Eyni ticketi approve et"
+    assert:
+      - only_one_succeeds: true
+
+  - id: forbidden
+    actor: employee[dept=IT, n=2]
+    do: "Ticketi approve etməyə çalış"
+    assert:
+      - not_visible: {selector: "[data-testid=\"ticket-approve\"]"}
+      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}

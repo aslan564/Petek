@@ -139,13 +139,14 @@ Alternativ (Faza 8, KadroHR-dan başqa hədəflər üçün): real catch-all dome
 
 Ssenari YAML-dır: `do` sətirləri təbii dildir (LLM şərh edir), `run`, `emits`, `wait_for` və `assert` isə kod tərəfindən icra və yoxlanır.
 
-Real fayl `scenarios/kadrohr.yaml`-dır; aşağıdakı blok onun tam surətidir (fayl dəyişəndə bu da yenilənir).
+Aşağıdakı blok `scenarios/contract-demo.yaml`-ın tam surətidir (fayl dəyişəndə bu da yenilənir): kontrakt saytı (`docs/TARGET_CONTRACT.md`, fake target) üçün kampaniya. Real KadroHR üçün kampaniya `scenarios/kadrohr.yaml`-dır: eyni sxem, üstəlik `target_profile.flows` (qeydiyyat, dəvət, şirkət kodu ilə qoşulma, login axınları real markup-a görə), `local_storage`, `dismiss`, `api_prefix` və `campaign.pacing` (aşağıda "Hədəf axınları").
 
 ```yaml
-# KadroHR core campaign (docs/PLAN.md "Ssenari formatı"). `do` = natural language for the LLM agent;
-# `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
+# Contract demo campaign (docs/PLAN.md "Ssenari formatı"): the site of docs/TARGET_CONTRACT.md, which the fake target
+# implements (./gradlew :testing:fake-target:run). Its flows are the contract defaults, so target_profile names none.
+# `do` = natural language for the LLM agent; `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
 campaign:
-  name: kadrohr-core
+  name: contract-demo
   target: https://staging.kadrohr.com     # PETEK_TARGET in .env wins
   testers: 30
   seed: 42
