@@ -14,14 +14,18 @@ out/
 *.ipr
 .vscode/
 
-# Secrets and runtime output (never commit)
+# Secrets and runtime output (never commit). Anchored to the root so feature
+# modules named like them (e.g. features/evidence) are not ignored.
 .env
-evidence/
-reports/
-storage_state/
+/evidence/
+/reports/
+/storage_state/
 *.db
 *.db-shm
 *.db-wal
 *.log
 
 .DS_Store
+
+# Claude Code worktrees
+/.claude/worktrees/
