@@ -1,11 +1,7 @@
 package az.petek.llm.infrastructure.cli
 
 import kotlinx.coroutines.CompletableDeferred
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
@@ -28,7 +24,10 @@ class FakeProcessRunner(
     override fun start(spec: ProcessSpec): RunningProcess {
         specs += spec
         workingDirectoryWasEmpty += Files.isDirectory(spec.workingDirectory) && isEmpty(spec.workingDirectory)
-        return script(spec).also { processes += it }
+        return script(spec).also {
+            it.run(spec)
+            processes += it
+        }
     }
 
     private fun isEmpty(directory: Path) = Files.list(directory).use { it.findFirst().isEmpty }
@@ -45,29 +44,37 @@ class FakeProcessRunner(
     }
 }
 
-/** A process that prints canned output and exits, or never exits ([hangs]) until [destroyTree] is called. */
+/**
+ * A process that reads its STDIN file, writes canned output to its STDOUT/STDERR files and exits, or never exits
+ * ([hangs]) until [destroyTree] is called.
+ */
 class FakeProcess(
-    stdout: String = "",
-    stderr: String = "",
+    private val stdout: String = "",
+    private val stderr: String = "",
     exitCode: Int = 0,
     val hangs: Boolean = false,
 ) : RunningProcess {
-    private val written = ByteArrayOutputStream()
     private val exit = CompletableDeferred<Int>()
-
     private val destroyCalls = AtomicInteger()
 
     init {
         if (!hangs) exit.complete(exitCode)
     }
 
-    val stdinText: String get() = written.toString(Charsets.UTF_8)
+    /** Everything the CLI would have read from STDIN. */
+    @Volatile
+    var stdinText: String = ""
+        private set
+
     val destroyCount: Int get() = destroyCalls.get()
     val destroyed: Boolean get() = destroyCount > 0
 
-    override val stdin: OutputStream = written
-    override val stdout: InputStream = ByteArrayInputStream(stdout.toByteArray())
-    override val stderr: InputStream = ByteArrayInputStream(stderr.toByteArray())
+    /** What a real process does with its redirected streams, done at start. */
+    fun run(spec: ProcessSpec) {
+        stdinText = Files.readString(spec.stdinFile)
+        Files.writeString(spec.stdoutFile, stdout)
+        Files.writeString(spec.stderrFile, stderr)
+    }
 
     override suspend fun awaitExit(): Int = exit.await()
 

@@ -8,13 +8,9 @@ import az.petek.llm.domain.LlmResponse
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
-import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -58,9 +54,9 @@ class ClaudeCliLlmClient internal constructor(
         val prompt = ClaudeCliInvocation.transcript(request.messages)
         val response =
             withContext(ioDispatcher) {
-                withScratchDirectory { directory ->
-                    val output = execute(ProcessSpec(command, environment, directory), prompt, request.label)
-                    parser.parse(output, request.label)
+                withScratchDirectory { scratch ->
+                    val spec = prepare(scratch, command, environment, prompt)
+                    parser.parse(execute(spec, request.label), request.label)
                 }
             }
         logger.debug {
@@ -70,9 +66,31 @@ class ClaudeCliLlmClient internal constructor(
         return response
     }
 
+    /**
+     * Lays out one call's scratch directory: the CLI's working directory is the empty `work/` inside it, and the
+     * files standing in for its standard streams sit next to it (outside the directory the CLI sees).
+     */
+    private fun prepare(
+        scratch: Path,
+        command: List<String>,
+        environment: Map<String, String>,
+        prompt: String,
+    ): ProcessSpec =
+        try {
+            ProcessSpec(
+                command = command,
+                environment = environment,
+                workingDirectory = Files.createDirectory(scratch.resolve(WORK_DIRECTORY)),
+                stdinFile = Files.writeString(scratch.resolve(STDIN_FILE), prompt),
+                stdoutFile = scratch.resolve(STDOUT_FILE),
+                stderrFile = scratch.resolve(STDERR_FILE),
+            )
+        } catch (e: IOException) {
+            throw LlmException.Transient("Cannot prepare a working directory for the Claude CLI: ${e.message}", e)
+        }
+
     private suspend fun execute(
         spec: ProcessSpec,
-        prompt: String,
         label: String,
     ): ProcessOutput {
         val process =
@@ -81,20 +99,22 @@ class ClaudeCliLlmClient internal constructor(
             } catch (e: IOException) {
                 throw notStarted(e)
             }
-        return coroutineScope {
-            val stdout = async { StreamDrain.head(process.stdout, MAX_STDOUT_BYTES) }
-            val stderr = async { StreamDrain.tail(process.stderr, MAX_STDERR_BYTES) }
-            launch { feed(process.stdin, prompt) }
+        val exitCode =
             try {
-                withTimeoutOrNull(config.timeout) {
-                    val exitCode = process.awaitExit()
-                    ProcessOutput(exitCode, stdout.await().decodeToString(), stderr.await().decodeToString())
-                } ?: throw LlmException.Timeout("Claude CLI did not answer within ${config.timeout} for $label")
+                withTimeoutOrNull(config.timeout) { process.awaitExit() }
+                    ?: throw LlmException.Timeout("Claude CLI did not answer within ${config.timeout} for $label")
             } finally {
-                // Also on success: nothing the CLI started may outlive the call. Killing unblocks the pipe readers,
-                // which this scope then waits for.
+                // Also on success: nothing the CLI started may outlive the call.
                 process.destroyTree()
             }
+        return try {
+            ProcessOutput(
+                exitCode = exitCode,
+                stdout = OutputFiles.head(spec.stdoutFile, MAX_STDOUT_BYTES).decodeToString(),
+                stderr = OutputFiles.tail(spec.stderrFile, MAX_STDERR_BYTES).decodeToString(),
+            )
+        } catch (e: IOException) {
+            throw LlmException.Transient("Cannot read the output of the Claude CLI for $label: ${e.message}", e)
         }
     }
 
@@ -108,17 +128,6 @@ class ClaudeCliLlmClient internal constructor(
                 "Claude CLI could not be started: ${config.executable}"
             }
         return LlmException.Unavailable("$summary ($reason)", error)
-    }
-
-    private fun feed(
-        stdin: OutputStream,
-        prompt: String,
-    ) {
-        try {
-            stdin.bufferedWriter(Charsets.UTF_8).use { it.write(prompt) }
-        } catch (_: IOException) {
-            // The CLI exited before reading everything (e.g. bad arguments); its output explains why.
-        }
     }
 
     private inline fun <T> withScratchDirectory(block: (Path) -> T): T {
@@ -137,6 +146,10 @@ class ClaudeCliLlmClient internal constructor(
 
     private companion object {
         const val SCRATCH_PREFIX = "petek-claude-"
+        const val WORK_DIRECTORY = "work"
+        const val STDIN_FILE = "stdin.txt"
+        const val STDOUT_FILE = "stdout.json"
+        const val STDERR_FILE = "stderr.txt"
         const val MAX_STDOUT_BYTES = 16 * 1024 * 1024
         const val MAX_STDERR_BYTES = 16 * 1024
         val MISSING_EXECUTABLE_MARKERS = listOf("error=2,", "No such file")

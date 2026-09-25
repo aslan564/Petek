@@ -95,8 +95,30 @@ class ClaudeCliProcessTest {
         environment.none { it.startsWith("CLAUDECODE=") || it.startsWith("CLAUDE_CODE_ENTRYPOINT=") } shouldBe true
 
         val workingDirectory = Path.of(out.resolve("pwd").readText().trim())
-        workingDirectory.fileName.toString() shouldStartWith "petek-claude-"
-        workingDirectory.exists() shouldBe false
+        workingDirectory.parent.fileName.toString() shouldStartWith "petek-claude-"
+        workingDirectory.parent.exists() shouldBe false
+    }
+
+    @Test
+    fun `a background child that outlives the CLI does not hold the answer back`() {
+        val childPid = temp.resolve("child.pid")
+        // The child inherits the CLI's STDOUT and keeps it open for a minute after the CLI itself has exited.
+        val executable =
+            script(
+                """
+                cat > /dev/null
+                sleep 60 &
+                echo ${'$'}! > "$childPid"
+                echo '$CANNED'
+                """.trimIndent(),
+            )
+        try {
+            val response = runBlocking { client(executable, timeoutMillis = 10_000).complete(LlmTestData.request()) }
+
+            response.output shouldBe buildJsonObject { put("action", "click") }
+        } finally {
+            ProcessHandle.of(childPid.readText().trim().toLong()).ifPresent { it.destroyForcibly() }
+        }
     }
 
     @Test
@@ -116,7 +138,6 @@ class ClaudeCliProcessTest {
 
         error.message shouldContain "a07/announce"
         val child = ProcessHandle.of(childPid.readText().trim().toLong())
-        // The child held our stdout pipe; returning at all proves it was killed. Its exit is still confirmed here.
         child.ifPresent { it.onExit().get(10, TimeUnit.SECONDS) }
         child.map { it.isAlive }.orElse(false) shouldBe false
     }

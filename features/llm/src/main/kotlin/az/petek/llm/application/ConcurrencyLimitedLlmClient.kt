@@ -10,6 +10,9 @@ import kotlinx.coroutines.sync.withPermit
  * Lets at most [permits] calls reach [delegate] at once; the others suspend (they do not fail) until a slot frees up.
  * Thirty agents share one plan or API key, and the provider rate-limits bursts harder than a steady queue.
  * Waiting callers stay cancellable, and a cancelled or failed call always returns its permit.
+ *
+ * Put it inside [RetryingLlmClient] (`RetryingLlmClient(ConcurrencyLimitedLlmClient(provider, n))`): a permit then
+ * covers one attempt, so a call sleeping through its backoff does not keep a slot from the other agents.
  */
 class ConcurrencyLimitedLlmClient(
     private val delegate: LlmClient,

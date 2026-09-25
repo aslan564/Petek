@@ -7,7 +7,8 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Records every call that reaches it in [meter]: successes with their usage, failures as failed calls.
- * Placed outermost (around retries), it counts one call per agent decision rather than one per HTTP attempt.
+ * Placed outermost (`MeteredLlmClient(RetryingLlmClient(ConcurrencyLimitedLlmClient(provider, n)), meter)`), it
+ * counts one call per agent decision rather than one per attempt; the usage recorded is that of the successful attempt.
  * Cancelled calls are not counted: they are neither an answer nor a provider failure.
  */
 class MeteredLlmClient(

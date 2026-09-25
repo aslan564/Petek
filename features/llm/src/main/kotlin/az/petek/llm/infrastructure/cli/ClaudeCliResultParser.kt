@@ -226,10 +226,14 @@ internal class ClaudeCliResultParser(
                 "please run /login",
                 "invalid api key",
                 "authentication",
-                "oauth token",
+                // "OAuth token has expired", "Invalid auth token · Fix external API key"
+                "auth token",
                 "billing",
             )
-        private val RATE_LIMIT_MARKERS = listOf("rate limit", "rate_limit", "usage limit", "too many requests")
+
+        // "You've hit your session limit · resets 5pm" is how current Claude Code reports a plan limit.
+        private val RATE_LIMIT_MARKERS =
+            listOf("rate limit", "rate_limit", "usage limit", "too many requests", "you've hit your")
         private val OVERLOAD_MARKERS = listOf("overloaded")
         private val USAGE_ERROR_MARKERS = listOf("unknown option", "unknown argument", "error: option")
         private val INVALID_OUTPUT_SUBTYPES = setOf("error_max_structured_output_retries", "error_max_turns")

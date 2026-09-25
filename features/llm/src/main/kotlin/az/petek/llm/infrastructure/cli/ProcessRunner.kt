@@ -1,7 +1,5 @@
 package az.petek.llm.infrastructure.cli
 
-import java.io.InputStream
-import java.io.OutputStream
 import java.nio.file.Path
 
 /**
@@ -16,11 +14,19 @@ fun interface ProcessRunner {
 /**
  * What to start. [environment] is the COMPLETE environment of the child (nothing else is inherited), and
  * [command] is passed to the OS as an argument vector, so no value is ever interpreted by a shell.
+ *
+ * The standard streams are files, not pipes: STDIN is read from [stdinFile] (written before the start), STDOUT and
+ * STDERR go to [stdoutFile] and [stderrFile]. A pipe stays open for as long as ANY process holding it lives, so a
+ * background child that outlived the CLI would keep a pipe reader (and the call) blocked past its timeout; a file
+ * is complete the moment the process exits.
  */
 data class ProcessSpec(
     val command: List<String>,
     val environment: Map<String, String>,
     val workingDirectory: Path,
+    val stdinFile: Path,
+    val stdoutFile: Path,
+    val stderrFile: Path,
 ) {
     init {
         require(command.isNotEmpty()) { "command must name an executable" }
@@ -32,13 +38,9 @@ data class ProcessSpec(
 
 /** A started process. Implementations must make [destroyTree] safe to call more than once and after exit. */
 interface RunningProcess {
-    val stdin: OutputStream
-    val stdout: InputStream
-    val stderr: InputStream
-
     /** Suspends until the process exits and returns its exit code. Cancelling the caller does not kill the process. */
     suspend fun awaitExit(): Int
 
-    /** Forcibly stops the process and every descendant it started (so no orphan keeps running or holds a pipe). */
+    /** Forcibly stops the process and every descendant it started (so no orphan keeps running). */
     fun destroyTree()
 }

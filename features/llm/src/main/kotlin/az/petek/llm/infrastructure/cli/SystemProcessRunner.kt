@@ -1,13 +1,19 @@
 package az.petek.llm.infrastructure.cli
 
 import kotlinx.coroutines.future.await
-import java.io.InputStream
-import java.io.OutputStream
 
-/** [ProcessRunner] backed by [ProcessBuilder]: argument vector (no shell), explicit environment and directory. */
+/**
+ * [ProcessRunner] backed by [ProcessBuilder]: argument vector (no shell), explicit environment and directory, and
+ * the standard streams redirected to the files named in the [ProcessSpec].
+ */
 class SystemProcessRunner : ProcessRunner {
     override fun start(spec: ProcessSpec): RunningProcess {
-        val builder = ProcessBuilder(spec.command).directory(spec.workingDirectory.toFile())
+        val builder =
+            ProcessBuilder(spec.command)
+                .directory(spec.workingDirectory.toFile())
+                .redirectInput(spec.stdinFile.toFile())
+                .redirectOutput(spec.stdoutFile.toFile())
+                .redirectError(spec.stderrFile.toFile())
         builder.environment().apply {
             clear()
             putAll(spec.environment)
@@ -18,10 +24,6 @@ class SystemProcessRunner : ProcessRunner {
     private class SystemRunningProcess(
         private val process: Process,
     ) : RunningProcess {
-        override val stdin: OutputStream get() = process.outputStream
-        override val stdout: InputStream get() = process.inputStream
-        override val stderr: InputStream get() = process.errorStream
-
         override suspend fun awaitExit(): Int = process.onExit().await().exitValue()
 
         override fun destroyTree() {

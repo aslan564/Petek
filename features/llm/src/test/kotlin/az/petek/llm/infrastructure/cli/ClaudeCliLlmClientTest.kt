@@ -174,7 +174,14 @@ class ClaudeCliLlmClientTest {
 
             runner.workingDirectoryWasEmpty shouldContainExactly listOf(true, true)
             runner.specs[0].workingDirectory shouldNotBe runner.specs[1].workingDirectory
-            runner.specs.forEach { Files.exists(it.workingDirectory) shouldBe false }
+            runner.specs.forEach { spec ->
+                listOf(spec.stdinFile, spec.stdoutFile, spec.stderrFile).forEach { file ->
+                    file.startsWith(spec.workingDirectory) shouldBe false
+                    file.parent shouldBe spec.workingDirectory.parent
+                    Files.exists(file) shouldBe false
+                }
+                Files.exists(spec.workingDirectory.parent) shouldBe false
+            }
         }
 
     @Test
@@ -311,6 +318,8 @@ class ClaudeCliLlmClientTest {
             "Invalid API key · Please run /login",
             "OAuth token has expired. Please obtain a new token or refresh your existing token.",
             "Failed to authenticate. API Error: 401 authentication_error",
+            "Invalid auth token · Fix external API key",
+            "Authentication required · Sign in again to continue",
         ],
     )
     fun `login problems are unavailable`(result: String) =
@@ -329,6 +338,7 @@ class ClaudeCliLlmClientTest {
             "API Error: Rate limit reached",
             "Claude AI usage limit reached|1760000000",
             "Request rejected (429) · too many requests",
+            "You've hit your session limit · resets 5pm (Asia/Baku)",
         ],
     )
     fun `rate and usage limits are rate limited`(result: String) =
@@ -412,6 +422,14 @@ class ClaudeCliLlmClientTest {
             error.message shouldContain "exit code 139"
             error.message shouldContain "T".repeat(500)
             error.message shouldNotContain "EEE"
+        }
+
+    @Test
+    fun `a CLI that exits without printing anything is transient`() =
+        runTest {
+            val error = shouldThrow<LlmException.Transient> { client(FakeProcessRunner.answering("")).answer() }
+
+            error.message shouldContain "no output"
         }
 
     @Test
@@ -504,7 +522,8 @@ class ClaudeCliLlmClientTest {
 
     @Test
     fun `the process spec never prints its arguments`() {
-        val spec = ProcessSpec(listOf("claude", "--system-prompt", "private prompt"), emptyMap(), Path.of("."))
+        val here = Path.of(".")
+        val spec = ProcessSpec(listOf("claude", "--system-prompt", "private prompt"), emptyMap(), here, here, here, here)
 
         spec.toString() shouldBe "ProcessSpec(executable=claude, args=2)"
     }

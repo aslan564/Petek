@@ -74,7 +74,7 @@ class MeteredLlmClientTest {
                             fail(LlmException.Unavailable("no credit")),
                         ),
                 )
-            val client = MeteredLlmClient(ConcurrencyLimitedLlmClient(RetryingLlmClient(provider), permits = 2), meter)
+            val client = MeteredLlmClient(RetryingLlmClient(ConcurrencyLimitedLlmClient(provider, permits = 2)), meter)
 
             client.complete(LlmTestData.request(label = "a01/first"))
             shouldThrow<LlmException.Unavailable> { client.complete(LlmTestData.request(label = "a01/second")) }

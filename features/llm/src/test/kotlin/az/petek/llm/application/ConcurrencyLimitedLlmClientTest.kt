@@ -1,18 +1,23 @@
 package az.petek.llm.application
 
 import az.petek.llm.LlmTestData
+import az.petek.llm.OutcomeLlmClient
+import az.petek.llm.OutcomeLlmClient.Companion.fail
+import az.petek.llm.OutcomeLlmClient.Companion.succeed
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmProviderId
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -110,6 +115,25 @@ class ConcurrencyLimitedLlmClientTest {
             runCurrent()
 
             client.availablePermits shouldBe 1
+        }
+
+    @Test
+    fun `inside the retry decorator a call waiting for its backoff leaves the permit to others`() =
+        runTest {
+            val provider =
+                OutcomeLlmClient(
+                    clock = { currentTime },
+                    outcomes = listOf(fail(LlmException.Transient("503")), succeed(), succeed()),
+                )
+            val client = RetryingLlmClient(ConcurrencyLimitedLlmClient(provider, permits = 1), jitter = RetryJitter.NONE)
+
+            val first = async { client.complete(LlmTestData.request(label = "a01/step")) }
+            runCurrent()
+            val second = async { client.complete(LlmTestData.request(label = "a02/step")) }
+            awaitAll(first, second)
+
+            // a02 ran while a01 slept through its 2 s backoff, instead of queueing behind it.
+            provider.callTimes shouldContainExactly listOf(0L, 0L, 2_000L)
         }
 
     @Test
