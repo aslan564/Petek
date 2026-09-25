@@ -2,8 +2,10 @@ package az.petek.orchestration.application
 
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
+import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.Pacing
+import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.TargetProfile
 import az.petek.core.ids.AgentId
 import az.petek.orchestration.domain.AgentState
@@ -112,6 +114,22 @@ class RunnerPacingTest {
             f.runner().run(oneStep(parallel = true).paced(Pacing(startStagger = 2.seconds, maxParallelActors = 1)))
 
             startedAt.values.toSet() shouldBe setOf(0L)
+        }
+
+    @Test
+    fun `a step that only asserts is not paced`() =
+        runTest {
+            val f = fixture()
+            val look =
+                step("look", everyoneButAdmin(), action = StepAction.None, assertions = listOf(AssertionSpec.NotVisible("Xəta", null)))
+            val campaign = campaign(steps = listOf(look), managers = 2, employees = 4)
+
+            val summary = f.runner().run(campaign.paced(Pacing(startStagger = 10.seconds, maxParallelActors = 1)))
+
+            currentTime shouldBe 0L
+            f.evidence.assertionList.count { it.scenarioStep == "look" } shouldBe 6
+            f.monitor.statuses.none { it.lastAction?.startsWith("pacing") == true } shouldBe true
+            summary.outcome shouldBe RunOutcome.PASSED
         }
 
     @Test

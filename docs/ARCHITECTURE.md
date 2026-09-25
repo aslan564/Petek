@@ -91,7 +91,8 @@ sequenceDiagram
    - Each actor performs its `do` (LLM loop) or `run` (code). All actors of a step run concurrently. `parallel: true`
      additionally starts them at the same instant (a barrier), which race tests need. Otherwise `campaign.pacing`
      starts their actions `start_stagger_ms` apart in agent id order (measured from the step's start, so waiting for an
-     event is not paced) and at most `max_parallel_actors` at once, against the per-IP limits of a real site.
+     event is not paced) and at most `max_parallel_actors` at once, against the per-IP limits of a real site. A step
+     that only asserts (no `do` or `run`) sends nothing to the site and is not paced.
    - With `emits`, the object id is read from the configured id source and the event is published with t0.
    - Assertions are evaluated per actor. `only_one_succeeds` is evaluated per group.
    - `on_fail: abort` stops the run; `continue` goes on.

@@ -71,7 +71,7 @@ internal data class StepResult(
  * `wait_for` on the bus -> reception checks -> render templates -> (start barrier) -> (pacing) -> perform under the
  * watchdog -> `emits` -> the remaining assertions. All actors of a step run concurrently; `only_one_succeeds` is judged
  * once all of them are done. The campaign's pacing ([StartPacer]) staggers and limits the actions of a step that is
- * not `parallel`.
+ * not `parallel` and has an action (`do` or `run`); a step that only asserts is not paced.
  *
  * Reception checks: in a step with `wait_for`, `visible_text` (and the `latency_max` that reads its latency) are
  * evaluated right after the event arrives, before the actor's own action. Their deadline is t0 + `within`, so
@@ -97,7 +97,8 @@ internal class StepExecutor(
             return StepResult(step, emptyList(), groupFailed = false)
         }
         val barrier = if (step.parallel) StartBarrier(chosen.size) else null
-        val pacing = if (step.parallel) Pacing.NONE else run.campaign.settings.pacing
+        // A step without an action only checks the page: nothing reaches the target that pacing would spread out.
+        val pacing = if (step.parallel || step.action is StepAction.None) Pacing.NONE else run.campaign.settings.pacing
         val results =
             coroutineScope {
                 val pacer = StartPacer(this, pacing, chosen.map { it.agentId })
