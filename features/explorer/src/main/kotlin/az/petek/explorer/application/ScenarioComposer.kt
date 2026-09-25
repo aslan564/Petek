@@ -5,6 +5,7 @@ import az.petek.campaign.domain.ActorExpressionParser
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.IdSource
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
@@ -234,7 +235,7 @@ internal class ScenarioComposer(
                 actor = actors.parseList(listOf("${role.key}[n=1]", "${role.key}[n=2]")),
                 action = StepAction.Do("$open səhifəsini aç və '${site(action.name)}' et"),
                 parallel = true,
-                assertions = listOf(AssertionSpec.OnlyOneSucceeds),
+                assertions = listOf(AssertionSpec.OnlyOneSucceeds(raceRequest(action))),
             )
         return Outcome.Covered(prerequisites + id)
     }
@@ -379,6 +380,16 @@ internal class ScenarioComposer(
                 else -> return null
             }
         return AssertionSpec.HttpStatus(resolved, method, settings.forbiddenStatus)
+    }
+
+    /**
+     * The requests that decide a race: the action's form, any object id in its path (`POST /tickets/[^/]+/approve`).
+     * Null (every mutating request) when the action submits no form the explorer saw.
+     */
+    private fun raceRequest(action: ActionModel): RequestPattern? {
+        val path = action.httpPath ?: return null
+        val method = action.httpMethod?.uppercase()?.takeIf { it in RequestPattern.MUTATING_METHODS } ?: return null
+        return RequestPattern(method, path.split('/').joinToString("/") { if (it == UrlPatterns.ID) "[^/]+" else escapeRegex(it) })
     }
 
     private fun withObject(

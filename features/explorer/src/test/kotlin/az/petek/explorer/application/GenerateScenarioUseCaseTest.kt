@@ -5,6 +5,7 @@ import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.DefaultTemplateRenderer
 import az.petek.campaign.domain.IdSource
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.infrastructure.YamlCampaignSource
@@ -182,7 +183,7 @@ class GenerateScenarioUseCaseTest {
         race.parallel shouldBe true
         race.actors.raw shouldBe "manager[n=1] | manager[n=2]"
         race.actors.selectors.map { it.role } shouldContainExactly listOf(Role.MANAGER, Role.MANAGER)
-        race.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds)
+        race.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", "/tickets/[^/]+/approve")))
         composed.campaign
             .step("ticket-submit-idempotency")
             .assertions

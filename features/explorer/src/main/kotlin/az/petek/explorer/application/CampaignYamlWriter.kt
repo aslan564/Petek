@@ -158,8 +158,19 @@ internal object CampaignYamlWriter {
                 "latency_max: {ms: ${spec.max.inWholeMilliseconds}}"
             }
 
-            AssertionSpec.OnlyOneSucceeds -> {
-                "only_one_succeeds: true"
+            is AssertionSpec.OnlyOneSucceeds -> {
+                val fields =
+                    listOfNotNull(
+                        spec.request?.let { "request: ${quote(it.describe())}" },
+                        spec.oracle?.let { oracle ->
+                            listOfNotNull(
+                                "path: ${quote(oracle.path)}",
+                                oracle.field?.let { "field: ${quote(it)}" },
+                                oracle.equals?.let { "equals: ${quote(it)}" },
+                            ).joinToString(", ", "oracle: {", "}")
+                        },
+                    )
+                if (fields.isEmpty()) "only_one_succeeds: true" else fields.joinToString(", ", "only_one_succeeds: {", "}")
             }
         }
 
