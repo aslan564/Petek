@@ -45,6 +45,7 @@ private val logger = KotlinLogging.logger {}
  *   visible (rule 1). The check is polled *inside* the page every [PROBE_POLLING_INTERVAL_MS] ms rather than with
  *   `getByText(...).waitFor()`, whose retries back off to 500 ms and would blur a real-time latency (t1 − t0).
  *   Text matching follows `getByText`: case-insensitive, whitespace-normalized substring of the rendered text.
+ *   Selectors that are plain CSS are probed the same way; Playwright-only syntax (`text=…`) uses a locator wait.
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
  *   text typed with [fill] is masked in error messages.
@@ -72,7 +73,9 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun snapshot(): PageSnapshot =
         perform("snapshot") {
-            SnapshotParser.parse(page.evaluate(BundledScripts.pageIndexer, SnapshotLimits().asScriptArgument()))
+            surviveNavigation {
+                SnapshotParser.parse(page.evaluate(BundledScripts.pageIndexer, SnapshotLimits().asScriptArgument()))
+            }
         }
 
     override suspend fun click(ref: Int) {
@@ -161,12 +164,12 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun accessibilitySnapshot(): String =
         perform("accessibility snapshot") {
-            SecretRedactor.redactAriaSnapshot(page.locator("body").ariaSnapshot(), secretValues())
+            surviveNavigation { SecretRedactor.redactAriaSnapshot(page.locator("body").ariaSnapshot(), secretValues()) }
         }
 
     override suspend fun domSnapshot(): String =
         perform("DOM snapshot") {
-            SecretRedactor.redactText(page.evaluate(BundledScripts.domSnapshot) as? String ?: "", secretValues())
+            surviveNavigation { SecretRedactor.redactText(page.evaluate(BundledScripts.domSnapshot) as? String ?: "", secretValues()) }
         }
 
     override suspend fun saveStorageState(path: Path) {
@@ -255,7 +258,21 @@ internal class PlaywrightBrowserSession private constructor(
         element.selectOption(SelectOption().setIndex(index))
     }
 
-    private fun probe(target: Map<String, String>): Boolean = page.evaluate(BundledScripts.visibilityProbe, target) == true
+    private fun probe(target: Map<String, String>): Boolean =
+        surviveNavigation { page.evaluate(BundledScripts.visibilityProbe, target) == true }
+
+    /**
+     * Runs a page evaluation; when a navigation (e.g. one started by the previous click) replaces the document
+     * meanwhile, waits for the new document to load and evaluates once more instead of failing the agent's step.
+     */
+    private fun <T> surviveNavigation(evaluation: () -> T): T =
+        try {
+            evaluation()
+        } catch (e: PlaywrightException) {
+            if (e.message?.contains(CONTEXT_DESTROYED) != true) throw e
+            page.waitForLoadState()
+            evaluation()
+        }
 
     /**
      * Waits with [BundledScripts.visibilityProbe] polled inside the page every [PROBE_POLLING_INTERVAL_MS], so
@@ -307,6 +324,9 @@ internal class PlaywrightBrowserSession private constructor(
 
         /** How often a wait re-checks the page: the resolution of every measured latency (t1). */
         const val PROBE_POLLING_INTERVAL_MS = 50.0
+
+        /** Playwright's message when the document an evaluation ran in was replaced by a navigation. */
+        private const val CONTEXT_DESTROYED = "Execution context was destroyed"
 
         /**
          * Opens a session: creates its thread, then on that thread its Playwright instance, browser (via

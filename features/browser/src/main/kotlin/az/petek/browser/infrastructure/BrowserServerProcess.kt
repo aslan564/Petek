@@ -37,7 +37,7 @@ internal class BrowserServerProcess private constructor(
     val isAlive: Boolean get() = process.isAlive
 
     /** The host and all of its descendants (Chromium and its helper processes) at this moment. */
-    fun processTree(): List<ProcessHandle> = listOf(process.toHandle()) + process.descendants().toList()
+    fun processTree(): List<ProcessHandle> = process.tree()
 
     /** Simulates the parent going away: the host sees EOF on stdin, exactly as when the JVM is killed. */
     internal fun closeInput() {
@@ -98,13 +98,13 @@ internal class BrowserServerProcess private constructor(
                     val status = if (process.isAlive) "closed its output" else "exited with code ${process.exitValue()}"
                     throw BrowserActionException("the browser server $status before it was ready:\n$output")
                 } catch (e: TimeoutCancellationException) {
-                    killAll(listOf(process.toHandle()) + process.descendants().toList())
+                    killAll(process.tree())
                     throw BrowserActionException("the browser server did not become ready within $startupTimeout:\n$output", e)
                 } catch (e: CancellationException) {
-                    killAll(listOf(process.toHandle()) + process.descendants().toList())
+                    killAll(process.tree())
                     throw e
                 } catch (e: BrowserActionException) {
-                    killAll(listOf(process.toHandle()) + process.descendants().toList())
+                    killAll(process.tree())
                     throw e
                 }
             }
@@ -117,7 +117,10 @@ internal class BrowserServerProcess private constructor(
         ): Thread =
             thread(name = name, isDaemon = true) {
                 try {
-                    stream.bufferedReader().forEachLine(onLine)
+                    stream.bufferedReader().forEachLine { line ->
+                        if (!line.startsWith(ENDPOINT_PREFIX)) logger.debug { "$name: $line" }
+                        onLine(line)
+                    }
                 } catch (e: IOException) {
                     logger.debug { "$name closed: ${e.message}" }
                 } finally {
@@ -133,5 +136,7 @@ internal class BrowserServerProcess private constructor(
         }
 
         private fun Process.awaitExit(timeout: Duration): Boolean = waitFor(timeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)
+
+        private fun Process.tree(): List<ProcessHandle> = listOf(toHandle()) + descendants().toList()
     }
 }

@@ -3,6 +3,7 @@ package az.petek.browser.infrastructure
 import az.petek.browser.domain.BrowserActionException
 import com.microsoft.playwright.impl.driver.Driver
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.time.Duration
@@ -46,14 +47,18 @@ internal class PlaywrightDriver(
         val process =
             try {
                 builder.start()
-            } catch (e: java.io.IOException) {
+            } catch (e: IOException) {
                 throw BrowserActionException("could not run the Playwright installer: ${e.message}", e)
             }
         val reader =
             thread(name = "playwright-install-output", isDaemon = true) {
-                process.inputStream.bufferedReader().forEachLine { line ->
-                    output.add(line)
-                    logger.debug { "playwright install: $line" }
+                try {
+                    process.inputStream.bufferedReader().forEachLine { line ->
+                        output.add(line)
+                        logger.debug { "playwright install: $line" }
+                    }
+                } catch (e: IOException) {
+                    logger.debug { "installer output closed: ${e.message}" }
                 }
             }
         if (!process.waitFor(installTimeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)) {

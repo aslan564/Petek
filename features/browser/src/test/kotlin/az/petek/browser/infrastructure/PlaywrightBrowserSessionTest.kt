@@ -248,6 +248,19 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `a snapshot right after a click that navigates does not fail`() =
+        withSession { session ->
+            session.navigate("/form")
+            session.snapshot()
+
+            session.click(10)
+            session.snapshot()
+
+            session.waitForSelector("#greeting", 3.seconds).found shouldBe true
+            session.snapshot().title shouldBe "Profil"
+        }
+
+    @Test
     fun `waitForText returns at once when the text is already visible`() =
         withSession { session ->
             session.navigate("/form")

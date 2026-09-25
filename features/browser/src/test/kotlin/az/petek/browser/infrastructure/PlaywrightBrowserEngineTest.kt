@@ -11,6 +11,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldNotBeEmpty
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -105,6 +106,23 @@ class PlaywrightBrowserEngineTest {
             shouldThrow<BrowserActionException> { factory.open(SessionOptions("late", site.baseUrl)) }
                 .message shouldContain "stopped"
             engine.stop()
+        }
+
+    @Test
+    fun `slow motion from the engine config slows every session down`() =
+        runBlocking<Unit> {
+            val factory = engine.start(BrowserEngineConfig(slowMo = 150.milliseconds))
+            val session = open(factory, "slow")
+            try {
+                session.navigate("/dynamic")
+
+                val took = measureTime { session.clickSelector("#add") }
+
+                took shouldBeGreaterThanOrEqualTo 150.milliseconds
+                session.count("button") shouldBe 2
+            } finally {
+                session.close()
+            }
         }
 
     @Test
