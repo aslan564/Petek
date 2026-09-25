@@ -56,11 +56,17 @@ trusted.
 - Page content is presented to the model as data with explicit framing; instructions found on pages are never
   executed — the model can only pick a whitelisted action, and the harness executes it.
 
-**Browser isolation (rule 9)**
+**Tester isolation (rules 7, 9; docs/requirements/R01 "Isolation guarantees")**
 - Every agent has its own browser context (cookies, storage) and its own Playwright instance on a single-thread
   dispatcher; sessions never share objects. JavaScript dialogs are accepted and recorded, never forwarded.
+- An agent's runtime knows its colleagues as `Colleague` (name, role, e-mail) — never their password or phone. Values
+  the testers share (`company_code`, invite links) are write-once; `{last_id}` never resolves to an object a colleague
+  created concurrently; only the admin may create or seed the company (campaign validator).
+- Saved storage states (live cookies) are written `rw-------` into a `rwx------` directory, one file per run and agent.
 - Injected page scripts (`features/browser/src/main/resources/**/*.js`) blank secret field values before serialising
   DOM snapshots.
+- Proven at scale: `TesterIsolationAtScaleTest` (5 000 testers through the real orchestrator) and
+  `BrowserIsolationAtScaleTest` (60 real Chromium contexts) run with `./gradlew build`.
 
 **Panel**
 - Ktor CIO bound to `127.0.0.1` only; `Host`/`Origin` headers must be local; every non-GET request needs the

@@ -98,6 +98,7 @@ A run (`petek run scenarios/<campaign>.yaml`):
 | AI | Claude Code CLI (`claude -p`, your Claude plan) or the Anthropic API, behind one `LlmClient` port with retry, concurrency limit and metering |
 | Evidence | SQLite (runs, identities, steps, events, receipts, assertions, findings, usage) + artifact files, every record with an id |
 | Quality gates | Kotlin warnings as errors, ktlint via Spotless, licence headers enforced, Konsist architecture tests, Kover coverage, e2e with real Chromium |
+| Isolation | Every tester in its own browser context and thread, knowing colleagues without their secrets; shared values write-once; proven on every build with 5 000 testers through the orchestrator and 30 (measured: 60) real Chromium sessions — see [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
 
 ## Quick start
 

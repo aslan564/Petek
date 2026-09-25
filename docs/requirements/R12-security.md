@@ -18,7 +18,7 @@ page content or the model steer the tool.
 | Prompt injection from pages | One structured decision validated against the action whitelist; the harness executes; page text is data | `agent`, `llm` |
 | AI process escaping | `claude -p` with no tools, no MCP, no settings, no session persistence; `ProcessBuilder` without a shell; scrubbed environment; fresh temp dir; kill tree on timeout | `llm/infrastructure/cli` |
 | Panel abuse from another site | Loopback bind; local `Host`/`Origin` only; per-start `X-Petek-Token` on non-GET; script nonce; masked tester e-mails | `dashboard/infrastructure` |
-| Cross-session leakage | One browser context and one Playwright per session on its own dispatcher | `browser` |
+| Cross-session leakage | One browser context and one Playwright per session on its own dispatcher; colleagues known without secrets (`Colleague`); shared values write-once; `{last_id}` never a concurrent colleague's id; admin-only company setup; storage states `rw-------` (see R01 "Isolation guarantees", proven at 5 000 fake and 60 real sessions) | `browser`, `agent`, `orchestration`, `campaign` |
 | Dependency compromise | Pinned versions in the catalog; wrapper checksum; Mailpit pinned and loopback; new libraries need approval | `gradle/`, `docker-compose.yml`, rule 11 |
 
 ## Verification

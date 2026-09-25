@@ -8,7 +8,7 @@ Status: **Implemented** (in `develop`, covered by tests), **Partial** (core exis
 
 | Id | Requirement | Status | Modules | ADRs | Plan |
 |---|---|---|---|---|---|
-| [R01](R01-concurrent-multi-agent-testing.md) | Many AI testers at once in isolated browser sessions | Implemented | orchestration, browser, identity, agent | 0001, 0002, 0006 | Faza 2–3 |
+| [R01](R01-concurrent-multi-agent-testing.md) | Many AI testers at once in isolated browser sessions; isolation audited and proven at 5 000 (harness) / 60 (real Chromium) | Implemented | orchestration, browser, identity, agent, campaign | 0001, 0002, 0006 | Faza 2–3, 8 |
 | [R02](R02-deterministic-harness.md) | Code decides: clock, assertions, action whitelist, `run` vs `do` | Implemented | core, agent, verification, campaign | 0003, 0004, 0007 | Faza 2, 4 |
 | [R03](R03-evidence-based-reporting.md) | Every verdict backed by evidence; ids everywhere; three-source judge; stability | Implemented | evidence, reporting | 0005, 0007 | Faza 5 |
 | [R04](R04-identities-registration-and-otp.md) | Deterministic identities; invitation and company-code sign-up; e-mail and phone OTP | Implemented | identity, mail, oracle, agent | 0004 | Faza 1, 4, 8 |

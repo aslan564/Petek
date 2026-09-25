@@ -224,6 +224,18 @@ finished run's surprises into explainable verdicts. The web panel (Faza 8) is bu
   questions) builds its draft on top of that one, so the newest triage draft of a run carries all of its changes.
   Re-running triage resumes: decided surprises are not asked again.
 ## Web panel (`features/dashboard`)
+## Tester isolation
+
+Only the orchestrator sees more than one tester. Each agent owns one browser context on one confined thread, reads
+only its own `Identity`, and knows the others as `Colleague`s (name, role, e-mail, department, registration — no
+password, no phone). What testers share (`SharedRunState`: `company_id`, `company_code`, `invite_link:<email>`) is
+write-once: the first publisher wins and a different later value is refused, so nobody can change what the others act
+on. `{last_id}` resolves to the actor's own emitted object, the object it waited for, or the newest object before the
+step began — never to an object a colleague created concurrently in the same step. The campaign validator lets only the
+admin run `register_owner` and `seed_company` and requires exactly one emitting step per event name. Evidence, events
+and receipts are attributed by harness state, never by the model. The full table and the scale proofs (5 000 testers
+through the orchestrator, 60 real Chromium contexts) are in `docs/requirements/R01-concurrent-multi-agent-testing.md`.
+
 ## Explorer (`features/explorer`, PLAN.md Faza 6)
 
 The explorer builds a model of a site it has never seen and turns it into a campaign draft; the panel's "Kəşfiyyat"
