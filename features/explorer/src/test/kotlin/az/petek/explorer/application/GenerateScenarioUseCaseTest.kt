@@ -80,13 +80,15 @@ class GenerateScenarioUseCaseTest {
             listOf("register_owner", "seed_company", "register_and_login")
         campaign.steps.map { it.id } shouldContainExactly
             listOf(
+                "announcement-submit-watch",
                 "announcement-submit-happy",
+                "announcement-submit-realtime",
                 "announcement-submit-permission",
+                "ticket-submit-watch",
                 "ticket-submit-happy",
+                "ticket-submit-realtime",
                 "ticket-approve-permission",
                 "ticket-reject-permission",
-                "announcement-submit-realtime",
-                "ticket-submit-realtime",
             )
         composed.covered.map { it.idea.pattern to it.idea.actionId } shouldHaveSize 7
         composed.skipped
@@ -126,6 +128,33 @@ class GenerateScenarioUseCaseTest {
                 AssertionSpec.LatencyMax(5000.milliseconds),
             )
         campaign.step("ticket-submit-realtime").actors.raw shouldBe "manager[*]"
+    }
+
+    @Test
+    fun `receivers open the page before the creation and are checked right after it, inside the visible_text window`() {
+        // The runner runs steps in order and checks visible_text of a wait_for step against t0 + within: a check that
+        // came after other steps would find its window over, and a receiver on another page could never see the item.
+        val composed = useCase().compose(Models.kadro(), request(maxIdeas = 50))
+        val ids = composed.campaign.steps.map { it.id }
+
+        listOf("announcement-submit", "ticket-submit").forEach { action ->
+            val creator = ids.indexOf("$action-happy")
+            ids[creator - 1] shouldBe "$action-watch"
+            ids[creator + 1] shouldBe "$action-realtime"
+            val watch = composed.campaign.step("$action-watch")
+            watch.actors.raw shouldBe
+                composed.campaign
+                    .step("$action-realtime")
+                    .actors.raw
+            watch.waitFor shouldBe null
+            watch.emits shouldBe null
+        }
+        (composed.campaign.step("announcement-submit-watch").action as StepAction.Do).instruction shouldContain "/announcements"
+        composed.covered
+            .single { it.idea.pattern == TestPattern.REALTIME && it.idea.actionId == "ticket-submit" }
+            .stepIds shouldContainExactly listOf("ticket-submit-watch", "ticket-submit-happy", "ticket-submit-realtime")
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+        reload(composed.yaml).steps shouldBe composed.campaign.steps
     }
 
     @Test
@@ -256,6 +285,113 @@ class GenerateScenarioUseCaseTest {
         reasons.any { "no observed action creates such an object" in it } shouldBe true
         reasons.any { "no campaign role (admin, manager, employee) was seen using 'cart-add' (seen: buyer)" in it } shouldBe true
         composed.campaign.steps.shouldBeEmpty()
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `actions on nested object pages and selectors with braces are skipped, and the draft still validates`() {
+        val kadro = Models.kadro()
+        val braced =
+            Models.action(
+                "ticket-close",
+                ActionKind.UPDATE,
+                "/tickets/{id}",
+                allowed = setOf("manager"),
+                forbidden = setOf("employee"),
+            )
+        val model =
+            kadro.copy(
+                pages = kadro.pages + Models.page("/tickets/{id}/comments/{id}", reachableBy = setOf("manager")),
+                actions =
+                    kadro.actions +
+                        Models.action(
+                            "comment-approve",
+                            ActionKind.APPROVE,
+                            "/tickets/{id}/comments/{id}",
+                            allowed = setOf("manager"),
+                            forbidden = setOf("employee"),
+                        ) +
+                        braced.copy(selector = "role=button[name=\"{{ close }}\"]"),
+            )
+
+        val composed = useCase().compose(model, request(maxIdeas = 50))
+
+        val reasons = composed.skipped.associate { (it.idea.actionId to it.idea.pattern) to it.reason }
+        reasons.getValue("comment-approve" to TestPattern.RACE) shouldContain "nested objects"
+        reasons.getValue("comment-approve" to TestPattern.PERMISSION) shouldContain "nested objects"
+        reasons.getValue("ticket-close" to TestPattern.PERMISSION) shouldContain "braces"
+        composed.campaign.steps.none { "comment-approve" in it.id } shouldBe true
+        composed.yaml
+            .lines()
+            .filterNot { it.startsWith("#") }
+            .none { "{id}" in it } shouldBe true
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+        reload(composed.yaml).steps shouldBe composed.campaign.steps
+    }
+
+    @Test
+    fun `a create form on an object page first creates that object and opens its page`() {
+        val kadro = Models.kadro()
+        val model =
+            kadro.copy(
+                actions =
+                    kadro.actions +
+                        Models.action(
+                            "comment-add",
+                            ActionKind.CREATE,
+                            "/tickets/{id}",
+                            name = "Şərh yaz",
+                            allowed = setOf("manager"),
+                            httpPath = "/tickets/{id}/comments",
+                        ),
+            )
+
+        val composed = useCase().compose(model, request(maxIdeas = 50, instructions = "şərh"))
+
+        val comment = composed.campaign.step("comment-add-happy")
+        (comment.action as StepAction.Do).instruction shouldContain "/tickets/{event.tickets_created.id} səhifəsini aç"
+        comment.emits!!.event shouldBe "comments_created"
+        val ids = composed.campaign.steps.map { it.id }
+        (ids.indexOf("ticket-submit-happy") < ids.indexOf("comment-add-happy")) shouldBe true
+        composed.covered
+            .single { it.idea.actionId == "comment-add" && it.idea.pattern == TestPattern.HAPPY_PATH }
+            .stepIds shouldContainExactly listOf("ticket-submit-happy", "comment-add-happy")
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `with a test API only the resources it serves get oracle ids and checks, others are named by their form`() {
+        val kadro = Models.kadro()
+        val model =
+            kadro.copy(
+                pages =
+                    kadro.pages +
+                        Models.page(
+                            "/company",
+                            Models.form(ActionKind.CREATE, "company-department-submit", "/company/departments", Models.field("name")),
+                            reachableBy = setOf("admin"),
+                        ),
+                actions =
+                    kadro.actions +
+                        Models.action(
+                            "company-department-submit",
+                            ActionKind.CREATE,
+                            "/company",
+                            name = "Əlavə et",
+                            allowed = setOf("admin"),
+                            httpPath = "/company/departments",
+                        ),
+            )
+
+        val composed = useCase().compose(model, request(maxIdeas = 50, testApi = true, instructions = "departament"))
+
+        val department = composed.campaign.step("company-department-submit-happy")
+        department.emits!!.event shouldBe "departments_created"
+        department.assertions.none { it is AssertionSpec.Oracle } shouldBe true
+        composed.campaign.target.idSources.keys shouldBe setOf("announcements_created", "tickets_created")
+        composed.campaign.target.idSources.values
+            .map { (it as IdSource.OracleField).path }
+            .none { "/test/company" in it || "/test/departments" in it } shouldBe true
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 

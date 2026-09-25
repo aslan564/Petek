@@ -27,6 +27,10 @@ data class ScannedLink(
     val ref: Int?,
 )
 
+/**
+ * A `<form>`. [methodOverride] is the value of a hidden `_method` field (`DELETE`, `PATCH`, …), which frameworks such
+ * as Rails and Laravel use to send other methods than POST from a plain form.
+ */
 data class ScannedForm(
     val action: String?,
     val method: String,
@@ -34,6 +38,7 @@ data class ScannedForm(
     val testId: String?,
     val fields: List<ScannedField>,
     val buttons: List<ScannedButton>,
+    val methodOverride: String? = null,
 )
 
 /** An editable control: `input` (not hidden, not a button), `select` or `textarea`. */
@@ -53,7 +58,10 @@ data class ScannedField(
     val autocomplete: String?,
 )
 
-/** A `button` or an `input` of type submit/button/reset/image. */
+/**
+ * A `button` or an `input` of type submit/button/reset/image. [formAction] and [formMethod] (`formaction`,
+ * `formmethod`) replace the form's own action and method when this button submits it.
+ */
 data class ScannedButton(
     val tag: String,
     val type: String,
@@ -62,6 +70,8 @@ data class ScannedButton(
     val id: String?,
     val testId: String?,
     val ref: Int?,
+    val formAction: String? = null,
+    val formMethod: String? = null,
 )
 
 /**
@@ -72,6 +82,7 @@ data class ScannedButton(
  */
 object HtmlScanner {
     const val REF_ATTRIBUTE = "data-petek-ref"
+    private const val METHOD_OVERRIDE = "_method"
 
     private val TAG =
         Regex("""<!--[\s\S]*?-->|<![^>]*>|<(/?)([A-Za-z][A-Za-z0-9:_-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>""")
@@ -166,11 +177,12 @@ object HtmlScanner {
     ) {
         val fields = mutableListOf<FieldBuilder>()
         val buttons = mutableListOf<ScannedButton>()
+        var methodOverride: String? = null
     }
 
     private class ScanState {
         private val links = mutableListOf<ScannedLink>()
-        private val forms = mutableListOf<Pair<FormBuilder, List<FieldBuilder>>>()
+        private val forms = mutableListOf<FormBuilder>()
         private val looseFields = mutableListOf<FieldBuilder>()
         private val looseButtons = mutableListOf<ScannedButton>()
         private val testIds = LinkedHashSet<String>()
@@ -266,7 +278,11 @@ object HtmlScanner {
                     .ifEmpty { "text" }
             when (type) {
                 "hidden" -> {
-                    return
+                    // Not a field anyone fills in, but `_method` decides what submitting the form does.
+                    val override = attributes["value"]?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+                    if (attributes["name"].equals(METHOD_OVERRIDE, ignoreCase = true) && override != null) {
+                        form?.methodOverride = override
+                    }
                 }
 
                 in BUTTON_INPUTS -> {
@@ -301,12 +317,14 @@ object HtmlScanner {
             id = attributes["id"]?.takeIf { it.isNotBlank() },
             testId = attributes["data-testid"]?.takeIf { it.isNotBlank() },
             ref = attributes[REF_ATTRIBUTE]?.toIntOrNull(),
+            formAction = attributes["formaction"]?.trim()?.takeIf { it.isNotEmpty() },
+            formMethod = attributes["formmethod"]?.trim()?.uppercase()?.takeIf { it.isNotEmpty() },
         )
 
         private fun closeForm() {
             val current = form ?: return
             closeSelect()
-            forms += current to current.fields.toList()
+            forms += current
             form = null
         }
 
@@ -362,7 +380,7 @@ object HtmlScanner {
             return ScannedDocument(
                 links = links.toList(),
                 forms =
-                    forms.map { (builder, fields) ->
+                    forms.map { builder ->
                         ScannedForm(
                             action = builder.attributes["action"]?.takeIf { it.isNotBlank() },
                             method =
@@ -372,8 +390,9 @@ object HtmlScanner {
                                     ?.ifEmpty { null } ?: "GET",
                             id = builder.attributes["id"]?.takeIf { it.isNotBlank() },
                             testId = builder.attributes["data-testid"]?.takeIf { it.isNotBlank() },
-                            fields = fields.map { it.build(labelsFor) },
+                            fields = builder.fields.map { it.build(labelsFor) },
                             buttons = builder.buttons.toList(),
+                            methodOverride = builder.methodOverride,
                         )
                     },
                 looseFields = looseFields.map { it.build(labelsFor) },

@@ -100,12 +100,23 @@ campaign drafts. The composition root (and later the web panel) drives it throug
     and was offered fills `reachableBy` and infers `forbiddenRoles`.
   - **TRIAL_TOUCH**: submits each observed CREATE form once with harmless data. It runs only with `allowWrites` *and* a
     `TestTargetCheck` confirmation that the target holds test data (`is_test`); otherwise it is skipped with the reason.
+    Only the logged-in role sessions write, because teardown removes only the test company's data. The anonymous
+    session only watches for live effects. Only forms that code classified CREATE are submitted, never on an LLM's
+    say-so. Sign-up and sign-in forms (also
+    without a password field), forms sent to another site, and forms sent with DELETE/PUT/PATCH (`_method` overrides
+    and `formaction`/`formmethod` included) are never submitted. Nothing is typed when the browser does not land on the
+    page where the form was seen.
 - `GenerateScenarioUseCase` turns the model's top test ideas (`TestPatternLibrary`, grounded by the instructions) into a
   campaign YAML draft. The draft is assembled by code and validated with `DefaultCampaignValidator` before it is stored.
+  Real-time checks follow their creating step directly, because `visible_text` is measured from t0. Receivers open the
+  page in a step before the creation. Oracle ids and checks are used only for resources that the target's test API
+  serves. Ideas a draft cannot express are skipped with the reason: objects nested in other objects, and selectors
+  with braces.
 - `CompareExplorationsUseCase` diffs two model versions of a target (Faza 7 "fərq kəşfiyyatı"). Partial models are
-  skipped for the "latest" diff.
+  skipped for the "latest" diff, including models that stopped at the page budget.
 
-A crawl is breadth-first and one page per URL pattern: `/tickets/t1` becomes `/tickets/{id}`. It stays within the page,
+A crawl is breadth-first and one page per URL pattern: `/tickets/t1`, `/attendance/2026-09-25` and
+`/tickets/123-noutbuk` each end in `{id}`. It stays within the page,
 depth and time budgets, and links that match the instructions are opened first. Every address is checked with a GET
 before it is opened. For each page, the explorer stores a screenshot and a DOM snapshot as evidence. Code heuristics
 extract forms, fields and buttons. **One structured LLM question** per page adds a purpose, named actions and questions
@@ -116,17 +127,19 @@ live-update transports seen in the traffic.
 Safety is enforced in code:
 - Crawls see the browser only through a read-only session. It cannot click, type, select, send non-GET requests or
   leave the target's origin.
-- Logout, delete and unsubscribe links (English and Azerbaijani), `/api/`, `/test/`, file downloads and `robots.txt`
-  exclusions are never followed.
+- The crawl never follows these: logout, delete, unsubscribe, approve and reject links (English and Azerbaijani,
+  also percent-encoded or in capitals), `/api/`, `/test/`, file downloads and `robots.txt` exclusions. A page that moves
+  to another site after loading is not learned and is not shown to the LLM.
 - Prompts show URL patterns instead of addresses, mask secret-looking field values and remove tokens.
 - The target must pass `TargetPolicy`.
 
 Every model element carries `OBSERVED`/`INFERRED` provenance and the artifact ids of its evidence. Each exploration
-stores one model version: the previous version for the same target + 1, marked `partial` when the exploration timed
-out, was cancelled or failed. Everything is stored in the process database by `SqliteExplorationRepository`, in the
+stores one model version: the previous version for the same target + 1. The version is marked `partial` when the
+exploration timed out, was cancelled, failed or left pages unvisited at the page budget. Everything is stored in the process database by `SqliteExplorationRepository`, in the
 tables `exploration`, `site_model_version`, `exploration_finding`, `exploration_event`, `exploration_artifact` and
 `scenario_draft`. Events (`ExplorationEvent`) are numbered per exploration, stored before they are published, and
-replayable, so a live view can catch up (`FlowExplorationObserver` offers them as a flow).
+replayable, so a live view can catch up (`FlowExplorationObserver` offers them as a flow). A cancellation cannot
+interrupt a write between storing an event and advancing its number.
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 

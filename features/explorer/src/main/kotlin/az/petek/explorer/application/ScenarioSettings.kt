@@ -17,6 +17,10 @@ data class SetupFunctions(
 /**
  * The fixed frame of a generated campaign: a small team that can express every covered idea (two managers for races,
  * several employees for real-time fan-out), its departments, and the limits of the assertions it writes.
+ *
+ * @property oracleResources the resources whose objects the target's test API serves (`GET /test/<resource>/latest?by=`
+ *   and `GET /test/<resource>/{id}`, docs/TARGET_CONTRACT.md). Only these get oracle id sources and oracle checks;
+ *   an oracle path the target does not serve would make every generated check fail.
  */
 data class ScenarioSettings(
     val team: RoleQuota = RoleQuota(admin = 1, manager = 2, employee = 3),
@@ -28,6 +32,7 @@ data class ScenarioSettings(
     val waitTimeout: Duration = 30.seconds,
     val maxLatency: Duration = 5_000.milliseconds,
     val forbiddenStatus: Int = 403,
+    val oracleResources: Set<String> = setOf("announcements", "tickets"),
 ) {
     init {
         require(team.admin == 1) { "a generated campaign has exactly one admin, who owns the company" }

@@ -39,6 +39,25 @@ class LinkPolicyTest {
     }
 
     @Test
+    fun `percent-encoded, upper-case and ascii spellings of unsafe words are recognised too`() {
+        verdict("https://site.test/%C3%A7%C4%B1x%C4%B1%C5%9F") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/account/log%6Fut") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/p", "ÇIXIŞ") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/hesab/cixis") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/p", "İMTİNA") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+    }
+
+    @Test
+    fun `links that decide something are never followed, the pages that list decisions are`() {
+        verdict("https://site.test/tickets/t1/approve") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/leave/7?do=reject") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/tickets/t1/x", "Təsdiqlə") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/tickets/t1/y", "Rədd et") shouldBe LinkVerdict.Skip(SkipReason.UNSAFE)
+        verdict("https://site.test/approvals", "Approvals") shouldBe LinkVerdict.Follow
+        verdict("https://site.test/tesdiqler", "Təsdiqlər") shouldBe LinkVerdict.Follow
+    }
+
+    @Test
     fun `words that merely contain a short unsafe word are not unsafe`() {
         verdict("https://site.test/silver", "Silver plan") shouldBe LinkVerdict.Follow
         verdict("https://site.test/dropdown-demo") shouldBe LinkVerdict.Follow
@@ -47,7 +66,7 @@ class LinkPolicyTest {
 
     @Test
     fun `machine endpoints and downloads are not pages`() {
-        verdict("https://site.test/api/tickets/t1/approve") shouldBe LinkVerdict.Skip(SkipReason.NOT_A_PAGE)
+        verdict("https://site.test/api/tickets/t1/comments") shouldBe LinkVerdict.Skip(SkipReason.NOT_A_PAGE)
         verdict("https://site.test/test/otp/+99450") shouldBe LinkVerdict.Skip(SkipReason.NOT_A_PAGE)
         verdict("https://site.test/graphql") shouldBe LinkVerdict.Skip(SkipReason.NOT_A_PAGE)
         verdict("https://site.test/files/report.PDF") shouldBe LinkVerdict.Skip(SkipReason.DOWNLOAD)
@@ -104,6 +123,23 @@ class RobotsRulesTest {
     }
 
     @Test
+    fun `a blank user agent line does not make a group apply to petek`() {
+        val rules =
+            RobotsRules.parse(
+                """
+                User-agent:
+                Disallow: /
+
+                User-agent: *
+                Disallow: /admin
+                """.trimIndent(),
+            )
+
+        rules.allows("/tickets") shouldBe true
+        rules.allows("/admin/users") shouldBe false
+    }
+
+    @Test
     fun `no rules allow everything`() {
         RobotsRules.NONE.allows("/anything") shouldBe true
         RobotsRules.parse("garbage without colons").allows("/x") shouldBe true
@@ -115,6 +151,18 @@ class KeywordsTest {
     fun `instructions yield meaningful words without stop words`() {
         Keywords.of("Test the ticket approval and elanlar, please") shouldBe setOf("ticket", "approval", "elanlar")
         Keywords.of(null) shouldBe emptySet()
+    }
+
+    @Test
+    fun `azerbaijani spellings fold to one word, upper case and ascii included`() {
+        Keywords.fold("ÇIXIŞ") shouldBe "cixis"
+        Keywords.fold("Çıxış") shouldBe "cixis"
+        Keywords.fold("İMTİNA") shouldBe "imtina"
+        Keywords.words("İMTİNA ET").map(Keywords::fold) shouldBe listOf("imtina", "et")
+        Keywords.matches("müraciət", "muracietler") shouldBe true
+        Keywords.containsStem("ƏLAVƏ ET", setOf("əlavə")) shouldBe true
+        Keywords.containsPhrase("Sistemə daxil olun", "daxil ol") shouldBe false
+        Keywords.containsPhrase("Hesaba DAXİL OL", "daxil ol") shouldBe true
     }
 
     @Test

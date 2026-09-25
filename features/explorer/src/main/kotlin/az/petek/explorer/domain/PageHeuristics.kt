@@ -96,12 +96,18 @@ object PageHeuristics {
 
         fun isShown(form: ScannedForm): Boolean = form.fields.any { isShown(it.ref) } || form.buttons.any { isShown(it.ref) }
 
-        /** The form as a model plus the accessible name of its submit button. */
+        /**
+         * The form as a model plus the accessible name of its submit button. What the submit button really sends
+         * decides: its `formaction`/`formmethod` replace the form's, and a hidden `_method` replaces POST.
+         */
         fun form(form: ScannedForm): Pair<FormModel, String?> {
-            val actionPattern = actionPattern(form.action)
-            val classification = FormClassifier.classify(form, actionPattern)
             val submit = form.buttons.filter { isShown(it.ref) }.firstOrNull { it.type == "submit" || it.type == "image" }
-            val scopedByAction = actionPattern?.takeIf { !UrlPatterns.hasId(it) }?.let { form.action }
+            val action = submit?.formAction ?: form.action
+            val sent = form.copy(action = action, method = sentMethod(form, submit))
+            val destination = destination(action)
+            val actionPattern = (destination as? Destination.SameSite)?.pattern
+            val classification = FormClassifier.classify(sent, actionPattern, offSite = destination == Destination.OtherSite)
+            val scopedByAction = actionPattern?.takeIf { !UrlPatterns.hasId(it) && form.action == action }?.let { form.action }
             val fields = form.fields.filter { isShown(it.ref) }.map { field(it, scopedByAction) }
             val model =
                 FormModel(
@@ -109,12 +115,20 @@ object PageHeuristics {
                     kind = classification.kind,
                     fields = fields,
                     submitSelector = submit?.let(::buttonSelector),
-                    method = form.method,
+                    method = sent.method,
                     actionPath = actionPattern,
                     provenance = Provenance.OBSERVED,
                     evidence = emptyList(),
                 )
             return model to submit?.let { elementName(it.ref) ?: it.text }
+        }
+
+        private fun sentMethod(
+            form: ScannedForm,
+            submit: ScannedButton?,
+        ): String {
+            val method = submit?.formMethod ?: form.method
+            return if (method == "POST") form.methodOverride ?: method else method
         }
 
         /** A form assembled from the element list: the fields in order, then the first button after the last field. */
@@ -160,10 +174,14 @@ object PageHeuristics {
             )
         }
 
-        private fun actionPattern(action: String?): String? {
-            val resolved = (if (action == null) url else UrlPatterns.resolve(url, action)) ?: return null
-            if (origin == null || !origin.contains(resolved)) return null
-            return UrlPatterns.of(resolved)
+        /**
+         * Where a form with [action] is sent: this site (the page itself without an action), another site, or
+         * nowhere a crawler can tell (`javascript:` actions of forms that scripts submit).
+         */
+        private fun destination(action: String?): Destination {
+            val resolved = (if (action == null) url else UrlPatterns.resolve(url, action)) ?: return Destination.Unknown
+            if (origin == null) return Destination.Unknown
+            return if (origin.contains(resolved)) Destination.SameSite(UrlPatterns.of(resolved)) else Destination.OtherSite
         }
 
         private fun field(
@@ -206,6 +224,16 @@ object PageHeuristics {
         }
 
         private fun elementName(ref: Int?): String? = ref?.let(elements::get)?.name?.takeIf { it.isNotBlank() }
+    }
+
+    private sealed interface Destination {
+        data class SameSite(
+            val pattern: String,
+        ) : Destination
+
+        data object OtherSite : Destination
+
+        data object Unknown : Destination
     }
 
     private const val MAX_OPTIONS = 20

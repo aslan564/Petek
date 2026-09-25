@@ -20,8 +20,8 @@ enum class Provenance {
 /**
  * What Pətək learned about a site in one exploration. Versions count up per target (see [TargetKey]); every element
  * carries its [Provenance] and the evidence artifacts (screenshots, DOM snapshots) it is based on. [partial] marks a
- * model whose exploration did not finish (time budget, cancellation, error): it is kept, but a missing page there
- * does not mean the page is gone.
+ * model whose exploration did not see the whole site (time budget, cancellation, error, or pages left unvisited at
+ * the page budget): it is kept, but a missing page there does not mean the page is gone.
  */
 data class SiteModel(
     val version: Int,

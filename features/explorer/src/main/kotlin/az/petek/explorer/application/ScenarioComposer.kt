@@ -30,17 +30,22 @@ import az.petek.explorer.domain.UrlPatterns
  *
  * | idea | steps and assertions |
  * |---|---|
- * | HAPPY_PATH of CREATE | the creator types a marker text; `visible_text` of it, `oracle` contains it with a test API; emits `<resource>_created` |
+ * | HAPPY_PATH of CREATE | the creator types a marker text; `visible_text` of it, `oracle` contains it when the test API serves the resource; emits `<resource>_created` |
  * | HAPPY_PATH of UPDATE/ASSIGN/SUBMIT | the action on the page (on the created object when the page needs one) |
- * | REALTIME | receivers `wait_for` the creation; `visible_text` of the marker and `latency_max` |
+ * | REALTIME | receivers open the page before the creation and `wait_for` it right after; `visible_text` of the marker and `latency_max` |
  * | PERMISSION | a role that was not offered the action tries it; `not_visible` of its element, `http_status` 403 on its form's path |
  * | RACE | two testers of an allowed role, `parallel`, on the created object; `only_one_succeeds` |
  * | IDEMPOTENCY of CREATE | double submit; `count` of list items with the marker equals 1 |
  *
  * Ideas it cannot express are skipped with the reason: no campaign role (admin, manager, employee) was seen using the
- * action, no observed action creates the object an action needs, no list selector, boundary rules that were never
- * observed, sign-up and sign-in (the setup run functions do those), deletions (never generated from an exploration).
- * Texts taken from the site never become template placeholders: braces are replaced before they reach a step.
+ * action, no observed action creates the object an action needs (or a page needs more than one object), no list
+ * selector, boundary rules that were never observed, sign-up and sign-in (the setup run functions do those), deletions
+ * (never generated from an exploration), selectors with braces. Texts taken from the site never become template
+ * placeholders: braces are replaced in texts, and a selector with braces is never written, so every draft validates.
+ *
+ * Objects are named by what the form creates: its action path's last segment (`/company/departments` ->
+ * `departments`, `/tickets/new` -> `tickets`), and an object page by the segment before its id (`/tickets/{id}`).
+ * A create form on an object page (a comment on `/tickets/{id}`) first needs that object created.
  */
 internal class ScenarioComposer(
     private val model: SiteModel,
@@ -59,17 +64,28 @@ internal class ScenarioComposer(
         ) : Outcome
     }
 
-    /** A step that creates objects of a resource, and what the others need to refer to them. */
+    /**
+     * A step that creates objects of a resource, what it needs first, and what the others need to refer to them.
+     * [page] is the address the creating step opens (a template when it is an object's page).
+     */
     private data class Creator(
         val stepId: String,
         val event: String,
         val marker: String,
-    )
+        val prerequisites: List<String>,
+        val page: String,
+    ) {
+        /** The steps that bring such an object into being, in order. */
+        val steps: List<String> get() = prerequisites + stepId
+    }
 
     private val steps = mutableListOf<ScenarioStep>()
     private val stepIds = HashSet<String>()
     private val creators = LinkedHashMap<String, Creator>()
     private val creatorsByResource = LinkedHashMap<String, Creator>()
+
+    /** Actions whose creator is being composed right now: a create form that needs its own kind of object first fails. */
+    private val composing = HashSet<String>()
     val idSources = LinkedHashMap<String, IdSource>()
 
     val mainSteps: List<ScenarioStep> get() = steps.toList()
@@ -127,28 +143,40 @@ internal class ScenarioComposer(
             return Outcome.Skipped("sign-up and sign-in are done by the setup run functions of every generated campaign")
         }
         val role = actorRole(action) ?: return noRole(action)
-        if (action.kind == ActionKind.CREATE) return Outcome.Covered(listOf(creator(action, page, role).stepId))
+        if (action.kind == ActionKind.CREATE) {
+            val creator = creator(action, page, role) ?: return noCreator(action, page)
+            return Outcome.Covered(creator.steps)
+        }
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
         val id = stepId(action, "happy")
         steps += step(id, StepPhase.MAIN, single(role), StepAction.Do("$open səhifəsini aç və '${site(action.name)}' əməliyyatını icra et"))
         return Outcome.Covered(prerequisites + id)
     }
 
+    /**
+     * Live delivery is only visible on a page that is open when the object is created, and the runner checks
+     * `visible_text` of a `wait_for` step against the creation time (t0 + within), running steps in order. So the
+     * receivers open the creator's page in a step right before the creation, and the check follows right after it:
+     * a check placed after other steps would find its window already over.
+     */
     private fun realtime(
         action: ActionModel,
         page: PageModel,
     ): Outcome {
         val role = actorRole(action) ?: return noRole(action)
-        val creator = creator(action, page, role)
         val seenBy = campaignRoles(action.trial?.seenLiveBy.orEmpty()).filter { it != role }
         val receivers = seenBy.ifEmpty { PREFERENCE.filter { it != role && settings.team.count(it) > 0 } }
         if (receivers.isEmpty()) return Outcome.Skipped("the generated team has no other role to receive it")
+        val creator = creator(action, page, role) ?: return noCreator(action, page)
+        val actor = receivers.joinToString(" | ", transform = ::everyone)
+        val watchId = stepId(action, "watch")
         val id = stepId(action, "realtime")
-        steps +=
+        val watch = step(watchId, StepPhase.MAIN, actor, StepAction.Do("${creator.page} səhifəsini aç və orada qal"))
+        val check =
             step(
                 id = id,
                 phase = StepPhase.MAIN,
-                actor = receivers.joinToString(" | ", transform = ::everyone),
+                actor = actor,
                 action = StepAction.None,
                 waitFor = WaitForSpec(creator.event, settings.waitTimeout),
                 assertions =
@@ -157,7 +185,10 @@ internal class ScenarioComposer(
                         AssertionSpec.LatencyMax(settings.maxLatency),
                     ),
             )
-        return Outcome.Covered(listOf(creator.stepId, id))
+        val at = steps.indexOfFirst { it.id == creator.stepId }
+        steps.add(at + 1, check)
+        steps.add(at, watch)
+        return Outcome.Covered(creator.prerequisites + listOf(watchId, creator.stepId, id))
     }
 
     private fun permission(
@@ -169,6 +200,7 @@ internal class ScenarioComposer(
                 ?: return Outcome.Skipped(
                     "no campaign role was seen without '${site(action.name)}'; tell Pətək which role must not use it",
                 )
+        if (!literal(action.selector)) return braces(action.selector)
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
         val assertions = mutableListOf<AssertionSpec>(AssertionSpec.NotVisible(text = null, selector = action.selector))
         httpCheck(action, page)?.let { assertions += it }
@@ -224,6 +256,8 @@ internal class ScenarioComposer(
                 ?: return Outcome.Skipped(
                     "no list item ('<name>-item' test id) was observed on ${page.urlPattern} to count the created objects",
                 )
+        if (!literal(item)) return braces(Selectors.testId(item))
+        val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
         val marker = "Pətək təkrar ${Slugs.of(action.id)}"
         val id = stepId(action, "idempotency")
         steps +=
@@ -233,13 +267,11 @@ internal class ScenarioComposer(
                 actor = single(role),
                 action =
                     StepAction.Do(
-                        "${path(
-                            page,
-                        )} səhifəsini aç, mətn sahələrinə '$marker' yaz və '${site(action.name)}' düyməsini tez-tez iki dəfə sıx",
+                        "$open səhifəsini aç, mətn sahələrinə '$marker' yaz və '${site(action.name)}' düyməsini tez-tez iki dəfə sıx",
                     ),
                 assertions = listOf(AssertionSpec.Count("${Selectors.testId(item)}:has-text(\"$marker\")", 1)),
             )
-        return Outcome.Covered(listOf(id))
+        return Outcome.Covered(prerequisites + id)
     }
 
     private fun boundary(action: ActionModel): Outcome =
@@ -252,68 +284,86 @@ internal class ScenarioComposer(
             )
         }
 
-    /** The step that creates an object with [action] (made once per action; the first per resource is its creator). */
+    /**
+     * The step that creates an object with [action] (made once per action; the first per resource is its creator),
+     * after the steps that create the object its page shows, if any. Null when that object cannot be created.
+     */
     private fun creator(
         action: ActionModel,
         page: PageModel,
         role: Role,
-    ): Creator {
+    ): Creator? {
         creators[action.id]?.let { return it }
-        val resource = resourceOf(page)
-        val event = Slugs.firstFree(Slugs.identifier(resource, "item") + "_created", "_") { it !in idSources && it !in usedEvents() }
-        val marker = "Pətək yoxlaması ${Slugs.of(action.id)}"
-        val assertions = mutableListOf<AssertionSpec>(AssertionSpec.VisibleText(marker, settings.visibleWithin))
-        val idSource =
-            if (testApi) {
-                idSources[event] = IdSource.OracleField("/test/$resource/latest?by={self.email}", "id")
-                assertions += AssertionSpec.Oracle("/test/$resource/{last_id}", field = null, equals = null, contains = marker)
-                null
-            } else {
-                action.trial
-                    ?.urlPatternAfter
-                    ?.let(::urlRegexOf)
-                    ?.let(IdSource::UrlRegex)
+        if (!composing.add(action.id)) return null
+        try {
+            val (open, prerequisites) = objectPage(page) ?: return null
+            val resource = createdResource(action, page)
+            val event = Slugs.firstFree(Slugs.identifier(resource, "item") + "_created", "_") { it !in idSources && it !in usedEvents() }
+            val marker = "Pətək yoxlaması ${Slugs.of(action.id)}"
+            val assertions = mutableListOf<AssertionSpec>(AssertionSpec.VisibleText(marker, settings.visibleWithin))
+            val idSource =
+                if (testApi && resource in settings.oracleResources) {
+                    idSources[event] = IdSource.OracleField("/test/$resource/latest?by={self.email}", "id")
+                    assertions += AssertionSpec.Oracle("/test/$resource/{last_id}", field = null, equals = null, contains = marker)
+                    null
+                } else {
+                    action.trial
+                        ?.urlPatternAfter
+                        ?.let(::urlRegexOf)
+                        ?.let(IdSource::UrlRegex)
+                }
+            val id = stepId(action, "happy")
+            steps +=
+                step(
+                    id = id,
+                    phase = StepPhase.MAIN,
+                    actor = single(role),
+                    action =
+                        StepAction.Do(
+                            "$open səhifəsini aç və '${site(action.name)}' ilə yeni qeyd yarat; mətn sahələrinə '$marker' yaz",
+                        ),
+                    emits = EmitSpec(event, idSource),
+                    assertions = assertions,
+                )
+            return Creator(id, event, marker, prerequisites, open).also {
+                creators[action.id] = it
+                creatorsByResource.putIfAbsent(resource, it)
             }
-        val id = stepId(action, "happy")
-        steps +=
-            step(
-                id = id,
-                phase = StepPhase.MAIN,
-                actor = single(role),
-                action =
-                    StepAction.Do(
-                        "${path(page)} səhifəsini aç və '${site(action.name)}' ilə yeni qeyd yarat; mətn sahələrinə '$marker' yaz",
-                    ),
-                emits = EmitSpec(event, idSource),
-                assertions = assertions,
-            )
-        return Creator(id, event, marker).also {
-            creators[action.id] = it
-            creatorsByResource.putIfAbsent(resource, it)
+        } finally {
+            composing.remove(action.id)
         }
     }
 
     /**
      * Where a step about [page] opens it: the page itself, or, when the page shows one object (`/tickets/{id}`), that
-     * object created earlier in the draft, e.g. `/tickets/{event.tickets_created.id}`; the creator step comes first.
-     * Null when the page needs an object that no observed action creates.
+     * object created earlier in the draft, e.g. `/tickets/{event.tickets_created.id}`, after the steps creating it.
+     * Null when the page needs an object that no observed action creates, or more than one object (only one can be
+     * referred to).
      */
-    private fun objectPage(page: PageModel): Pair<String, List<String>>? {
-        if (!UrlPatterns.hasId(page.urlPattern)) return page.urlPattern to emptyList()
-        val creator = creatorFor(resourceOf(page)) ?: return null
-        return withObject(page.urlPattern, creator.event) to listOf(creator.stepId)
-    }
+    private fun objectPage(page: PageModel): Pair<String, List<String>>? =
+        when (page.urlPattern.split('/').count { it == UrlPatterns.ID }) {
+            0 -> page.urlPattern to emptyList()
+            1 -> creatorFor(objectOf(page.urlPattern))?.let { withObject(page.urlPattern, it.event) to it.steps }
+            else -> null
+        }
 
     private fun creatorFor(resource: String): Creator? {
         creatorsByResource[resource]?.let { return it }
-        val action =
-            model.actions.firstOrNull { candidate ->
-                candidate.kind == ActionKind.CREATE && model.page(candidate.pageId)?.let(::resourceOf) == resource &&
-                    actorRole(candidate) != null
-            } ?: return null
-        val page = model.page(action.pageId) ?: return null
-        return creator(action, page, checkNotNull(actorRole(action)))
+        for (candidate in model.actions) {
+            if (candidate.kind != ActionKind.CREATE) continue
+            val role = actorRole(candidate) ?: continue
+            val page = model.page(candidate.pageId) ?: continue
+            if (createdResource(candidate, page) != resource) continue
+            creator(candidate, page, role)?.let { return it }
+        }
+        return null
     }
+
+    /** What [action] creates: named by its form's action path when it has one, else by its page. */
+    private fun createdResource(
+        action: ActionModel,
+        page: PageModel,
+    ): String = collectionOf(action.httpPath ?: page.urlPattern)
 
     /** `http_status` for a role that must be refused: the action's form path, with the created object when it needs one. */
     private fun httpCheck(
@@ -325,7 +375,7 @@ internal class ScenarioComposer(
         val resolved =
             when (path.split('/').count { it == UrlPatterns.ID }) {
                 0 -> path
-                1 -> creatorFor(resourceOf(page))?.let { withObject(path, it.event) } ?: return null
+                1 -> creatorFor(objectOf(path))?.let { withObject(path, it.event) } ?: return null
                 else -> return null
             }
         return AssertionSpec.HttpStatus(resolved, method, settings.forbiddenStatus)
@@ -345,10 +395,28 @@ internal class ScenarioComposer(
 
     private fun escapeRegex(text: String): String = text.map { if (it in REGEX_META) "\\$it" else "$it" }.joinToString("")
 
-    private fun resourceOf(page: PageModel): String =
-        UrlPatterns.resource(page.urlPattern)?.let { Slugs.of(it) }?.ifEmpty { null } ?: "items"
+    /** The collection a pattern lists or posts to: its last segment that is neither an id nor a verb. */
+    private fun collectionOf(pattern: String): String =
+        pattern
+            .split('/')
+            .lastOrNull { it.isNotEmpty() && it != UrlPatterns.ID && Keywords.fold(it) !in VERB_SEGMENTS }
+            .let(::resourceName)
 
-    private fun path(page: PageModel): String = UrlPatterns.beforeFirstId(page.urlPattern)
+    /** The object a pattern with ids shows or acts on: the segment right before its last id (`/tickets/{id}/approve`). */
+    private fun objectOf(pattern: String): String {
+        val segments = pattern.split('/').filter { it.isNotEmpty() }
+        val lastId = segments.lastIndexOf(UrlPatterns.ID)
+        if (lastId < 0) return collectionOf(pattern)
+        return resourceName(segments.take(lastId).lastOrNull { it != UrlPatterns.ID })
+    }
+
+    private fun resourceName(segment: String?): String = segment?.let { Slugs.of(it) }?.ifEmpty { null } ?: "items"
+
+    /** Campaign templates read braces as placeholders: a selector with braces would make the whole draft invalid. */
+    private fun literal(selector: String): Boolean = '{' !in selector && '}' !in selector
+
+    private fun braces(selector: String): Outcome =
+        Outcome.Skipped("its selector ${site(selector)} contains braces, which campaign templates would read as a placeholder")
 
     private fun actorRole(action: ActionModel): Role? = campaignRoles(action.allowedRoles).firstOrNull { settings.team.count(it) > 0 }
 
@@ -371,7 +439,13 @@ internal class ScenarioComposer(
         action: ActionModel,
         page: PageModel,
     ): Outcome =
-        Outcome.Skipped("'${site(action.name)}' works on one object of ${page.urlPattern}, but no observed action creates such an object")
+        if (page.urlPattern.split('/').count { it == UrlPatterns.ID } > 1) {
+            Outcome.Skipped("'${site(action.name)}' works on nested objects of ${page.urlPattern}; a draft can refer to one object only")
+        } else {
+            Outcome.Skipped(
+                "'${site(action.name)}' works on one object of ${page.urlPattern}, but no observed action creates such an object",
+            )
+        }
 
     private fun stepId(
         action: ActionModel,
@@ -436,5 +510,8 @@ internal class ScenarioComposer(
         const val ITEM_SUFFIX = "-item"
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
+
+        /** Path segments that name what is done, not what it is done to (`/tickets/new`, `/tickets/{id}/edit`). */
+        val VERB_SEGMENTS = setOf("new", "create", "add", "edit", "update", "yeni", "yarat", "elave", "redakte")
     }
 }

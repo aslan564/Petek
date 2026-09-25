@@ -19,8 +19,14 @@ import az.petek.explorer.domain.Provenance
 import az.petek.explorer.domain.Severity
 import az.petek.explorer.domain.SiteModelAccumulator
 import az.petek.explorer.domain.SiteOrigin
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
-/** Records findings once each (per kind and page, or per broken address), stores them and announces them. */
+/**
+ * Records findings once each (per kind and page, or per broken address), stores them and announces them. Storing and
+ * remembering a finding happen together or not at all, also when the exploration is cancelled meanwhile, so the
+ * result's findings always equal the stored ones.
+ */
 internal class FindingRecorder(
     private val explorationId: ExplorationId,
     private val store: ExplorationFindings,
@@ -45,8 +51,10 @@ internal class FindingRecorder(
     ): ExplorationFinding? {
         if (!keys.add(key)) return null
         val finding = ExplorationFinding(ids.findingId(), kind, severity, pageUrl, detail, role, evidence.distinct())
-        store.saveFinding(explorationId, finding)
-        recorded += finding
+        withContext(NonCancellable) {
+            store.saveFinding(explorationId, finding)
+            recorded += finding
+        }
         emitter.emit { ExplorationEvent.FindingRecorded(it, finding) }
         return finding
     }

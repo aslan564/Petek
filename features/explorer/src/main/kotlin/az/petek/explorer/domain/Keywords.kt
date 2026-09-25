@@ -1,17 +1,21 @@
 package az.petek.explorer.domain
 
+import java.text.Normalizer
 import java.util.Locale
 
 /**
  * Word matching shared by the explorer's rules (link safety, form classification, instruction grounding).
  * Text is split into lower-case words of letters and digits (Azerbaijani letters included). Two words match when one
  * starts with the other and the shorter has at least [MIN_STEM] characters, so `ticket` matches `tickets` and `elan`
- * matches `elanlar` without a stemmer.
+ * matches `elanlar` without a stemmer. Matching compares [fold]ed words, so `ÇIXIŞ`, `Çıxış` and `cixis` are one word
+ * (upper-case Azerbaijani text lower-cases to dotted `i`, and URLs often carry the ASCII spelling).
  */
 object Keywords {
     const val MIN_STEM = 3
 
-    private val SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
+    /** Combining marks belong to their word (`İ` lower-cases to `i` + U+0307), so they never split one. */
+    private val SEPARATORS = Regex("[^\\p{L}\\p{M}\\p{N}]+")
+    private val MARKS = Regex("\\p{M}+")
 
     /** Words that carry no meaning for grounding, in English and Azerbaijani. */
     private val STOP_WORDS =
@@ -64,12 +68,20 @@ object Keywords {
     fun of(text: String?): Set<String> =
         if (text == null) emptySet() else words(text).filter { it.length >= MIN_STEM && it !in STOP_WORDS }.toCollection(LinkedHashSet())
 
+    /** [word] lower-cased without diacritics, `ı` as `i` and `ə` as `e`: `Çıxış` -> `cixis`, `ƏLAVƏ` -> `elave`. */
+    fun fold(word: String): String {
+        val lower = word.lowercase(Locale.ROOT).replace('ı', 'i').replace('ə', 'e')
+        return MARKS.replace(Normalizer.normalize(lower, Normalizer.Form.NFD), "")
+    }
+
     fun matches(
         a: String,
         b: String,
     ): Boolean {
-        val shorter = if (a.length <= b.length) a else b
-        val longer = if (a.length <= b.length) b else a
+        val first = fold(a)
+        val second = fold(b)
+        val shorter = if (first.length <= second.length) first else second
+        val longer = if (first.length <= second.length) second else first
         return shorter.length >= MIN_STEM && longer.startsWith(shorter)
     }
 
@@ -90,7 +102,20 @@ object Keywords {
     fun containsStem(
         text: String,
         stems: Collection<String>,
-    ): Boolean = words(text).any { word -> stems.any { word == it || (it.length >= MIN_PREFIX_STEM && word.startsWith(it)) } }
+    ): Boolean {
+        val folded = stems.map(::fold)
+        return words(text).map(::fold).any { word -> folded.any { word == it || (it.length >= MIN_PREFIX_STEM && word.startsWith(it)) } }
+    }
+
+    /** True when the words of [phrase] occur in [text] one right after the other (`log in`, `daxil ol`), folded. */
+    fun containsPhrase(
+        text: String,
+        phrase: String,
+    ): Boolean {
+        val wanted = words(phrase).map(::fold)
+        if (wanted.isEmpty()) return false
+        return words(text).map(::fold).windowed(wanted.size).any { it == wanted }
+    }
 
     const val MIN_PREFIX_STEM = 5
 }

@@ -103,4 +103,26 @@ class HtmlScannerTest {
         form.fields.single().name shouldBe "a"
         form.buttons.single().text shouldBe "Ok"
     }
+
+    @Test
+    fun `hidden method overrides and the submit button's own action and method are kept`() {
+        val html =
+            """
+            <form action="/tickets/t1" method="post">
+              <input type="hidden" name="_method" value=" delete ">
+              <input type="hidden" name="csrf" value="token">
+              <button formaction="https://other.test/x" formmethod="get">Göndər</button>
+            </form>
+            <form action="/notes" method="post"><input type="hidden" name="other" value="put"><button>OK</button></form>
+            """.trimIndent()
+
+        val (first, second) = HtmlScanner.scan(html).forms
+
+        first.methodOverride shouldBe "DELETE"
+        first.fields shouldHaveSize 0
+        first.buttons.single().formAction shouldBe "https://other.test/x"
+        first.buttons.single().formMethod shouldBe "GET"
+        second.methodOverride shouldBe null
+        second.buttons.single().formAction shouldBe null
+    }
 }

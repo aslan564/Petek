@@ -154,13 +154,7 @@ internal class CrawlPass(
             }
         val finalUrl = currentUrl() ?: link.url
         if (!context.origin.contains(finalUrl)) {
-            context.raiseUnknown(
-                "Opening $pattern sends the browser to another site (${finalUrl.host}). Is that expected?",
-                "Seen as $role; the explorer does not follow other sites.",
-                null,
-                Provenance.OBSERVED,
-                emptyList(),
-            )
+            leftTheSite(pattern, finalUrl)
             return
         }
         val finalPattern = UrlPatterns.of(finalUrl)
@@ -212,6 +206,20 @@ internal class CrawlPass(
         return true
     }
 
+    /** The browser ended up on another site (a redirect, a meta refresh or a script): asked, never explored. */
+    private suspend fun leftTheSite(
+        pattern: String,
+        landed: URI,
+    ) {
+        context.raiseUnknown(
+            "Opening $pattern sends the browser to another site (${landed.host ?: landed.scheme}). Is that expected?",
+            "Seen as $role; the explorer does not follow other sites.",
+            null,
+            Provenance.OBSERVED,
+            emptyList(),
+        )
+    }
+
     private suspend fun learn(
         url: URI,
         pattern: String,
@@ -221,6 +229,17 @@ internal class CrawlPass(
     ) {
         val captured = context.capture.capture(session, role)
         val snapshot = captured.snapshot
+        // The page may have moved on after its address was read (a delayed meta refresh or script): what another
+        // site shows is never learned, never shown to the LLM and never followed.
+        val shownAt = runCatching { URI(snapshot.url) }.getOrNull()
+        if (shownAt != null && shownAt.isAbsolute && !context.origin.contains(shownAt)) {
+            if (shownAt.scheme.lowercase() in WEB_SCHEMES) {
+                leftTheSite(pattern, shownAt)
+            } else {
+                context.notes += "$role: $pattern could not be read: the browser shows ${shownAt.scheme}:"
+            }
+            return
+        }
         val facts = PageHeuristics.inspect(snapshot, captured.document, url)
         val analysis = context.analyst.analyse(snapshot, pattern, viewer, context.request.grounding, facts.forms)
         val evidence = captured.evidence
@@ -415,17 +434,20 @@ internal class CrawlPass(
         )
     }
 
-    /** GET without following redirects, with this viewpoint's cookies; null when the request itself failed. */
+    /**
+     * GET without following redirects, with this viewpoint's cookies; null when the request itself failed. The full
+     * address is sent (and checked by the read-only session), so a caller's session opened with another base URL can
+     * never be probed off the target. Logs show the address without its query, which may carry tokens.
+     */
     private suspend fun probe(url: URI): HttpProbeResult? {
         if (url in probes) return probes[url]
-        val path = url.rawPath.orEmpty().ifEmpty { "/" } + (url.rawQuery?.let { "?$it" } ?: "")
         val answer =
             try {
-                session.request("GET", path)
+                session.request("GET", url.toString())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: BrowserActionException) {
-                logger.debug { "GET $path as $role failed: ${e.message}" }
+                logger.debug { "GET ${UrlPatterns.display(url)} as $role failed: ${e.message}" }
                 null
             }
         probes[url] = answer
@@ -444,6 +466,7 @@ internal class CrawlPass(
     private fun looksLikeSignIn(pattern: String): Boolean = Keywords.containsStem(pattern, SIGN_IN_WORDS)
 
     private companion object {
+        val WEB_SCHEMES = setOf("http", "https")
         val SIGN_IN_WORDS = setOf("login", "signin", "sign", "auth", "daxil")
 
         /** How the browser adapter labels each transport in its details. */

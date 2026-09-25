@@ -11,8 +11,8 @@ class CompareExplorationsUseCase(
 ) {
     /**
      * The diff between the two newest complete model versions of [target] (partial models of explorations that timed
-     * out, were cancelled or failed are skipped: a page they did not reach is not a removed page); null while fewer
-     * than two complete versions exist.
+     * out, were cancelled, failed or stopped at the page budget are skipped: a page they did not reach is not a
+     * removed page); null while fewer than two complete versions exist.
      */
     suspend fun latest(target: URI): SiteModelDiff? {
         val complete = mutableListOf<SiteModel>()

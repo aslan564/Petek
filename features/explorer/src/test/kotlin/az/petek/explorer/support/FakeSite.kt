@@ -37,6 +37,7 @@ class FakeSite(
     private val pages = HashMap<Pair<String, String?>, Page>()
     private val redirects = HashMap<Pair<String, String?>, String>()
     private val statuses = HashMap<Pair<String, String?>, Int>()
+    private val laterRedirects = HashMap<String, String>()
     val sessions = CopyOnWriteArrayList<Session>()
 
     /** Selector of a submit button -> what submitting it creates: the page path it lands on, and whether others see it live. */
@@ -74,6 +75,17 @@ class FakeSite(
         view: String? = null,
     ) {
         statuses[path to view] = status
+    }
+
+    /**
+     * The page at [from] moves the browser to [to] only after it loaded (a delayed meta refresh or a script): the
+     * address read right after the navigation is still [from], the first snapshot already shows [to].
+     */
+    fun laterRedirect(
+        from: String,
+        to: String,
+    ) {
+        laterRedirects[from] = to
     }
 
     fun session(view: String = "anonymous"): Session = Session(view).also { sessions += it }
@@ -122,6 +134,7 @@ class FakeSite(
         private fun currentPage(): Page? = lookup(pages, pathOf(current), view)
 
         override suspend fun snapshot(): PageSnapshot {
+            laterRedirects[pathOf(current)]?.takeIf { current.host == base.host }?.let { current = resolve(it) }
             val page = currentPage()
             val text = (listOf(page?.text ?: "Səhifə tapılmadı.") + liveTexts).joinToString("\n")
             return PageSnapshot(current.toString(), page?.title ?: "Not found", page?.elements.orEmpty(), text)
@@ -318,10 +331,14 @@ class FakeSite(
             fun submit(
                 text: String,
                 testId: String? = null,
+                formAction: String? = null,
+                formMethod: String? = null,
             ) {
                 val ref = ref("button", text, "button", testId)
                 lines += text
-                body.append("<button type=\"submit\"${attrs(ref, testId)}>${escape(text)}</button>")
+                val overrides =
+                    (formAction?.let { " formaction=\"${escape(it)}\"" } ?: "") + (formMethod?.let { " formmethod=\"$it\"" } ?: "")
+                body.append("<button type=\"submit\"${attrs(ref, testId)}$overrides>${escape(text)}</button>")
             }
         }
 

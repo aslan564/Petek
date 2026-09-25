@@ -48,7 +48,9 @@ object TargetKey {
 /**
  * Generalises page addresses so one kind of page is one entry of the model: `/tickets/t17` and `/tickets/t18` are both
  * `/tickets/{id}`. A path segment counts as an id when it is a number, a UUID, a long hex string, a short prefixed
- * counter such as `t17`/`a3` (never an API version like `v2`) or a long random token (letters and digits mixed).
+ * counter such as `t17`/`a3` (never an API version like `v2`), a date (`2026-09-25`, `2026-09`), a numbered slug
+ * (`123-noutbuk-islemir`) or a long random token (letters and digits mixed). Without the dates and numbered slugs a
+ * calendar or a list of slugged items would spend the whole page budget on copies of one page.
  * Query strings and fragments are dropped: they select data, not a different kind of page.
  */
 object UrlPatterns {
@@ -61,11 +63,14 @@ object UrlPatterns {
     private val API_VERSION = Regex("[vV]\\d+")
     private val TOKEN = Regex("[A-Za-z0-9_-]{20,}")
     private val PREFIXED_ID = Regex("[A-Za-z]{2,6}_[0-9A-Za-z]{8,}")
+    private val DATE = Regex("\\d{4}-\\d{2}(-\\d{2})?")
+    private val NUMBERED_SLUG = Regex("\\d+-[\\p{L}\\p{N}%-]*[\\p{L}%][\\p{L}\\p{N}%-]*")
 
     fun isIdSegment(segment: String): Boolean =
         when {
             segment.isEmpty() -> false
             NUMBER.matches(segment) || UUID.matches(segment) || HEX.matches(segment) -> true
+            DATE.matches(segment) || NUMBERED_SLUG.matches(segment) -> true
             API_VERSION.matches(segment) -> false
             PREFIXED_COUNTER.matches(segment) || PREFIXED_ID.matches(segment) -> true
             TOKEN.matches(segment) -> segment.any(Char::isDigit) && segment.any(Char::isLetter)

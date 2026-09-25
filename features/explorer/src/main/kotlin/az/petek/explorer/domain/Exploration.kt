@@ -42,7 +42,10 @@ enum class ExplorationPhase {
     /** Crawl again with each logged-in session the caller passes, to compare what each role can reach and do. */
     ROLE_BASED,
 
-    /** Submit every observed CREATE form once with harmless data; only with `allowWrites` on a confirmed test target. */
+    /**
+     * Submit every observed CREATE form once with harmless data; only with `allowWrites` on a confirmed test target,
+     * and only as a logged-in role (a visitor's writes are not part of the test company that teardown removes).
+     */
     TRIAL_TOUCH,
 }
 

@@ -44,16 +44,18 @@ class ExplorationRefusedException(
  * - **ROLE_BASED** crawls again with each logged-in session in `roleSessions` (role name -> session; the caller logs
  *   them in and keeps owning them). Comparing what each role reached and was offered fills `reachableBy` and infers
  *   `forbiddenRoles`.
- * - **TRIAL_TOUCH** runs only with [ExplorationRequest.allowWrites] *and* a [TestTargetCheck] confirmation; otherwise
- *   it is skipped with the reason. It is the only phase that submits anything (see [TrialToucher]).
+ * - **TRIAL_TOUCH** runs only with [ExplorationRequest.allowWrites], a [TestTargetCheck] confirmation *and* logged-in
+ *   role sessions (only they write into the test company that teardown removes); otherwise it is skipped with the
+ *   reason. It is the only phase that submits anything (see [TrialToucher]); the anonymous session only watches.
  *
  * Every crawl looks through a [ReadOnlyBrowserSession], so outside TRIAL_TOUCH the explorer cannot click, type or
  * leave the target's origin. The target must pass [targetPolicy] first, else [ExplorationRefusedException] is thrown
  * and nothing is stored. Events go to the repository and then to the observer as they happen. The time budget is
  * honoured by the harness clock between pages and by a hard timeout; whatever the ending (done, timeout,
  * cancellation, error), the model and summary are saved: model version = previous version for the same target + 1,
- * marked [SiteModel.partial] unless the exploration completed. A cancelled exploration is saved as CANCELLED and the
- * cancellation is rethrown.
+ * marked [SiteModel.partial] unless the exploration completed without leaving pages unvisited at the page budget
+ * (so a version diff never reports a page it simply did not reach as removed). A cancelled exploration is saved as
+ * CANCELLED and the cancellation is rethrown.
  */
 class ExploreSiteUseCase(
     private val sessions: BrowserSessionFactory,
@@ -134,7 +136,7 @@ class ExploreSiteUseCase(
         status: ExplorationStatus,
         failure: Exception?,
     ): ExplorationResult {
-        val model = saveModel(context, partial = status != ExplorationStatus.COMPLETED)
+        val model = saveModel(context, partial = status != ExplorationStatus.COMPLETED || context.pageBudgetReached)
         val summary = context.summary(status)
         val endedAt = clock.now().wall
         repository.finish(context.id, status, endedAt, summary, model.version)
@@ -206,12 +208,19 @@ class ExploreSiteUseCase(
 
         private suspend fun trialTouch() {
             if (!context.request.allowWrites) return skipped(ExplorationPhase.TRIAL_TOUCH, "allowWrites is false")
-            val writable =
+            // Only a logged-in role writes into the test company, which teardown removes as a whole; what a visitor
+            // creates (a contact or demo request) belongs to no company and would stay on the target for good.
+            if (roleSessions.isEmpty()) {
+                return skipped(
+                    ExplorationPhase.TRIAL_TOUCH,
+                    "no logged-in session was given; visitors' writes are not part of the test company and cannot be torn down",
+                )
+            }
+            val watchers =
                 buildMap {
                     putAll(roleSessions)
                     anonymousSession?.let { put(SiteModelAccumulator.ANONYMOUS, it) }
                 }
-            if (writable.isEmpty()) return skipped(ExplorationPhase.TRIAL_TOUCH, "no browser session is open to submit forms with")
             when (val check = testTargetCheck.check(context.request.target)) {
                 is TestTargetVerdict.Refused -> {
                     return skipped(ExplorationPhase.TRIAL_TOUCH, "the target is not confirmed as test data: ${check.reason}")
@@ -221,8 +230,8 @@ class ExploreSiteUseCase(
                     context.notes += "Trial touch allowed: ${check.evidence}"
                 }
             }
-            started(ExplorationPhase.TRIAL_TOUCH, writable.keys.sorted())
-            TrialToucher(context, writable, clock).run()
+            started(ExplorationPhase.TRIAL_TOUCH, roleSessions.keys.sorted())
+            TrialToucher(context, roleSessions, watchers, clock).run()
         }
 
         private suspend fun started(

@@ -7,8 +7,10 @@ import az.petek.explorer.domain.ExplorationEventLog
 import az.petek.explorer.domain.ExplorationId
 import az.petek.explorer.domain.ExplorationObserver
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 private val logger = KotlinLogging.logger {}
 
@@ -16,6 +18,10 @@ private val logger = KotlinLogging.logger {}
  * Numbers, stores and publishes the events of one exploration: store first (so a panel that replays the log never
  * misses what it was shown live), then notify the observer. Sequence numbers continue after [startAfter] without gaps,
  * also when several coroutines emit at once. A failing observer is logged and ignored.
+ *
+ * Storing is not cancellable: a store such as SQLite finishes its write on its own thread even when the caller is
+ * cancelled (the exploration's time budget, a stop from the panel), so a cancellation that arrived during the write
+ * would otherwise leave the counter behind the stored log and the closing event would reuse a stored number.
  */
 internal class ExplorationEmitter(
     private val explorationId: ExplorationId,
@@ -31,8 +37,10 @@ internal class ExplorationEmitter(
         lock
             .withLock {
                 val built = event(EventHeader(explorationId, seq + 1, clock.now().wall))
-                log.append(built)
-                seq = built.header.seq
+                withContext(NonCancellable) {
+                    log.append(built)
+                    seq = built.header.seq
+                }
                 built
             }.also(::notify)
 

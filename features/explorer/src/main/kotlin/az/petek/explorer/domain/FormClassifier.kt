@@ -1,9 +1,12 @@
 package az.petek.explorer.domain
 
 /**
- * Classifies a form (or a lone button) by code from its test ids, ids, names, button texts and action path, in English
- * and Azerbaijani. The rules favour caution: a form with editable fields is never taken for an approval (the e-mail
- * code form's button also says "Təsdiqlə"), and anything that looks like logging out is [ActionKind.OTHER].
+ * Classifies a form (or a lone button) by code from its test ids, ids, names, button texts, method and action path, in
+ * English and Azerbaijani. The rules favour caution, because [ActionKind.CREATE] is what the trial touch may submit:
+ * a form with editable fields is never taken for an approval (the e-mail code form's button also says "Təsdiqlə"),
+ * anything that looks like logging out or posts to another site is [ActionKind.OTHER], a form sent with the DELETE
+ * method is [ActionKind.DELETE], and sign-up and sign-in forms stay [ActionKind.REGISTER]/[ActionKind.LOGIN] also
+ * without a password field (magic links, invitation codes).
  */
 object FormClassifier {
     private val LOGOUT = setOf("logout", "logoff", "signout", "çıxış", "cixis")
@@ -50,6 +53,15 @@ object FormClassifier {
         )
     private val LOGIN = setOf("login", "signin", "daxil")
     private val REGISTER = setOf("register", "signup", "join", "invite", "qeydiyyat", "qoşul", "dəvət", "registration")
+
+    /**
+     * Sign-up and sign-in words that hold without a password field. Narrower than [REGISTER]/[LOGIN]: an admin's
+     * "invite" form creates an invitation, and `daxil et` (enter data) is not `daxil ol` (sign in).
+     */
+    private val PASSWORDLESS_REGISTER = setOf("register", "signup", "registration", "join", "qeydiyyat", "qoşul")
+    private val PASSWORDLESS_REGISTER_PHRASES = listOf("sign up")
+    private val PASSWORDLESS_LOGIN = setOf("login", "signin")
+    private val PASSWORDLESS_LOGIN_PHRASES = listOf("log in", "sign in", "daxil ol")
     private val VERIFY = setOf("verify", "verification", "code", "otp", "confirm", "təsdiq")
     private val SEARCH = setOf("search", "find", "filter", "query", "axtar", "axtarış")
     private val CODE_FIELDS = setOf("code", "otp", "token", "pin")
@@ -61,12 +73,22 @@ object FormClassifier {
         val purpose: String,
     )
 
+    /**
+     * [actionPattern] is the generalised same-site path the form is sent to; [offSite] says it is sent to another
+     * origin (then the form is [ActionKind.OTHER] whatever it says). [ScannedForm.method] is taken as the method that
+     * is really sent, `_method` overrides included.
+     */
     fun classify(
         form: ScannedForm,
         actionPattern: String?,
+        offSite: Boolean = false,
     ): Classification {
         val submit = form.buttons.firstOrNull { it.type == "submit" || it.type == "image" } ?: form.buttons.firstOrNull()
         val label = submit?.text?.takeIf { it.isNotBlank() }
+        if (offSite) {
+            val purpose = label?.let { "form '$it' sent to another site" } ?: "form sent to another site"
+            return Classification(ActionKind.OTHER, purpose)
+        }
         val words =
             listOfNotNull(form.testId, form.id, actionPattern, label, submit?.testId, submit?.id, submit?.name)
                 .joinToString(" ")
@@ -121,13 +143,15 @@ object FormClassifier {
         actionPattern: String?,
     ): ActionKind {
         if (Keywords.containsStem(words, LOGOUT)) return ActionKind.OTHER
-        if (Keywords.containsStem(words, DELETE)) return ActionKind.DELETE
+        if (Keywords.containsStem(words, DELETE) || form.method == "DELETE") return ActionKind.DELETE
         if (editable.isEmpty() || editable.all { it.tag == "select" }) {
             buttonOnlyKind(words, editable)?.let { return it }
         }
         return when {
             isVerification(words, editable) -> ActionKind.SUBMIT
             isSearch(words, editable, form) -> ActionKind.SUBMIT
+            isPasswordlessSignUp(words) -> ActionKind.REGISTER
+            isPasswordlessSignIn(words) -> ActionKind.LOGIN
             Keywords.containsStem(words, ASSIGN) -> ActionKind.ASSIGN
             Keywords.containsStem(words, REJECT) -> ActionKind.REJECT
             Keywords.containsStem(words, UPDATE) && actionPattern?.let(UrlPatterns::hasId) == true -> ActionKind.UPDATE
@@ -138,6 +162,12 @@ object FormClassifier {
             else -> ActionKind.SUBMIT
         }
     }
+
+    private fun isPasswordlessSignUp(words: String): Boolean =
+        Keywords.containsStem(words, PASSWORDLESS_REGISTER) || PASSWORDLESS_REGISTER_PHRASES.any { Keywords.containsPhrase(words, it) }
+
+    private fun isPasswordlessSignIn(words: String): Boolean =
+        Keywords.containsStem(words, PASSWORDLESS_LOGIN) || PASSWORDLESS_LOGIN_PHRASES.any { Keywords.containsPhrase(words, it) }
 
     /** Forms that are just a button (and maybe a choice): approve, reject, assign, a status change. */
     private fun buttonOnlyKind(

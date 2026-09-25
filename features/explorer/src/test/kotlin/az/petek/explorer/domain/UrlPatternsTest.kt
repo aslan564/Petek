@@ -18,6 +18,16 @@ class UrlPatternsTest {
     }
 
     @Test
+    fun `dates and numbered slugs are ids, so a calendar or a slugged list is one page`() {
+        UrlPatterns.of("/attendance/2026-09-25") shouldBe "/attendance/{id}"
+        UrlPatterns.of("/payroll/2026-09/employees") shouldBe "/payroll/{id}/employees"
+        UrlPatterns.of("/tickets/123-noutbuk-islemir") shouldBe "/tickets/{id}"
+        UrlPatterns.of("/tickets/124-%C3%A7ap-edilmir") shouldBe "/tickets/{id}"
+        UrlPatterns.of("/settings/2fa") shouldBe "/settings/2fa"
+        UrlPatterns.of("/pricing/2026") shouldBe "/pricing/{id}"
+    }
+
+    @Test
     fun `plain words, api versions and short slugs stay as they are`() {
         UrlPatterns.of("/api/v2/tickets") shouldBe "/api/v2/tickets"
         UrlPatterns.of("/company/departments") shouldBe "/company/departments"

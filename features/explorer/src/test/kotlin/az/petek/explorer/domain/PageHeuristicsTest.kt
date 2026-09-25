@@ -81,6 +81,102 @@ class PageHeuristicsTest {
     }
 
     @Test
+    fun `sign-up and sign-in forms without a password field are never taken for create forms`() {
+        val signUp =
+            inspect("https://site.test/signup") {
+                form("/signup") {
+                    field("Ad Soyad", "name")
+                    field("E-poçt", "email", type = "email")
+                    submit("Qeydiyyatdan keç")
+                }
+            }
+        val join =
+            inspect("https://site.test/join") {
+                form("/join") {
+                    field("Şirkət kodu", "code")
+                    field("Ad Soyad", "name")
+                    field("E-poçt", "email", type = "email")
+                    submit("Qoşul", testId = "join-submit")
+                }
+            }
+        val magicLink =
+            inspect("https://site.test/") {
+                form("/session") {
+                    field("E-poçt", "email", type = "email")
+                    submit("Daxil ol")
+                }
+            }
+        val enterData =
+            inspect("https://site.test/notes") {
+                form("/notes") {
+                    field("Qeyd", "note")
+                    submit("Məlumatı daxil et")
+                }
+            }
+
+        signUp.forms.single().kind shouldBe ActionKind.REGISTER
+        join.forms.single().kind shouldBe ActionKind.REGISTER
+        magicLink.forms.single().kind shouldBe ActionKind.LOGIN
+        // "daxil et" (enter data) is not "daxil ol" (sign in): a note form stays a create form.
+        enterData.forms.single().kind shouldBe ActionKind.CREATE
+    }
+
+    @Test
+    fun `a form sent to another site is never a create form, also when only its button says so`() {
+        val facts =
+            inspect("https://site.test/newsletter") {
+                form("https://mailer.example/subscribe") {
+                    field("E-poçt", "email", type = "email")
+                    submit("Əlavə et", testId = "newsletter-add")
+                }
+                form("/notes") {
+                    field("Qeyd", "note")
+                    submit("Yarat", testId = "note-create", formAction = "https://other.example/collect")
+                }
+                form("javascript:void(0)") {
+                    field("Başlıq", "title")
+                    submit("Yarat", testId = "spa-create")
+                }
+            }
+
+        facts.forms.map { it.kind } shouldContainExactly listOf(ActionKind.OTHER, ActionKind.OTHER, ActionKind.CREATE)
+        facts.forms.first().purpose shouldContain "another site"
+        facts.forms.first().actionPath shouldBe null
+        facts.actions.single { it.selector == "[data-testid=\"spa-create\"]" }.kind shouldBe ActionKind.CREATE
+    }
+
+    @Test
+    fun `what the submit button really sends decides the method and the kind`() {
+        val facts =
+            inspect("https://site.test/tickets/t1") {
+                form("/tickets/t1") {
+                    hidden("_method", "delete")
+                    field("Səbəb", "reason")
+                    submit("Tamamla", testId = "ticket-finish")
+                }
+                form("/tickets/t1/comments") {
+                    textarea("Şərh", "body")
+                    submit("Əlavə et", testId = "comment-add")
+                    submit("Hamısını sil", testId = "comment-purge", formAction = "/tickets/t1/comments/purge")
+                }
+                form("/notes") {
+                    hidden("_method", "PATCH")
+                    field("Qeyd", "note")
+                    submit("Yarat", testId = "note-send", formMethod = "post")
+                }
+            }
+
+        val finish = facts.forms[0]
+        finish.method shouldBe "DELETE"
+        finish.kind shouldBe ActionKind.DELETE
+        facts.actions.single { it.selector == "[data-testid=\"ticket-finish\"]" }.httpMethod shouldBe "DELETE"
+        // The first submit button is what submitting sends (Enter, the trial touch); a later button's formaction is not.
+        facts.forms[1].kind shouldBe ActionKind.CREATE
+        facts.forms[1].actionPath shouldBe "/tickets/{id}/comments"
+        facts.forms[2].method shouldBe "PATCH"
+    }
+
+    @Test
     fun `an e-mail code form is a verification, never an approval, although its button says Təsdiqlə`() {
         val facts =
             inspect("https://site.test/verify?email=a%40b.c") {

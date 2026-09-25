@@ -108,6 +108,17 @@ class ReadOnlyBrowserSessionTest {
         }
 
     @Test
+    fun `the address that was checked is exactly the address passed on`() =
+        runTest {
+            site.page("/tickets", "T")
+
+            session.navigate("  /tickets\n")
+            session.request("get", " /tickets ")
+
+            inner.actions shouldContainExactly listOf("navigate /tickets", "request GET /tickets")
+        }
+
+    @Test
     fun `the refusal does not depend on what the wrapped session would answer`() =
         runTest {
             inner.recorder.httpResponses["POST /x"] = HttpProbeResult(200, "")

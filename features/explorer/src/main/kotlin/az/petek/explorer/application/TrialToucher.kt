@@ -32,18 +32,24 @@ private val logger = KotlinLogging.logger {}
  * then stops. Only the explorer's use case starts it, and only with `allowWrites` on a target the [az.petek.explorer
  * .domain.TestTargetCheck] confirmed as test data. Rules that keep it harmless:
  *
- * - only forms classified CREATE, never login, sign-up, verification, approval or deletion forms, never a form with a
- *   password or file field, never a form whose address or button looks destructive;
- * - one submission per form, from a role that was offered it, on a page of the target's own origin;
+ * - only forms that code classified CREATE (an LLM's reading of a button never makes a form writable), never login,
+ *   sign-up, verification, approval or deletion forms, never a form sent to another site, never a form with a
+ *   password or file field, never a form whose page, address or button looks destructive;
+ * - one submission per form, from a logged-in role that was offered it (never as a visitor: only the test company's
+ *   data is torn down), on a page of the target's own origin; nothing is typed when the browser does not land on the
+ *   page the form was seen on (a redirect to the sign-in page, another site), because the same selectors could then
+ *   address another form;
  * - every text carries a unique marker (`Pətək sınaq …`) so the result can be recognised, and nothing is deleted
  *   afterwards (a test target is torn down as a whole).
  *
  * After submitting it looks at what happened: the marker on the submitter's page (accepted), an error-like message
- * (rejected), and whether the other roles' open pages showed the marker live within [ExplorerSettings.liveEffectTimeout].
+ * (rejected), and whether the other viewpoints' open pages ([watchers], the visitor included) showed the marker live
+ * within [ExplorerSettings.liveEffectTimeout].
  */
 internal class TrialToucher(
     private val context: ExplorationContext,
-    private val sessions: Map<String, BrowserSession>,
+    private val writers: Map<String, BrowserSession>,
+    private val watchers: Map<String, BrowserSession>,
     private val clock: HarnessClock,
 ) {
     private var touched = 0
@@ -55,12 +61,16 @@ internal class TrialToucher(
             if (context.deadlinePassed()) return
             val page = accumulator.pages().firstOrNull { it.id == action.pageId } ?: continue
             val form = page.forms.firstOrNull { it.submitSelector == action.selector } ?: continue
-            val refusal = refusal(action, form)
+            val refusal = refusal(action, page, form)
             if (refusal != null) {
                 context.notes += "Trial touch skipped '${action.name}' on ${page.urlPattern}: $refusal"
                 continue
             }
-            val role = action.allowedRoles.firstOrNull { it in sessions } ?: continue
+            val role = action.allowedRoles.firstOrNull { it in writers }
+            if (role == null) {
+                context.notes += "Trial touch skipped '${action.name}' on ${page.urlPattern}: no logged-in role given was offered it"
+                continue
+            }
             val url = accumulator.exampleUrl(page.urlPattern, role) ?: continue
             if (!context.origin.contains(url)) continue
             try {
@@ -77,11 +87,14 @@ internal class TrialToucher(
 
     private fun refusal(
         action: ActionModel,
+        page: PageModel,
         form: FormModel,
     ): String? =
         when {
+            form.kind != ActionKind.CREATE -> "code classified the form as ${form.kind}, not CREATE"
+            form.method.uppercase() in NEVER_SENT -> "the form is sent with ${form.method.uppercase()}"
             form.fields.any { it.type in NEVER_FILLED } -> "the form asks for a password or a file"
-            LinkPolicy.looksUnsafe(form.actionPath.orEmpty(), action.name, form.purpose) -> "the form looks destructive"
+            LinkPolicy.looksUnsafe(page.urlPattern, form.actionPath.orEmpty(), action.name, form.purpose) -> "the form looks destructive"
             form.fields.none { it.type !in SKIPPED_TYPES } -> "the form has no field to fill"
             else -> null
         }
@@ -93,9 +106,15 @@ internal class TrialToucher(
         role: String,
         url: URI,
     ) {
-        val session = sessions.getValue(role)
+        val session = writers.getValue(role)
         val marker = "Pətək sınaq ${context.id.value.takeLast(MARKER_ID_CHARS)}-${++touched}"
         session.navigate(url.toString())
+        val landed = addressOf(session)
+        if (landed == null || !context.origin.contains(landed) || UrlPatterns.of(landed) != page.urlPattern) {
+            val where = landed?.let { if (context.origin.contains(it)) UrlPatterns.of(it) else "another site" } ?: "an unknown address"
+            context.notes += "Trial touch skipped '${action.name}' on ${page.urlPattern}: the browser landed on $where"
+            return
+        }
         val before =
             session
                 .snapshot()
@@ -118,10 +137,10 @@ internal class TrialToucher(
                 messages.any { Keywords.containsStem(it, ERROR_WORDS) } -> TrialOutcome.REJECTED
                 else -> TrialOutcome.UNCLEAR
             }
-        val observers = sessions.filterKeys { it != role }
+        val observers = watchers.filterKeys { it != role }
         val seenLiveBy = if (accepted) watch(observers, marker) else emptySet()
         val evidence = listOfNotNull(context.capture.screenshot(session, role))
-        val urlAfter = runCatching { UrlPatterns.of(session.currentUrl()) }.getOrNull()
+        val urlAfter = addressOf(session)?.let { if (context.origin.contains(it)) UrlPatterns.of(it) else null }
         context.accumulator.recordTrial(action.id, TrialTouch(role, outcome, marker, messages, urlAfter, seenLiveBy, evidence))
         if (accepted && observers.isNotEmpty() && seenLiveBy.isEmpty()) {
             context.raiseUnknown(
@@ -135,6 +154,17 @@ internal class TrialToucher(
         }
         logger.info { "Trial touch of ${action.id} as $role: $outcome, seen live by $seenLiveBy" }
     }
+
+    /** Where [session] is now; null when that cannot be read. Cancellation is never swallowed. */
+    private suspend fun addressOf(session: BrowserSession): URI? =
+        try {
+            URI(session.currentUrl())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.debug { "Reading the address of a trial touch failed: ${e.message}" }
+            null
+        }
 
     private suspend fun fill(
         session: BrowserSession,
@@ -200,6 +230,7 @@ internal class TrialToucher(
 
     private companion object {
         val NEVER_FILLED = setOf("password", "file")
+        val NEVER_SENT = setOf("DELETE", "PUT", "PATCH")
         val SKIPPED_TYPES = setOf("checkbox", "radio", "hidden", "submit", "button", "reset", "image", "week")
         val ERROR_WORDS =
             setOf(

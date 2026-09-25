@@ -19,8 +19,8 @@ internal class ReadOnlyBrowserSession(
     private val origin: SiteOrigin,
 ) : BrowserSession by delegate {
     override suspend fun navigate(pathOrUrl: String) {
-        requireOnOrigin(pathOrUrl)
-        delegate.navigate(pathOrUrl)
+        // The address that was checked is exactly the one passed on.
+        delegate.navigate(requireOnOrigin(pathOrUrl))
     }
 
     override suspend fun request(
@@ -29,8 +29,7 @@ internal class ReadOnlyBrowserSession(
         body: String?,
     ): HttpProbeResult {
         if (!method.equals("GET", ignoreCase = true) || body != null) refuse("$method request")
-        requireOnOrigin(path)
-        return delegate.request("GET", path, null)
+        return delegate.request("GET", requireOnOrigin(path), null)
     }
 
     override suspend fun click(ref: Int) = refuse("click")
@@ -62,10 +61,12 @@ internal class ReadOnlyBrowserSession(
 
     override suspend fun close() = refuse("closing a session it does not own")
 
-    private fun requireOnOrigin(pathOrUrl: String) {
+    /** [pathOrUrl] trimmed when it is an address on [origin] (absolute, or a path starting with one `/`); else refused. */
+    private fun requireOnOrigin(pathOrUrl: String): String {
+        val address = pathOrUrl.trim()
         val uri =
             try {
-                URI(pathOrUrl.trim())
+                URI(address)
             } catch (_: URISyntaxException) {
                 refuse("opening an unparsable address")
             }
@@ -73,9 +74,10 @@ internal class ReadOnlyBrowserSession(
             if (uri.isAbsolute) {
                 origin.contains(uri)
             } else {
-                uri.scheme == null && uri.rawAuthority == null && pathOrUrl.trim().startsWith("/") && !pathOrUrl.trim().startsWith("//")
+                uri.scheme == null && uri.rawAuthority == null && address.startsWith("/") && !address.startsWith("//")
             }
         if (!onOrigin) refuse("leaving the target origin")
+        return address
     }
 
     private fun refuse(what: String): Nothing = throw IllegalStateException("The explorer is read-only here: $what is not allowed")

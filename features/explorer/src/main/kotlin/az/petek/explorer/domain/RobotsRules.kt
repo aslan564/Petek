@@ -37,7 +37,7 @@ class RobotsRules private constructor(
             agent: String = AGENT,
         ): RobotsRules {
             val groups = groups(text)
-            val own = groups.filter { group -> group.agents.any { it != "*" && agent.lowercase().contains(it) } }
+            val own = groups.filter { group -> group.agents.any { it.isNotEmpty() && it != "*" && agent.lowercase().contains(it) } }
             val chosen = own.ifEmpty { groups.filter { "*" in it.agents } }
             return RobotsRules(chosen.flatMap { it.rules })
         }
