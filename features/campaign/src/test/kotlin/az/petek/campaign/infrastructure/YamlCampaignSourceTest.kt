@@ -170,6 +170,13 @@ class YamlCampaignSourceTest {
         }
 
         @Test
+        fun `an omitted split still invites every manager`() {
+            registrationFor(managers = 5, employees = 1) shouldBe RegistrationQuota(invite = 5, companyCode = 1)
+            registrationFor(managers = 3, employees = 0) shouldBe RegistrationQuota(invite = 3, companyCode = 0)
+            registrationFor(managers = 4, employees = 4) shouldBe RegistrationQuota(invite = 4, companyCode = 4)
+        }
+
+        @Test
         fun `no non-admins means nobody joins`() {
             registrationFor(managers = 0, employees = 0) shouldBe RegistrationQuota(invite = 0, companyCode = 0)
         }

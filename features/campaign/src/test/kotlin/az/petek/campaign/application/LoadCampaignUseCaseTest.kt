@@ -90,6 +90,30 @@ class LoadCampaignUseCaseTest {
     }
 
     @Test
+    fun `a registration that lets managers join with the company code is rejected with its line`() {
+        val file =
+            write(
+                """
+                campaign:
+                  target: https://staging.kadrohr.test
+                  testers: 7
+                  seed: 1
+                  roles: {admin: 1, manager: 2, employee: 4}
+                  departments: [IT, HR]
+                  registration: {invite: 1, company_code: 5}
+                  budget: {max_steps_per_agent: 10, max_minutes: 5}
+                steps:
+                  - id: make
+                    actor: admin
+                    do: x
+                """,
+            )
+        val issue = shouldThrow<CampaignValidationException> { useCase().execute(file, KNOWN_RUN_FUNCTIONS) }.issues.single()
+        issue.line shouldBe 7
+        issue.message shouldContain "campaign.registration.invite is 1 but must be at least roles.manager (2)"
+    }
+
+    @Test
     fun `an endless wait and an off-target oracle path are rejected with their lines`() {
         val file =
             write(

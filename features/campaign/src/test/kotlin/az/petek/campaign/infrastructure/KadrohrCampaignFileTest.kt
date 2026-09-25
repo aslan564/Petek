@@ -42,6 +42,13 @@ class KadrohrCampaignFileTest {
     }
 
     @Test
+    fun `every manager can be invited, so no manager has to join with the company code`() {
+        val settings = campaign.settings
+        (settings.registration.invite >= settings.roles.manager) shouldBe true
+        settings.registration.invite + settings.registration.companyCode shouldBe settings.roles.manager + settings.roles.employee
+    }
+
+    @Test
     fun `settings are read as written`() {
         val settings = campaign.settings
         settings.name shouldBe "kadrohr-core"
@@ -66,7 +73,8 @@ class KadrohrCampaignFileTest {
 
     @Test
     fun `setup actions mix natural language and run functions`() {
-        step("owner_signup").action shouldBe StepAction.Do("Qeydiyyatdan keç, email kodunu təsdiqlə və 'Pətək Test MMC' adlı şirkət yarat")
+        step("owner_signup").action shouldBe
+            StepAction.Do("Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat")
         step("seed").action shouldBe StepAction.Run("seed_company")
         step("join").action shouldBe StepAction.Run("register_and_login")
         step("join").actors.selectors shouldContainExactly listOf(ActorSelector(Role.EMPLOYEE), ActorSelector(Role.MANAGER))
