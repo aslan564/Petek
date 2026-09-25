@@ -63,6 +63,8 @@ private val logger = KotlinLogging.logger {}
  * @param port the port to listen on; 0 picks a free one (see the URI [start] returns).
  * @param backend everything besides the live board; by default none (those screens then show that they are empty).
  * @param refreshInterval the fastest pace of the exploration stream (the board's is [LiveDashboard]'s own).
+ * @param defaultTarget the site the instruction screen's "Hədəf sayt" starts with (e.g. the configured `PETEK_TARGET`);
+ *   the owner may change it.
  */
 class DashboardServer(
     private val dashboard: LiveDashboard,
@@ -72,6 +74,7 @@ class DashboardServer(
     private val port: Int = 7070,
     private val backend: PanelBackend = UnavailablePanelBackend(),
     private val refreshInterval: Duration = 250.milliseconds,
+    defaultTarget: String? = null,
 ) : AutoCloseable {
     init {
         require(port in 0..MAX_PORT) { "port must be in 0..$MAX_PORT, was $port" }
@@ -79,7 +82,7 @@ class DashboardServer(
     }
 
     private val guard = RequestGuard(host)
-    private val page = DashboardPage(guard.token)
+    private val page = DashboardPage(guard.token, defaultTarget)
     private val lock = Any()
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
     private var address: URI? = null

@@ -98,6 +98,16 @@ class InMemoryEvidence :
 
     override suspend fun latest() = runList.maxByOrNull { it.startedAt }
 
+    /** Newest first; equal start times keep the later-created run first, like the SQLite store. */
+    override suspend fun list(limit: Int): List<RunRecord> {
+        require(limit > 0) { "limit must be positive, was $limit" }
+        return runList
+            .withIndex()
+            .sortedWith(compareByDescending<IndexedValue<RunRecord>> { it.value.startedAt }.thenByDescending { it.index })
+            .take(limit)
+            .map { it.value }
+    }
+
     override suspend fun byRepeatGroup(group: String) = runList.filter { it.repeatGroup == group }.sortedBy { it.repeatIndex }
 
     override suspend fun addResource(resource: RunResource) {

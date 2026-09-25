@@ -89,4 +89,15 @@ class PanelInstructionsTest {
         RunRequest(scenarioId = "scn_1", testers = 0).problems().map { it.field } shouldContainExactly listOf(PanelInstructions.TESTERS)
         RunRequest(scenarioId = null, campaignPath = "scenarios/kadrohr.yaml", testers = 30).problems().size shouldBe 0
     }
+
+    @Test
+    fun `a run request may name another site to run against, as a full http or https address`() {
+        RunRequest(scenarioId = "scn_1", target = "https://kadrohr.com").problems().shouldBeEmpty()
+        RunRequest(scenarioId = "scn_1", target = "  ").problems().shouldBeEmpty()
+        RunRequest(scenarioId = "scn_1", target = null).problems().shouldBeEmpty()
+        listOf("kadrohr.com", "ftp://kadrohr.com", "https://", "http://exa mple.com").forEach { target ->
+            RunRequest(scenarioId = "scn_1", target = target).problems().map { it.field } shouldContainExactly
+                listOf(PanelInstructions.TARGET)
+        }
+    }
 }

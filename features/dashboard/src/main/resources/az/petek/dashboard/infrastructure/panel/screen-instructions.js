@@ -5,7 +5,7 @@
   const { h, L, fmt } = P;
   const DRAFT_KEY = 'petek.instructions';
   const DEFAULTS = {
-    target: '',
+    target: P.defaultTarget,
     instructions: '',
     testers: 30,
     roles: { admins: 1, managers: 5, employees: 24 },
@@ -25,7 +25,11 @@
   function load() {
     try {
       const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-      if (saved && typeof saved === 'object') return Object.assign(structuredClone(DEFAULTS), saved);
+      if (saved && typeof saved === 'object') {
+        const form = Object.assign(structuredClone(DEFAULTS), saved);
+        if (!String(form.target || '').trim()) form.target = DEFAULTS.target;
+        return form;
+      }
     } catch (e) { /* storage blocked or corrupt: start from the defaults */ }
     return structuredClone(DEFAULTS);
   }
@@ -153,7 +157,8 @@
 
   async function run(button) {
     clearErrors();
-    const res = await P.busy(button, () => P.api.post('/api/runs', { scenarioId: ui.scenario.value || null, testers: form.testers, headful: ui.headful.checked }));
+    const body = { scenarioId: ui.scenario.value || null, testers: form.testers, headful: ui.headful.checked, target: form.target.trim() || null };
+    const res = await P.busy(button, () => P.api.post('/api/runs', body));
     if (!res.ok) { showProblems(res.problems); P.toast(res.error, 'error'); return; }
     P.toast('Run başladı: ' + res.data.runId, 'ok');
     P.go('agentler');

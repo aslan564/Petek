@@ -110,6 +110,25 @@ class SqliteRunRepositoryTest {
         }
 
     @Test
+    fun `the run list is newest first and stops at the limit`() =
+        withStore(dir) { store, _ ->
+            store.create(run(RunId("run_old"), startedAt = at(1)))
+            store.create(run(RunId("run_new"), startedAt = at(100)))
+            store.create(run(RunId("run_tie_a"), startedAt = at(50)))
+            store.create(run(RunId("run_tie_b"), startedAt = at(50)))
+
+            store.list(10).map { it.runId.value } shouldContainExactly listOf("run_new", "run_tie_b", "run_tie_a", "run_old")
+            store.list(2).map { it.runId.value } shouldContainExactly listOf("run_new", "run_tie_b")
+        }
+
+    @Test
+    fun `an empty store lists no runs and a limit below one is refused`() =
+        withStore(dir) { store, _ ->
+            store.list(5).shouldBeEmpty()
+            shouldThrow<IllegalArgumentException> { store.list(0) }
+        }
+
+    @Test
     fun `a repeat group lists its runs by repeat index and nothing else`() =
         withStore(dir) { store, _ ->
             store.create(run(RunId("run_3"), startedAt = at(3), repeatGroup = "grp_1", repeatIndex = 3))

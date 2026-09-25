@@ -113,6 +113,22 @@ class DashboardServerTest {
         }
 
     @Test
+    fun `the page names the default target escaped, and none when the server has none`() =
+        runBlocking<Unit> {
+            val artifacts = TempDirArtifactStore(dir.resolve("evidence"))
+            val server = DashboardServer(dashboard, artifacts, port = 0, defaultTarget = "https://kadro.test/?a=1&b=\"<x>\"")
+            try {
+                val base = server.start().toString().removeSuffix("/")
+                val html = serve().client.get(base + "/").bodyAsText()
+
+                html shouldContain "<meta name=\"petek-target\" content=\"https://kadro.test/?a=1&amp;b=&quot;&lt;x&gt;&quot;\">"
+            } finally {
+                server.stop()
+            }
+            serve().get("/").bodyAsText() shouldContain "<meta name=\"petek-target\" content=\"\">"
+        }
+
+    @Test
     fun `the snapshot is JSON of the board without any contact data or secret`() =
         runBlocking<Unit> {
             val harness = serve()

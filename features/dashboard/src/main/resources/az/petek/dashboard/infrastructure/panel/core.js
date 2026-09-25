@@ -129,6 +129,7 @@
     transport: { websocket: 'WebSocket', sse: 'SSE', polling: 'Polling', unknown: 'Naməlum' },
     visitedAs: { anonymous: 'anonim', admin: 'admin', manager: 'menecer', employee: 'işçi' },
     activity: {
+      STARTED: ['Başladı', 'blue'], PHASE_SKIPPED: ['Buraxıldı', 'amber'], NOTE: ['Qeyd', 'slate'], SESSIONS: ['Sessiya', 'cyan'],
       PHASE_STARTED: ['Faza', 'blue'], PAGE_VISITED: ['Səhifə', 'slate'], ACTION_DISCOVERED: ['Əməliyyat', 'cyan'], FINDING_RECORDED: ['Tapıntı', 'red'],
       UNKNOWN_RAISED: ['Sual', 'amber'], MODEL_UPDATED: ['Model', 'violet'], DRAFT_READY: ['Layihə', 'green'], FINISHED: ['Bitdi', 'green'], FAILED: ['Xəta', 'red'],
     },
@@ -190,6 +191,9 @@
   // ---------- API ----------
   const tokenMeta = document.querySelector('meta[name="petek-token"]');
   const TOKEN = tokenMeta ? tokenMeta.getAttribute('content') : '';
+  const targetMeta = document.querySelector('meta[name="petek-target"]');
+  /** The site the instruction form starts with (the configured target); empty when the server names none. */
+  P.defaultTarget = targetMeta ? targetMeta.getAttribute('content') || '' : '';
   async function request(method, path, body) {
     const init = { method, cache: 'no-store', headers: { Accept: 'application/json' } };
     if (method !== 'GET') {

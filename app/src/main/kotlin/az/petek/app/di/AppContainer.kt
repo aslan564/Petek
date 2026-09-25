@@ -22,6 +22,7 @@ import az.petek.campaign.domain.TemplateRenderer
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.UuidV7IdGenerator
+import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.time.HarnessClock
@@ -32,6 +33,11 @@ import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.infrastructure.FileSystemArtifactStore
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
+import az.petek.explorer.application.CompareExplorationsUseCase
+import az.petek.explorer.application.GenerateScenarioUseCase
+import az.petek.explorer.application.ScenarioSettings
+import az.petek.explorer.domain.ExplorationRepository
+import az.petek.explorer.infrastructure.SqliteExplorationRepository
 import az.petek.identity.application.PlanIdentitiesUseCase
 import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
@@ -73,6 +79,19 @@ import az.petek.reporting.application.FinalizeRunUseCase
 import az.petek.reporting.domain.ThreeSourceJudge
 import az.petek.reporting.infrastructure.HtmlReportWriter
 import az.petek.reporting.infrastructure.MarkdownReportWriter
+import az.petek.scenarios.application.ScenarioCatalog
+import az.petek.scenarios.application.TriageResults
+import az.petek.scenarios.application.TriageRunUseCase
+import az.petek.scenarios.domain.ScenarioIdGenerator
+import az.petek.scenarios.domain.ScenarioRepository
+import az.petek.scenarios.domain.ScenarioValidator
+import az.petek.scenarios.domain.SecretRedactor
+import az.petek.scenarios.domain.TriageRepository
+import az.petek.scenarios.domain.UuidV7ScenarioIdGenerator
+import az.petek.scenarios.infrastructure.CampaignScenarioValidator
+import az.petek.scenarios.infrastructure.FileSystemScenarioFiles
+import az.petek.scenarios.infrastructure.SqliteScenarioRepository
+import az.petek.scenarios.infrastructure.SqliteTriageRepository
 import az.petek.verification.application.RecordingVerifyStepUseCase
 import az.petek.verification.application.VerifyStepUseCase
 import az.petek.verification.domain.DefaultAssertionEvaluator
@@ -90,7 +109,11 @@ private val logger = KotlinLogging.logger {}
  * creates a database.
  *
  * Wiring decisions:
- * - one SQLite database and one [SqliteEvidenceStore] (recorder + query + runs) per process;
+ * - one SQLite database and one [SqliteEvidenceStore] (recorder + query + runs) per process; the explorer's
+ *   repository, the scenario catalog and triage live in the same database (a container built with
+ *   [AppOverrides.database] shares its caller's instead of opening its own);
+ * - explorations get their own browser engine ([explorerBrowserEngine]), so a run stopping its browsers never closes
+ *   an exploration's pages;
  * - the LLM is `Metered(Retrying(ConcurrencyLimited(provider, PETEK_LLM_CONCURRENCY)))`: a permit covers one attempt,
  *   and metering counts one call per agent decision; the [usageMeter] is flushed into the evidence store per run by
  *   the [finalizer] ([UsageFlushingFinalizer]) before the report is written;
@@ -115,7 +138,7 @@ class AppContainer(
 
     // --- storage ------------------------------------------------------------------------------------------------
 
-    val database: SqliteDatabase by lazy { resources.track(SqliteDatabase.open(config.dbPath)) }
+    val database: SqliteDatabase by lazy { overrides.database ?: resources.track(SqliteDatabase.open(config.dbPath)) }
 
     private val evidenceStore: SqliteEvidenceStore by lazy { SqliteEvidenceStore(database) }
 
@@ -269,6 +292,76 @@ class AppContainer(
 
     val teardown: TeardownUseCase by lazy { OracleTeardownUseCase(runs, oracle) }
 
+    // --- explorer (docs/PLAN.md Faza 6) ---------------------------------------------------------------------------
+
+    /** Explorations with their site model versions, findings, events, artifacts and drafts, in the shared database. */
+    val explorations: ExplorationRepository by lazy { SqliteExplorationRepository(database) }
+
+    private val ownsExplorerEngine = AtomicBoolean(false)
+
+    /**
+     * The explorer's own browser engine, separate from the runs' [browserEngine]: a run stops its engine when it ends,
+     * which must never close the pages of an exploration going on at the same time (and vice versa).
+     */
+    val explorerBrowserEngine: BrowserEngine by lazy {
+        overrides.explorerBrowser ?: overrides.browser ?: PlaywrightBrowserEngine(clock).also { ownsExplorerEngine.set(true) }
+    }
+
+    /** Campaign drafts from site models, validated exactly like `petek run` validates a campaign file. */
+    fun scenarioGenerator(settings: ScenarioSettings = ScenarioSettings()): GenerateScenarioUseCase =
+        GenerateScenarioUseCase(
+            DefaultCampaignValidator(templateRenderer),
+            templateRenderer,
+            knownRunFunctions,
+            explorations,
+            clock,
+            ids,
+            settings,
+        )
+
+    val compareExplorations: CompareExplorationsUseCase by lazy { CompareExplorationsUseCase(explorations) }
+
+    // --- scenario catalog and triage (docs/PLAN.md Faza 7) --------------------------------------------------------
+
+    /** Checks scenario text with the same loader (`PETEK_TARGET` override) and validator as `petek run`. */
+    val scenarioValidator: ScenarioValidator by lazy {
+        CampaignScenarioValidator(
+            YamlCampaignSource(targetOverride = config.target),
+            DefaultCampaignValidator(templateRenderer),
+            knownRunFunctions,
+            config.evidenceDir.resolve(SCENARIO_CHECK_DIRECTORY),
+        )
+    }
+
+    private val scenarioVersions: ScenarioRepository by lazy { SqliteScenarioRepository(database) }
+
+    private val triageStore: TriageRepository by lazy { SqliteTriageRepository(database) }
+
+    private val scenarioIds: ScenarioIdGenerator = UuidV7ScenarioIdGenerator()
+
+    val scenarioCatalog: ScenarioCatalog by lazy {
+        ScenarioCatalog(scenarioVersions, scenarioValidator, FileSystemScenarioFiles(), clock, scenarioIds)
+    }
+
+    /**
+     * Triage of finished runs. Evidence shown to the model is redacted with every configured secret plus [secrets]
+     * (the triaged run's test passwords, which only its identities know): nothing secret reaches the LLM (rule 10).
+     */
+    fun triage(secrets: Collection<Secret> = emptyList()): TriageRunUseCase =
+        TriageRunUseCase(
+            llm = llm,
+            evidence = evidenceQuery,
+            runs = runs,
+            scenarios = scenarioVersions,
+            triage = triageStore,
+            validator = scenarioValidator,
+            clock = clock,
+            ids = scenarioIds,
+            redactor = SecretRedactor(listOfNotNull(config.testToken, config.anthropicApiKey, config.identitySecret) + secrets),
+        )
+
+    val triageResults: TriageResults by lazy { TriageResults(triageStore) }
+
     /**
      * Ends the live board (it draws its final frame) so the terminal can be written to again. Call it after the last
      * run of a command: the board does not draw again afterwards. Safe to call when no board was ever shown.
@@ -282,6 +375,10 @@ class AppContainer(
         resources.closeMonitors()
         if (ownsBrowserEngine.get()) {
             runCatching { runBlocking { browserEngine.stop() } }.onFailure { logger.warn(it) { "the browser engine did not stop cleanly" } }
+        }
+        if (ownsExplorerEngine.get()) {
+            runCatching { runBlocking { explorerBrowserEngine.stop() } }
+                .onFailure { logger.warn(it) { "the explorer's browser engine did not stop cleanly" } }
         }
         resources.closeAll()
     }
@@ -347,5 +444,8 @@ class AppContainer(
 
         /** Logger of the board's log-file copy; `logback.xml` sends it to the file only. */
         const val BOARD_LOGGER = "az.petek.board"
+
+        /** Where scenario texts are written briefly to be loaded and checked: `<evidence>/scenario-checks/`. */
+        const val SCENARIO_CHECK_DIRECTORY = "scenario-checks"
     }
 }

@@ -1,6 +1,7 @@
 package az.petek.app.di
 
 import az.petek.browser.domain.BrowserEngine
+import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.time.HarnessClock
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.RunRepository
@@ -21,6 +22,13 @@ data class AppOverrides(
     val monitor: MonitorView? = null,
     val clock: HarnessClock? = null,
     val browser: BrowserEngine? = null,
+    /** The explorer's own browser engine; by default [browser] when given, else a separate Playwright engine. */
+    val explorerBrowser: BrowserEngine? = null,
+    /**
+     * A database opened by the caller, shared instead of opening `PETEK_DB` again: the web panel's containers for runs
+     * against another site use the panel's database, so every run, exploration and scenario stays in one place.
+     */
+    val database: SqliteDatabase? = null,
     /** Wraps the evidence recorder (outermost), e.g. so the web panel sees every step as it is recorded. */
     val recorderDecorator: ((EvidenceRecorder) -> EvidenceRecorder)? = null,
     /** Wraps the run repository, e.g. so the web panel learns when a run starts and ends. */

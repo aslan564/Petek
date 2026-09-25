@@ -21,33 +21,65 @@ import az.petek.orchestration.domain.ActorResolver
  * so the command can warn before the run starts.
  */
 object CampaignScaler {
+    /** `petek run --agents N`: [resize], with the new size in the campaign's name so reports tell the runs apart. */
     fun scale(
         campaign: Campaign,
         agents: Int,
     ): Campaign {
+        val resized = resize(campaign, agents)
+        if (resized === campaign) return campaign
+        return resized.copy(
+            settings =
+                resized.settings.copy(
+                    name = "${campaign.settings.name} ($agents testers, scaled from ${campaign.settings.testers})",
+                ),
+        )
+    }
+
+    /**
+     * The web panel's tester count: [campaign] with exactly [testers] testers, fewer or more than it has, under its own
+     * name (the panel shows the count next to it, and triage finds the scenario by it). Growing additionally keeps at
+     * least one manager per department when the campaign has managers (so `manager[<department>]` steps keep an actor)
+     * while leaving an employee when it has employees. The result still has to pass the campaign validator (the caller
+     * checks it).
+     */
+    fun resize(
+        campaign: Campaign,
+        testers: Int,
+    ): Campaign {
         val settings = campaign.settings
-        if (agents < 1) throw ScalingException("--agents must be at least 1, was $agents")
-        if (agents == settings.testers) return campaign
-        val admins = minOf(settings.roles.admin, 1)
-        if (agents < admins + 1 && settings.roles.manager + settings.roles.employee > 0) {
-            throw ScalingException("--agents $agents leaves no tester besides the admin; use at least ${admins + 1}")
+        if (testers < 1) throw ScalingException("the tester count must be at least 1, was $testers")
+        if (testers == settings.testers) return campaign
+        val roles = settings.roles
+        val admins = minOf(roles.admin, 1)
+        val others = testers - admins
+        if (others < 1 && roles.manager + roles.employee > 0) {
+            throw ScalingException("$testers testers leave no tester besides the admin; use at least ${admins + 1}")
         }
-        val others = agents - admins
-        if (others > 0 && settings.roles.manager + settings.roles.employee == 0) {
-            throw ScalingException("--agents $agents: the campaign has only the admin, so there is no role to give more testers")
+        if (others > 0 && roles.manager + roles.employee == 0) {
+            throw ScalingException("$testers testers: the campaign has only the admin, so there is no role to give more testers")
         }
-        val (managers, employees) = apportion(others, listOf(settings.roles.manager, settings.roles.employee))
-        val invited = apportion(others, listOf(settings.registration.invite, settings.registration.companyCode)).first()
-        val invite = maxOf(invited, managers)
-        val companyCode = others - invite
+        var (managers, employees) = apportion(others, listOf(roles.manager, roles.employee))
+        if (testers > settings.testers && roles.manager > 0) {
+            val keepEmployee = if (roles.employee > 0) 1 else 0
+            val wanted = minOf(settings.departments.size, others - keepEmployee)
+            if (managers < wanted) {
+                employees -= wanted - managers
+                managers = wanted
+            }
+        }
+        // Managers always join by invitation: the company-code form has no role field.
+        val invite =
+            apportion(others, listOf(settings.registration.invite, settings.registration.companyCode))[0]
+                .coerceAtLeast(managers)
+                .coerceAtMost(others)
         return campaign.copy(
             settings =
                 settings.copy(
-                    testers = agents,
+                    testers = testers,
                     roles = RoleQuota(admin = admins, manager = managers, employee = employees),
-                    registration = RegistrationQuota(invite = invite, companyCode = companyCode),
-                    names = settings.names.take(agents),
-                    name = "${settings.name} ($agents testers, scaled from ${settings.testers})",
+                    registration = RegistrationQuota(invite = invite, companyCode = others - invite),
+                    names = settings.names.take(testers),
                 ),
         )
     }

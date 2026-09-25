@@ -17,6 +17,13 @@ class CliSession(
     private val envFile: Path?,
     val verbose: Boolean,
 ) {
+    /**
+     * Whether this invocation names a configuration: `--env-file` was given (a missing one is [loadConfig]'s error), or
+     * `.env` exists in the working directory. `petek panel` falls back to the local demo only without one.
+     */
+    val hasConfigurationFile: Boolean
+        get() = envFile != null || Files.isRegularFile(runtime.workingDirectory.resolve(DEFAULT_ENV_FILE))
+
     /** @throws ConfigException listing every problem of `.env` and the environment. */
     fun loadConfig(): PetekConfig {
         val explicit = envFile?.let { runtime.workingDirectory.resolve(it) }
