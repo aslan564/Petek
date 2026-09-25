@@ -178,6 +178,76 @@ class RunnerEventsTest {
         }
 
     @Test
+    fun `an agent-reported id that could climb out of a request path is never published`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { _, _ -> ActionOutcome(ActionStatus.SUCCEEDED, "created", objectId = "../../companies/c1") }
+            val campaign =
+                campaign(
+                    steps =
+                        listOf(
+                            step("create", admin(), emits = "thing_created"),
+                            step(
+                                "approve",
+                                employees("IT", nth = 1),
+                                assertions = listOf(AssertionSpec.HttpStatus("/api/tickets/{last_id}/approve", "POST", 403)),
+                            ),
+                        ),
+                )
+
+            val summary = f.runner().run(campaign)
+
+            f.event().objectId.shouldBeNull()
+            f.event().objectIdSource.shouldBeNull()
+            val emit = f.step("create", StepKind.EMIT, "a01")
+            emit.status shouldBe StepStatus.FAILED
+            emit.detail!! shouldContain "id_unavailable: agent_report: rejected unsafe id '../../companies/c1'"
+            f.verify.actorCalls
+                .single()
+                .second.templates.lastId
+                .shouldBeNull()
+            summary.outcome shouldBe RunOutcome.FAILED
+        }
+
+    @Test
+    fun `an unsafe id from a configured source falls back to the agent's id and fails the emit`() =
+        runTest {
+            val f = fixture()
+            f.browser.configure = { it.attributes["[data-testid=ticket-item]" to "data-id"] = "7/approve?as=admin" }
+            f.agents.script = { _, _ -> ActionOutcome(ActionStatus.SUCCEEDED, "created", objectId = "t7") }
+
+            f.runner().run(emitting(IdSource.DomAttribute("[data-testid=ticket-item]", "data-id")))
+
+            f.event().objectId shouldBe "t7"
+            f.event().objectIdSource shouldBe "agent_report"
+            val emit = f.step("create", StepKind.EMIT, "a01")
+            emit.status shouldBe StepStatus.FAILED
+            emit.detail!! shouldContain "dom: rejected unsafe id '7/approve?as=admin'"
+        }
+
+    @Test
+    fun `ids are trimmed before they are checked and published`() =
+        runTest {
+            val f = fixture()
+            f.browser.configure = { it.attributes["[data-testid=ticket-item]" to "data-id"] = "  t8\n" }
+
+            f.runner().run(emitting(IdSource.DomAttribute("[data-testid=ticket-item]", "data-id")))
+
+            f.event().objectId shouldBe "t8"
+            f.event().objectIdSource shouldBe "dom"
+        }
+
+    @Test
+    fun `usual id shapes are safe and path-changing ones are not`() {
+        listOf("42", "a9", "t_1", "0199a1b2-7c3d-7e4f-8a9b-0c1d2e3f4a5b", "PTK-4821", "c1:2", "v1.2").forEach {
+            ObjectIdReader.isSafeId(it) shouldBe true
+        }
+        listOf("", "..", "a/..", "1/approve", "1?x=2", "1#frag", "a b", "%2e%2e", "x".repeat(257), "a\\b").forEach {
+            ObjectIdReader.isSafeId(it) shouldBe false
+        }
+    }
+
+    @Test
     fun `nothing is emitted when the action did not succeed`() =
         runTest {
             val f = fixture()
