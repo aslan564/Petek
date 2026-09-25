@@ -28,6 +28,8 @@ data class CampaignSettings(
     val registration: RegistrationQuota,
     val budget: Budget,
     val onFail: OnFail,
+    /** Campaign name from the YAML (`campaign.name`), default = file name without extension. */
+    val name: String = "campaign",
 )
 
 data class RoleQuota(
