@@ -19,8 +19,14 @@ dependencies {
     implementation(libs.clikt)
     implementation(libs.mordant)
     implementation(libs.kotlin.logging)
-    runtimeOnly(libs.logback.classic)
+    // Compile access: the MDC helper and the programmatic log setup (log directory from the configuration).
+    implementation(libs.logback.classic)
     testImplementation(testFixtures(project(":core:domain")))
+    testImplementation(testFixtures(project(":features:browser")))
+    testImplementation(testFixtures(project(":features:llm")))
+    testImplementation(testFixtures(project(":features:evidence")))
+    testImplementation(testFixtures(project(":features:identity")))
+    testImplementation(project(":testing:fake-target"))
 }
 
 application {
