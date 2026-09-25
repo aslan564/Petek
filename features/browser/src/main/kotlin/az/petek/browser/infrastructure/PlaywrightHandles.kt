@@ -54,6 +54,7 @@ internal class PlaywrightHandles private constructor(
             options: SessionOptions,
             connector: BrowserConnector,
             traffic: RealtimeTrafficRecorder,
+            dialogs: DialogRecorder,
             clock: HarnessClock,
         ): PlaywrightHandles {
             val playwright = Playwright.create()
@@ -63,10 +64,29 @@ internal class PlaywrightHandles private constructor(
                 context.setDefaultTimeout(options.defaultTimeout.toPlaywrightTimeout())
                 val page = context.newPage()
                 observeRealtimeTraffic(page, traffic, clock)
+                acceptDialogs(page, dialogs, clock)
                 return PlaywrightHandles(playwright, browser, context, page)
             } catch (e: Exception) {
                 runCatching { playwright.close() }
                 throw e
+            }
+        }
+
+        /**
+         * Accepts every dialog the page opens and records it. Without a handler Playwright dismisses dialogs, which
+         * turns a `confirm("Delete?")` into a silent "no" the agent never hears about. Accepting follows what a
+         * tester clicking OK would do; a prompt gets its default text. The handler runs on the session thread,
+         * while one of the session's own calls waits, so answering here is the documented Playwright pattern.
+         */
+        private fun acceptDialogs(
+            page: Page,
+            dialogs: DialogRecorder,
+            clock: HarnessClock,
+        ) {
+            page.onDialog { dialog ->
+                dialogs.record(dialog.type(), dialog.message(), clock.now())
+                runCatching { if (dialog.type() == "prompt") dialog.accept(dialog.defaultValue()) else dialog.accept() }
+                    .onFailure { logger.debug { "accepting a ${dialog.type()} dialog failed: ${it.message}" } }
             }
         }
 

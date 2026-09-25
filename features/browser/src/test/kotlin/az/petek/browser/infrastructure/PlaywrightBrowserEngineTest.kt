@@ -9,7 +9,9 @@ import az.petek.browser.domain.SessionOptions
 import az.petek.core.time.SystemHarnessClock
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
@@ -67,6 +69,84 @@ class PlaywrightBrowserEngineTest {
 
             results shouldContainExactlyInAnyOrder
                 (1..10).map { SessionReport("browser-agent-$it", "Salam, user$it", "user$it", "local=user$it") }
+        }
+
+    @Test
+    fun `sessions beyond contextsPerBrowser start further browser servers and every session still works`() =
+        runBlocking<Unit> {
+            val factory = engine.start(BrowserEngineConfig(contextsPerBrowser = 2))
+            engine.browserServers() shouldHaveSize 1
+
+            val sessions = (1..5).map { open(factory, "shard-$it") }
+            try {
+                engine.browserServers() shouldHaveSize 3
+                engine.sessionsPerServer() shouldContainExactly listOf(2, 2, 1)
+                val servers = engine.browserServers().map { it.processTree().first().pid() }
+                chromeProcessesOfThisJvm().filter { chrome -> servers.none { chrome.hasAncestor(it) } }.shouldBeEmpty()
+                sessions.forEachIndexed { index, session ->
+                    loginAndReport(session, "shard${index + 1}").greeting shouldBe "Salam, shard${index + 1}"
+                }
+            } finally {
+                sessions.forEach { it.close() }
+            }
+            engine.sessionsPerServer() shouldContainExactly listOf(0, 0, 0)
+        }
+
+    @Test
+    fun `closing sessions frees their slots and new sessions fill the least-loaded server first`() =
+        runBlocking<Unit> {
+            val factory = engine.start(BrowserEngineConfig(contextsPerBrowser = 2))
+            val sessions = (1..5).map { open(factory, "slot-$it") }.toMutableList()
+            try {
+                sessions.removeAt(0).close()
+                sessions.removeAt(0).close()
+                engine.sessionsPerServer() shouldContainExactly listOf(0, 2, 1)
+
+                sessions += open(factory, "slot-6")
+                engine.sessionsPerServer() shouldContainExactly listOf(1, 2, 1)
+                sessions += open(factory, "slot-7")
+                sessions += open(factory, "slot-8")
+                engine.sessionsPerServer() shouldContainExactly listOf(2, 2, 2)
+
+                engine.browserServers() shouldHaveSize 3
+                sessions.last().navigate("/form")
+                sessions.last().isTextVisible("Qeydiyyat") shouldBe true
+            } finally {
+                sessions.forEach { it.close() }
+            }
+        }
+
+    @Test
+    fun `stop kills the process trees of every browser server`() =
+        runBlocking<Unit> {
+            val factory = engine.start(BrowserEngineConfig(contextsPerBrowser = 1))
+            val sessions = (1..3).map { open(factory, "many-$it") }
+            sessions.forEach { it.navigate("/form") }
+            engine.browserServers() shouldHaveSize 3
+            val trees = engine.browserServers().map { it.processTree() }
+            trees.forEach { it.size shouldBeGreaterThanOrEqual 2 }
+
+            engine.stop()
+
+            trees.flatten().forEach { it.awaitExit() }
+            engine.browserServers().shouldBeEmpty()
+            sessions.forEach { session ->
+                shouldThrow<BrowserActionException> { session.snapshot() }.message shouldContain "is closed"
+            }
+        }
+
+    @Test
+    fun `sessions opening all at once never start more browser servers than they need`() =
+        runBlocking<Unit> {
+            val factory = engine.start(BrowserEngineConfig(contextsPerBrowser = 3))
+
+            val sessions = withContext(Dispatchers.Default) { (1..7).map { async { open(factory, "burst-$it") } }.awaitAll() }
+            try {
+                engine.browserServers() shouldHaveSize 3
+                engine.sessionsPerServer().sorted() shouldContainExactly listOf(1, 3, 3)
+            } finally {
+                sessions.forEach { it.close() }
+            }
         }
 
     @Test

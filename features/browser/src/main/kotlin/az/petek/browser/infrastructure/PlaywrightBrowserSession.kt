@@ -2,6 +2,7 @@ package az.petek.browser.infrastructure
 
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.PageSnapshot
@@ -53,6 +54,8 @@ private val logger = KotlinLogging.logger {}
  *   Selectors that are plain CSS are probed the same way; Playwright-only syntax (`text=…`) uses a locator wait.
  * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
+ * - JavaScript dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are accepted as they open and kept until
+ *   [drainDialogs] reports them; see [PlaywrightHandles].
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
  *   text typed with [fill] is masked in error messages. Text typed into a password field is remembered and masked
  *   in every later snapshot, [readText] and [currentUrl], even after the page reveals the field or echoes the value.
@@ -64,6 +67,7 @@ internal class PlaywrightBrowserSession private constructor(
     private val clock: HarnessClock,
     private val handles: PlaywrightHandles,
     private val traffic: RealtimeTrafficRecorder,
+    private val dialogs: DialogRecorder,
     private val onClosed: (PlaywrightBrowserSession) -> Unit,
 ) : BrowserSession {
     private val closed = AtomicBoolean(false)
@@ -224,6 +228,13 @@ internal class PlaywrightBrowserSession private constructor(
             // A round trip to the browser makes Playwright dispatch the traffic events it has already received.
             runCatching { page.title() }
             traffic.observation()
+        }
+
+    override suspend fun drainDialogs(): List<DialogEvent> =
+        perform("read dialogs") {
+            // As above: the round trip dispatches a dialog event already received, so the handler answers it first.
+            runCatching { page.title() }
+            dialogs.drain().map { it.copy(message = SecretRedactor.redactText(it.message, typedSecrets)) }
         }
 
     /**
@@ -411,9 +422,10 @@ internal class PlaywrightBrowserSession private constructor(
             }
             val thread = ConfinedThread("browser-${options.label}")
             val traffic = RealtimeTrafficRecorder()
+            val dialogs = DialogRecorder()
             val handles =
                 try {
-                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, clock) }
+                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, clock) }
                 } catch (e: BrowserActionException) {
                     thread.close()
                     throw e
@@ -422,7 +434,7 @@ internal class PlaywrightBrowserSession private constructor(
                     val reason = if (e is PlaywrightException) PlaywrightFailures.reasonOf(e.message.orEmpty()) else e.message
                     throw BrowserActionException("could not open browser session '${options.label}': $reason", e)
                 }
-            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, onClosed)
+            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, onClosed)
             try {
                 currentCoroutineContext().ensureActive()
             } catch (e: CancellationException) {

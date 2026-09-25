@@ -2,18 +2,23 @@ package az.petek.browser.testing
 
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.DialogEvent
+import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
+import az.petek.core.time.HarnessTimestamp
 import java.nio.file.Path
+import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
 
 /**
  * In-memory browser for unit tests. Tests set [snapshotProvider], [visibleTexts], [selectorTexts] and
  * [httpResponses]; every call is appended to [actions] as a readable string (e.g. `click 3`, `fillSelector #x=abc`).
+ * Dialogs: [openDialog] queues one for [drainDialogs]; [onAction] lets a dialog appear as the effect of an action.
  */
 class FakeBrowserSession(
     override val label: String = "fake",
@@ -35,10 +40,12 @@ class FakeBrowserSession(
     var observation = NetworkObservation(emptySet(), emptyList())
     var failOn: ((String) -> Boolean) = { false }
     var closed = false
+    private val pendingDialogs = ArrayList<DialogEvent>()
 
     private fun record(action: String) {
         if (failOn(action)) throw BrowserActionException("scripted failure: $action")
         actions += action
+        onAction(action)
     }
 
     override suspend fun navigate(pathOrUrl: String) {
@@ -116,6 +123,25 @@ class FakeBrowserSession(
     }
 
     override suspend fun networkObservation(): NetworkObservation = observation
+
+    /** Simulates the page opening a dialog that the session accepted; reported once by [drainDialogs]. */
+    fun openDialog(
+        type: DialogType,
+        message: String,
+    ) {
+        val at = clock?.now() ?: HarnessTimestamp(Instant.EPOCH, 0)
+        synchronized(pendingDialogs) { pendingDialogs += DialogEvent(type, message, at) }
+    }
+
+    /** Called before a recorded action runs (e.g. `click 3`) so a test can open a dialog "caused" by that action. */
+    var onAction: (String) -> Unit = {}
+
+    override suspend fun drainDialogs(): List<DialogEvent> =
+        synchronized(pendingDialogs) {
+            val drained = pendingDialogs.toList()
+            pendingDialogs.clear()
+            drained
+        }
 
     override suspend fun close() {
         closed = true

@@ -76,6 +76,7 @@ internal class TestSite : AutoCloseable {
                 }
                 get("/csp.js") { call.respondText(CSP_SCRIPT, ContentType.Text.JavaScript) }
                 get("/shadow") { call.respondText(SHADOW_PAGE, ContentType.Text.Html) }
+                get("/dialogs") { call.respondText(DIALOG_PAGE, ContentType.Text.Html) }
             }
         }.start(wait = false)
 
@@ -89,6 +90,22 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        val DIALOG_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Dialoqlar</title></head><body>
+            <button id="confirm" onclick="answer(confirm('Bileti silək?') ? 'silindi' : 'saxlanıldı')">Sil</button>
+            <button id="prompt" onclick="answer('ad=' + prompt('Adınız?', 'Əli'))">Ad</button>
+            <button id="alert" onclick="alert('Yadda saxlandı'); answer('bağlandı')">Saxla</button>
+            <label>Şifrə <input id="pw" type="password"></label>
+            <button id="echo" onclick="alert('Şifrəniz: ' + document.getElementById('pw').value); answer('göstərildi')">Göstər</button>
+            <p id="answer"></p>
+            <script>
+              function answer(text) { document.getElementById('answer').textContent = text; }
+            </script>
+            </body></html>
+            """.trimIndent()
+
         val FORM_PAGE =
             """
             <!doctype html>
