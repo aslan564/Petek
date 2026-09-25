@@ -36,6 +36,7 @@ include(
     ":features:capacity",
     ":features:scenarios",
     ":features:dashboard",
+    ":features:explorer",
     ":app",
     ":testing:fake-target",
     ":e2e",
