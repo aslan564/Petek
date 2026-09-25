@@ -1,0 +1,46 @@
+# R15 — Distribution and monetization: installable in any project, runs beside it and in CI; paid editions possible
+
+**Status:** Planned (Faza 12, 14) · **ADRs:** 0009, 0011
+
+## Requirement
+
+The owner wants to publish Pətək so that any project can add it (the owner first mentioned Maven; the agreed shape is
+a sidecar), start it alongside the application, open the panel, point it at the site, explore, run and get reports —
+and, when the time comes, earn from it.
+
+## Why
+
+Adoption needs a one-command install and a one-command start; income needs scale, history, team features and hosting
+that the open core deliberately leaves to paid editions, without ever carrying the model cost (R09).
+
+## Architecture
+
+- **Sidecar, not a library in the target's build.** Pətək ships as a standalone distribution: `installDist`/jlink CLI
+  (paths independent of the repository root, `PETEK_HOME`), a Docker image (Playwright base + JDK 25, Mailpit
+  companion), and an `npx petek` launcher that only downloads and starts it. Embedding Playwright, Chromium, SQLite and
+  an AI CLI into a target's Maven/npm build would be heavy and fragile; the sidecar keeps the target untouched.
+- **In the project:** `petek init` writes `.petek/` and `petek.yaml` (target profile) plus the skill pack (R10);
+  `petek dev` starts the panel when the app's health URL answers.
+- **CI mode:** `petek run --ci` → exit code, JUnit XML, SARIF for findings, HTML report artifact; GitHub Actions and
+  GitLab templates; frozen `run` scenarios execute without an AI.
+- **Contract kits** (Faza 14): Spring Boot starter, Express router, Laravel package that implement the `/test/...`
+  contract of `docs/TARGET_CONTRACT.md` in one line — the only Pətək piece that lives inside the target.
+- **Business model (ADR-0011):** open core + paid modules/hosted: hosted swarm (multi-machine orchestration), report
+  history and trends, shared panel, SSO/audit, report hosting — behind the ports named in R14. Opt-in, counters-only
+  telemetry (`UsageSink`) so pricing can be grounded. Shareable single-file reports as sales material.
+
+## Modules touched
+
+`app` (`init`, `dev`, `--ci`, `--json`), `build-logic` (distribution, publishing conventions), `reporting`
+(shareable report), `orchestration`/`evidence` (ports for paid implementations), new `kits/` repositories.
+
+## Verification (planned)
+
+- `installDist` output runs `doctor` from an arbitrary directory; the Docker image runs the contract demo; `petek init`
+  on empty Node and Spring projects; a GitHub Action on the fake target turns red on an injected failure.
+
+## Open items
+
+- Owner: register names (GitHub org, domain, npm, Maven); decide whether paid modules live in a separate repository
+  (recommended) or a `premium/` module.
+- Do not build the hosted service before three to five paying customers use the local tool.

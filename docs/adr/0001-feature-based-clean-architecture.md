@@ -64,5 +64,6 @@ evidence the boundaries work.
 
 ## Action Items
 1. [x] Convention plugins, version catalog, per-feature modules.
-2. [ ] Konsist architecture tests in `e2e` (in progress).
+2. [x] Konsist architecture tests in `e2e` (`ArchitectureTest`, 7 rules, run with `build`; added 2026-09-25 — the
+   rules had been stated in CLAUDE.md but not enforced until then).
 3. [ ] Revisit module granularity at Faza 8 (web panel / Spring Boot).

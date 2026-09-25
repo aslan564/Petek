@@ -3,8 +3,18 @@
 ## Layihə
 Pətək çoxistifadəçili AI test platformasıdır: N AI tester agenti hədəf saytda (ilk hədəf KadroHR) eyni anda ayrı
 brauzer sessiyalarında işləyir, orkestrator onları koordinasiya edir, nəticə sübut əsaslı hesabatdır.
-Tam plan: `docs/PLAN.md`. Arxitektura və modul xəritəsi: `docs/ARCHITECTURE.md`. Hədəf saytın test kontraktı
-(`data-testid`, `/test/...` endpointləri): `docs/TARGET_CONTRACT.md`. Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.
+Tam plan: `docs/PLAN.md`. Arxitektura və modul xəritəsi: `docs/ARCHITECTURE.md`. Hər tələbin arxitektura sənədi:
+`docs/requirements/` (R01–R15, dəyişiklik toxunduğu tələbi yeniləyir). Hədəf saytın test kontraktı
+(`data-testid`, `/test/...` endpointləri): `docs/TARGET_CONTRACT.md`. Qərarlar: `docs/adr/`. İstifadəçi sənədi:
+`README.md` (EN) və `README.az.md` (AZ). Töhfə və təhlükəsizlik qaydaları: `CONTRIBUTING.md`, `SECURITY.md`.
+Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.
+
+## Sahib, lisenziya və branch-lar
+Müəllif hüququ © 2026 Kodcraft, müəllif Aslan Aslanov; lisenziya Business Source License 1.1 (`LICENSE`, `NOTICE`;
+2030-09-25-də Apache 2.0). Hər mənbə faylı (`.kt`, `.kts`, `.js`, `.css`, `.html`) `build-logic/.../PetekLicense.kt`-dəki
+başlığı daşıyır — `spotlessApply` qoyur, `spotlessCheck` (build-in içində) yoxlayır; başqa copyright sətri əlavə etmə.
+`develop` inteqrasiya branch-ıdır; `petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsidir, dəyişdirilmir. Commit, PR və
+kodda model/alət adı yazılmır.
 
 ## Stack (versiyalar `gradle/libs.versions.toml`-da)
 Kotlin 2.4 / JDK 25 toolchain, Gradle 9.8 (Kotlin DSL, version catalog, `build-logic` convention plugin-ləri,
@@ -13,7 +23,7 @@ kotlinx.serialization + kaml, Clikt + Mordant, SQLite (sqlite-jdbc + Exposed 1.x
 kotlin-logging + logback, Anthropic Java SDK + Claude Code CLI (LLM), JUnit 6 + Kotest assertions, Konsist,
 Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 
-## Arxitektura qaydaları (Konsist testləri `e2e/` modulunda bunları yoxlayır)
+## Arxitektura qaydaları (`e2e/src/test/kotlin/az/petek/architecture/ArchitectureTest.kt` Konsist ilə hər build-də yoxlayır)
 - Feature-based clean architecture: hər feature `features/<ad>/` modulu, içində üç qat:
   `az.petek.<ad>.domain` → `application` → `infrastructure`.
 - `domain`: saf Kotlin (model, port interfeysləri, saf qaydalar). Framework importu yoxdur
@@ -45,7 +55,7 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 
 ## Əmrlər
     docker compose up -d                                   # Mailpit :1025 / :8025
-    ./gradlew build                                        # compile + unit testlər + ktlint + arxitektura testləri
+    ./gradlew build                                        # compile + unit testlər + ktlint + lisenziya başlıqları + arxitektura testləri
     ./gradlew spotlessApply                                # formatlama
     ./gradlew :e2e:e2eTest                                 # fake target + real Chromium ilə e2e
     ./gradlew :e2e:liveTest                                # real LLM ilə (Claude planından istifadə edir)

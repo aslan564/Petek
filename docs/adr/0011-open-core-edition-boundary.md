@@ -1,8 +1,9 @@
 # ADR-0011: Open-core edition boundary, workspace identity and opt-in telemetry
 
-**Status:** Proposed (licence choice pending)
+**Status:** Accepted (licence chosen 2026-09-25: BSL 1.1, Licensor Kodcraft, Author Aslan Aslanov, Change Date
+2030-09-25 → Apache 2.0; `LICENSE`, `NOTICE` and enforced file headers are in `develop`)
 **Date:** 2026-09-25
-**Deciders:** Aslan (owner)
+**Deciders:** Aslan Aslanov (owner, Kodcraft)
 
 ## Context
 The owner wants to be able to earn from Pətək later. Decisions that are cheap now and expensive later: the licence,
@@ -18,9 +19,10 @@ Bring-your-own-AI (ADR-0008) already keeps the model cost off Pətək.
   always `local`; hosted editions set it per account.
 - **Telemetry** is a port, opt-in, off by default, counters only (features used, provider kind, tester count), never
   content, never secrets. The local implementation writes a file the owner can read.
-- **Licence**: to be chosen by the owner — Apache 2.0 (widest adoption) or BSL 1.1 converting to Apache 2.0 after
-  four years (protects a hosted offering). Recommendation: BSL 1.1, given the hosted-swarm plan. The `LICENSE` file
-  lands in Faza 8, before wider distribution.
+- **Licence**: Business Source License 1.1 (owner's decision, 2026-09-25). Licensor Kodcraft (Aslan Aslanov);
+  Additional Use Grant: production use to test software you own or operate, no Competing Offering; Change Date
+  2030-09-25; Change License Apache 2.0. Every source file carries the header from `PetekLicense.kt`, enforced by
+  Spotless in `build`; contributions are licensed to Kodcraft with the right to relicense (`CONTRIBUTING.md`).
 - **Brand**: `petek` (Latin spelling) for GitHub organisation, domain, npm and Maven coordinates; package root stays
   `az.petek`.
 

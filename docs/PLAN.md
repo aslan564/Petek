@@ -546,8 +546,11 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
 - [x] `PETEK_MAIL_SOURCE=mailpit|test-api` və `PETEK_TEST_API_URL` konfiqurasiya açarları; `AppContainer`
   `TestApiMailbox`-u seçir, oracle ayrıca API ünvanına gedir; `petek doctor` seçilmiş poçt qutusunu yoxlayır.
 - [x] Faza 6–7 qutularını kodla tutuşdurub işarələmək; `docs/ARCHITECTURE.md`-də boş "Explorer" bölməsini yazmaq.
-- [ ] `LICENSE` faylı (qərar: aşağıdakı "Qərar gözləyən suallar"); `NOTICE`; ad/marka: `petek` latın yazılışı ilə
-  GitHub org, domen, npm/Maven adlarının tutulması (sahib).
+- [x] `LICENSE` (BSL 1.1: Kodcraft / Aslan Aslanov, Change Date 2030-09-25 → Apache 2.0), `NOTICE`; hər mənbə faylında
+  Spotless-in məcbur etdiyi copyright başlığı (`PetekLicense.kt`); `README.md` + `README.az.md`, `SECURITY.md`,
+  `CONTRIBUTING.md`, `docs/requirements/` (R01–R15), GitHub Actions CI, PR şablonu, `CODEOWNERS`.
+- [ ] Ad/marka: `petek` latın yazılışı ilə GitHub org, domen, npm/Maven adlarının tutulması (sahib).
+- [x] Konsist arxitektura testləri `e2e/`-də (CLAUDE.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
 - [ ] `workspace_id` ID sisteminə əlavə olunur (qayda 4): `run`, `identity`, `finding` cədvəlləri və `ReportModel`;
   lokal rejimdə həmişə `local`. Migrasiya `core/sqlite`-də.
 - [ ] Edition sərhədi ADR-i (ADR-0011): ödənişli implementasiyaların port arxasında ayrı modulda yaşayacağı portlar
@@ -749,8 +752,7 @@ hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
 
 ### Qərar gözləyən suallar (Pətək 2)
 
-- [ ] **Lisenziya:** Apache 2.0 (maksimum yayılma) və ya BSL 1.1 → 4 ildən sonra Apache 2.0 (hosted rəqabətdən
-  qorunma)? Tövsiyə: BSL 1.1, çünki hosted sürü satmaq niyyəti var.
+- [x] **Lisenziya:** BSL 1.1 (Kodcraft / Aslan Aslanov), 2030-09-25-də Apache 2.0 — qərar 2026-09-25 (ADR-0011).
 - [ ] **MCP:** Kotlin MCP SDK (yeni kitabxana, qayda 11) və ya SDK-sız nazik stdio JSON-RPC? Tövsiyə: SDK, əgər
   Kotlin 2.4/JDK 25 ilə uyğundursa; deyilsə nazik implementasiya.
 - [ ] **IMAP kitabxanası:** Jakarta Mail (Angus) və ya Ktor üzərində minimal IMAP? Tövsiyə: Jakarta Mail (Angus).
