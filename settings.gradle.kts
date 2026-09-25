@@ -33,6 +33,7 @@ include(
     ":features:verification",
     ":features:orchestration",
     ":features:reporting",
+    ":features:explorer",
     ":app",
     ":testing:fake-target",
     ":e2e",
