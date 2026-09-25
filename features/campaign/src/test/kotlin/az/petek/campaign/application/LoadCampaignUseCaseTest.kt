@@ -90,6 +90,37 @@ class LoadCampaignUseCaseTest {
     }
 
     @Test
+    fun `an endless wait and an off-target oracle path are rejected with their lines`() {
+        val file =
+            write(
+                """
+                campaign:
+                  target: https://staging.kadrohr.test
+                  testers: 2
+                  seed: 1
+                  roles: {admin: 1, manager: 0, employee: 1}
+                  departments: [IT]
+                  budget: {max_steps_per_agent: 10, max_minutes: 5}
+                steps:
+                  - id: make
+                    actor: admin
+                    do: x
+                    emits: created
+                  - id: read
+                    actor: employee
+                    wait_for: {event: created, timeout_s: 1e300}
+                    do: y
+                    assert:
+                      - oracle: {path: "https://elsewhere.test/test/x/{last_id}", field: id}
+                """,
+            )
+        val issues = shouldThrow<CampaignValidationException> { useCase().execute(file, KNOWN_RUN_FUNCTIONS) }.issues
+        issues.single { "wait_for timeout must be finite" in it.message }.line shouldBe 15
+        issues.single { "path must be a path on the target" in it.message }.line shouldBe 18
+        issues.size shouldBe 2
+    }
+
+    @Test
     fun `schema problems stop the load before validation`() {
         val file = write("campaign:\n  testers: 1\n  colour: blue")
         val issues = shouldThrow<CampaignValidationException> { useCase().execute(file, KNOWN_RUN_FUNCTIONS) }.issues

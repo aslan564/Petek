@@ -8,6 +8,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.net.URI
@@ -160,6 +161,18 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `the target must not carry credentials, and messages never show them`() {
+            val issue = issue(with(settings(target = URI("https://bob:hunter2@staging.kadrohr.test/app"))), "must not contain credentials")
+            issue.line shouldBe 11
+            issue.message shouldContain "'https://***@staging.kadrohr.test/app'"
+            issue.message shouldNotContain "hunter2"
+
+            val registry = issues(with(settings(target = URI("https://bob:hunter2@bad_host.test"))))
+            registry.map { it.message }.forEach { it shouldNotContain "hunter2" }
+            registry shouldHaveSize 2
+        }
+
+        @Test
         fun `the name must not be blank`() {
             issue(with(settings().copy(name = " ")), "campaign.name must not be blank")
         }
@@ -246,9 +259,11 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
-        fun `wait_for timeout must be positive`() {
+        fun `wait_for timeout must be positive and finite`() {
             val waiter = step("read", actor = "employee", waitFor = "announcement_created", waitTimeout = Duration.ZERO)
             issue(campaign(announce, waiter), "wait_for timeout must be positive")
+            val forever = step("read", actor = "employee", waitFor = "announcement_created", waitTimeout = Duration.INFINITE)
+            issue(campaign(announce, forever), "wait_for timeout must be finite, was Infinity")
         }
 
         @Test
@@ -321,21 +336,52 @@ class DefaultCampaignValidatorTest {
             vararg assertions: AssertionSpec,
             actor: String = "employee",
             parallel: Boolean = false,
-        ) = campaign(announce, step("check", actor = actor, parallel = parallel, assertions = assertions.toList(), line = 70))
+            waitFor: String? = null,
+            action: StepAction = StepAction.Do("Elan yarat"),
+        ) = campaign(
+            announce,
+            step(
+                "check",
+                actor = actor,
+                action = action,
+                waitFor = waitFor,
+                parallel = parallel,
+                assertions = assertions.toList(),
+                line = 70,
+            ),
+        )
 
         @Test
         fun `latency_max needs an earlier visible_text in the same step`() {
-            issue(asserting(AssertionSpec.LatencyMax(5.seconds)), "must come after a visible_text").line shouldBe 70
+            val waiting = "announcement_created"
+            issue(asserting(AssertionSpec.LatencyMax(5.seconds), waitFor = waiting), "must come after a visible_text").line shouldBe 70
             issue(
-                asserting(AssertionSpec.LatencyMax(5.seconds), AssertionSpec.VisibleText("x", 5.seconds)),
+                asserting(AssertionSpec.LatencyMax(5.seconds), AssertionSpec.VisibleText("x", 5.seconds), waitFor = waiting),
                 "must come after a visible_text",
             )
-            issues(asserting(AssertionSpec.VisibleText("x", 5.seconds), AssertionSpec.LatencyMax(5.seconds))).shouldBeEmpty()
+            issues(
+                asserting(AssertionSpec.VisibleText("x", 5.seconds), AssertionSpec.LatencyMax(5.seconds), waitFor = waiting),
+            ).shouldBeEmpty()
         }
 
         @Test
-        fun `latency_max must be positive`() {
-            issue(asserting(AssertionSpec.VisibleText("x", 5.seconds), AssertionSpec.LatencyMax(Duration.ZERO)), "ms must be positive")
+        fun `latency_max needs a wait_for because latency is measured from the awaited event`() {
+            val issue =
+                issue(
+                    asserting(AssertionSpec.VisibleText("x", 5.seconds), AssertionSpec.LatencyMax(5.seconds)),
+                    "needs the step to wait_for an event",
+                )
+            issue.line shouldBe 70
+            issue.message shouldContain "step 'check', latency_max"
+        }
+
+        @Test
+        fun `latency_max must be positive and finite`() {
+            fun latency(max: Duration) =
+                asserting(AssertionSpec.VisibleText("x", 5.seconds), AssertionSpec.LatencyMax(max), waitFor = "announcement_created")
+
+            issue(latency(Duration.ZERO), "ms must be positive")
+            issue(latency(Duration.INFINITE), "ms must be finite")
         }
 
         @Test
@@ -358,9 +404,30 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
-        fun `visible_text needs text and a positive wait`() {
+        fun `only_one_succeeds needs an action whose outcomes are compared`() {
+            val waiting =
+                asserting(
+                    AssertionSpec.OnlyOneSucceeds,
+                    actor = "manager[IT] | manager[HR]",
+                    parallel = true,
+                    action = StepAction.None,
+                )
+            issue(waiting, "needs a do or run").message shouldContain "step 'check', only_one_succeeds"
+            val running =
+                asserting(
+                    AssertionSpec.OnlyOneSucceeds,
+                    actor = "manager[IT] | manager[HR]",
+                    parallel = true,
+                    action = StepAction.Run("login"),
+                )
+            issues(running).shouldBeEmpty()
+        }
+
+        @Test
+        fun `visible_text needs text and a positive, finite wait`() {
             issue(asserting(AssertionSpec.VisibleText(" ", 5.seconds)), "text must not be blank")
             issue(asserting(AssertionSpec.VisibleText("x", Duration.ZERO)), "within_s must be positive")
+            issue(asserting(AssertionSpec.VisibleText("x", Duration.INFINITE)), "within_s must be finite")
         }
 
         @Test
@@ -373,6 +440,17 @@ class DefaultCampaignValidatorTest {
         @Test
         fun `oracle needs a path`() {
             issue(asserting(AssertionSpec.Oracle("", "status", "ok", null)), "path must not be blank")
+        }
+
+        @Test
+        fun `oracle and http_status paths must stay on the target`() {
+            for (path in listOf("https://evil.test/test/x", "//evil.test/x", "/\\evil.test/x", "test/x", "{last_id}")) {
+                issue(asserting(AssertionSpec.Oracle(path, null, null, null)), "starting with a single '/'").message shouldContain
+                    "step 'check', oracle: path must be a path on the target"
+                issue(asserting(AssertionSpec.HttpStatus(path, "GET", 200)), "starting with a single '/'").message shouldContain
+                    "step 'check', http_status: path must be a path on the target"
+            }
+            issues(asserting(AssertionSpec.HttpStatus("/api/tickets/1/approve?next=https://x.test", "POST", 403))).shouldBeEmpty()
         }
 
         @Test
@@ -425,6 +503,20 @@ class DefaultCampaignValidatorTest {
         @Test
         fun `placeholder look-alikes in the wrong case are rejected`() {
             issue(campaign(step("s", action = StepAction.Do("Mail {Self.Email}"))), "'{Self.Email}' looks like a placeholder")
+        }
+
+        @Test
+        fun `placeholder look-alikes the renderer would leave literal are rejected`() {
+            val hyphen =
+                step("open", action = StepAction.Do("Open /tickets/{event.ticket-created.id}"))
+            issue(campaign(step("t", emits = "ticket-created"), hyphen), "'{event.ticket-created.id}' looks like a placeholder")
+            issue(campaign(announce, step("s", action = StepAction.Do("Open { last_id }"))), "'{ last_id }' looks like a placeholder")
+        }
+
+        @Test
+        fun `braces that cannot be placeholders are left alone`() {
+            val text = "Yaz: {\"a\": 1}, \\d{3}, {bir iki}"
+            issues(campaign(step("s", action = StepAction.Do(text)))).shouldBeEmpty()
         }
 
         @Test
@@ -509,6 +601,29 @@ class DefaultCampaignValidatorTest {
             issue(campaign(announce, target = profile("announcement_created" to IdSource.OracleField("/x", ""))), "oracle field")
             issue(campaign(announce, target = profile("announcement_created" to IdSource.DomAttribute("", "data-id"))), "dom selector")
             issue(campaign(announce, target = profile("announcement_created" to IdSource.DomAttribute("li", " "))), "dom attribute")
+        }
+
+        @Test
+        fun `oracle id sources must stay on the target`() {
+            val offsite = IdSource.OracleField("https://evil.test/latest?by={self.email}", "id")
+            issue(campaign(announce, target = profile("announcement_created" to offsite)), "oracle path must be a path on the target")
+        }
+
+        @Test
+        fun `page paths and selectors of the target profile are checked`() {
+            val lines = SourceLines(mapOf(SourceLines.ROOT to 1, "target_profile.paths.login" to 17))
+            val profile =
+                TargetProfile(
+                    paths = mapOf("login" to "https://evil.test/login", "ticket" to "/tickets/{last_id}", "home" to "/{Self.Home}"),
+                    selectors = mapOf("login.email" to " ", "item" to "[data-id='{event.nope.id}']"),
+                    idSources = emptyMap(),
+                )
+            val found = issues(campaign(announce, target = profile, sourceLines = lines))
+            found.single { "target_profile.paths.login must be a path on the target" in it.message }.line shouldBe 17
+            found.single { "'{Self.Home}' looks like a placeholder" in it.message }
+            found.single { "target_profile.selectors.login.email must not be blank" in it.message }
+            found.single { "{event.nope.id} refers to 'nope', which no step emits" in it.message }
+            found shouldHaveSize 4
         }
 
         @Test

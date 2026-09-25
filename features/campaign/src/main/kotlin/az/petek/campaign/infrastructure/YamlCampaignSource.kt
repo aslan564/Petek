@@ -69,23 +69,36 @@ class YamlCampaignSource(
             fail(null, "campaign file '$path' is not valid UTF-8")
         }
 
-    /** Valid YAML is parsed as is; only a file that fails to parse gets its actor flow lists quoted and a second try. */
+    /**
+     * Valid YAML is parsed as is; only a file that fails to parse gets its actor flow lists quoted and a second try.
+     * The repair is kept only when every line it touched is a step's `actor` key, otherwise the original error stands.
+     */
     private fun parse(text: String): YamlNode =
         try {
             Yaml.default.parseToYamlNode(text)
         } catch (e: EmptyYamlDocumentException) {
             fail(null, "the campaign file is empty")
         } catch (e: MalformedYamlException) {
-            val repaired = quoteActorFlowLists(text)
-            if (repaired == text) syntaxError(e)
+            parseRepaired(text, e)
+        } catch (e: YamlException) {
+            syntaxError(e)
+        }
+
+    private fun parseRepaired(
+        text: String,
+        original: MalformedYamlException,
+    ): YamlNode {
+        val repaired = quoteActorFlowLists(text)
+        if (repaired == text) syntaxError(original)
+        val root =
             try {
                 Yaml.default.parseToYamlNode(repaired)
             } catch (retry: YamlException) {
                 syntaxError(retry)
             }
-        } catch (e: YamlException) {
-            syntaxError(e)
-        }
+        if (!onlyStepActorsChanged(changedLines(text, repaired), collectSourceLines(root))) syntaxError(original)
+        return root
+    }
 
     private fun syntaxError(e: YamlException): Nothing = fail(e.line, "YAML syntax error: ${e.message}")
 

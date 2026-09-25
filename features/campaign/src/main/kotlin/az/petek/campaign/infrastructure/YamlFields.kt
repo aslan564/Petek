@@ -20,7 +20,17 @@ internal class YamlFields(
 
     fun has(key: String): Boolean = get(key) != null
 
+    /** Whether [key] is written at all, even without a value (`do:`). */
+    fun declares(key: String): Boolean = key in keys
+
     fun pathOf(key: String): String = childPath(path, key)
+
+    /**
+     * The node under an optional [key]; null when the key is absent. A key written without a value is a problem:
+     * for keys like `do`, `assert` or `wait_for` an empty value would silently turn the step into one that checks less.
+     */
+    fun valued(key: String): YamlNode? =
+        get(key) ?: if (declares(key)) reader.problem(pathOf(key), "${displayPath(pathOf(key))} has no value") else null
 
     /** The node under [key], or a "missing key" / "no value" problem. */
     fun required(key: String): YamlNode? =

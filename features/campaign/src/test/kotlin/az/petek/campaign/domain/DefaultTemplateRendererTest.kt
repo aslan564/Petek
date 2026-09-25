@@ -88,6 +88,18 @@ class DefaultTemplateRendererTest {
     }
 
     @Test
+    fun `a blank value counts as missing instead of producing a wrong URL`() {
+        val blank = context.copy(lastId = " ", self = context.self + ("department" to ""), eventIds = mapOf("ticket_created" to ""))
+        val error =
+            shouldThrow<TemplateException> {
+                renderer.render("/t/{last_id}/{event.ticket_created.id}?d={self.department}", blank)
+            }
+        error.message shouldContain "{last_id} cannot be resolved"
+        error.message shouldContain "{event.ticket_created.id} cannot be resolved"
+        error.message shouldContain "has no 'department' (available: agent_id, email, name, phone, role)"
+    }
+
+    @Test
     fun `a missing self field fails naming the field and the available ones`() {
         val error = shouldThrow<TemplateException> { renderer.render("{self.password}", context) }
         error.message shouldContain "{self.password}"

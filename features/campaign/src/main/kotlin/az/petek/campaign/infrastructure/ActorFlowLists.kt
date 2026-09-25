@@ -1,5 +1,7 @@
 package az.petek.campaign.infrastructure
 
+import az.petek.campaign.domain.SourceLines
+
 /**
  * `actor: [manager[IT], manager[HR]]` is the list form documented in docs/PLAN.md and used by `scenarios/kadrohr.yaml`,
  * but it is not valid YAML: inside a flow sequence `[` and `]` are indicators, so `manager[IT]` cannot be a plain item.
@@ -10,6 +12,34 @@ package az.petek.campaign.infrastructure
  * span several lines or are followed by anything but a comment are left for the YAML parser to judge.
  */
 internal fun quoteActorFlowLists(text: String): String = text.split('\n').joinToString("\n", transform = ::quoteActorFlowList)
+
+/** 1-based numbers of the lines [quoteActorFlowLists] changed; the line count never changes, so they align. */
+internal fun changedLines(
+    original: String,
+    repaired: String,
+): Set<Int> =
+    original
+        .split('\n')
+        .zip(repaired.split('\n'))
+        .mapIndexedNotNullTo(LinkedHashSet()) { index, (before, after) -> (index + 1).takeIf { before != after } }
+
+/**
+ * Whether every line in [changed] holds the `actor` key of a setup or main step in the repaired tree. A line that
+ * merely looks like `actor: [...]` elsewhere (inside a `do: |` block, say) must never be rewritten silently.
+ */
+internal fun onlyStepActorsChanged(
+    changed: Set<Int>,
+    lines: SourceLines,
+): Boolean {
+    val actorLines =
+        lines.byPath
+            .filterKeys { STEP_ACTOR_PATH.matches(it) }
+            .values
+            .toSet()
+    return actorLines.containsAll(changed)
+}
+
+private val STEP_ACTOR_PATH = Regex("""(setup|steps)\[\d+]\.actor""")
 
 internal fun quoteActorFlowList(line: String): String {
     val prefix = ACTOR_FLOW_LIST_START.find(line)?.groupValues?.get(1) ?: return line

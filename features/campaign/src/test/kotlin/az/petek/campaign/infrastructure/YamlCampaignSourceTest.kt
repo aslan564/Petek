@@ -438,8 +438,20 @@ class YamlCampaignSourceTest {
         }
 
         @Test
+        fun `step keys written without a value are errors, not silently dropped`() {
+            fun step(body: String) = withSteps("steps:\n  - actor: admin\n$body")
+
+            issue(step("    do:\n    assert:\n      - count: {selector: li, equals: 1}"), "'steps[0].do' has no value").line shouldBe 10
+            issue(step("    run:\n    assert:\n      - count: {selector: li, equals: 1}"), "'steps[0].run' has no value").line shouldBe 10
+            issue(step("    do: x\n    assert:"), "'steps[0].assert' has no value").line shouldBe 11
+            issue(step("    do: x\n    emits:"), "'steps[0].emits' has no value").line shouldBe 11
+            issue(step("    do: x\n    wait_for: ~"), "'steps[0].wait_for' has no value").line shouldBe 11
+        }
+
+        @Test
         fun `do and run are mutually exclusive`() {
             issue(withSteps("steps:\n  - actor: admin\n    do: x\n    run: login"), "has both do and run").line shouldBe 9
+            issue(withSteps("steps:\n  - actor: admin\n    do:\n    run: login"), "has both do and run").line shouldBe 9
         }
 
         @Test
@@ -524,6 +536,24 @@ class YamlCampaignSourceTest {
             val issue = issues("campaign:\n  testers: 3\n  roles: {admin: 1\nsteps: []").single()
             issue.message shouldContain "YAML syntax error"
             issue.line shouldBe 4
+        }
+
+        @Test
+        fun `the documented bracketed actor list loads with its items quoted`() {
+            val campaign = load(withSteps("steps:\n  - actor: [employee[IT], employee[dept=IT, n=1]]   # race\n    do: x"))
+            campaign.steps
+                .single()
+                .actors.selectors shouldContainExactly
+                listOf(ActorSelector(Role.EMPLOYEE, department = "IT"), ActorSelector(Role.EMPLOYEE, department = "IT", nth = 1))
+            campaign.steps.single().line shouldBe 9
+        }
+
+        @Test
+        fun `the actor list repair never rewrites text outside a step actor`() {
+            val yaml = withSteps("steps:\n  - actor: [employee[IT], admin]\n    do: |\n      actor: [a[b]]")
+            val issue = issues(yaml).single()
+            issue.message shouldContain "YAML syntax error"
+            issue.line shouldBe 9
         }
 
         @Test

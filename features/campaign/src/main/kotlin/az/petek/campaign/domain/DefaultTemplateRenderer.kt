@@ -3,7 +3,8 @@ package az.petek.campaign.domain
 /**
  * Renders `{placeholder}` templates (see [Placeholder]). Only `{` + [Placeholder.NAME_PATTERN] + `}` is a placeholder,
  * so regex quantifiers like `\d{3}` or JSON braces stay literal. Substituted values are inserted verbatim and never
- * rendered again, so a value containing braces cannot inject another placeholder.
+ * rendered again, so a value containing braces cannot inject another placeholder. A blank value counts as missing:
+ * `/test/tickets/{last_id}` must fail rather than become `/test/tickets/`.
  */
 class DefaultTemplateRenderer : TemplateRenderer {
     override fun render(
@@ -33,7 +34,7 @@ class DefaultTemplateRenderer : TemplateRenderer {
             is Placeholder.Self -> context.self[placeholder.field]
             is Placeholder.EventId -> context.eventIds[placeholder.event]
             null -> null
-        }
+        }?.takeUnless { it.isBlank() }
 
     private fun problem(
         name: String,
@@ -46,7 +47,7 @@ class DefaultTemplateRenderer : TemplateRenderer {
 
             is Placeholder.Self -> {
                 "Placeholder {$name} cannot be resolved: the tester has no '${placeholder.field}' " +
-                    "(available: ${context.self.keys.sorted().joinToString(", ").ifEmpty { "none" }})"
+                    "(available: ${context.self.filterValues { it.isNotBlank() }.keys.sorted().joinToString(", ").ifEmpty { "none" }})"
             }
 
             is Placeholder.EventId -> {

@@ -4,17 +4,20 @@ import az.petek.core.model.Role
 import java.net.URI
 import java.util.regex.Pattern
 import java.util.regex.PatternSyntaxException
+import kotlin.time.Duration
 
 /**
  * Checks every rule listed on [CampaignValidator] and the following, reporting all issues at once (never just the first):
  *
  * - settings: `testers > 0`, role and registration quotas are non-negative and add up, departments are non-empty,
  *   unique and addressable by the actor grammar, names are unique, the budget is positive, the target is an absolute
- *   http(s) URL;
+ *   http(s) URL without credentials (messages mask them);
  * - actors: named departments exist and every expression can match at least one tester under the quotas;
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
- *   emitted by an earlier step, `latency_max` follows a `visible_text` of the same step, `only_one_succeeds` needs
- *   `parallel: true` and actors that can match two or more testers;
+ *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
+ *   step that waits for an event (t0), `only_one_succeeds` needs a `do`/`run`, `parallel: true` and actors that can
+ *   match two or more testers;
+ * - paths: oracle, `http_status` and `target_profile.paths` values are `/...` paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
  * - templates use only [Placeholder.SUPPORTED_FORMS]. In `do`/`run` text and a step's own id source, `{last_id}` and
  *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts.
@@ -78,7 +81,14 @@ class DefaultCampaignValidator(
         private fun checkTarget(target: URI) {
             val scheme = target.scheme?.lowercase()
             if (!target.isAbsolute || scheme !in WEB_SCHEMES || target.host.isNullOrBlank()) {
-                report("campaign.target", "campaign.target must be an absolute http(s) URL with a host, was '$target'")
+                report("campaign.target", "campaign.target must be an absolute http(s) URL with a host, was '${redacted(target)}'")
+            }
+            if (target.rawAuthority?.contains('@') == true) {
+                report(
+                    "campaign.target",
+                    "campaign.target must not contain credentials ('user:password@'); the target is copied into run records " +
+                        "and reports, was '${redacted(target)}'",
+                )
             }
         }
 
@@ -162,10 +172,21 @@ class DefaultCampaignValidator(
         // ---- target profile ----
 
         private fun checkTargetProfile() {
+            val anyStep = EventScope(emittedAnywhere, "any step")
+            campaign.target.paths.forEach { (key, value) ->
+                val path = "target_profile.paths.$key"
+                relativePathProblem(value)?.let { report(path, "$path $it") }
+                checkTemplate(value, path, path, anyStep, fallbackLine = null)
+            }
+            campaign.target.selectors.forEach { (key, value) ->
+                val path = "target_profile.selectors.$key"
+                if (value.isBlank()) report(path, "$path must not be blank")
+                checkTemplate(value, path, path, anyStep, fallbackLine = null)
+            }
             campaign.target.idSources.forEach { (event, source) ->
                 val path = "target_profile.id_sources.$event"
                 if (event !in emittedAnywhere) report(path, "$path: no step emits '$event'")
-                checkIdSource(source, path, context = path, EventScope(emittedAnywhere, "any step"), fallbackLine = null)
+                checkIdSource(source, path, context = path, anyStep, fallbackLine = null)
             }
         }
 
@@ -182,7 +203,7 @@ class DefaultCampaignValidator(
                 }
 
                 is IdSource.OracleField -> {
-                    if (source.path.isBlank()) report(path, "$context: oracle path must not be blank", fallbackLine)
+                    relativePathProblem(source.path)?.let { report(path, "$context: oracle path $it", fallbackLine) }
                     if (source.field.isBlank()) report(path, "$context: oracle field must not be blank", fallbackLine)
                     checkTemplate(source.path, path, context, scope, fallbackLine)
                 }
@@ -354,7 +375,7 @@ class DefaultCampaignValidator(
                     val reason = if (waitFor.event in emittedAnywhere) "is emitted only by this or a later step" else "no step emits"
                     report("wait_for", "$name waits for '${waitFor.event}', which $reason")
                 }
-                if (!waitFor.timeout.isPositive()) report("wait_for", "$name: wait_for timeout must be positive, was ${waitFor.timeout}")
+                durationProblem(waitFor.timeout)?.let { report("wait_for", "$name: wait_for timeout $it") }
             }
 
             private fun checkAssertion(
@@ -376,7 +397,7 @@ class DefaultCampaignValidator(
                     is AssertionSpec.VisibleText -> {
                         listOfNotNull(
                             "text must not be blank".takeIf { assertion.text.isBlank() },
-                            "within_s must be positive, was ${assertion.within}".takeUnless { assertion.within.isPositive() },
+                            durationProblem(assertion.within)?.let { "within_s $it" },
                         )
                     }
 
@@ -386,12 +407,12 @@ class DefaultCampaignValidator(
                     }
 
                     is AssertionSpec.Oracle -> {
-                        listOfNotNull("path must not be blank".takeIf { assertion.path.isBlank() })
+                        listOfNotNull(relativePathProblem(assertion.path)?.let { "path $it" })
                     }
 
                     is AssertionSpec.HttpStatus -> {
                         listOfNotNull(
-                            "path must not be blank".takeIf { assertion.path.isBlank() },
+                            relativePathProblem(assertion.path)?.let { "path $it" },
                             "method '${assertion.method}' is not one of $HTTP_METHODS".takeIf { assertion.method !in HTTP_METHODS },
                             "equals must be an HTTP status (100-599), was ${assertion.equals}".takeIf { assertion.equals !in 100..599 },
                         )
@@ -406,15 +427,18 @@ class DefaultCampaignValidator(
 
                     is AssertionSpec.LatencyMax -> {
                         listOfNotNull(
-                            "ms must be positive, was ${assertion.max}".takeUnless { assertion.max.isPositive() },
+                            durationProblem(assertion.max)?.let { "ms $it" },
                             "must come after a visible_text assertion of the same step, which measures the latency"
                                 .takeIf { step.assertions.take(index).none { it is AssertionSpec.VisibleText } },
+                            "needs the step to wait_for an event, because latency is measured from the time that event was emitted"
+                                .takeIf { step.waitFor == null },
                         )
                     }
 
                     AssertionSpec.OnlyOneSucceeds -> {
                         listOfNotNull(
                             "needs parallel: true so the actors start at the same instant".takeUnless { step.parallel },
+                            "needs a do or run whose outcomes are compared".takeIf { step.action == StepAction.None },
                             maxMatches(step.actors).takeIf { it < 2 }?.let {
                                 "needs actors that can match at least 2 testers, but '${step.actors.raw}' matches at most $it"
                             },
@@ -446,7 +470,12 @@ class DefaultCampaignValidator(
                 placeholderProblem(name, scope)?.let { report(path, "$context: $it", fallbackLine) }
             }
             LOOKALIKE.findAll(text).map { it.value }.filterNot { Placeholder.NAME_PATTERN.matches(it.drop(1).dropLast(1)) }.forEach {
-                report(path, "$context: '$it' looks like a placeholder, but placeholder names are lower-case", fallbackLine)
+                report(
+                    path,
+                    "$context: '$it' looks like a placeholder but would stay literal; placeholder names use only " +
+                        "lower-case letters, digits, '_' and '.', without spaces",
+                    fallbackLine,
+                )
             }
         }
 
@@ -508,7 +537,44 @@ class DefaultCampaignValidator(
         val WEB_SCHEMES = setOf("http", "https")
         val HTTP_METHODS = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 
-        /** Brace text shaped like a placeholder in any letter case, to catch `{Self.Email}` typos. */
-        val LOOKALIKE = Regex("\\{[A-Za-z_][A-Za-z0-9_.]*}")
+        /**
+         * Brace text shaped like a placeholder that the renderer would leave literal: `{Self.Email}`,
+         * `{event.ticket-created.id}`, `{ last_id }`. Such a typo would otherwise reach a URL or prompt unreplaced.
+         */
+        val LOOKALIKE = Regex("""\{\s*[A-Za-z_][A-Za-z0-9_.\-]*\s*}""")
+
+        /** Timeouts must end: an infinite one (`timeout_s: 1e300` overflows to it) would hang the run instead of failing the step. */
+        fun durationProblem(duration: Duration): String? =
+            when {
+                !duration.isPositive() -> "must be positive, was $duration"
+                !duration.isFinite() -> "must be finite, was $duration"
+                else -> null
+            }
+
+        /**
+         * Oracle, HTTP and page paths are resolved against the target. An absolute or scheme-relative URL would send
+         * the test token, the agent's cookies or typed passwords to another host, so only `/...` paths are accepted.
+         */
+        fun relativePathProblem(path: String): String? =
+            when {
+                path.isBlank() -> {
+                    "must not be blank"
+                }
+
+                !path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\") -> {
+                    "must be a path on the target starting with a single '/', was '$path'"
+                }
+
+                else -> {
+                    null
+                }
+            }
+
+        /** The target as shown in messages: credentials in the authority are masked. */
+        fun redacted(target: URI): String {
+            val authority = target.rawAuthority ?: return target.toString()
+            val at = authority.lastIndexOf('@')
+            return if (at < 0) target.toString() else target.toString().replaceFirst(authority, "***@" + authority.substring(at + 1))
+        }
     }
 }

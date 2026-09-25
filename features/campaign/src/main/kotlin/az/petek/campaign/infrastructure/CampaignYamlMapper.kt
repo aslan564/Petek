@@ -45,8 +45,9 @@ internal class CampaignYamlMapper(
         val reader = YamlReader(lines)
         val campaign = Reading(reader).campaign(root, sourceHash)
         val issues = reader.issues
-        if (issues.isNotEmpty() || campaign == null) throw CampaignValidationException(issues)
-        return campaign.copy(sourceLines = lines)
+        if (issues.isNotEmpty()) throw CampaignValidationException(issues)
+        // Every path that yields no campaign records a problem first; reaching this without one is a mapper bug.
+        return checkNotNull(campaign) { "campaign mapping produced neither a campaign nor an issue" }.copy(sourceLines = lines)
     }
 
     /** One mapping pass over one file. */
@@ -257,8 +258,8 @@ internal class CampaignYamlMapper(
             val id = fields.text("id") ?: "${if (phase == StepPhase.SETUP) "setup" else "step"}-$ordinal"
             val actors = actors(fields)
             val action = action(fields)
-            val emits = fields["emits"]?.let { emits(it, fields.pathOf("emits")) }
-            val waitFor = fields["wait_for"]?.let { waitFor(it, fields.pathOf("wait_for")) }
+            val emits = fields.valued("emits")?.let { emits(it, fields.pathOf("emits")) }
+            val waitFor = fields.valued("wait_for")?.let { waitFor(it, fields.pathOf("wait_for")) }
             val parallel = fields.bool("parallel") ?: false
             val onFail = onFail(fields)
             val assertions = assertions(fields)
@@ -303,16 +304,16 @@ internal class CampaignYamlMapper(
 
         private fun action(fields: YamlFields): StepAction? =
             when {
-                fields.has("do") && fields.has("run") -> {
+                fields.declares("do") && fields.declares("run") -> {
                     reader.problem(fields.path, "'${fields.path}' has both do and run; use one of them")
                 }
 
-                fields.has("do") -> {
-                    fields.text("do")?.let { StepAction.Do(it) }
+                fields.declares("do") -> {
+                    fields.valued("do")?.let { reader.text(it, fields.pathOf("do")) }?.let { StepAction.Do(it) }
                 }
 
-                fields.has("run") -> {
-                    run(fields["run"], fields.pathOf("run"))
+                fields.declares("run") -> {
+                    fields.valued("run")?.let { run(it, fields.pathOf("run")) }
                 }
 
                 else -> {
@@ -321,7 +322,7 @@ internal class CampaignYamlMapper(
             }
 
         private fun run(
-            node: YamlNode?,
+            node: YamlNode,
             path: String,
         ): StepAction.Run? {
             if (node is YamlScalar) return StepAction.Run(node.content)
@@ -371,7 +372,7 @@ internal class CampaignYamlMapper(
         // ---- assertions ----
 
         private fun assertions(fields: YamlFields): List<AssertionSpec> {
-            val items = reader.list(fields["assert"], fields.pathOf("assert")) ?: return emptyList()
+            val items = reader.list(fields.valued("assert"), fields.pathOf("assert")) ?: return emptyList()
             return items.mapNotNull(::assertion)
         }
 
