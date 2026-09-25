@@ -45,6 +45,9 @@ internal class RunState(
     /** Ids of the scenario steps that have been started, in order. */
     val startedSteps: MutableSet<String> = java.util.Collections.synchronizedSet(LinkedHashSet())
 
+    /** The agents each started step was run by (step id -> agent ids), as resolved when it started. */
+    val executedActors = ConcurrentHashMap<String, List<AgentId>>()
+
     /** Company ids already registered as run resources. */
     val companies: MutableSet<String> = ConcurrentHashMap.newKeySet()
 

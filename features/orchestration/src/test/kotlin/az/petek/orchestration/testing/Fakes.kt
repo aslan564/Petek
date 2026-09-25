@@ -38,7 +38,11 @@ import az.petek.oracle.domain.JsonFieldSelector
 import az.petek.orchestration.application.RunFinalizer
 import az.petek.orchestration.domain.AgentStatus
 import az.petek.orchestration.domain.MonitorView
+import az.petek.orchestration.domain.PublishedEvent
+import az.petek.orchestration.domain.RunPlan
 import az.petek.orchestration.domain.RunSummary
+import az.petek.orchestration.domain.TaskState
+import az.petek.orchestration.domain.TaskUpdate
 import az.petek.verification.application.VerifyStepUseCase
 import az.petek.verification.domain.ActorResult
 import az.petek.verification.domain.AssertionInput
@@ -327,16 +331,26 @@ class TestSharedRunState : SharedRunState {
     ): String? = withTimeoutOrNull(timeout) { values.first { key in it }[key] }
 }
 
+/**
+ * Records every monitor call. [events] keeps the board's calls (run, steps, messages); [timeline] has every call in
+ * order as one readable line, task updates as `task <step> <agent> <STATE>`.
+ */
 class RecordingMonitor : MonitorView {
     val events = CopyOnWriteArrayList<String>()
     val statuses = CopyOnWriteArrayList<AgentStatus>()
     val summaries = CopyOnWriteArrayList<RunSummary>()
+    val plans = CopyOnWriteArrayList<RunPlan>()
+    val tasks = CopyOnWriteArrayList<TaskUpdate>()
+    val published = CopyOnWriteArrayList<PublishedEvent>()
+    val received = CopyOnWriteArrayList<String>()
+    val timeline = CopyOnWriteArrayList<String>()
 
     override fun runStarted(
         runId: RunId,
         agents: List<AgentStatus>,
     ) {
         events += "runStarted ${agents.size}"
+        timeline += "runStarted ${agents.size}"
     }
 
     override fun agentUpdated(status: AgentStatus) {
@@ -345,16 +359,51 @@ class RecordingMonitor : MonitorView {
 
     override fun stepStarted(scenarioStep: String) {
         events += "step $scenarioStep"
+        timeline += "step $scenarioStep"
     }
 
     override fun message(text: String) {
         events += "message $text"
+        timeline += "message $text"
     }
 
     override fun runFinished(summary: RunSummary) {
         summaries += summary
         events += "runFinished ${summary.outcome}"
+        timeline += "runFinished ${summary.outcome}"
     }
+
+    override fun planReady(plan: RunPlan) {
+        plans += plan
+        timeline += "plan " + plan.steps.joinToString(" ") { step -> "${step.id}=${step.resolvedAgents.joinToString(",")}" }
+    }
+
+    override fun taskUpdated(update: TaskUpdate) {
+        tasks += update
+        timeline += "task ${update.stepId} ${update.agentId} ${update.state}"
+    }
+
+    override fun eventPublished(event: PublishedEvent) {
+        published += event
+        timeline += "published ${event.name} by ${event.emitter}"
+    }
+
+    override fun eventReceived(
+        eventName: String,
+        agentId: AgentId,
+        latencyMs: Long?,
+        received: Boolean,
+    ) {
+        val line = "${if (received) "received" else "missed"} $eventName by $agentId"
+        this.received += line
+        timeline += line
+    }
+
+    /** The states one task went through, in order. */
+    fun statesOf(
+        stepId: String,
+        agent: String,
+    ): List<TaskState> = tasks.filter { it.stepId == stepId && it.agentId == AgentId(agent) }.map { it.state }
 }
 
 class CountingFinalizer(

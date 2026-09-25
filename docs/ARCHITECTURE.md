@@ -25,7 +25,7 @@ ordered by number everywhere.
 | `features/llm` | Structured-output LLM calls, retries, concurrency limit, usage metering | `LlmClient` | Claude Code CLI (`claude -p`, Claude plan) and Anthropic Java SDK |
 | `features/agent` | Tool whitelist, decision protocol, agent loop, deterministic `run` functions | `DecisionProtocol`, `LoopDetector`, `AgentLoop`, `RunFunction`, `TesterAgent` | — |
 | `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds), race evidence from each actor's own requests | `AssertionEvaluator`, `VerifyStepUseCase`, `RaceEvidence` | — |
-| `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
+| `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board, the orchestrator's task plan for live views | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
 | `app` | CLI (`plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`), `.env` config, composition root, logging | — | Clikt, logback |
@@ -125,6 +125,18 @@ is decided by code from each actor's own requests (CLAUDE.md rule 2), never by w
    observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve -> 303; a03 POST
    /tickets/t2/approve -> 409`). With `oracle: {path, field, equals}` and a test API, the target's final state must
    match too, and its answer is kept as an ORACLE artifact.
+
+## Live task plan
+
+Besides the agent board, `MonitorView` receives the orchestrator's plan and progress, for the web panel (the console
+views may ignore them; the methods have no-op defaults):
+
+- `planReady(RunPlan)`: every step (phase, actors as written, `do`/`run` text, `emits`, `wait_for`, `parallel`,
+  assertion types) with the agents that act in it. Sent once the agents' sessions are open and again before a step
+  when an agent that failed meanwhile changes who runs the remaining steps; steps already run keep their agents.
+- `taskUpdated(TaskUpdate)`: every step × agent transition, `PENDING` -> (`WAITING_EVENT`) -> `RUNNING` ->
+  `PASSED` | `FAILED` | `BLOCKED` | `LOST_RACE`, or `SKIPPED` (agent failed earlier, run aborted, never reached).
+- `eventPublished(PublishedEvent)` and `eventReceived(event, agent, latencyMs, received)` for the event timeline.
 
 ## Capacity advice (`petek capacity`)
 

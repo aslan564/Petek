@@ -11,6 +11,7 @@ import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.orchestration.domain.RunOutcome
+import az.petek.orchestration.domain.TaskState
 import az.petek.orchestration.testing.AgentCall
 import az.petek.orchestration.testing.RunnerFixture
 import az.petek.orchestration.testing.VirtualClock
@@ -124,6 +125,8 @@ class RunnerRaceTest {
             summary.outcome shouldBe RunOutcome.PASSED
             summary.stepsFailed shouldBe 0
             summary.failedAgents shouldBe 0
+            f.monitor.statesOf("race", "a03").last() shouldBe TaskState.LOST_RACE
+            f.monitor.statesOf("race", "a02").last() shouldBe TaskState.PASSED
         }
 
     // --- verdicts --------------------------------------------------------------------------------------------------------
@@ -266,6 +269,7 @@ class RunnerRaceTest {
             failed.status shouldBe StepStatus.ERROR
             failed.detail shouldBe "browser_error: page crashed; request: no matching request"
             f.evidence.artifactList.map { it.stepId } shouldContainExactly listOf(failed.stepId)
+            f.monitor.statesOf("race", "a03").last() shouldBe TaskState.FAILED
             summary.failedAgents shouldBe 1
         }
 
@@ -359,6 +363,7 @@ class RunnerRaceTest {
             f.verify.groupCalls.shouldBeEmpty()
             f.evidence.assertionList.shouldBeEmpty()
             f.steps("work", StepKind.DO).single { it.agentId == AgentId("a02") }.status shouldBe StepStatus.PASSED
+            f.monitor.statesOf("work", "a02").last() shouldBe TaskState.PASSED
             f.evidence.eventList
                 .singleOrNull()
                 .shouldBeNull()

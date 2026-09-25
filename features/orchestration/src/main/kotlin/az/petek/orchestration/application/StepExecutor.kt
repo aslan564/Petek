@@ -33,6 +33,7 @@ import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.ActorResolver
 import az.petek.orchestration.domain.AgentState
 import az.petek.orchestration.domain.PublishedEvent
+import az.petek.orchestration.domain.TaskState
 import az.petek.verification.application.VerifyStepUseCase
 import az.petek.verification.domain.ActorResult
 import az.petek.verification.domain.AssertionInput
@@ -93,6 +94,9 @@ internal data class StepResult(
  * expects: its action is recorded PASSED with detail `lost_race: ...`, it does not count as a failed agent, and the
  * group assertion decides. Because that needs every actor's evidence, the action records of a race step are written
  * once all its actors are done (with their own start and end times).
+ *
+ * Every task transition (waiting, running, final state) and every event published or received is reported to the
+ * [TaskBoard].
  */
 internal class StepExecutor(
     private val run: RunState,
@@ -103,11 +107,13 @@ internal class StepExecutor(
     private val ids: IdGenerator get() = services.ids
     private val evidence: HarnessEvidence get() = services.evidence
     private val board: AgentBoard get() = services.board
+    private val tasks: TaskBoard get() = services.tasks
 
     suspend fun execute(step: ScenarioStep): StepResult {
         board.stepStarted(step.id)
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
+        run.executedActors[step.id] = chosen.map { it.agentId }
         if (chosen.isEmpty()) {
             evidence.system(run, null, "skip", StepStatus.SKIPPED, "no active actor matches '${step.actors.raw}'", step.id)
             return StepResult(step, emptyList(), groupFailed = false)
@@ -133,6 +139,7 @@ internal class StepExecutor(
                 val reason = run.failureReason(it.agentId) ?: "failed"
                 val detail = "agent failed earlier ($reason)"
                 evidence.system(run, it.agentId, "skip", StepStatus.SKIPPED, detail, step.id)
+                tasks.update(step.id, it.agentId, TaskState.SKIPPED, detail)
             }
     }
 
@@ -189,6 +196,7 @@ internal class StepExecutor(
         spec: WaitForSpec,
     ): WaitResult {
         board.update(actor.agentId, AgentState.WAITING, actor.step.id, "wait_for ${spec.event}")
+        tasks.update(actor.step.id, actor.agentId, TaskState.WAITING_EVENT, "wait_for ${spec.event}")
         val started = clock.now()
         val event = run.bus.await(spec.event, afterSequence = 0, timeout = spec.timeout) ?: return WaitResult.TimedOut(started)
         val stepId =
@@ -233,6 +241,7 @@ internal class StepExecutor(
         skipAction(actor, reason)
         evidence.skippedAssertions(run, actor.stepId, actor.step.id, actor.agentId, actorSpecs(actor.step), reason)
         board.update(actor.agentId, AgentState.IDLE, actor.step.id, "$NOT_RECEIVED ${spec.event}")
+        tasks.update(actor.step.id, actor.agentId, TaskState.FAILED, detail)
         return ActorStepResult(actor.identity, null, NOT_RECEIVED)
     }
 
@@ -271,6 +280,7 @@ internal class StepExecutor(
         latencyMs: Long?,
     ) {
         services.recorder.receipt(EventReceipt(event.eventId, run.runId, actor.agentId, received, t1, latencyMs))
+        tasks.eventReceived(event.name, actor.agentId, latencyMs, received)
     }
 
     // --- action ---------------------------------------------------------------------------------------------------
@@ -312,6 +322,7 @@ internal class StepExecutor(
             "not evaluated: the step could not be rendered",
         )
         board.update(actor.agentId, AgentState.IDLE, actor.step.id, detail)
+        tasks.update(actor.step.id, actor.agentId, TaskState.FAILED, detail)
         return ActorStepResult(actor.identity, null, TEMPLATE_ERROR)
     }
 
@@ -342,6 +353,7 @@ internal class StepExecutor(
     ): Performed {
         val description = describe(action)
         board.update(actor.agentId, AgentState.WORKING, actor.step.id, description)
+        tasks.update(actor.step.id, actor.agentId, TaskState.RUNNING, description)
         val started = clock.now()
         val outcome = if (action is StepAction.None) NOTHING_TO_DO else execute(actor, action, templates)
         return Performed(action, description, started, clock.now(), outcome)
@@ -495,6 +507,7 @@ internal class StepExecutor(
         val source = spec.idSource ?: run.campaign.target.idSource(spec.event)
         val resolution = services.objectIds.read(source, actor.session, outcome, templates)
         val event = run.bus.publish(spec.event, resolution.objectId, actor.agentId)
+        tasks.eventPublished(event)
         services.recorder.event(
             EventRecord(
                 eventId = event.eventId,
@@ -677,6 +690,15 @@ internal class StepExecutor(
                 else -> "ok"
             }
         board.update(actor.agentId, state, actor.step.id, "$result: ${outcome.summary}")
+        val task =
+            when {
+                failureKey != null && blocked -> TaskState.BLOCKED
+                failureKey != null -> TaskState.FAILED
+                lost != null -> TaskState.LOST_RACE
+                else -> TaskState.PASSED
+            }
+        val detail = if (lost != null && failureKey == null) lostDetail(lost, outcome) else "$result: ${outcome.summary}"
+        tasks.update(actor.step.id, actor.agentId, task, detail)
         return ActorStepResult(actor.identity, outcome, failureKey, acted.requests, lostRace = lost != null)
     }
 
@@ -924,6 +946,7 @@ internal class StepServices(
     val recorder: EvidenceRecorder,
     val evidence: HarnessEvidence,
     val board: AgentBoard,
+    val tasks: TaskBoard,
     val clock: HarnessClock,
     val ids: IdGenerator,
     val diagnostics: DiagnosticContext,
