@@ -7,6 +7,7 @@ import az.petek.core.sqlite.SqliteDatabase
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.evidence.infrastructure.EvidenceFixtures.A01
@@ -51,6 +52,22 @@ class SqliteEvidenceRecorderTest {
             store.step(systemStep)
 
             store.steps(RUN) shouldContainExactly listOf(agentStep, systemStep)
+        }
+
+    @Test
+    fun `every step kind, step status and finding class round-trips by name`() =
+        withStore(dir) { store, _ ->
+            val steps =
+                StepKind.entries.flatMap { kind ->
+                    StepStatus.entries.map { status -> step("stp_${kind}_$status").copy(kind = kind, status = status) }
+                }
+            val findings = FindingClass.entries.map { finding("fnd_$it").copy(findingClass = it) }
+
+            steps.forEach { store.step(it) }
+            findings.forEach { store.finding(it) }
+
+            store.steps(RUN) shouldContainExactly steps
+            store.findings(RUN) shouldContainExactly findings
         }
 
     @Test

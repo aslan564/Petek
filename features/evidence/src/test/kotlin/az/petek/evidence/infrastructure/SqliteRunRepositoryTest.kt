@@ -12,7 +12,13 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
@@ -158,6 +164,41 @@ class SqliteRunRepositoryTest {
             store.removeResource(RunId("run_missing"), "company", "company-1")
 
             store.resources(RUN).shouldBeEmpty()
+        }
+
+    @Test
+    fun `evidence and resources recorded before their run row exists are kept`() =
+        withStore(dir) { store, _ ->
+            store.step(EvidenceFixtures.step("stp_early"))
+            store.addResource(resource("company-1"))
+
+            store.create(run())
+
+            store.steps(RUN).map { it.stepId.value } shouldContainExactly listOf("stp_early")
+            store.resources(RUN) shouldContainExactly listOf(resource("company-1"))
+        }
+
+    @Test
+    fun `concurrent registrations of the same resource keep exactly one`() =
+        withStore(dir) { store, _ ->
+            withContext(Dispatchers.Default) {
+                (1..50).map { i -> async { store.addResource(resource("company-${i % 5}", createdAt = at(i.toLong()))) } }.awaitAll()
+            }
+
+            store.resources(RUN).map { it.externalId }.sorted() shouldContainExactly (0..4).map { "company-$it" }
+        }
+
+    @Test
+    fun `concurrent creation of one run id lets exactly one caller win`() =
+        withStore(dir) { store, _ ->
+            val outcomes =
+                withContext(Dispatchers.Default) {
+                    (1..20).map { i -> async { runCatching { store.create(run(startedAt = at(i.toLong()))) } } }.awaitAll()
+                }
+
+            outcomes.count { it.isSuccess } shouldBe 1
+            outcomes.mapNotNull { it.exceptionOrNull() }.forEach { it.shouldBeInstanceOf<IllegalArgumentException>() }
+            store.find(RUN) shouldNotBe null
         }
 
     @Test
