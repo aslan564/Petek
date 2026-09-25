@@ -4,6 +4,7 @@ import az.petek.app.campaign.CampaignScaler
 import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.campaign.ScalingException
 import az.petek.app.di.AppContainer
+import az.petek.app.panel.Contacts
 import az.petek.app.panel.PanelTargets
 import az.petek.app.panel.explorer.SetupRun
 import az.petek.app.panel.explorer.SetupRuns
@@ -426,14 +427,22 @@ internal class PanelRunsAdapter(
                         scenarioStep = surprise.scenarioStep,
                         agentId = surprise.agentId,
                         surpriseKind = surprise.kind.name,
-                        surprise = surprise.text,
+                        surprise = withoutContacts(surprise.text),
                         category = TriageCategory.valueOf(verdict.category.name),
-                        rationale = verdict.rationale,
+                        rationale = withoutContacts(verdict.rationale),
                         confidence = verdict.confidence,
                         proposedChange =
                             change?.let {
                                 val summary = it.summary.ifBlank { "dəyişiklik təklifi" }
-                                if (it.status == ProposalStatus.REJECTED) "$summary — istifadə olunmadı: ${it.rejection}" else summary
+                                val text =
+                                    if (it.status ==
+                                        ProposalStatus.REJECTED
+                                    ) {
+                                        "$summary — istifadə olunmadı: ${it.rejection}"
+                                    } else {
+                                        summary
+                                    }
+                                withoutContacts(text)
                             },
                         proposalScenarioId = change?.draftId?.value,
                         evidence =
@@ -445,6 +454,8 @@ internal class PanelRunsAdapter(
                 },
         )
     }
+
+    private fun withoutContacts(text: String): String = Contacts.masked(text)
 
     /** A failure after the run job took over the lease (the job closes it; the caller must not). */
     private class LaunchedException(

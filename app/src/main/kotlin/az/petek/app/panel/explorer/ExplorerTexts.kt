@@ -78,6 +78,13 @@ internal object ExplorerTexts {
             }
         }
 
+    /** A note of the explorer's summary; the ones the owner meets often are translated, others shown as they are. */
+    fun note(note: String): String =
+        when {
+            note.startsWith(TRIAL_ALLOWED) -> "Sınaq toxunuşuna icazə verildi: " + note.removePrefix(TRIAL_ALLOWED)
+            else -> note
+        }
+
     /** One line per test idea, written for the owner; [actionName] is the site's own label of the action. */
     fun rationale(
         idea: TestIdea,
@@ -119,6 +126,7 @@ internal object ExplorerTexts {
         return "'$actionName'" + (kind?.let { " (${kind(it)})" } ?: "") + ": " + why + matched
     }
 
+    private const val TRIAL_ALLOWED = "Trial touch allowed: "
     private const val NOT_CONFIRMED = "the target is not confirmed as test data: "
     private const val MATCHES_INSTRUCTIONS = "(matches the owner's instructions)"
 }

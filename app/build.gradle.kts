@@ -61,3 +61,18 @@ tasks.named<JavaExec>("run") {
     workingDir = rootProject.projectDir
     standardInput = System.`in`
 }
+
+// The panel end to end in real Chromium against the in-process fake KadroHR, with screenshots of every screen in
+// build/panel-screenshots/ (tag "e2e", kept out of the fast build): ./gradlew :app:e2eTest
+tasks.register<Test>("e2eTest") {
+    description = "The web panel end to end against the fake target in real Chromium, with screenshots."
+    group = "verification"
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("e2e") }
+    maxHeapSize = "3g"
+    shouldRunAfter(tasks.test)
+}

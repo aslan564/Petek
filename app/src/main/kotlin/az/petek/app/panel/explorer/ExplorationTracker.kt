@@ -143,8 +143,8 @@ internal class ExplorationTracker(
             }
 
             is ExplorationEvent.Finished -> {
-                ended(event.summary)
-                event.summary.notes.forEach { log(at, NOTE, it) }
+                ended(event.summary, at)
+                event.summary.notes.forEach { log(at, NOTE, ExplorerTexts.note(it)) }
                 log(at, FINISHED, finishedLine(event.summary))
             }
 
@@ -280,7 +280,11 @@ internal class ExplorationTracker(
         log(event.header.at, PAGE_VISITED, "${event.urlPattern} · ${ExplorerTexts.role(event.role)}$status")
     }
 
-    private fun ended(summary: ExplorationSummary) {
+    /** The elapsed time is the owner's: from the start (preparing role sessions included) to the end event. */
+    private fun ended(
+        summary: ExplorationSummary,
+        at: Instant,
+    ) {
         finishRunningPhase()
         status =
             when (summary.status) {
@@ -289,7 +293,7 @@ internal class ExplorationTracker(
                 ExplorationStatus.CANCELLED -> ViewStatus.CANCELLED
                 ExplorationStatus.FAILED -> ViewStatus.FAILED
             }
-        endedMs = summary.durationMs
+        endedMs = maxOf(summary.durationMs, elapsedAt(at))
         message =
             when {
                 summary.status == ExplorationStatus.TIMED_OUT -> "Vaxt büdcəsi bitdi; öyrənilənlər saxlanıldı."

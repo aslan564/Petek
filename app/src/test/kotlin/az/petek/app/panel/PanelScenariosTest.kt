@@ -160,6 +160,27 @@ class PanelScenariosTest {
         }
 
     @Test
+    fun `the project's own KadroHR campaign is imported, approved and planned for its 30 testers`() =
+        runBlocking<Unit> {
+            val campaign = Files.readString(Path.of("..", "scenarios", "kadrohr.yaml"))
+            val panel = harness(mapOf("kadrohr.yaml" to campaign))
+
+            val version = panel.backend.scenarios().single()
+
+            version.name shouldBe "kadrohr-core"
+            version.status shouldBe ScenarioStatus.APPROVED
+            panel.backend
+                .scenario(version.id)
+                .shouldNotBeNull()
+                .yaml shouldBe campaign
+            val plan = panel.backend.runPlan(version.id).shouldNotBeNull()
+            plan.steps
+                .single { it.id == "read_announce" }
+                .agentIds.size shouldBe 24
+            plan.steps.single { it.id == "race" }.parallel shouldBe true
+        }
+
+    @Test
     fun `an owner's file that fails validation is skipped and the rest is imported`() =
         runBlocking<Unit> {
             Files.createDirectories(dir.resolve("scenarios"))

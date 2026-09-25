@@ -27,8 +27,11 @@ import az.petek.orchestration.domain.MonitorView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The web panel's backend in the composition root: one adapter per area of [PanelBackend], each over the real use
@@ -41,7 +44,9 @@ import java.nio.file.Path
  * - [PanelRuns]: runs of approved versions, history, reports, stability and triage ([PanelRunsAdapter]).
  *
  * Artifacts the panel may serve besides the live board's are an exploration's captures and the evidence a shown triage
- * verdict cites. [close] cancels whatever still runs (a run still tears down and writes its report).
+ * verdict cites. [close] cancels whatever still runs and waits (at most [CLOSE_GRACE]) until it has let go: a run still
+ * tears down its test company and writes its report, an exploration saves its model, before the container they use is
+ * closed.
  */
 internal class AppPanelBackend(
     private val capacity: PanelCapacity,
@@ -59,7 +64,9 @@ internal class AppPanelBackend(
         explorer.explorationArtifact(artifactId) ?: runs.evidenceArtifact(artifactId)
 
     override fun close() {
-        scope.cancel()
+        val work = scope.coroutineContext.job
+        work.cancel()
+        runBlocking { withTimeoutOrNull(CLOSE_GRACE) { work.join() } }
     }
 
     companion object {
@@ -98,6 +105,9 @@ internal class AppPanelBackend(
         }
 
         const val SCENARIO_DIRECTORY = "scenarios"
+
+        /** How long closing waits for a cancelled run's teardown and report (Ctrl+C gives the process 90 s). */
+        val CLOSE_GRACE = 75.seconds
 
         /** The explorer's own files next to the evidence: `<evidence>/explorer/`. */
         const val EXPLORER_DIRECTORY = "explorer"

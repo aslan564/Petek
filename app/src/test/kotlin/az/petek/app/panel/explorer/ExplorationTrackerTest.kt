@@ -149,6 +149,28 @@ class ExplorationTrackerTest {
     }
 
     @Test
+    fun `the elapsed time includes preparing the role sessions and the explorer's notes are shown translated`() {
+        val tracker = tracker()
+        tracker.apply(ExplorerFixtures.started(seconds = 18))
+        tracker.apply(
+            ExplorerFixtures.finished(
+                ExplorerFixtures.summary(durationMs = 42_000, notes = listOf("Trial touch allowed: company c1 is_test=true", "other")),
+                seconds = 60,
+            ),
+        )
+
+        val view = tracker.view(at(90))
+        view.elapsedMs shouldBe 60_000
+        view.activity.map { it.text } shouldContainExactly
+            listOf(
+                "Kəşfiyyat bitdi: 2 səhifə, 1 əməliyyat, 1 form, 1 tapıntı",
+                "other",
+                "Sınaq toxunuşuna icazə verildi: company c1 is_test=true",
+                "Kəşfiyyat başladı: kadro.test · Anonim gəzinti, Rollarla gəzinti, Sınaq toxunuşu",
+            )
+    }
+
+    @Test
     fun `timed out, cancelled and page-budget endings explain themselves`() {
         val timedOut = tracker().apply { apply(ExplorerFixtures.finished(ExplorerFixtures.summary(ModelStatus.TIMED_OUT))) }
         timedOut.view(at(1)).status shouldBe ExplorationStatus.TIMED_OUT

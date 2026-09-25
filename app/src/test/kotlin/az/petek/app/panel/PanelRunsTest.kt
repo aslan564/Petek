@@ -20,6 +20,7 @@ import az.petek.evidence.domain.RunResult
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.scenarios.domain.ScenarioVersionId
+import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.seconds
 
 /** Runs, history, reports, stability and triage from the panel, with production wiring and no browser or LLM. */
 class PanelRunsTest {
@@ -142,6 +144,24 @@ class PanelRunsTest {
                 .runs()
                 .single()
                 .result shouldBe RunResult.ABORTED
+        }
+
+    @Test
+    fun `closing the panel stops a running run and still tears it down and writes its report first`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm().apply { agentGate = CompletableDeferred() }
+            val panel = harness(llm = llm)
+            val started = panel.backend.startRun(RunRequest(scenarioId = panel.approved()))
+            eventually(10.seconds) { llm.client.requests.isNotEmpty() shouldBe true }
+
+            open.remove(panel)
+            panel.close()
+
+            val reopened = harness()
+            val history = reopened.backend.runs().single()
+            history.runId shouldBe started.runId
+            history.result shouldBe RunResult.ABORTED
+            history.reportAvailable shouldBe true
         }
 
     @Test

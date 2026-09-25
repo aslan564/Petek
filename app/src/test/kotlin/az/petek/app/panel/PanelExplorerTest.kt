@@ -240,7 +240,7 @@ class PanelExplorerTest {
             create.kind shouldBe "CREATE"
             create.allowedRoles shouldBe listOf("admin")
             view.activity.map { it.text } shouldContain "Rol sessiyaları hazırdır: admin"
-            view.activity.map { it.text } shouldContain "Trial touch allowed: company c1 is_test=true"
+            view.activity.map { it.text } shouldContain "Sınaq toxunuşuna icazə verildi: company c1 is_test=true"
             panel.site.sessions
                 .single { it.view == "admin" }
                 .recorder.actions

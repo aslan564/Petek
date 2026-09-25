@@ -20,8 +20,8 @@ private val logger = KotlinLogging.logger {}
  * - its plan as soon as its identities are planned ([wrap] of the [IdentityRepository]), which is before the first
  *   step: the plan (steps with the agents they resolve to) goes to [onPlan] for the orchestrator screen.
  *
- * [expect] arms the watch for the next run the panel starts; runs started by anyone else (while nothing is expected)
- * are only remembered by id. Thread-safe.
+ * [expect] arms the watch for the next run the panel starts; runs created while nothing is expected (another command
+ * using the same repositories) are not watched. Thread-safe.
  */
 internal class PanelRunWatch(
     private val onPlan: (RunPlanView) -> Unit,
