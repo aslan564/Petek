@@ -1,0 +1,13 @@
+Pətək — multi-agent AI test platform
+Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov.
+
+This product is licensed under the Business Source License 1.1 (see LICENSE).
+On the Change Date, 2030-09-25, it converts to the Apache License, Version 2.0.
+
+"Pətək" and the Pətək logo are trademarks of Kodcraft; the License grants no
+trademark rights. Contributions are accepted under the terms in CONTRIBUTING.md.
+
+Third-party software used by Pətək (Kotlin, kotlinx, Ktor, Playwright, SQLite,
+Exposed, Clikt, Mordant, kotlin-logging, Logback, the Anthropic Java SDK, JUnit,
+Kotest, Konsist, Spotless, ktlint, Kover, Mailpit) is distributed under its own
+licenses; see gradle/libs.versions.toml for the exact versions.
