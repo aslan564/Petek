@@ -8,6 +8,7 @@ import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.campaign
+import az.petek.campaign.testing.contractDemoScenario
 import az.petek.campaign.testing.kadrohrScenario
 import az.petek.campaign.testing.step
 import io.kotest.assertions.throwables.shouldThrow
@@ -45,7 +46,14 @@ class LoadCampaignUseCaseTest {
     fun `the real campaign needs its run functions`() {
         val error = shouldThrow<CampaignValidationException> { useCase().execute(kadrohrScenario(), setOf("login")) }
         error.issues.map { it.message.substringAfter("unknown run function ").substringBefore(" ") } shouldContainExactly
-            listOf("'seed_company'", "'register_and_login'")
+            listOf("'register_owner'", "'seed_company'", "'register_and_login'")
+    }
+
+    @Test
+    fun `the contract demo campaign loads and validates`() {
+        val campaign = useCase().execute(contractDemoScenario(), KNOWN_RUN_FUNCTIONS)
+        campaign.settings.name shouldBe "contract-demo"
+        campaign.allSteps.size shouldBe 9
     }
 
     @Test

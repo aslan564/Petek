@@ -32,7 +32,28 @@ data class CampaignSettings(
     val onFail: OnFail,
     /** Campaign name from the YAML (`campaign.name`), default = file name without extension. */
     val name: String = "campaign",
+    /** How the actors of a step are started (`campaign.pacing`); by default all at once. */
+    val pacing: Pacing = Pacing.NONE,
 )
+
+/**
+ * How the actors of one step start their action, so that a real site's per-IP rate limits (KadroHR: 50 sign-ins a
+ * minute) are not hit by every tester signing up at the same instant: actor *n* (in agent id order, from 0) starts no
+ * earlier than [startStagger] × *n* after the step began, and at most [maxParallelActors] act at once (null: no
+ * limit). Steps with `parallel: true` ignore both: a race needs its actors to start together. Steps without an action
+ * (only assertions) are not paced either: they send nothing to the target.
+ */
+data class Pacing(
+    val startStagger: Duration = Duration.ZERO,
+    val maxParallelActors: Int? = null,
+) {
+    /** Whether this pacing changes anything at all. */
+    val isNone: Boolean get() = startStagger == Duration.ZERO && maxParallelActors == null
+
+    companion object {
+        val NONE: Pacing = Pacing()
+    }
+}
 
 data class RoleQuota(
     val admin: Int,

@@ -62,7 +62,7 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 ## Kod konvensiyaları
 - `suspend` funksiyalar; bloklayan I/O yalnız `Dispatchers.IO`-da və ya sessiyanın öz dispetçerində.
 - Konfiqurasiya və ssenari modelləri domain `data class`-larıdır; YAML DTO-ları infrastructure-dadır.
-  Sxem dəyişəndə `scenarios/kadrohr.yaml` və `docs/ARCHITECTURE.md` də yenilənir.
+  Sxem dəyişəndə `scenarios/kadrohr.yaml` (real KadroHR), `scenarios/contract-demo.yaml` (fake target, `docs/PLAN.md`-dəki nümunə) və `docs/ARCHITECTURE.md` də yenilənir.
 - Testlər: JUnit 6 + Kotest assertions (`shouldBe`), mock kitabxanası yoxdur — `testFixtures`-dakı fake-lər
   (`FakeBrowserSession`, `ScriptedLlmClient`, `InMemoryEvidence`, `FakeMailbox`, `FakeTargetOracle`, `FakeHarnessClock`).
   Test adları backtick ilə, cümlə kimi. Real brauzer tələb edən testlər `@Tag("e2e")`, real LLM `@Tag("live")`.

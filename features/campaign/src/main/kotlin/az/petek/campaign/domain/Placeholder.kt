@@ -36,6 +36,15 @@ sealed interface Placeholder {
          */
         val CAMPAIGN_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "department", "role", "phone")
 
+        /**
+         * `self` fields flows may use (see [Flow]): the campaign's, the display name split for sign-up forms that ask
+         * for first and last name separately, and the password, which only the harness types (flows never reach the LLM).
+         */
+        val FLOW_SELF_FIELDS: Set<String> = CAMPAIGN_SELF_FIELDS + linkedSetOf("first_name", "last_name", "password")
+
+        /** `{api}`: [TargetProfile.apiPrefix], replaced in campaign paths when the file is loaded (see [expandApiPrefix]). */
+        const val API_PREFIX: String = "{api}"
+
         private const val LAST_ID = "last_id"
         private const val SELF_PREFIX = "self."
         private const val EVENT_PREFIX = "event."

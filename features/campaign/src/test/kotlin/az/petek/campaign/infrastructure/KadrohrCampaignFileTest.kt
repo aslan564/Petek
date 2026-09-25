@@ -2,42 +2,54 @@ package az.petek.campaign.infrastructure
 
 import az.petek.campaign.domain.ActorSelector
 import az.petek.campaign.domain.AssertionSpec
-import az.petek.campaign.domain.Budget
 import az.petek.campaign.domain.DefaultCampaignValidator
-import az.petek.campaign.domain.EmitSpec
+import az.petek.campaign.domain.Flow
+import az.petek.campaign.domain.FlowNames
+import az.petek.campaign.domain.FlowStep
 import az.petek.campaign.domain.IdSource
-import az.petek.campaign.domain.OnFail
+import az.petek.campaign.domain.LinkPurpose
+import az.petek.campaign.domain.Pacing
 import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.domain.StepAction
-import az.petek.campaign.domain.StepPhase
+import az.petek.campaign.domain.TargetProfile
+import az.petek.campaign.domain.ValueTarget
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.kadrohrScenario
-import az.petek.campaign.testing.repoFile
 import az.petek.core.model.Role
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 import java.net.URI
 import java.nio.file.Files
-import java.security.MessageDigest
-import java.util.HexFormat
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** The real `scenarios/kadrohr.yaml` must load completely and validate without a single issue. */
+/** `scenarios/kadrohr.yaml`, the campaign for the real KadroHR, describes its flows and validates for any team size. */
 class KadrohrCampaignFileTest {
     private val file = kadrohrScenario()
     private val campaign = YamlCampaignSource().load(file)
-    private val fileLines = Files.readAllLines(file)
-
-    private fun lineContaining(fragment: String): Int = fileLines.indexOfFirst { fragment in it }.also { check(it >= 0) { fragment } } + 1
+    private val target = campaign.target
 
     private fun step(id: String) = campaign.allSteps.single { it.id == id }
+
+    private fun flow(name: String): Flow = target.flows.getValue(name)
+
+    private fun allSteps(steps: List<FlowStep>): List<FlowStep> =
+        steps.flatMap { step ->
+            when (step) {
+                is FlowStep.IfVisible -> listOf(step) + allSteps(step.then)
+                is FlowStep.Journey -> listOf(step) + step.pages.flatMap { allSteps(it.steps) }
+                else -> listOf(step)
+            }
+        }
 
     @Test
     fun `the real campaign validates without issues`() {
@@ -51,121 +63,115 @@ class KadrohrCampaignFileTest {
     }
 
     @Test
-    fun `the scenario example of docs PLAN is exactly this file`() {
-        val section = Files.readString(repoFile("docs/PLAN.md")).substringAfter("## Ssenari formatı")
-        val example = section.substringAfter("```yaml\n").substringBefore("```")
-        example shouldBe Files.readString(file)
-        section.substringBefore("```yaml") shouldContain "`scenarios/kadrohr.yaml`"
+    fun `it validates for any number of testers that leaves two managers for the race`() {
+        listOf(5, 6, 8, 12, 20, 30, 50, 100, 500).forEach { testers ->
+            val nonAdmins = testers - 1
+            val managers = maxOf(2, (nonAdmins * 5 / 29.0).roundToInt())
+            val invite = maxOf(managers, (nonAdmins + 1) / 2)
+            val scaled =
+                campaign.copy(
+                    settings =
+                        campaign.settings.copy(
+                            testers = testers,
+                            roles = RoleQuota(admin = 1, manager = managers, employee = nonAdmins - managers),
+                            registration = RegistrationQuota(invite = invite, companyCode = nonAdmins - invite),
+                        ),
+                )
+
+            val issues = DefaultCampaignValidator().validate(scaled, KNOWN_RUN_FUNCTIONS)
+
+            check(issues.isEmpty()) { "$testers testers: $issues" }
+        }
     }
 
     @Test
-    fun `every manager can be invited, so no manager has to join with the company code`() {
-        val settings = campaign.settings
-        (settings.registration.invite >= settings.roles.manager) shouldBe true
-        settings.registration.invite + settings.registration.companyCode shouldBe settings.roles.manager + settings.roles.employee
+    fun `the real site is targeted at a paced rate with KadroHR's API prefix and first-visit flags`() {
+        campaign.settings.name shouldBe "kadrohr-real"
+        campaign.settings.target shouldBe URI("https://kadrohr.com")
+        campaign.settings.testers shouldBe 30
+        campaign.settings.pacing shouldBe Pacing(startStagger = 1500.milliseconds)
+        target.apiPrefix shouldBe "/api/v1"
+        target.localStorage["kadro:domain_dialog_dismissed"] shouldBe "1"
+        target.localStorage["kadro:lang"] shouldBe "az"
+        target.dismiss shouldContainExactly listOf("role=button[name=\"Qəbul edirəm\"]")
     }
 
     @Test
-    fun `settings are read as written`() {
-        val settings = campaign.settings
-        settings.name shouldBe "kadrohr-core"
-        settings.target shouldBe URI("https://staging.kadrohr.com")
-        settings.testers shouldBe 30
-        settings.seed shouldBe 42L
-        settings.names shouldContainExactly listOf("Əli", "Vəli", "Sahil", "Cəmil", "Amil")
-        settings.roles shouldBe RoleQuota(admin = 1, manager = 5, employee = 24)
-        settings.departments shouldContainExactly listOf("IT", "HR", "Satış", "Maliyyə", "Əməliyyat")
-        settings.registration shouldBe RegistrationQuota(invite = 15, companyCode = 14)
-        settings.budget shouldBe Budget(maxStepsPerAgent = 60, maxMinutes = 40)
-        settings.onFail shouldBe OnFail.CONTINUE
+    fun `every run function has a KadroHR flow and the password is only ever typed`() {
+        target.flows.keys shouldBe FlowNames.ALL
+        listOf(FlowNames.REGISTER_OWNER, FlowNames.JOIN_BY_INVITE, FlowNames.JOIN_BY_CODE, FlowNames.LOGIN).forEach { name ->
+            flow(name) shouldNotBe TargetProfile.DEFAULT_FLOWS[name]
+        }
+        flow(FlowNames.VERIFY_IDENTITY) shouldBe TargetProfile.DEFAULT_FLOWS[FlowNames.VERIFY_IDENTITY]
+        val typed =
+            target.flows.values
+                .flatMap { allSteps(it.steps) }
+                .filter { "{self.password}" in it.toString() }
+        typed.all { it is FlowStep.Fill } shouldBe true
+        typed.size shouldBe 7
     }
 
     @Test
-    fun `setup and steps keep their order, ids and phases`() {
+    fun `the owner confirms the sign-up by link and the login needs the company code`() {
+        val signUp = flow(FlowNames.REGISTER_OWNER).steps
+        signUp shouldContain FlowStep.Fill("register.first_name", "{self.first_name}")
+        signUp shouldContain FlowStep.Fill("register.last_name", "{self.last_name}")
+        signUp shouldContain FlowStep.Fill("register.confirm_password", "{self.password}")
+        signUp shouldContain FlowStep.Check("register.mode_hybrid")
+        signUp shouldContain FlowStep.EmailLink(LinkPurpose.VERIFY, "registration/verify\\?token=")
+        signUp shouldContain FlowStep.AccountCreated
+        flow(FlowNames.LOGIN).steps shouldContain FlowStep.Fill("login.company_code", "{shared.company_code}")
+        flow(FlowNames.LOGIN).steps.last() shouldBe FlowStep.SaveSession
+    }
+
+    @Test
+    fun `employees join by invitation link or with the company code`() {
+        flow(FlowNames.JOIN_BY_INVITE).steps.first() shouldBe FlowStep.EmailLink(LinkPurpose.INVITE, "set-password\\?token=")
+        flow(FlowNames.JOIN_BY_CODE).steps.first() shouldBe FlowStep.Goto("/register/employee")
+        flow(FlowNames.JOIN_BY_CODE).steps shouldContain FlowStep.Fill("join.code", "{shared.company_code}")
+        listOf(FlowNames.JOIN_BY_INVITE, FlowNames.JOIN_BY_CODE).forEach { flow(it).steps shouldContain FlowStep.AccountCreated }
+        flow(FlowNames.JOIN_BY_CODE)
+            .steps
+            .filterIsInstance<FlowStep.EmailLink>()
+            .single()
+            .target shouldBe ValueTarget.vars("verify_link")
+    }
+
+    @Test
+    fun `setup runs the flows deterministically and the steps cover announcements and a leave approval race`() {
         campaign.setup.map { it.id } shouldContainExactly listOf("owner_signup", "seed", "join")
-        campaign.steps.map { it.id } shouldContainExactly listOf("announce", "read_announce", "ticket", "ticket_flow", "race", "forbidden")
-        campaign.setup.map { it.phase }.distinct() shouldContainExactly listOf(StepPhase.SETUP)
-        campaign.steps.map { it.phase }.distinct() shouldContainExactly listOf(StepPhase.MAIN)
-    }
-
-    @Test
-    fun `setup actions mix natural language and run functions`() {
-        step("owner_signup").action shouldBe
-            StepAction.Do("Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat")
-        step("seed").action shouldBe StepAction.Run("seed_company")
+        step("owner_signup").action shouldBe StepAction.Run("register_owner", mapOf("company" to "Pətək Test MMC"))
         step("join").action shouldBe StepAction.Run("register_and_login")
-        step("join").actors.selectors shouldContainExactly listOf(ActorSelector(Role.EMPLOYEE), ActorSelector(Role.MANAGER))
+        campaign.steps.map { it.id } shouldContainExactly
+            listOf("announce", "read_announce", "announce_seen", "leave_request", "leave_race", "forbidden_approval")
+        step("read_announce").waitFor shouldBe WaitForSpec("announcement_created", 60.seconds)
     }
 
     @Test
-    fun `the announcement flow emits, waits and asserts`() {
-        val announce = step("announce")
-        announce.emits shouldBe EmitSpec("announcement_created", null)
-        announce.assertions shouldContainExactly
-            listOf(AssertionSpec.Oracle("/test/announcements/{last_id}", "status", "published", null))
-
-        val read = step("read_announce")
-        read.actors.selectors shouldContainExactly listOf(ActorSelector(Role.EMPLOYEE))
-        read.waitFor shouldBe WaitForSpec("announcement_created", 30.seconds)
-        read.assertions shouldContainExactly
-            listOf(
-                AssertionSpec.VisibleText("Sabah 10:00 ümumi iclas", 5.seconds),
-                AssertionSpec.LatencyMax(5000.milliseconds),
-                AssertionSpec.Oracle("/test/announcements/{last_id}/receipts", null, null, "{self.email}"),
-            )
-    }
-
-    @Test
-    fun `the ticket flow uses department and position selectors`() {
-        step("ticket").actors.selectors shouldContainExactly listOf(ActorSelector(Role.EMPLOYEE, department = "IT", nth = 1))
-        step("ticket").emits shouldBe EmitSpec("ticket_created", null)
-        step("ticket_flow").actors.selectors shouldContainExactly listOf(ActorSelector(Role.MANAGER, department = "IT"))
-        step("ticket_flow").waitFor shouldBe WaitForSpec("ticket_created", 30.seconds)
-    }
-
-    @Test
-    fun `the race runs two managers in parallel`() {
-        val race = step("race")
+    fun `two managers race to approve the same leave request and an employee may not`() {
+        val race = step("leave_race")
         race.parallel shouldBe true
+        race.waitFor shouldBe WaitForSpec("leave_request_created", 30.seconds)
         race.actors.selectors shouldContainExactly
             listOf(ActorSelector(Role.MANAGER, department = "IT"), ActorSelector(Role.MANAGER, department = "HR"))
-        race.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve")))
-    }
-
-    @Test
-    fun `the forbidden step checks the UI and the API`() {
-        step("forbidden").assertions shouldContainExactly
+        race.assertions shouldContainAll
             listOf(
-                AssertionSpec.NotVisible(null, "[data-testid=\"ticket-approve\"]"),
-                AssertionSpec.HttpStatus("/api/tickets/{last_id}/approve", "POST", 403),
+                AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/leave-requests/[^/]+/approve")),
+                AssertionSpec.Oracle("/test/leave-requests/{last_id}", "status", "APPROVED", null),
+            )
+        step("forbidden_approval").assertions shouldContainExactly
+            listOf(
+                AssertionSpec.NotVisible(null, "role=button[name=\"Təsdiqlə\"]"),
+                AssertionSpec.HttpStatus("/api/v1/leave-requests/{last_id}/approve", "POST", 403),
             )
     }
 
     @Test
-    fun `id sources come from the oracle`() {
-        campaign.target.idSources shouldBe
+    fun `created objects are identified through KadroHR's test API`() {
+        target.idSources shouldBe
             mapOf(
                 "announcement_created" to IdSource.OracleField("/test/announcements/latest?by={self.email}", "id"),
-                "ticket_created" to IdSource.OracleField("/test/tickets/latest?by={self.email}", "id"),
+                "leave_request_created" to IdSource.OracleField("/test/leave-requests/latest?by={self.email}", "id"),
             )
-        campaign.target.paths shouldBe emptyMap()
-        campaign.target.selectors shouldBe emptyMap()
-    }
-
-    @Test
-    fun `steps and settings remember their lines in the file`() {
-        step("owner_signup").line shouldBe lineContaining("- id: owner_signup")
-        step("forbidden").line shouldBe lineContaining("- id: forbidden")
-        campaign.sourceLines.lineOf("campaign.testers") shouldBe lineContaining("testers: 30")
-        campaign.sourceLines.lineOf("steps[1].assert[1]") shouldBe lineContaining("latency_max")
-        campaign.sourceLines.lineOf("target_profile.id_sources.ticket_created") shouldBe lineContaining("ticket_created:")
-    }
-
-    @Test
-    fun `the source hash is the SHA-256 of the file bytes`() {
-        val expected = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)))
-        campaign.sourceHash shouldBe expected
-        campaign.sourceHash shouldBe campaign.sourceHash.lowercase()
-        campaign.sourceHash.length shouldBe 64
     }
 }

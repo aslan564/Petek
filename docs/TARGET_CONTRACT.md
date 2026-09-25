@@ -1,9 +1,14 @@
 # Target contract
 
 What a target site offers so Pətək can test it deterministically. KadroHR is the first target. The fake target
-(`testing/fake-target`) implements exactly this contract and is used by the e2e tests. Every path and selector can be
-overridden per campaign under `target_profile:` (`paths`, `selectors`); the defaults below come from
-`TargetProfile.DEFAULT_PATHS` / `DEFAULT_SELECTORS`.
+(`testing/fake-target`) implements exactly this contract and is used by the e2e tests
+(`scenarios/contract-demo.yaml`). Every path and selector can be overridden per campaign under `target_profile:`
+(`paths`, `selectors`); the defaults below come from `TargetProfile.DEFAULT_PATHS` / `DEFAULT_SELECTORS`.
+
+The contract is the default, not a requirement: a site whose flows differ describes them under
+`target_profile.flows` (sign-up, join by invitation or company code, login, identity check; docs/ARCHITECTURE.md
+"Target flows"), with `local_storage`, `dismiss` for overlays and `api_prefix` for its regular API. The flows of §2
+below are `TargetProfile.DEFAULT_FLOWS`. `scenarios/kadrohr.yaml` describes the real KadroHR this way.
 
 ## 1. Test mode (staging only)
 
@@ -46,6 +51,12 @@ and reports it.
 
 Pətək only reads e-mails received after the run started and marks each one read after use.
 
+Instead of Mailpit, a target in test mode may keep the mail it would send to the test domain and return it from its test
+API (`PETEK_MAIL_SOURCE=test-api`): `GET /test/emails?to=<email>` answers newest first
+`[{"id", "to", "subject", "text", "html", "links": [], "created_at", "read"}]`, and `POST /test/emails/{id}/read`
+marks one used (without that endpoint Pətək remembers used mail itself). A flow's `email_link` may name the link by a
+pattern (`set-password\?token=`) when it does not contain one of the hints above.
+
 ## 4. Test API (`X-Test-Token`; JSON; snake_case)
 
 | Method | Path | Response |
@@ -66,10 +77,13 @@ Pətək only reads e-mails received after the run started and marks each one rea
 
 `http_status` assertions call the target's normal API with the agent's own session cookies. Example:
 `POST /api/tickets/{id}/approve` returns `200` for a manager and `403` for an employee. Approving an already decided
-ticket returns `409`. Only one of two concurrent approvals may succeed.
+ticket returns `409`. Only one of two concurrent approvals may succeed. The prefix `/api` is
+`target_profile.api_prefix` (KadroHR: `/api/v1`); campaign paths may write it as `{api}` (`{api}/tickets/{last_id}/approve`).
 
 ## 6. Status of KadroHR
 
-The KadroHR side (test mode, test API, `data-testid`s) lives in its own repository. Until it exists, the same campaign
-runs against the fake target (`./gradlew :testing:fake-target:run`). Against a site without the test API, oracle
-assertions are reported as `SKIPPED`, and flows that need Mailpit or `/test/otp` cannot finish.
+The KadroHR side (test mode, test API, `data-testid`s) lives in its own repository; docs/KADROHR_READINESS.md lists
+what it needs. Its real flows differ from §2, so `scenarios/kadrohr.yaml` describes them as flows over its current
+markup; `scenarios/contract-demo.yaml` runs against the fake target (`./gradlew :testing:fake-target:run`).
+Against a site without the test API, oracle assertions are reported as `SKIPPED`, and flows that need Mailpit or
+`/test/otp` cannot finish.

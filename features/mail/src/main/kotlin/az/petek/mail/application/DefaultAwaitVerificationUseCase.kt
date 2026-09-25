@@ -26,6 +26,7 @@ private val logger = KotlinLogging.logger {}
  * A [MailboxException] is retried at the next poll. If the mailbox is still failing when the time is up, that
  * failure is thrown instead of [MailTimeoutException]: "the inbox is unreachable" is an environment problem, while
  * `mail_timeout` is a finding about the target. Only `delay`/`withTimeoutOrNull` measure time, so virtual time works.
+ * [awaitLink] polls the same way, with the extractor's pattern rule deciding which message is usable.
  */
 class DefaultAwaitVerificationUseCase(
     private val mailbox: Mailbox,
@@ -43,22 +44,42 @@ class DefaultAwaitVerificationUseCase(
         timeout: Duration,
         pollInterval: Duration,
     ): VerificationCode {
-        require(timeout.isPositive()) { "timeout must be positive, was $timeout" }
-        require(pollInterval.isPositive()) { "pollInterval must be positive, was $pollInterval" }
-        val poller = Poller(to, since, purpose)
-        val found = withTimeoutOrNull(timeout) { poller.pollUntilFound(pollInterval) }
-        return found ?: throw (poller.lastFailure ?: MailTimeoutException(to, timeout))
+        val poller = Poller(to, since, purpose.name.lowercase()) { extractor.extract(it, purpose) }
+        return poller.await(timeout, pollInterval)
     }
 
+    override suspend fun awaitLink(
+        to: String,
+        since: Instant,
+        pattern: Regex,
+        timeout: Duration,
+        pollInterval: Duration,
+    ): VerificationCode {
+        val poller = Poller(to, since, "link matching '${pattern.pattern}'") { extractor.extractLink(it, pattern) }
+        return poller.await(timeout, pollInterval)
+    }
+
+    /** One wait for one tester's message; [wanted] names what is looked for in log lines. */
     private inner class Poller(
         private val to: String,
         private val since: Instant,
-        private val purpose: MailPurpose,
+        private val wanted: String,
+        private val extract: (MailMessage) -> VerificationCode?,
     ) {
         /** Failure of the most recent poll; cleared by a successful one. */
         var lastFailure: MailboxException? = null
             private set
         private val reportedSkips = mutableSetOf<String>()
+
+        suspend fun await(
+            timeout: Duration,
+            pollInterval: Duration,
+        ): VerificationCode {
+            require(timeout.isPositive()) { "timeout must be positive, was $timeout" }
+            require(pollInterval.isPositive()) { "pollInterval must be positive, was $pollInterval" }
+            val found = withTimeoutOrNull(timeout) { pollUntilFound(pollInterval) }
+            return found ?: throw (lastFailure ?: MailTimeoutException(to, timeout))
+        }
 
         suspend fun pollUntilFound(pollInterval: Duration): VerificationCode {
             while (true) {
@@ -81,7 +102,7 @@ class DefaultAwaitVerificationUseCase(
                     .filter { !it.read && !it.receivedAt.isBefore(since) }
                     .sortedByDescending { it.receivedAt }
             for (message in candidates) {
-                val code = extractor.extract(message, purpose)
+                val code = extract(message)
                 if (code != null) {
                     mailbox.markRead(message.id)
                     return code
@@ -93,7 +114,7 @@ class DefaultAwaitVerificationUseCase(
 
         private fun reportSkip(message: MailMessage) {
             if (reportedSkips.add(message.id)) {
-                logger.info { "Mail ${message.id} to $to ('${message.subject}') has no ${purpose.name.lowercase()}; still waiting" }
+                logger.info { "Mail ${message.id} to $to ('${message.subject}') has no $wanted; still waiting" }
             }
         }
     }

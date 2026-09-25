@@ -11,6 +11,7 @@ import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.OracleCondition
+import az.petek.campaign.domain.Pacing
 import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.RoleQuota
@@ -20,6 +21,7 @@ import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.WaitForSpec
+import az.petek.campaign.domain.expandApiPrefix
 import com.charleskorn.kaml.YamlList
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
@@ -33,6 +35,7 @@ import kotlin.time.Duration.Companion.seconds
  * Maps a parsed campaign YAML tree onto the domain model, following the schema of `scenarios/kadrohr.yaml` and
  * docs/PLAN.md "Ssenari formatı". Structural problems (unknown keys, wrong types, missing keys) are collected with
  * lines and thrown together as one [CampaignValidationException]; cross-field rules are left to the validator.
+ * `{api}` is replaced by `target_profile.api_prefix` once the whole file is mapped (see [expandApiPrefix]).
  */
 internal class CampaignYamlMapper(
     private val defaultName: String,
@@ -49,7 +52,9 @@ internal class CampaignYamlMapper(
         val issues = reader.issues
         if (issues.isNotEmpty()) throw CampaignValidationException(issues)
         // Every path that yields no campaign records a problem first; reaching this without one is a mapper bug.
-        return checkNotNull(campaign) { "campaign mapping produced neither a campaign nor an issue" }.copy(sourceLines = lines)
+        return checkNotNull(campaign) { "campaign mapping produced neither a campaign nor an issue" }
+            .copy(sourceLines = lines)
+            .expandApiPrefix()
     }
 
     /** One mapping pass over one file. */
@@ -83,6 +88,7 @@ internal class CampaignYamlMapper(
             val budget = budget(fields)
             val onFail = onFail(fields) ?: OnFail.CONTINUE
             val name = fields.text("name") ?: defaultName
+            val pacing = fields.map("pacing", PACING_KEYS)?.let(::pacing) ?: Pacing.NONE
             return CampaignSettings(
                 target = target ?: return null,
                 testers = testers ?: return null,
@@ -94,8 +100,15 @@ internal class CampaignYamlMapper(
                 budget = budget ?: return null,
                 onFail = onFail,
                 name = name,
+                pacing = pacing,
             )
         }
+
+        private fun pacing(fields: YamlFields): Pacing =
+            Pacing(
+                startStagger = fields.long("start_stagger_ms", required = false)?.milliseconds ?: Pacing.NONE.startStagger,
+                maxParallelActors = fields.int("max_parallel_actors", required = false),
+            )
 
         private fun target(fields: YamlFields): URI? {
             val path = fields.pathOf("target")
@@ -161,6 +174,10 @@ internal class CampaignYamlMapper(
                 paths = textMap(fields, "paths"),
                 selectors = textMap(fields, "selectors"),
                 idSources = idSources(fields),
+                flows = TargetProfile.DEFAULT_FLOWS + FlowYamlReading(reader).flows(fields["flows"], fields.pathOf("flows")),
+                localStorage = textMap(fields, "local_storage"),
+                dismiss = fields.textList("dismiss").orEmpty(),
+                apiPrefix = fields.text("api_prefix")?.trim() ?: TargetProfile.DEFAULT_API_PREFIX,
             )
 
         private fun textMap(
@@ -536,11 +553,13 @@ internal class CampaignYamlMapper(
                 "registration",
                 "budget",
                 "on_fail",
+                "pacing",
             )
         val ROLE_KEYS = linkedSetOf("admin", "manager", "employee")
         val REGISTRATION_KEYS = linkedSetOf("invite", "company_code")
         val BUDGET_KEYS = linkedSetOf("max_steps_per_agent", "max_minutes")
-        val TARGET_PROFILE_KEYS = linkedSetOf("paths", "selectors", "id_sources")
+        val PACING_KEYS = linkedSetOf("start_stagger_ms", "max_parallel_actors")
+        val TARGET_PROFILE_KEYS = linkedSetOf("paths", "selectors", "id_sources", "flows", "local_storage", "dismiss", "api_prefix")
         val ID_SOURCE_KEYS = linkedSetOf("url_regex", "oracle", "dom", "agent")
         val ORACLE_ID_KEYS = linkedSetOf("path", "field")
         val DOM_ID_KEYS = linkedSetOf("selector", "attribute")

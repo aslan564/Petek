@@ -5,6 +5,7 @@ import az.petek.agent.application.runs.RunFunctionSettings
 import az.petek.agent.application.runs.RunFunctions
 import az.petek.agent.domain.ActionOutcome
 import az.petek.browser.testing.FakeBrowserSession
+import az.petek.campaign.domain.TargetProfile
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.evidence.domain.ArtifactType
@@ -19,13 +20,19 @@ import io.kotest.matchers.string.shouldNotContain
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
-/** One agent, the simulated site and every collaborator of the standard run functions. */
+/**
+ * One agent, the simulated site and every collaborator of the standard run functions. With [contractSite] the agent's
+ * browser is [SimulatedKadro] (docs/TARGET_CONTRACT.md); without it the plain [browser], which a test scripts itself
+ * (see [ScriptedSite]) for sites described by a custom [target] profile.
+ */
 class RunFunctionFixture(
     val identity: Identity,
     oracleAvailable: Boolean = true,
     roster: List<Identity> = AgentTestData.roster,
     oracleOverride: ((FakeTargetOracle) -> TargetOracle)? = null,
     settings: RunFunctionSettings = RunFunctionSettings(),
+    target: TargetProfile = TargetProfile.DEFAULT,
+    contractSite: Boolean = true,
 ) {
     val clock = FakeHarnessClock()
     val verification = FakeVerification()
@@ -35,7 +42,7 @@ class RunFunctionFixture(
     val shared = InMemorySharedRunState()
     val evidence = InMemoryEvidence()
     val artifacts = InMemoryArtifactStore()
-    val runtime = AgentTestData.runtime(site, identity, roster, shared)
+    val runtime = AgentTestData.runtime(if (contractSite) site else browser, identity, roster, shared, target = target)
     val registry =
         RunFunctions.standard(
             oracle = oracleOverride?.invoke(oracle) ?: oracle,

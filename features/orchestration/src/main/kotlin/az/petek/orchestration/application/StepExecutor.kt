@@ -9,6 +9,7 @@ import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.EmitSpec
+import az.petek.campaign.domain.Pacing
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
@@ -79,9 +80,10 @@ internal data class StepResult(
 
 /**
  * Executes one scenario step for all its actors (docs/ARCHITECTURE.md "Run lifecycle", step 3). Per actor:
- * `wait_for` on the bus -> reception checks -> render templates -> (start barrier) -> perform under the watchdog ->
- * `emits` -> the remaining assertions. All actors of a step run concurrently; `only_one_succeeds` is judged once
- * all of them are done.
+ * `wait_for` on the bus -> reception checks -> render templates -> (start barrier) -> (pacing) -> perform under the
+ * watchdog -> `emits` -> the remaining assertions. All actors of a step run concurrently; `only_one_succeeds` is judged
+ * once all of them are done. The campaign's pacing ([StartPacer]) staggers and limits the actions of a step that is
+ * not `parallel` and has an action (`do` or `run`); a step that only asserts is not paced.
  *
  * Reception checks: in a step with `wait_for`, `visible_text` (and the `latency_max` that reads its latency) are
  * evaluated right after the event arrives, before the actor's own action. Their deadline is t0 + `within`, so
@@ -125,16 +127,23 @@ internal class StepExecutor(
         }
         val race = raceSpec(step)
         val barrier = if (step.parallel) StartBarrier(chosen.size) else null
+        // A step without an action only checks the page: nothing reaches the target that pacing would spread out.
+        val pacing = if (step.parallel || step.action is StepAction.None) Pacing.NONE else run.campaign.settings.pacing
         val raced = ConcurrentLinkedQueue<ActorRun.Raced>()
         val runs =
             try {
                 coroutineScope {
-                    chosen
-                        .map { identity ->
-                            async(services.diagnostics.of(run.runId, identity.agentId)) {
-                                runActor(step, identity, barrier, race).also { if (it is ActorRun.Raced) raced += it }
-                            }
-                        }.awaitAll()
+                    val pacer = StartPacer(this, pacing, chosen.map { it.agentId })
+                    try {
+                        chosen
+                            .map { identity ->
+                                async(services.diagnostics.of(run.runId, identity.agentId)) {
+                                    runActor(step, identity, barrier, race, pacer).also { if (it is ActorRun.Raced) raced += it }
+                                }
+                            }.awaitAll()
+                    } finally {
+                        pacer.close()
+                    }
                 }
             } catch (e: Exception) {
                 // Cancelled (budget, abort) or an actor crashed: racers that already acted still leave their records.
@@ -162,6 +171,7 @@ internal class StepExecutor(
         identity: Identity,
         barrier: StartBarrier?,
         race: AssertionSpec.OnlyOneSucceeds?,
+        pacer: StartPacer,
     ): ActorRun {
         var arrived = false
         try {
@@ -187,7 +197,10 @@ internal class StepExecutor(
                 arrived = true
                 barrier.awaitOpen()
             }
-            val performed = perform(actor, action, templates)
+            val performed =
+                pacer.paced(identity.agentId, { board.update(identity.agentId, AgentState.WAITING, step.id, it) }) {
+                    perform(actor, action, templates)
+                }
             val requests = if (race != null && raceStart != null) requestsOf(actor, race, raceStart) else null
             if (requests == null) recordAction(actor, performed, actionRecord(step, performed.outcome, race = null, lost = null))
             failureScreenshot(actor, performed.outcome)

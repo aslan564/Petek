@@ -10,14 +10,20 @@ import kotlin.time.Duration.Companion.seconds
  * second for at most 60 s, the company code awaited up to 5 minutes, registration tried at most 3 times.
  */
 data class RunFunctionSettings(
-    /** Waiting for an element that should appear on its own (a form, the user name after login). */
+    /** Waiting for an element that should appear on its own (a form, the user name after login); a flow's `wait_for` default. */
     val uiTimeout: Duration = 15.seconds,
-    /** Waiting for the page to move on after a form was submitted; a page that stays means "rejected". */
+    /**
+     * Waiting for the page to move on after a form was submitted; a page that stays means "rejected". Also a flow's
+     * `expect_url` default and each wait of a `journey`.
+     */
     val transitionTimeout: Duration = 15.seconds,
     val pollInterval: Duration = 250.milliseconds,
     val mailTimeout: Duration = 60.seconds,
     val mailPollInterval: Duration = 1.seconds,
-    /** How long a company-code tester waits for the admin to publish the code. */
+    /**
+     * How long a flow waits for a `{shared.<key>}` value another tester publishes, e.g. a company-code tester for the
+     * admin's company code.
+     */
     val companyCodeTimeout: Duration = 5.minutes,
     /** The test API may lag behind the UI (company just created, OTP just sent): ask this many times. */
     val oracleAttempts: Int = 5,

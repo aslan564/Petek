@@ -63,6 +63,7 @@ internal class PlaywrightHandles private constructor(
                 val browser = connector.connect(playwright)
                 val context = browser.newContext(contextOptions(options))
                 context.setDefaultTimeout(options.defaultTimeout.toPlaywrightTimeout())
+                LocalStorageSeed.script(options)?.let(context::addInitScript)
                 val page = context.newPage()
                 observeRealtimeTraffic(page, traffic, clock)
                 observeMutations(page, mutations, clock)

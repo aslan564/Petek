@@ -62,6 +62,11 @@ data class SessionOptions(
     val storageState: Path? = null,
     val viewport: Viewport = Viewport(),
     val defaultTimeout: Duration = Duration.parse("15s"),
+    /**
+     * Seeded into the localStorage of [baseUrl]'s origin before any page script runs, on every page load (so a flag
+     * such as "first-visit dialog dismissed" holds even after the site clears it). Other origins are left alone.
+     */
+    val localStorage: Map<String, String> = emptyMap(),
 )
 
 /** Result of waiting for something to appear. [observedAt] is the harness time it was seen (t1). */

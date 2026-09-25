@@ -228,7 +228,13 @@ class DefaultCampaignRunner(
     ) {
         val agentId = identity.agentId
         try {
-            val session = factory.open(SessionOptions(label = agentId.value, baseUrl = run.campaign.settings.target))
+            val options =
+                SessionOptions(
+                    label = agentId.value,
+                    baseUrl = run.campaign.settings.target,
+                    localStorage = run.campaign.target.localStorage,
+                )
+            val session = factory.open(options)
             run.sessions[agentId] = session
             val runtime =
                 AgentRuntime(
