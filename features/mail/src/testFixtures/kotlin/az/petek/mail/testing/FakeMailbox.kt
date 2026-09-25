@@ -16,10 +16,18 @@ class FakeMailbox : Mailbox {
         to: String,
         since: Instant,
         unreadOnly: Boolean,
-    ): MailMessage? =
+    ): MailMessage? = findRecent(to, since, unreadOnly, limit = 1).firstOrNull()
+
+    override suspend fun findRecent(
+        to: String,
+        since: Instant,
+        unreadOnly: Boolean,
+        limit: Int,
+    ): List<MailMessage> =
         messages
             .filter { m -> m.to.any { it.equals(to, ignoreCase = true) } && !m.receivedAt.isBefore(since) && (!unreadOnly || !m.read) }
-            .maxByOrNull { it.receivedAt }
+            .sortedByDescending { it.receivedAt }
+            .take(limit)
 
     override suspend fun markRead(messageId: String) {
         val i = messages.indexOfFirst { it.id == messageId }
