@@ -23,7 +23,8 @@ import kotlin.time.Duration
  * - paths: oracle, `http_status` and `target_profile.paths` values are `/...` paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
  * - templates use only [Placeholder.SUPPORTED_FORMS]. In `do`/`run` text and a step's own id source, `{last_id}` and
- *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts.
+ *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts;
+ * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
  *
  * Issue lines come from [Campaign.sourceLines], falling back to [ScenarioStep.line].
  */
@@ -199,6 +200,7 @@ class DefaultCampaignValidator(
                 if (event !in emittedAnywhere) report(path, "$path: no step emits '$event'")
                 checkIdSource(source, path, context = path, anyStep, fallbackLine = null)
             }
+            TargetProfileRules(campaign.target, settings.pacing) { path, message -> report(path, message) }.check()
         }
 
         private fun checkIdSource(
@@ -496,7 +498,12 @@ class DefaultCampaignValidator(
         ): String? =
             when (val placeholder = Placeholder.parse(name)) {
                 null -> {
-                    "unknown placeholder {$name}; allowed: ${Placeholder.SUPPORTED_FORMS}"
+                    if ("{$name}" == Placeholder.API_PREFIX) {
+                        "{$name} stands for target_profile.api_prefix and is replaced when the campaign file is loaded; " +
+                            "a campaign built in code writes the prefix itself"
+                    } else {
+                        "unknown placeholder {$name}; allowed: ${Placeholder.SUPPORTED_FORMS}"
+                    }
                 }
 
                 is Placeholder.Self -> {

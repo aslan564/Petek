@@ -30,7 +30,8 @@ interface ActorExpressionParser {
  * Cross-field rules: role quota sums to testers, registration quota sums to non-admins and invites at least every
  * manager (managers always join by invitation), departments non-empty,
  * unique step ids, every `wait_for` refers to an event emitted by an earlier step, `only_one_succeeds` only on
- * `parallel` steps with 2+ actors, known `run` functions, templates only use known placeholders.
+ * `parallel` steps with 2+ actors, known `run` functions, templates only use known placeholders, and the target profile's
+ * flows, overlays, API prefix and the campaign's pacing are well-formed.
  */
 interface CampaignValidator {
     fun validate(
