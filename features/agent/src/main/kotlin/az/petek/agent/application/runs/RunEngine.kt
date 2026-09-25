@@ -61,6 +61,16 @@ internal suspend fun RunTrace.outcomeOf(body: suspend RunTrace.() -> ActionOutco
         ActionOutcome(ActionStatus.ERROR, "Unexpected ${e::class.simpleName}: ${e.message}")
     }
 
+/**
+ * Detail of a recorded sub-action that threw [e]. An unreachable test inbox leads with `mail_unavailable:` like the
+ * concluding step (see [outcomeOf]), so the report files the sub-action under that key too instead of reading a word
+ * of Mailpit's error text ("Request timeout has expired") as a second, misleading failure key.
+ */
+internal fun errorDetail(e: Exception): String? {
+    val message = e.message ?: e::class.simpleName
+    return if (e is MailboxException) "${FailureReason.MAIL_UNAVAILABLE.key}: $message" else message
+}
+
 internal fun succeeded(
     summary: String,
     objectId: String? = null,

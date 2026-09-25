@@ -61,13 +61,19 @@ object FailureKeys {
     private val knownPattern = Regex("(?<![A-Za-z0-9_])(" + KNOWN.joinToString("|") { Regex.escape(it) } + ")(?![A-Za-z0-9_])")
     private val leadingKeyPattern = Regex("^\\s*\\[?([a-z][a-z0-9]*(?:_[a-z0-9]+)+)]?\\s*:")
 
+    // The agent loop's last turn of a `do` step: `<observation> | outcome: <STATUS> <failure key>: <summary>`.
+    private val outcomeKeyPattern = Regex("\\|\\s*outcome:\\s*[A-Z]+\\s+([a-z][a-z0-9]*(?:_[a-z0-9]+)*)\\s*:")
+
     /**
      * The failure key of [detail], or null when it carries none. A `key:` prefix wins, because the orchestrator
-     * writes `<failure key>: <summary>` and the summary is free text; otherwise the first known key counts.
+     * writes `<failure key>: <summary>` and the summary is free text; next the key of an agent loop's
+     * `| outcome: <STATUS> <key>:` marker, because the observation before it is free text too (an unreachable inbox
+     * may say "Request timeout has expired" and is still `mail_unavailable`); otherwise the first known key counts.
      */
     fun find(detail: String?): String? {
         if (detail.isNullOrBlank()) return null
         return leadingKeyPattern.find(detail)?.groupValues?.get(1)
+            ?: outcomeKeyPattern.find(detail)?.groupValues?.get(1)
             ?: knownPattern.find(detail)?.groupValues?.get(1)
     }
 

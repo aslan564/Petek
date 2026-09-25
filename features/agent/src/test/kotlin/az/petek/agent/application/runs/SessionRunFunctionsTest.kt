@@ -163,7 +163,10 @@ class SessionRunFunctionsTest {
             outcome.failureReason shouldBe FailureReason.MAIL_UNAVAILABLE
             outcome.summary shouldBe "Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed (ConnectException)"
             currentTime shouldBe 60_000
-            val final = fixture.steps.last()
+            val (await, final) = fixture.steps.takeLast(2)
+            await.action shouldBe "read_email_code: await e-mail code for ${fixture.runtime.identity.email}"
+            await.status shouldBe StepStatus.ERROR
+            await.detail shouldBe "mail_unavailable: Mailpit at http://127.0.0.1:8025: search failed (ConnectException)"
             final.action shouldBe "run read_email_code"
             final.status shouldBe StepStatus.ERROR
             final.detail shouldBe

@@ -286,6 +286,9 @@ class RegisterAndLoginRunFunctionTest {
             fixture.verification.calls shouldContainExactly listOf(invited.email to MailPurpose.CODE)
             currentTime shouldBe 60_000
             fixture.storageStateSaved() shouldBe false
+            val await = fixture.steps.single { it.action == "register_and_login: await e-mail code for ${invited.email}" }
+            await.status shouldBe StepStatus.ERROR
+            await.detail shouldBe "mail_unavailable: Mailpit at http://127.0.0.1:8025: search answered HTTP 503"
         }
 
     @Test
