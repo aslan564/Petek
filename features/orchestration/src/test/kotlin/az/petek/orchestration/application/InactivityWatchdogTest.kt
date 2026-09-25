@@ -3,6 +3,7 @@ package az.petek.orchestration.application
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.FailureReason
+import az.petek.browser.domain.BrowserActionException
 import az.petek.core.ids.AgentId
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
@@ -10,11 +11,13 @@ import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -125,6 +128,67 @@ class InactivityWatchdogTest {
 
             watchdog.guard(a01, 10.seconds) { awaitCancellation() }.status shouldBe ActionStatus.BLOCKED
             currentTime shouldBe 10_000
+        }
+
+    @Test
+    fun `an action that turns the watchdog's cancellation into its own error is still blocked`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+
+            val outcome =
+                watchdog.guard(a01, 30.seconds) {
+                    try {
+                        awaitCancellation()
+                    } catch (e: CancellationException) {
+                        throw BrowserActionException("page closed while clicking", e)
+                    }
+                }
+
+            outcome.status shouldBe ActionStatus.BLOCKED
+            outcome.failureReason shouldBe FailureReason.TIMEOUT
+            currentTime shouldBe 30_000
+        }
+
+    @Test
+    fun `an action that swallows the watchdog's cancellation is still blocked`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+
+            val outcome =
+                watchdog.guard(a01, 30.seconds) {
+                    try {
+                        awaitCancellation()
+                    } catch (_: CancellationException) {
+                        ActionOutcome(ActionStatus.ERROR, "interrupted")
+                    }
+                }
+
+            outcome.status shouldBe ActionStatus.BLOCKED
+        }
+
+    @Test
+    fun `the caller's own cancellation wins over a block that already timed out`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+            val blockedAndWrapping = CompletableDeferred<Unit>()
+            val guarded =
+                async {
+                    watchdog.guard(a01, 30.seconds) {
+                        try {
+                            awaitCancellation()
+                        } catch (e: CancellationException) {
+                            blockedAndWrapping.complete(Unit)
+                            // Still cleaning up when the caller is cancelled as well.
+                            withContext(NonCancellable) { delay(5.seconds) }
+                            throw BrowserActionException("page closed", e)
+                        }
+                    }
+                }
+            blockedAndWrapping.await()
+
+            guarded.cancel()
+
+            shouldThrow<CancellationException> { guarded.await() }
         }
 
     @Test

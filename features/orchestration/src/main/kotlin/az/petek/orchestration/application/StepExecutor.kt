@@ -440,9 +440,8 @@ internal class StepExecutor(
             val records = services.verify.verifyActor(specs, input)
             records.filter { it.verdict == Verdict.FAILED }.forEach { run.tally.assertionFailed(actor.agentId) }
             Verification(records, error = false)
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Exception) {
+            rethrowIfCancelled(e)
             recordVerificationError(actor.step.id, actor.agentId, actor.correlationId, e)
             Verification(emptyList(), error = true)
         }
@@ -465,9 +464,8 @@ internal class StepExecutor(
         val records =
             try {
                 services.verify.verifyGroup(specs, input, actorResults)
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
+                rethrowIfCancelled(e)
                 recordVerificationError(step.id, null, correlationId, e)
                 return true
             }

@@ -13,6 +13,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -142,6 +143,27 @@ class OracleTeardownUseCaseTest {
             val result = offline.teardown(runId)
 
             result.failures.single() shouldContain "test API is not available"
+            runs.resources(runId).map { it.externalId } shouldBe listOf("c1")
+        }
+
+    @Test
+    fun `an oracle call that times out internally is reported, not mistaken for a cancelled teardown`() =
+        runTest {
+            testCompany("c1")
+            testCompany("c2")
+            val slow =
+                object : TargetOracle by oracle {
+                    override suspend fun deleteCompany(companyId: String) {
+                        if (companyId == "c1") throw CancellationException("DELETE /test/companies/c1 timed out")
+                        oracle.deleteCompany(companyId)
+                    }
+                }
+            val runId = run("run_1", companies = arrayOf("c1", "c2"))
+
+            val result = OracleTeardownUseCase(runs, slow).teardown(runId)
+
+            result.failures.single() shouldContain "company:c1: DELETE /test/companies/c1 timed out"
+            result.removed shouldBe listOf("company:c2")
             runs.resources(runId).map { it.externalId } shouldBe listOf("c1")
         }
 

@@ -250,6 +250,10 @@ class FakeBrowserEngine(
     @Volatile
     var failOpenFor: Set<String> = emptySet()
 
+    /** What opening a session listed in [failOpenFor] throws. */
+    @Volatile
+    var openError: (String) -> Exception = { label -> BrowserActionException("context for $label crashed") }
+
     @Volatile
     var configure: (FakeBrowserSession) -> Unit = {}
 
@@ -257,7 +261,7 @@ class FakeBrowserEngine(
         starts.incrementAndGet()
         if (failStart) throw BrowserActionException("chromium could not start")
         return BrowserSessionFactory { options ->
-            if (options.label in failOpenFor) throw BrowserActionException("context for ${options.label} crashed")
+            if (options.label in failOpenFor) throw openError(options.label)
             opened += options
             FakeBrowserSession(options.label, clock).also {
                 configure(it)

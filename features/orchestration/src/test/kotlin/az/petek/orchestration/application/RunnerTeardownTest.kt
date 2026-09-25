@@ -4,10 +4,13 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.SharedRunState
 import az.petek.browser.domain.BrowserEngineConfig
+import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.StepAction
+import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
 import az.petek.evidence.domain.RunResult
+import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.identity.domain.IdentityConflictException
 import az.petek.identity.domain.IdentityPlan
@@ -259,6 +262,70 @@ class RunnerTeardownTest {
             f.browser.stops.get() shouldBe 0
             f.system("abort").single().detail!! shouldContain "duplicate name"
             f.finalizer.calls shouldHaveSize 1
+        }
+
+    @Test
+    fun `a fatal error aborts the run and cleans up before it propagates`() =
+        runTest {
+            val f = fixture().apply { companyThen { TODO("agent loop not wired") } }
+
+            shouldThrow<NotImplementedError> {
+                f.runner().run(campaign(setup = listOf(seed), steps = listOf(step("work", employees()))))
+            }
+
+            val run = f.evidence.runList.single()
+            run.result shouldBe RunResult.ABORTED
+            f.system("abort").single().detail!! shouldContain "fatal error: NotImplementedError"
+            f.monitor.summaries
+                .single()
+                .outcome shouldBe RunOutcome.ABORTED
+            f.shouldHaveCleanedUp(run.runId)
+        }
+
+    @Test
+    fun `a stray cancellation from a callee is a failure of that callee, not a cancelled run`() =
+        runTest {
+            val f = fixture()
+            // e.g. the verifier's own withTimeout firing: the run itself was never cancelled.
+            f.verify.oracleVerdict = { _, _ -> throw CancellationException("oracle request timed out") }
+            val campaign =
+                campaign(
+                    steps =
+                        listOf(
+                            step("check", admin(), assertions = listOf(AssertionSpec.Oracle("/test/tickets/1", "status", "open", null))),
+                            step("after", employees()),
+                        ),
+                )
+
+            val summary = f.runner().run(campaign)
+
+            val error = f.steps("check", StepKind.ASSERT).single()
+            error.status shouldBe StepStatus.ERROR
+            error.detail!! shouldContain "verification failed: CancellationException: oracle request timed out"
+            f.step("check", StepKind.DO, "a01").status shouldBe StepStatus.PASSED
+            f.agents.callsFor("after") shouldHaveSize 4
+            f.system("abort").shouldBeEmpty()
+            summary.outcome shouldBe RunOutcome.FAILED
+        }
+
+    @Test
+    fun `a stray cancellation while opening one session only fails that tester`() =
+        runTest {
+            val f = fixture()
+            f.browser.failOpenFor = setOf("a03")
+            f.browser.openError = { CancellationException("connect to the browser server timed out") }
+
+            val summary = f.runner().run(campaign(steps = listOf(step("work", everyoneButAdmin()))))
+
+            val open = f.system("open_session").single()
+            open.agentId shouldBe AgentId("a03")
+            open.detail!! shouldContain "browser_error: CancellationException"
+            f.identities.statusReasons[summary.runId to AgentId("a03")] shouldBe "browser_error"
+            f.agents
+                .callsFor("work")
+                .map { it.agentId.value }
+                .sorted() shouldBe listOf("a02", "a04", "a05", "a06", "a07")
+            summary.outcome shouldBe RunOutcome.FAILED
         }
 
     @Test

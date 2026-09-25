@@ -51,6 +51,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Path
@@ -136,12 +138,18 @@ class DefaultCampaignRunner(
         lateinit var summary: RunSummary
         try {
             withContext(diagnostics.of(runId, null)) { execute(run, board) }
-        } catch (e: CancellationException) {
-            run.abort("run cancelled")
-            throw e
         } catch (e: Exception) {
+            if (e is CancellationException && !currentCoroutineContext().isActive) {
+                run.abort("run cancelled")
+                throw e
+            }
+            // Includes a stray CancellationException from a callee while the run itself was not cancelled.
             logger.error(e) { "run $runId stopped by an unexpected error" }
             run.abort("unexpected error: ${e::class.simpleName}: ${e.message}")
+        } catch (e: Throwable) {
+            // A fatal error (e.g. an unimplemented function) must never leave the run recorded as PASSED.
+            run.abort("fatal error: ${e::class.simpleName}: ${e.message}")
+            throw e
         } finally {
             summary = withContext(NonCancellable + diagnostics.of(runId, null)) { conclude(run, board) }
         }
@@ -226,9 +234,8 @@ class DefaultCampaignRunner(
                     storageStatePath = storageStatePath(run.runId, agentId),
                 )
             run.agents[agentId] = agents.create(runtime)
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Exception) {
+            rethrowIfCancelled(e)
             val reason = FailureReason.BROWSER_ERROR.key
             val detail = "$reason: ${e::class.simpleName}: ${e.message}"
             evidence.system(run, agentId, "open_session", StepStatus.ERROR, detail, tally = Tally.FAIL)

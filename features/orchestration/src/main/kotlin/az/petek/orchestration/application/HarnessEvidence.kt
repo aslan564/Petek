@@ -19,7 +19,6 @@ import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.CancellationException
 
 private val logger = KotlinLogging.logger {}
 
@@ -134,9 +133,8 @@ internal class HarnessEvidence(
             val record = artifacts.write(run.runId, stepId, agentId.value, ArtifactType.SCREENSHOT, session.screenshot())
             recorder.artifact(record)
             record.artifactId
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Exception) {
+            rethrowIfCancelled(e)
             logger.warn { "run ${run.runId} agent $agentId: failure screenshot not taken (${e::class.simpleName}: ${e.message})" }
             null
         }

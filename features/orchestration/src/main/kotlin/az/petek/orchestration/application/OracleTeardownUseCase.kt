@@ -4,7 +4,6 @@ import az.petek.core.ids.RunId
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
 import az.petek.oracle.domain.TargetOracle
-import kotlinx.coroutines.CancellationException
 
 /**
  * Removes what a run created on the target, using the resources the run registered (CLAUDE.md rule 8: the oracle
@@ -39,9 +38,8 @@ class OracleTeardownUseCase(
             try {
                 oracle.deleteCompany(resource.externalId)
                 null
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
+                rethrowIfCancelled(e)
                 if (alreadyGone(resource.externalId)) null else e.message ?: e::class.simpleName
             }
         if (problem == null) runs.removeResource(resource.runId, resource.kind, resource.externalId)
@@ -51,9 +49,8 @@ class OracleTeardownUseCase(
     private suspend fun alreadyGone(companyId: String): Boolean =
         try {
             oracle.company(companyId) == null
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            rethrowIfCancelled(e)
             false
         }
 

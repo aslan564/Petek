@@ -7,6 +7,8 @@ import az.petek.core.ids.AgentId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -43,8 +45,9 @@ class InactivityWatchdog {
 
     /**
      * Runs [block] for [agentId]; returns its outcome, or a BLOCKED outcome if the agent went [timeout] without
-     * progress. Exceptions thrown by [block] propagate unchanged. A non-positive or infinite [timeout] disables
-     * the watchdog for this call.
+     * progress. Once the watchdog has cancelled the action the result is BLOCKED however the action ended — also
+     * when it turned the cancellation into an exception of its own (e.g. a browser error). Otherwise exceptions thrown
+     * by [block] propagate unchanged. A non-positive or infinite [timeout] disables the watchdog for this call.
      */
     suspend fun guard(
         agentId: AgentId,
@@ -54,29 +57,33 @@ class InactivityWatchdog {
         if (!timeout.isPositive() || timeout.isInfinite()) return block()
         val signal = counter(agentId)
         val blocked = AtomicBoolean(false)
-        return coroutineScope {
-            val work = async { block() }
-            val watcher =
-                launch {
-                    var seen = signal.value
-                    while (true) {
-                        val next = withTimeoutOrNull(timeout) { signal.first { it != seen } }
-                        if (next == null) {
-                            blocked.set(true)
-                            work.cancel(CancellationException("agent $agentId made no progress for $timeout"))
-                            return@launch
+        return try {
+            coroutineScope {
+                val work = async { block() }
+                val watcher =
+                    launch {
+                        var seen = signal.value
+                        while (true) {
+                            val next = withTimeoutOrNull(timeout) { signal.first { it != seen } }
+                            if (next == null) {
+                                blocked.set(true)
+                                work.cancel(CancellationException("agent $agentId made no progress for $timeout"))
+                                return@launch
+                            }
+                            seen = next
                         }
-                        seen = next
                     }
+                try {
+                    work.await()
+                } finally {
+                    watcher.cancel()
                 }
-            try {
-                work.await()
-            } catch (e: CancellationException) {
-                if (!blocked.get()) throw e
-                blockedOutcome(timeout)
-            } finally {
-                watcher.cancel()
             }
+        } catch (e: Exception) {
+            if (!blocked.get()) throw e
+            // The caller's own cancellation (budget, abort) still wins over the watchdog's verdict.
+            currentCoroutineContext().ensureActive()
+            blockedOutcome(timeout)
         }
     }
 
