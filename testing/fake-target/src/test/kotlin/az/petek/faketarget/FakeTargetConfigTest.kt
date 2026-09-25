@@ -47,8 +47,10 @@ class FakeTargetConfigTest {
                     "FAKE_TARGET_PHONE_OTP" to "FALSE",
                     "FAKE_TARGET_NOTIFICATION_DELAY_MS" to "250",
                     "FAKE_TARGET_BUGS" to "race_double_approve, DROP_NOTIFICATION_FOR_ONE_USER",
+                    "FAKE_TARGET_RACE_WINDOW_MS" to "15000",
                 ),
             )
+        options.config.raceWindow shouldBe 15.seconds
         options.port shouldBe 9090
         options.mailPort shouldBe 9025
         options.config.testToken shouldBe "tok"
@@ -69,5 +71,7 @@ class FakeTargetConfigTest {
         shouldThrow<IllegalArgumentException> { FakeTargetOptions.fromEnvironment(mapOf("FAKE_TARGET_PORT" to "70000")) }
         shouldThrow<IllegalArgumentException> { FakeTargetOptions.fromEnvironment(mapOf("FAKE_TARGET_PHONE_OTP" to "maybe")) }
         shouldThrow<IllegalArgumentException> { FakeTargetOptions.fromEnvironment(mapOf("FAKE_TARGET_NOTIFICATION_DELAY_MS" to "-5")) }
+        shouldThrow<IllegalArgumentException> { FakeTargetOptions.fromEnvironment(mapOf("FAKE_TARGET_RACE_WINDOW_MS" to "0")) }
+        shouldThrow<IllegalArgumentException> { FakeTargetOptions.fromEnvironment(mapOf("FAKE_TARGET_RACE_WINDOW_MS" to "soon")) }
     }
 }

@@ -19,10 +19,12 @@ import az.petek.faketarget.web.AuthRoutes
 import az.petek.faketarget.web.EventsRoute
 import az.petek.faketarget.web.WebApplication
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.server.application.Application
 import io.ktor.server.cio.CIO
 import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +54,11 @@ class FakeTargetServer(
             ignoreUnknownKeys = true
             encodeDefaults = true
         }
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineName("fake-target"))
+    private val scope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.Default + CoroutineName("fake-target") +
+                CoroutineExceptionHandler { _, e -> logger.error(e) { "Background task of the fake target failed" } },
+        )
     private val hub = NotificationHub()
 
     /** Read access to everything the fake knows, for test assertions. */
@@ -78,18 +84,21 @@ class FakeTargetServer(
     /** Where the Mailpit-compatible API listens, e.g. `http://127.0.0.1:8025`. Only valid after [start]. */
     val mailpitUrl: URI get() = requireRunning().mailpitUrl
 
-    /** Starts both servers; port 0 picks a free port. Blocks until both accept connections. */
+    /**
+     * Starts both servers; port 0 picks a free port. Blocks until both accept connections. A taken port fails with an
+     * [IllegalStateException] naming it, and nothing is left running.
+     */
     fun start(
         port: Int = 0,
         mailPort: Int = 0,
     ): FakeTargetServer {
         synchronized(lock) {
             check(running == null && !stopped) { "FakeTargetServer can be started only once" }
-            val web = embeddedServer(CIO, port = port, host = HOST) { webApplication().install(this) }.start(wait = false)
+            val web = startEngine("web application", port) { webApplication().install(this) }
             val mail =
                 try {
-                    embeddedServer(CIO, port = mailPort, host = HOST) { MailpitApi(outbox, json).install(this) }.start(wait = false)
-                } catch (e: Exception) {
+                    startEngine("Mailpit API", mailPort) { MailpitApi(outbox, json).install(this) }
+                } catch (e: IllegalStateException) {
                     web.stop(0, 0)
                     throw e
                 }
@@ -127,6 +136,18 @@ class FakeTargetServer(
     }
 
     override fun close() = stop()
+
+    /** CIO reports a taken port as a bare coroutine cancellation; name the port so the failure is actionable. */
+    private fun startEngine(
+        what: String,
+        port: Int,
+        module: Application.() -> Unit,
+    ): EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration> =
+        try {
+            embeddedServer(CIO, port = port, host = HOST, module = module).start(wait = false)
+        } catch (e: Exception) {
+            throw IllegalStateException("Cannot start the fake target's $what on $HOST:$port (is the port already in use?)", e)
+        }
 
     private fun requireRunning(): Running = synchronized(lock) { checkNotNull(running) { "FakeTargetServer is not running" } }
 

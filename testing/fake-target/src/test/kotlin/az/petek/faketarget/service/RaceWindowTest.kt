@@ -3,6 +3,8 @@ package az.petek.faketarget.service
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -36,6 +38,17 @@ class RaceWindowTest {
             val second = async { window.await("t2").let { currentTime } }
             first.await() shouldBe 2_000
             second.await() shouldBe 2_000
+        }
+
+    @Test
+    fun `a waiter that gives up does not release the next caller early`() =
+        runTest {
+            val quitter = launch { window.await("t1") }
+            testScheduler.advanceTimeBy(100)
+            quitter.cancelAndJoin()
+            val start = currentTime
+            window.await("t1")
+            currentTime - start shouldBe 2_000
         }
 
     @Test

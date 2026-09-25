@@ -2,9 +2,11 @@ package az.petek.faketarget.service
 
 import az.petek.faketarget.model.Notification
 import az.petek.faketarget.model.NotificationType
+import az.petek.faketarget.store.FakeTargetStore
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.time.Clock
 import java.time.Instant
 
 class NotificationHubTest {
@@ -50,6 +52,43 @@ class NotificationHubTest {
         stream.notifications.tryReceive().isClosed shouldBe true
         hub.publish(notification("a@x.az", 1))
         hub.publish(notification("nobody@x.az", 2))
+    }
+
+    @Test
+    fun `recipients whose streams are all closed leave nothing behind`() {
+        val tab1 = hub.subscribe("a@x.az")
+        val tab2 = hub.subscribe("a@x.az")
+        hub.connectedRecipients() shouldBe 1
+        tab1.close()
+        hub.openStreams("a@x.az") shouldBe 1
+        tab2.close()
+        tab2.close()
+        hub.connectedRecipients() shouldBe 0
+    }
+
+    @Test
+    fun `a stream opened after a disconnect is registered afresh and a late close of an ended stream is harmless`() {
+        val old = hub.subscribe("a@x.az")
+        hub.disconnect(listOf("a@x.az"))
+        val fresh = hub.subscribe("a@x.az")
+        old.close()
+        hub.openStreams("a@x.az") shouldBe 1
+        hub.publish(notification("a@x.az", 1))
+        fresh.notifications
+            .tryReceive()
+            .getOrNull()
+            ?.id shouldBe "n1"
+    }
+
+    @Test
+    fun `a live stream for someone who no longer exists is ended at once`() {
+        val service = NotificationService(FakeTargetStore(), hub, Clock.systemUTC())
+        val stream = service.open("ghost@x.az", afterSequence = 0)
+        stream.backlog shouldBe emptyList()
+        stream.subscription.notifications
+            .tryReceive()
+            .isClosed shouldBe true
+        hub.connectedRecipients() shouldBe 0
     }
 
     @Test

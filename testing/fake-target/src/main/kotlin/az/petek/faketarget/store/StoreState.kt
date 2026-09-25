@@ -61,6 +61,9 @@ internal class StoreState {
 
     fun companyByCode(code: String): Company? = companies.values.firstOrNull { it.code.equals(code.trim(), ignoreCase = true) }
 
+    /** The first of [candidates] no company uses yet. */
+    fun unusedCompanyCode(candidates: Sequence<String>): String = candidates.first { companyByCode(it) == null }
+
     fun departmentsOf(companyId: String): List<Department> = departments.values.filter { it.companyId == companyId }
 
     /** Resolves a department of [companyId] by name (exact, trimmed) or by id. */

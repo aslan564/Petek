@@ -6,7 +6,6 @@ import az.petek.faketarget.model.Notification
 import az.petek.faketarget.service.AccountService
 import az.petek.faketarget.service.Failure
 import az.petek.faketarget.service.NotificationService
-import io.ktor.http.HttpHeaders
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -36,7 +35,6 @@ internal class EventsRoute(
             }
             val after =
                 NotificationService.sequenceOf(call.request.headers["Last-Event-ID"] ?: call.request.queryParameters["after"])
-            call.response.header(HttpHeaders.CacheControl, "no-store")
             call.response.header("X-Accel-Buffering", "no")
             call.respond(
                 SSEServerContent(call) {

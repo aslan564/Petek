@@ -306,6 +306,48 @@ class OwnerSignUpTest {
             val login = browser.submit("/login", "email" to owner.email, "password" to owner.password, "next" to "/tickets")
             login.location shouldBe "/tickets"
             browser.submit("/login", "email" to owner.email, "password" to owner.password, "next" to "//evil.example").location shouldBe "/"
+            // Browsers drop tabs from a Location header, which would turn this into //evil.example.
+            browser.submit("/login", "email" to owner.email, "password" to owner.password, "next" to "/\t/evil.example").location shouldBe
+                "/"
+        }
+
+    @Test
+    fun `submitting a finished verification step again goes home with a session and to the login without one`() =
+        runBlocking<Unit> {
+            val owner = fake.registerOwner(email = "v@test.kadrohr.com")
+            val email = owner.email
+            owner.browser.submit("/verify", "email" to email, "code" to "000000").location shouldBe "/"
+            owner.browser.submit("/verify/phone", "email" to email, "code" to "000000").location shouldBe "/"
+            owner.browser.submit("/verify/phone/resend", "email" to email).location shouldBe "/"
+
+            val stranger = fake.browser()
+            val again = stranger.submit("/verify", "email" to email, "code" to "000000")
+            again.status shouldBe 200
+            again.text("login-info") shouldBe "Bu addım artıq tamamlanıb. Daxil olun."
+            again.attribute("login-email", "value") shouldBe email
+            stranger
+                .submit("/verify/phone", "email" to email, "code" to "000000")
+                .text("login-info") shouldBe "Bu addım artıq tamamlanıb. Daxil olun."
+        }
+
+    @Test
+    fun `the phone step sends someone with an unverified e-mail back to the e-mail step`() =
+        runBlocking<Unit> {
+            val browser = fake.browser()
+            browser.submit(
+                "/register",
+                "name" to "Vəli",
+                "email" to "v@test.kadrohr.com",
+                "phone" to "+994500000001",
+                "password" to "owner-secret-1",
+                "company" to "X",
+            )
+            browser.get("/verify/phone?email=v%40test.kadrohr.com").location shouldBe "/verify?email=v%40test.kadrohr.com"
+            browser.submit("/verify/phone", "email" to "v@test.kadrohr.com", "code" to "123456").location shouldBe
+                "/verify?email=v%40test.kadrohr.com"
+            browser
+                .submit("/verify/phone", "email" to "nobody@test.kadrohr.com", "code" to "123456")
+                .text("verify-phone-error") shouldBe "Bu e-poçt üçün gözləyən təsdiq yoxdur."
         }
 
     @Test

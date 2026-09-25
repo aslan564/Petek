@@ -73,8 +73,14 @@ internal fun verifyLocation(email: String): String = "/verify?email=${email.enco
 
 internal fun verifyPhoneLocation(email: String): String = "/verify/phone?email=${email.encodeURLParameter()}"
 
-/** Only same-site paths are accepted as a post-login target. */
-internal fun safeNext(next: String?): String? = next?.takeIf { it.startsWith("/") && !it.startsWith("//") && '\\' !in it }
+/**
+ * Only same-site paths are accepted as a post-login target. Whitespace and control characters are refused too:
+ * browsers strip tabs and newlines from a `Location`, so `/\t/evil.example` would otherwise become `//evil.example`.
+ */
+internal fun safeNext(next: String?): String? =
+    next?.takeIf { path ->
+        path.startsWith("/") && !path.startsWith("//") && path.none { it == '\\' || it.isWhitespace() || it.isISOControl() }
+    }
 
 internal val Failure.status: HttpStatusCode
     get() =

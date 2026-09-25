@@ -115,6 +115,29 @@ class JoinAndInvitationTest {
         }
 
     @Test
+    fun `a company without departments can still be joined with its code`() =
+        runBlocking<Unit> {
+            val owner = fake.registerOwner()
+            val code = fake.companyOf(owner.email).string("code")
+            fake
+                .browser()
+                .get("/join?code=$code")
+                .options("join-department") shouldContainExactly listOf("" to "Departament seçin")
+
+            val member = fake.joinWithCode(code, "early@test.kadrohr.com", department = "")
+
+            member.browser
+                .get("/")
+                .text("current-user-role") shouldBe "employee"
+            val user =
+                fake.server.store
+                    .user("early@test.kadrohr.com")
+                    .shouldNotBeNull()
+            user.department shouldBe null
+            user.role shouldBe UserRole.EMPLOYEE
+        }
+
+    @Test
     fun `an invitee follows the e-mailed link and becomes the invited role in the invited department`() =
         runBlocking<Unit> {
             val owner = fake.registerOwner()

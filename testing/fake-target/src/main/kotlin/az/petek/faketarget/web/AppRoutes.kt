@@ -54,6 +54,9 @@ internal class AppRoutes(
 
     fun chrome(user: User): Chrome = Chrome(user, companies.company(user).name, notifications.panel(user))
 
+    /** The session header of the caller, or null for a visitor without a session. */
+    fun chromeOf(call: ApplicationCall): Chrome? = accounts.userBySession(SessionCookie.read(call))?.let(::chrome)
+
     private fun Route.homeRoutes() {
         get("/") {
             val user = currentUserOrLogin(call) ?: return@get

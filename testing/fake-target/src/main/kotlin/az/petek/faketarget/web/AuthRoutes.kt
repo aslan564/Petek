@@ -157,14 +157,7 @@ internal class AuthRoutes(
                         }
 
                         Failure.ALREADY_VERIFIED -> {
-                            call.respondHtml {
-                                loginPage(
-                                    email,
-                                    next = null,
-                                    error = null,
-                                    info = outcome.failure.message,
-                                )
-                            }
+                            call.alreadyVerified(email)
                         }
 
                         else -> {
@@ -197,9 +190,11 @@ internal class AuthRoutes(
                 }
 
                 is Outcome.Failed -> {
-                    when (val user = accounts.user(email)) {
-                        null -> call.phoneStepUnavailable(email, outcome.failure)
-                        else -> call.respondHtml { verifyPhonePage(user.email, user.phone, outcome.failure.message) }
+                    val user = accounts.user(email)
+                    if (user == null || outcome.failure in STEP_UNAVAILABLE) {
+                        call.phoneStepUnavailable(email, outcome.failure)
+                    } else {
+                        call.respondHtml { verifyPhonePage(user.email, user.phone, outcome.failure.message) }
                     }
                 }
             }
@@ -267,12 +262,26 @@ internal class AuthRoutes(
     ) {
         when (failure) {
             Failure.EMAIL_NOT_VERIFIED -> seeOther(verifyLocation(email))
-            Failure.ALREADY_VERIFIED -> respondHtml { loginPage(email, next = null, error = null, info = failure.message) }
+            Failure.ALREADY_VERIFIED -> alreadyVerified(email)
             else -> respondHtml { verificationProblemPage("verify-phone-error", failure.message) }
         }
+    }
+
+    /**
+     * A step submitted again after it succeeded (a double click, a reload): with a session go home, otherwise offer the
+     * login, rather than showing a verification error to someone who is done.
+     */
+    private suspend fun ApplicationCall.alreadyVerified(email: String) {
+        if (loggedIn(this)) return seeOther("/")
+        respondHtml { loginPage(email, next = null, error = null, info = Failure.ALREADY_VERIFIED.message) }
     }
 
     private fun loggedIn(call: ApplicationCall): Boolean = accounts.userBySession(SessionCookie.read(call)) != null
 
     private fun Parameters.text(name: String): String = this[name].orEmpty()
+
+    private companion object {
+        /** Phone-step failures that are not about the entered code, so the code form would not help. */
+        val STEP_UNAVAILABLE = setOf(Failure.NO_PENDING_VERIFICATION, Failure.EMAIL_NOT_VERIFIED, Failure.ALREADY_VERIFIED)
+    }
 }

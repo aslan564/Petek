@@ -43,12 +43,15 @@ th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e4e7eb}
     /**
      * Live notifications over SSE: resumes after the newest notification the page rendered (`data-last-id`), prepends
      * each new `notification-item` and bumps `notification-count`. EventSource reconnects on its own and then sends
-     * `Last-Event-ID`, which the server prefers over `?after=`.
+     * `Last-Event-ID`, which the server prefers over `?after=`. The stream is closed on `pagehide`, so a page restored
+     * from the back/forward cache reloads itself.
      */
     const val LIVE_NOTIFICATIONS = """
 (function () {
   var list = document.querySelector('[data-testid="notification-list"]');
   var count = document.querySelector('[data-testid="notification-count"]');
+  // A page restored from the back/forward cache has a closed stream and a stale panel: fetch it afresh.
+  window.addEventListener('pageshow', function (event) { if (event.persisted) window.location.reload(); });
   if (!list || !count || !window.EventSource) return;
   var after = list.getAttribute('data-last-id');
   var source = new EventSource('/events' + (after ? '?after=' + encodeURIComponent(after) : ''));

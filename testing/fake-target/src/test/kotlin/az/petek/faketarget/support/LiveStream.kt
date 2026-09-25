@@ -27,22 +27,30 @@ class LiveStream(
     private val connected = CompletableDeferred<Unit>()
     private val responseHeaders = CompletableDeferred<Headers>()
     private val events = Channel<ServerSentEvent>(Channel.UNLIMITED)
+    private val ended = CompletableDeferred<Unit>()
 
     init {
         scope.launch {
-            browser.client.sse(
-                urlString = browser.url("/events$query"),
-                showCommentEvents = true,
-                request = { lastEventId?.let { header("Last-Event-ID", it) } },
-            ) {
-                responseHeaders.complete(call.response.headers)
-                incoming.collect { event ->
-                    if (event.comments?.contains("connected") == true) connected.complete(Unit)
-                    if (event.event == "notification") events.send(event)
+            try {
+                browser.client.sse(
+                    urlString = browser.url("/events$query"),
+                    showCommentEvents = true,
+                    request = { lastEventId?.let { header("Last-Event-ID", it) } },
+                ) {
+                    responseHeaders.complete(call.response.headers)
+                    incoming.collect { event ->
+                        if (event.comments?.contains("connected") == true) connected.complete(Unit)
+                        if (event.event == "notification") events.send(event)
+                    }
                 }
+            } finally {
+                ended.complete(Unit)
             }
         }
     }
+
+    /** Suspends until the server ended the stream (or the connection broke). */
+    suspend fun awaitEnded() = withTimeout(TIMEOUT) { ended.await() }
 
     /** Suspends until the server has registered the stream (it sends a `connected` comment right after). */
     suspend fun awaitConnected() = withTimeout(TIMEOUT) { connected.await() }

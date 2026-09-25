@@ -29,7 +29,11 @@ internal class RaceWindow(
             gate.complete(Unit)
             return
         }
-        withTimeoutOrNull(window) { gate.await() }
-        synchronized(lock) { if (waiting[key] === gate) waiting.remove(key) }
+        try {
+            withTimeoutOrNull(window) { gate.await() }
+        } finally {
+            // Also when the caller is cancelled (client gone), so a stale gate never releases a later caller early.
+            synchronized(lock) { if (waiting[key] === gate) waiting.remove(key) }
+        }
     }
 }

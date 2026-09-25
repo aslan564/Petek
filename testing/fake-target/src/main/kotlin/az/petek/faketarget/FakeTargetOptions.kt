@@ -18,8 +18,13 @@ internal data class FakeTargetOptions(
                     testToken = value("PETEK_TEST_TOKEN") ?: defaults.testToken,
                     testMailDomain = value("PETEK_MAIL_DOMAIN") ?: defaults.testMailDomain,
                     requirePhoneOtp = value("FAKE_TARGET_PHONE_OTP")?.let(::parseBoolean) ?: defaults.requirePhoneOtp,
-                    notificationDelay = value("FAKE_TARGET_NOTIFICATION_DELAY_MS")?.let(::parseDelay) ?: defaults.notificationDelay,
+                    notificationDelay =
+                        value("FAKE_TARGET_NOTIFICATION_DELAY_MS")?.let { parseMillis("FAKE_TARGET_NOTIFICATION_DELAY_MS", it) }
+                            ?: defaults.notificationDelay,
                     bugs = value("FAKE_TARGET_BUGS")?.let(::parseBugs) ?: emptySet(),
+                    raceWindow =
+                        value("FAKE_TARGET_RACE_WINDOW_MS")?.let { parseMillis("FAKE_TARGET_RACE_WINDOW_MS", it) }
+                            ?: defaults.raceWindow,
                 )
             return FakeTargetOptions(
                 config = config,
@@ -34,9 +39,11 @@ internal data class FakeTargetOptions(
         private fun parseBoolean(raw: String): Boolean =
             requireNotNull(raw.lowercase().toBooleanStrictOrNull()) { "FAKE_TARGET_PHONE_OTP must be true or false, was '$raw'" }
 
-        private fun parseDelay(raw: String): Duration {
-            val millis =
-                requireNotNull(raw.toLongOrNull()?.takeIf { it >= 0 }) { "FAKE_TARGET_NOTIFICATION_DELAY_MS must be >= 0, was '$raw'" }
+        private fun parseMillis(
+            name: String,
+            raw: String,
+        ): Duration {
+            val millis = requireNotNull(raw.toLongOrNull()?.takeIf { it >= 0 }) { "$name must be >= 0, was '$raw'" }
             return millis.milliseconds
         }
 

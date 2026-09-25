@@ -5,10 +5,12 @@ import az.petek.faketarget.api.TestApi
 import az.petek.faketarget.api.TicketApi
 import az.petek.faketarget.service.Failure
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.install
 import io.ktor.server.html.respondHtml
 import io.ktor.server.plugins.BadRequestException
@@ -16,6 +18,7 @@ import io.ktor.server.plugins.ContentTransformationException
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
@@ -26,7 +29,12 @@ import kotlinx.serialization.json.Json
 
 private val logger = KotlinLogging.logger {}
 
-/** Wires the web application: plugins, the page routes, the JSON API, the test API and the SSE stream. */
+/**
+ * Wires the web application: plugins, the page routes, the JSON API, the test API and the SSE stream.
+ *
+ * Every response is `Cache-Control: no-store`: pages change with every action (ticket status, notification count),
+ * and browsers otherwise serve history navigations (Back) from their cache, showing agents a stale state.
+ */
 internal class WebApplication(
     private val auth: AuthRoutes,
     private val app: AppRoutes,
@@ -36,6 +44,7 @@ internal class WebApplication(
     private val json: Json,
 ) {
     fun install(application: Application) {
+        application.intercept(ApplicationCallPipeline.Plugins) { context.response.header(HttpHeaders.CacheControl, "no-store") }
         application.install(ContentNegotiation) { json(json) }
         application.install(SSE)
         application.install(StatusPages) {
@@ -67,7 +76,9 @@ internal class WebApplication(
         if (path.startsWith("/api/") || path.startsWith("/test/") || path == "/events") {
             respond(status, ErrorJson(status.description.lowercase().replace(' ', '_'), message))
         } else {
-            respondHtml(status) { errorPage(chrome = null, title = status.description, message = message) }
+            // A logged-in visitor keeps the session header and notification panel even on error pages.
+            val chrome = runCatching { app.chromeOf(this) }.getOrNull()
+            respondHtml(status) { errorPage(chrome, title = status.description, message = message) }
         }
     }
 }

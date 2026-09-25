@@ -84,6 +84,44 @@ class LiveNotificationsTest {
         }
 
     @Test
+    fun `deleting the company ends its members' open streams`() =
+        runBlocking<Unit> {
+            val team = fake.team()
+            val other = fake.registerOwner(email = "other@test.kadrohr.com", company = "Qalan MMC")
+            LiveStream(team.itEmployee.browser).use { member ->
+                LiveStream(other.browser).use { outsider ->
+                    member.awaitConnected()
+                    outsider.awaitConnected()
+
+                    fake.testDelete("/test/companies/${team.companyId}").status shouldBe 204
+
+                    member.awaitEnded()
+                    fake.server.store
+                        .user(team.itEmployee.email) shouldBe null
+                    // EventSource reconnects on its own; the reconnect is refused because the session died with the company.
+                    team.itEmployee.browser
+                        .get("/events")
+                        .status shouldBe 401
+                    other.browser
+                        .get("/")
+                        .text("current-user-name") shouldBe "Əli Kərimov"
+                    outsider.drain().shouldBeEmpty()
+                }
+            }
+        }
+
+    @Test
+    fun `stopping the server ends every open stream`() =
+        runBlocking<Unit> {
+            val team = fake.team()
+            LiveStream(team.hrEmployee.browser).use { stream ->
+                stream.awaitConnected()
+                fake.server.stop()
+                stream.awaitEnded()
+            }
+        }
+
+    @Test
     fun `the event stream needs a session`() =
         runBlocking<Unit> {
             val response = fake.http.get(fake.web("/events"))

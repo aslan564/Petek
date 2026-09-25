@@ -1,6 +1,7 @@
 package az.petek.faketarget
 
 import az.petek.faketarget.support.FakeTargetFixture
+import az.petek.faketarget.support.LiveStream
 import az.petek.faketarget.support.toPage
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
@@ -10,6 +11,8 @@ import io.kotest.matchers.string.shouldContain
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import java.net.InetAddress
@@ -57,6 +60,44 @@ class FakeTargetServerTest {
         }
 
     @Test
+    fun `a logged-in visitor keeps the session header and notification panel on error pages`() =
+        runBlocking<Unit> {
+            FakeTargetFixture().use { fake ->
+                val owner = fake.registerOwner()
+                val missing = owner.browser.get("/no/such/page")
+                missing.status shouldBe 404
+                missing.text("page-error") shouldBe "Səhifə tapılmadı."
+                missing.text("current-user-name") shouldBe owner.name
+                listOf("logout", "nav-home", "notification-bell", "notification-count", "notification-list").forEach {
+                    missing.has(it) shouldBe true
+                }
+                fake
+                    .browser()
+                    .get("/no/such/page")
+                    .has("current-user-name") shouldBe false
+            }
+        }
+
+    @Test
+    fun `no response of the web port may be cached, so Back never shows a stale page`() =
+        runBlocking<Unit> {
+            FakeTargetFixture().use { fake ->
+                val owner = fake.registerOwner()
+                val responses =
+                    listOf(
+                        owner.browser.client.get(owner.browser.url("/")),
+                        owner.browser.client.get(owner.browser.url("/login")),
+                        owner.browser.client.get(owner.browser.url("/no/such/page")),
+                        owner.browser.client.get(owner.browser.url("/api/me")),
+                        fake.http.get(fake.web("/test/companies?owner=${owner.email}")) { header("X-Test-Token", fake.config.testToken) },
+                    )
+                responses.forEach { it.headers.getAll(HttpHeaders.CacheControl) shouldBe listOf("no-store") }
+                LiveStream(owner.browser).use { it.headers().getAll(HttpHeaders.CacheControl) shouldBe listOf("no-store") }
+                owner.browser.get("/").body shouldContain "event.persisted"
+            }
+        }
+
+    @Test
     fun `the store offers read-only snapshots as properties and as functions`() =
         runBlocking<Unit> {
             FakeTargetFixture().use { fake ->
@@ -78,10 +119,15 @@ class FakeTargetServerTest {
         }
 
     @Test
-    fun `an occupied port makes the start fail loudly`() {
+    fun `an occupied port makes the start fail loudly and leaves nothing running`() {
+        val free = ServerSocket(0, 50, InetAddress.getLoopbackAddress()).use { it.localPort }
         ServerSocket(0, 50, InetAddress.getLoopbackAddress()).use { taken ->
-            shouldThrow<Exception> { FakeTargetServer().start(mailPort = taken.localPort) }
-            shouldThrow<Exception> { FakeTargetServer().start(port = taken.localPort) }
+            val mailTaken = shouldThrow<IllegalStateException> { FakeTargetServer().start(port = free, mailPort = taken.localPort) }
+            mailTaken.message shouldContain "Mailpit API on 127.0.0.1:${taken.localPort}"
+            val webTaken = shouldThrow<IllegalStateException> { FakeTargetServer().start(port = taken.localPort) }
+            webTaken.message shouldContain "web application on 127.0.0.1:${taken.localPort}"
         }
+        // The web application that did start is stopped again, so its port is free.
+        ServerSocket(free, 50, InetAddress.getLoopbackAddress()).close()
     }
 }

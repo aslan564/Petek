@@ -349,7 +349,10 @@ internal class AccountService(
         return user
     }
 
-    /** The invitation's department wins; otherwise the one picked in the form, which is required without an invitation. */
+    /**
+     * The invitation's department wins; otherwise the one picked in the form, which is required without an invitation
+     * unless the company has no departments yet (the select is then empty, and refusing would be a dead end).
+     */
     private fun StoreState.joinDepartment(
         companyId: String,
         invitation: Invitation?,
@@ -358,15 +361,15 @@ internal class AccountService(
         when {
             invitation?.department != null -> invitation.department.ok()
             picked.isNotBlank() -> department(companyId, picked)?.ok() ?: Failure.UNKNOWN_DEPARTMENT.failed()
-            invitation != null -> null.ok()
+            invitation != null || departmentsOf(companyId).isEmpty() -> null.ok()
             else -> Failure.DEPARTMENT_REQUIRED.failed()
         }
 
+    /** `PTK-` and four digits; should those run out, six digits (so the loop under the store lock always ends). */
     private fun StoreState.uniqueCompanyCode(): String {
-        while (true) {
-            val code = "PTK-${secrets.fourDigits()}"
-            if (companyByCode(code) == null) return code
-        }
+        val fourDigits = generateSequence { "PTK-${secrets.fourDigits()}" }.take(FOUR_DIGIT_ATTEMPTS)
+        val sixDigits = generateSequence { "PTK-${secrets.sixDigitCode()}" }
+        return unusedCompanyCode(fourDigits + sixDigits)
     }
 
     /** Next step once the e-mail is verified: the phone OTP (issued here) or a new session. */
@@ -448,5 +451,6 @@ internal class AccountService(
     private companion object {
         val CODE_TTL: Duration = Duration.ofMinutes(30)
         const val MAX_ATTEMPTS = 5
+        const val FOUR_DIGIT_ATTEMPTS = 50
     }
 }

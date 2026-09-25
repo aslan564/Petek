@@ -7,8 +7,9 @@ import java.util.concurrent.CountDownLatch
  *
  * Environment (all optional): `PETEK_TEST_TOKEN` (default `dev-token`), `PETEK_MAIL_DOMAIN` (default
  * `test.kadrohr.com`), `FAKE_TARGET_PORT` (8080), `FAKE_TARGET_MAIL_PORT` (8025, so stop a real Mailpit first),
- * `FAKE_TARGET_PHONE_OTP` (true), `FAKE_TARGET_NOTIFICATION_DELAY_MS` (0) and `FAKE_TARGET_BUGS`
- * (comma-separated [FakeBug] names).
+ * `FAKE_TARGET_PHONE_OTP` (true), `FAKE_TARGET_NOTIFICATION_DELAY_MS` (0), `FAKE_TARGET_BUGS`
+ * (comma-separated [FakeBug] names) and `FAKE_TARGET_RACE_WINDOW_MS` (2000; widen it when LLM-driven agents should
+ * hit [FakeBug.RACE_DOUBLE_APPROVE], since their clicks are seconds apart).
  */
 fun main() {
     // Before the first logger exists: a quiet console configuration shipped with this module.

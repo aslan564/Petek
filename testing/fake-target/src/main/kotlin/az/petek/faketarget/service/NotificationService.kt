@@ -54,12 +54,20 @@ internal class NotificationService(
         }
     }
 
+    /**
+     * Opens a live stream. A recipient who no longer exists (their company was deleted after the session was checked)
+     * gets an already ended stream, so it cannot outlive the [NotificationHub.disconnect] that already ran.
+     */
     fun open(
         recipient: String,
         afterSequence: Long,
     ): NotificationStream =
         store.transaction {
             val subscription = hub.subscribe(recipient)
+            if (recipient !in users) {
+                subscription.close()
+                return@transaction NotificationStream(subscription, emptyList())
+            }
             val backlog = notifications.values.filter { it.recipient == recipient && it.sequence > afterSequence }
             NotificationStream(subscription, backlog)
         }
