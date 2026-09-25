@@ -241,7 +241,7 @@ class PanelEndToEndTest {
                 .ScreenshotOptions()
                 .setPath(SHOTS.resolve("$name.png"))
                 .setType(ScreenshotType.PNG)
-                .setFullPage(true),
+                .setFullPage(full),
         )
     }
 

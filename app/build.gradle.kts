@@ -76,3 +76,13 @@ tasks.register<Test>("e2eTest") {
     maxHeapSize = "3g"
     shouldRunAfter(tasks.test)
 }
+
+// Kover instruments every Test task and its verification (part of `check`) runs them all; without this `build` would
+// start Chromium for the panel end-to-end test.
+kover {
+    currentProject {
+        instrumentation {
+            disabledForTestTasks.add("e2eTest")
+        }
+    }
+}
