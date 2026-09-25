@@ -1,0 +1,38 @@
+package az.petek.llm.infrastructure
+
+import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.junit.jupiter.api.Test
+
+class StructuredJsonTest {
+    private val expected = buildJsonObject { put("action", "click") }
+
+    @Test
+    fun `bare JSON is read as is`() {
+        StructuredJson.parseObject("""{"action":"click"}""") shouldBe expected
+    }
+
+    @Test
+    fun `a json code fence is removed`() {
+        StructuredJson.parseObject("```json\n{\"action\": \"click\"}\n```") shouldBe expected
+    }
+
+    @Test
+    fun `a plain code fence with surrounding whitespace is removed`() {
+        StructuredJson.parseObject("  ```\n{\"action\": \"click\"}\n```  \n") shouldBe expected
+    }
+
+    @Test
+    fun `a sentence around the object is ignored`() {
+        StructuredJson.parseObject("Here is my decision: {\"action\": \"click\"} Done.") shouldBe expected
+    }
+
+    @Test
+    fun `text that holds no JSON object is rejected`() {
+        StructuredJson.parseObject("I cannot help with that.") shouldBe null
+        StructuredJson.parseObject("") shouldBe null
+        StructuredJson.parseObject("[1, 2]") shouldBe null
+        StructuredJson.parseObject("{\"action\": ") shouldBe null
+    }
+}
