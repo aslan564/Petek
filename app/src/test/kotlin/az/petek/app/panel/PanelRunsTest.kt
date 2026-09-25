@@ -175,33 +175,24 @@ class PanelRunsTest {
         }
 
     @Test
-    fun `a run against another address runs there, as if it were PETEK_TARGET, and a production address is refused`() =
+    fun `a run goes only to the configured site, never to another address the page sends`() =
         runBlocking<Unit> {
             val runs = FakeBrowserEngine()
             val panel = harness(runs = runs)
             val scenario = panel.approved()
 
-            val started = panel.backend.startRun(RunRequest(scenarioId = scenario, target = "http://127.0.0.2:9/app"))
-            panel.ended(started.runId)
+            listOf("http://127.0.0.2:9/app", "https://kadrohr.com").forEach { other ->
+                val refused =
+                    shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario, target = other)) }
+                refused.problems.single().field shouldBe PanelInstructions.TARGET
+            }
+            runs.options.shouldBeEmpty()
 
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario, target = panel.site.base.toString()))
+            panel.ended(started.runId)
             panel.backend
                 .runs()
                 .single()
-                .target shouldBe "http://127.0.0.2:9/app"
-            runs.options.map { it.baseUrl.toString() }.distinct() shouldBe listOf("http://127.0.0.2:9/app")
-            val refused =
-                shouldThrow<PanelRequestException> {
-                    panel.backend.startRun(
-                        RunRequest(scenarioId = scenario, target = "https://kadrohr.com"),
-                    )
-                }
-            refused.problems.single().field shouldBe PanelInstructions.TARGET
-
-            val again = panel.backend.startRun(RunRequest(scenarioId = scenario, target = panel.site.base.toString()))
-            panel.ended(again.runId)
-            panel.backend
-                .runs()
-                .first()
                 .target shouldBe "http://127.0.0.1:9"
         }
 

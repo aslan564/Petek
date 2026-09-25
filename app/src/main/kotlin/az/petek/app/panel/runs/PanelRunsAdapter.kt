@@ -114,6 +114,19 @@ internal class PanelRunsAdapter(
                 ?.takeIf {
                     it.isNotBlank()
                 }?.let { PanelTargets.allowed(it, container.config.targetPolicy, PanelInstructions.TARGET) }
+        // Until runs carry their own site's settings, a run goes only to the configured site: another site would get this
+        // site's test token and sign-up flows.
+        if (target != null && !PanelTargets.sameSite(target, container.config.target)) {
+            throw PanelRequestException(
+                listOf(
+                    FieldProblem(
+                        PanelInstructions.TARGET,
+                        "Run hələlik yalnız ${container.config.target} saytında işləyir. ${target.host} üçün \"Kəşf et\" " +
+                            "(yalnız oxuma) işləyir; o sayt üçün run tezliklə qoşulacaq.",
+                    ),
+                ),
+            )
+        }
         val lease = targets.lease(target)
         val campaign =
             try {
