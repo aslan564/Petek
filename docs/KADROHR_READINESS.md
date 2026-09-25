@@ -38,17 +38,31 @@ Test API endpointləri (JSON, snake_case):
 
 ## Pətək tərəfi (bizdə edilir)
 
-- `scenarios/kadrohr.yaml` KadroHR-ın real axınlarına görə yazılır:
-  - `/register` (ad/soyad, şifrə təkrarı, şirkət kodu);
-  - linklə təsdiq;
-  - şirkət kodu ilə login;
-  - `/register/employee`;
-  - `/set-password?token=`;
-  - elanlar;
-  - yarış testi üçün ticket əvəzinə məzuniyyət təsdiqi.
-- Formlar və addımlar YAML-da təsvir olunur (`target_profile.flows`). Selektorlar `autocomplete`, rol və label ilə seçilir. `data-testid` gələndə onlara keçmək bir sətirlik dəyişiklikdir.
-- Qeydiyyat və login tempi tənzimlənir (`pacing`), IP limitinə düşməmək üçün.
-- `petek probe https://kadrohr.com` hazırlığı yoxlayır: səhifələr, selektorlar, `/test` API, real-time transportu.
+- [x] `scenarios/kadrohr.yaml` KadroHR-ın real axınlarına görə yazıldı (`target_profile.flows`):
+  - `/register` (ad/soyad, şifrə təkrarı, ölkə, HYBRID qeydiyyat rejimi);
+  - linklə təsdiq (`registration/verify?token=`), sonra `/register/verify` → `/register/complete`;
+  - şirkət kodu ilə login (kod test API-dən, `{shared.company_code}`);
+  - `/register/employee` (şirkət kodu, linklə təsdiq);
+  - dəvət linki `set-password?token=` (backend forması `#password`, `#confirmPassword`, `#submitBtn`);
+  - elanlar (qəbz test API-dən) və yarış testi üçün ticket əvəzinə məzuniyyət təsdiqi (iki menecer, bir qalib).
+- [x] Selektorlar `autocomplete`, id və Playwright rol selektorları ilə seçilir; `data-testid` gələndə
+  `target_profile.selectors`-da açarın dəyərini dəyişmək kifayətdir, axınlar açar adı ilə yazılıb.
+- [x] Domen dialoqu `local_storage` ilə (`kadro:domain_dialog_dismissed=1`, dil `kadro:lang=az`) açılmır; GDPR
+  razılıq pəncərəsi `dismiss` ilə bağlanır.
+- [x] Qeydiyyat və login tempi tənzimlənir (`campaign.pacing.start_stagger_ms: 1500`), IP limitinə düşməmək üçün.
+- [x] Test poçtu hədəfin test API-sindən oxuna bilər (`TestApiMailbox`, `GET /test/emails?to=`).
+- [ ] App konfiqurasiyası: `PETEK_MAIL_SOURCE=mailpit|test-api` və test API-nin baza ünvanı (API `api.kadrohr.com`-dadır,
+  sayt `kadrohr.com`) — composition root-da qoşulmalıdır.
+- [ ] `petek probe https://kadrohr.com` hazırlığı yoxlayır: səhifələr, selektorlar, `/test` API, real-time transportu.
+
+**Pətək-in KadroHR-dan gözlədiyi əlavə cavablar** (docs/PLAN.md "Real KadroHR üçün açıq suallar"):
+
+- `http_status` yoxlaması (`POST /api/v1/leave-requests/{id}/approve` → 403) agentin cookie-ləri ilə sayt origin-inə
+  gedir; KadroHR isə token-i `Authorization` başlığı ilə `api.kadrohr.com`-a göndərir. Test rejimində API-nin
+  `kadrohr.com/api/...` altında cookie ilə açılması (və ya başqa həll) lazımdır, əks halda bu yoxlama 401 görür.
+- `/test/emails` cavabında `links[]` sahəsi olsun (dəvət və təsdiq linkləri), `POST /test/emails/{id}/read` olmasa da
+  olar.
+- `/test/leave-requests/{id}` cavabında `status` (`APPROVED` və s.) və tarixçə; `/test/announcements/{id}`-də `title`.
 
 ## Şəbəkə
 

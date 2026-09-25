@@ -247,6 +247,48 @@ steps:
 
 `{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = həmin aktorun son `emits` payload-undakı obyekt id-si.
 
+### Hədəf axınları (`target_profile.flows`)
+
+Pətək istənilən sayta uyğunlaşmalıdır: KadroHR-ın real axınları kontraktdan fərqlənir (linklə təsdiq, loginə şirkət
+kodu, ad/soyad ayrı, şifrə təkrarı, overlay-lər). Ona görə deterministik `run` funksiyaları sabit kod yox, kampaniyadakı
+**axınları** icra edir. Axın adlarını run funksiyaları seçir:
+
+| Run funksiyası | Axın(lar) |
+|---|---|
+| `register_owner` | `register_owner`; test API varsa şirkət id/kodu paylaşılır; sessiya açılmayıbsa `login`, sonra `verify_identity` |
+| `register_and_login` | kimliyin rejiminə görə `join_by_invite` və ya `join_by_code`; sessiya açılmayıbsa `login`; `verify_identity`; 3 cəhd (hesab yarandıqdan sonra təkrar cəhd `login` ilə) |
+| `login` | `login` |
+| `verify_identity` | `verify_identity` (`assert_identity` addımı məcburidir) |
+
+Default axınlar `docs/TARGET_CONTRACT.md`-dəki kontraktdır (fake target üçün heç nə yazmaq lazım deyil); kampaniya eyni
+adlı axını yazanda default əvəz olunur. Axın addımları (bir addım = bir sübut sətri):
+
+| Addım | Nə edir |
+|---|---|
+| `goto: <path>` | səhifəni açır (path açarı, `/path` və ya `{vars.link}` kimi şablon) |
+| `fill: {selector, value}`, `select: {selector, option}`, `check`, `click`, `click_if_visible` | forma əməliyyatları |
+| `wait_for: <selector>` / `{selector \| any: [...] \| text, timeout_s, fail}` | element və ya mətn görünənə qədər gözləyir |
+| `expect_url: {regex, timeout_s, fail}` | URL uyğun gələnə qədər gözləyir |
+| `email_link: {purpose: verify\|invite\|any, pattern, open, into}` | test poçtundan linki götürür (dəvət üçün əvvəl `seed_company`-nin paylaşdığı link), saxlayır, açır |
+| `email_code: {selector, submit}`, `phone_code: {selector, submit}` | kodu yazır; rədd edilən e-poçt kodu bir dəfə yenisi ilə təkrarlanır, sonra `otp_rejected` |
+| `read: {selector, into, regex}`, `set_shared: {key, value}` | dəyər oxuyur/paylaşır (`vars.<k>` və ya `shared.<k>`) |
+| `if_visible: {selector, then, timeout_s}` | şərti addımlar |
+| `journey: {label, until, pages, start, max_visits}` | saytın vəziyyətindən asılı səhifələr (kod, telefon, login...) `until` görünənə qədər |
+| `save_session`, `account_created`, `assert_identity: <selector>` | sessiyanı saxlayır; hesabın yarandığını qeyd edir; kimliyi yoxlayır |
+
+Selektor ya profil açarıdır (`login.email` → `target_profile.selectors`), ya da olduğu kimi CSS/Playwright selektorudur
+(`role=button[name="Daxil ol"]`). Dəyərlər şablondur: `{self.email|password|name|first_name|last_name|phone|department|role|agent_id}`,
+`{shared.company_code|company_id|invite_link|...}` (paylaşılmayıbsa gözlənilir), `{vars.<key>}`, `{campaign.company}`,
+xəta mesajlarında `{url}`. `{self.password}` yalnız `fill` dəyərində ola bilər — axınlar LLM-ə getmir, sübutda `***` görünür.
+`fail: {reason, message, error}` addımın xətasını adlandırır (`login_failed`, `registration_failed`, ...); `error`
+selektorunun mətni mesaja əlavə olunur.
+
+Profilin digər açarları: `local_storage` (hər brauzer kontekstinə, səhifə skriptlərindən əvvəl, yalnız hədəf origin-ə
+yazılır, məs. `kadro:domain_dialog_dismissed: "1"`), `dismiss` (hər addımdan əvvəl görünən overlay-lər bağlanır),
+`api_prefix` (`{api}` → `/api/v1`, fayl yüklənəndə açılır). `campaign.pacing: {start_stagger_ms, max_parallel_actors}`
+bir addımın aktorlarını agent id sırası ilə aralıqla və ən çox N paralel başladır (IP limitləri üçün); `parallel: true`
+addımları bundan asılı deyil. Poçt mənbəyi Mailpit və ya hədəfin test API-si (`GET /test/emails?to=`) ola bilər.
+
 ## Texnologiya seçimi və repo strukturu
 
 MVP Kotlin/JVM 21 + Gradle (Kotlin DSL) + kotlinx.coroutines + Playwright Java + SQLite üzərində, tək JVM prosesində, IntelliJ IDEA-da yazılır. Python-un üstünlüyü (hazır browser-agent kitabxanaları) bu planda onsuz da istifadə olunmur, çünki agent döngəsi whitelist alətlərlə özümüz yazırıq; Kotlin isə developerin sürətini və Faza 8-in web paneli üçün Spring Boot yolunu verir.
@@ -489,6 +531,19 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
 - [x] KadroHR web-də real-time mexanizmi hansıdır? — **Avtomatik aşkarlanır.** Pətək ondan asılı deyil: gecikmə DOM-da ölçülür, nəqliyyat (WebSocket, SSE, polling) şəbəkə trafikindən tapılıb hesabatda göstərilir.
 - [x] Elanın "oxundu" statusu backend-də var, yoxsa yalnız bildiriş göndərilir? (receipts oracle-ı buna bağlıdır) — **Var** (təsdiqləndi); `receipts` oracle assert-i default kampaniyadadır.
 - [x] Hansı LLM provayderi və model agentlər üçün? — **Claude, Claude planı ilə** (`claude -p`), default model **Sonnet** (`claude-sonnet-5`); Anthropic API alternativ olaraq qalır.
+
+**Real KadroHR üçün açıq suallar** (`scenarios/kadrohr.yaml`, 2026-09-25)
+
+- [ ] KadroHR-ın test API-si hansı ünvandadır? API `api.kadrohr.com`-dadır, sayt isə `kadrohr.com`; oracle və
+  `TestApiMailbox` üçün ayrıca baza URL (məs. `PETEK_TEST_API_URL`) lazımdır — app konfiqurasiyası.
+- [ ] `http_status` yoxlaması agentin cookie-ləri ilə hədəf origin-ə gedir, KadroHR isə access token-i JS-də saxlayıb
+  `Authorization` başlığı ilə `api.kadrohr.com`-a göndərir. `forbidden_approval`-dakı 403 yoxlamasının işləməsi üçün ya
+  test rejimində API eyni origin-dən (`kadrohr.com/api/...`) cookie ilə açılmalı, ya da Pətək sessiyanın token-ini
+  istifadə etməyi öyrənməlidir. Qərara qədər bu yoxlama 401 görə bilər.
+- [ ] Məzuniyyəti kim təsdiqləyə bilər (`leave.approve`)? Kampaniya IT və HR menecerlərinin yarışını fərz edir; icazə
+  yalnız departament rəhbərindədirsə yarış aktorları dəyişməlidir.
+- [ ] `/test/announcements/{id}` və `/test/leave-requests/{id}` cavab formaları (`title`, `status: APPROVED`) test
+  API yazılanda təsdiqlənməlidir.
 
 **Sahibin əlavə qərarları (2026-09-25)**
 
