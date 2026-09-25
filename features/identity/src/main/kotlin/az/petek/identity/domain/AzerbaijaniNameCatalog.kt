@@ -132,13 +132,14 @@ object AzerbaijaniNameCatalog : NameCatalog {
             "Məmmədli",
         )
 
-    private val femaleKeys: Set<String> = femaleFirstNames.mapTo(HashSet()) { it.lowercase() }
+    /** Compared like every other name ([NameAllocator.key]), so `İLAHƏ` or `ILAHƏ` given by the user is still female. */
+    private val femaleKeys: Set<String> = femaleFirstNames.mapTo(HashSet(), NameAllocator::key)
 
     override fun surnameFor(
         firstName: String,
         surname: String,
     ): String {
         val inflects = surname.endsWith("ov") || surname.endsWith("ev")
-        return if (inflects && firstName.lowercase() in femaleKeys) surname + "a" else surname
+        return if (inflects && NameAllocator.key(firstName) in femaleKeys) surname + "a" else surname
     }
 }

@@ -1,5 +1,6 @@
 package az.petek.identity.domain
 
+import java.text.Normalizer
 import kotlin.random.Random
 
 /**
@@ -16,12 +17,12 @@ internal class NameAllocator(
         catalog.firstNames
             .map(::normalize)
             .filter { it.isNotEmpty() }
-            .distinct()
+            .distinctBy(::key)
     private val surnames =
         catalog.surnames
             .map(::normalize)
             .filter { it.isNotEmpty() }
-            .distinct()
+            .distinctBy(::key)
 
     val hasSurnames: Boolean get() = surnames.isNotEmpty()
 
@@ -129,8 +130,19 @@ internal class NameAllocator(
                 .filter { it.isNotEmpty() }
                 .joinToString(" ")
 
-        /** Comparison key: names that differ only in letter case are the same person. */
-        fun key(name: String): String = name.lowercase()
+        /**
+         * Comparison key: names that differ only in letter case are the same person, also for the Azerbaijani
+         * alphabet. Its two i's (`i`/`İ` and `ı`/`I`) do not pair up like English ones, so a plain [lowercase]
+         * keeps `SATIŞ` and `Satış` (or `ƏLİ` and `Əli`) apart; all four fold to `i` here, which keeps `IT` = `it`
+         * too. Composed and decomposed spellings of a letter (`ü` and `u` + `◌̈`) are unified first.
+         */
+        fun key(name: String): String =
+            buildString(name.length) {
+                Normalizer.normalize(name, Normalizer.Form.NFC).forEach { append(if (it in I_LETTERS) 'i' else it) }
+            }.lowercase()
+
+        /** `I`, `İ` and `ı`; the fourth, `i`, is the target of the fold. */
+        private const val I_LETTERS = "Iİı"
 
         fun isFullName(normalized: String): Boolean = ' ' in normalized
     }

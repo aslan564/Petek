@@ -91,6 +91,25 @@ class IdentitySpecValidationTest {
     }
 
     @Test
+    fun `Azerbaijani capitals count as the same letters when comparing departments`() {
+        conflict(spec(departments = listOf("IT", "Satış", "SATIŞ"))) shouldContain "department 'Satış' is listed more than once"
+        conflict(spec(departments = listOf("Əməliyyat", "ƏMƏLİYYAT"))) shouldContain
+            "department 'Əməliyyat' is listed more than once"
+    }
+
+    @Test
+    fun `Azerbaijani capitals count as the same letters when comparing names`() {
+        conflict(spec(names = listOf("Əli", "ƏLİ"))) shouldContain "name 'Əli' is given more than once"
+        conflict(spec(names = listOf("İlkin Qasımov", "ilkin QASIMOV"))) shouldContain
+            "name 'İlkin Qasımov' is given more than once"
+    }
+
+    @Test
+    fun `composed and decomposed spellings of a letter are the same name`() {
+        conflict(spec(names = listOf("Günel", "Günel"))) shouldContain "is given more than once"
+    }
+
+    @Test
     fun `blank departments are rejected`() {
         conflict(spec(departments = listOf("IT", " "))) shouldContain "department names must not be blank"
     }

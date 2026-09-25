@@ -209,6 +209,19 @@ class DefaultIdentityRegistryGeneratorTest {
     }
 
     @Test
+    fun `a given first name in Azerbaijani capitals never repeats a given full name`() {
+        val small = SmallCatalog(firstNames = listOf("Anar", "Emin"), surnames = listOf("Kərimov", "Əliyev"))
+        (1L..10L).forEach { seed ->
+            val result =
+                generator(small).generate(
+                    spec(testers = 4, seed = seed, managers = 1, names = listOf("ƏLİ", "Əli Kərimov")),
+                    RUN_TAG,
+                )
+            result.identities.map { it.displayName }.take(2) shouldBe listOf("ƏLİ Əliyev", "Əli Kərimov")
+        }
+    }
+
+    @Test
     fun `catalog first names are not repeated while unused ones are left`() {
         identities.map { it.displayName.substringBefore(' ') }.shouldNotContainDuplicates()
     }
@@ -236,7 +249,7 @@ class DefaultIdentityRegistryGeneratorTest {
     fun `display names, e-mails and phones are unique for 100 testers`() {
         val many = generator().generate(spec(testers = 100), RUN_TAG).identities
         many shouldHaveSize 100
-        many.map { it.displayName.lowercase() }.shouldNotContainDuplicates()
+        many.map { NameAllocator.key(it.displayName) }.shouldNotContainDuplicates()
         many.map { it.email }.shouldNotContainDuplicates()
         many.map { it.phone }.shouldNotContainDuplicates()
         many.map { it.password }.shouldNotContainDuplicates()
@@ -246,7 +259,7 @@ class DefaultIdentityRegistryGeneratorTest {
     fun `the largest registry keeps every value unique`() {
         val many = generator().generate(spec(testers = 999, managers = 20), RUN_TAG).identities
         many.last().agentId shouldBe AgentId("a999")
-        many.map { it.displayName.lowercase() }.shouldNotContainDuplicates()
+        many.map { NameAllocator.key(it.displayName) }.shouldNotContainDuplicates()
         many.map { it.email }.shouldNotContainDuplicates()
         many.map { it.phone }.shouldNotContainDuplicates()
     }

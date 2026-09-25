@@ -56,6 +56,14 @@ class AzerbaijaniNameCatalogTest {
     }
 
     @Test
+    fun `female first names are recognized whatever their letter case`() {
+        catalog.surnameFor("İLAHƏ", "Məmmədov") shouldBe "Məmmədova"
+        catalog.surnameFor("ILAHƏ", "Məmmədov") shouldBe "Məmmədova"
+        catalog.surnameFor("TÜRKAN", "Quliyev") shouldBe "Quliyeva"
+        catalog.surnameFor("SƏBİNƏ", "Kərimov") shouldBe "Kərimova"
+    }
+
+    @Test
     fun `male and unknown first names keep the masculine form`() {
         catalog.surnameFor("Əli", "Məmmədov") shouldBe "Məmmədov"
         catalog.surnameFor("Sahil", "Hüseynov") shouldBe "Hüseynov"
