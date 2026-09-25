@@ -15,14 +15,12 @@ import java.util.Locale
 
 /*
  * Column encodings shared by every evidence table. They are chosen so that the SQLite file stays readable with
- * plain SQL tools and survives enum additions: no CHECK constraints, no binary blobs.
+ * plain SQL tools and survives enum additions: no CHECK constraints on enum columns, no binary blobs.
+ *
+ * Every string is a `TEXT` column, never `VARCHAR(n)`: SQLite would not enforce the length, but Exposed does, on
+ * the client, before the statement runs. A bounded column would therefore turn a long id, scenario step or new
+ * enum name into an exception at record time, and that evidence would be lost.
  */
-
-/** Ids are opaque strings; the limit only documents intent (SQLite does not enforce VARCHAR lengths). */
-internal const val ID_LENGTH = 128
-
-/** Longest enum constant name we expect, with generous headroom. */
-internal const val ENUM_LENGTH = 32
 
 /**
  * Instants are stored as ISO-8601 UTC text with exactly nine fractional digits, e.g.
@@ -46,12 +44,11 @@ internal object ArtifactIdsJson {
     fun decode(text: String): List<ArtifactId> = Json.parseToJsonElement(text).jsonArray.map { ArtifactId(it.jsonPrimitive.content) }
 }
 
-internal fun Table.instant(name: String): Column<Instant> =
-    varchar(name, InstantText.LENGTH).transform(InstantText::decode, InstantText::encode)
+internal fun Table.instant(name: String): Column<Instant> = text(name).transform(InstantText::decode, InstantText::encode)
 
 /** Stores an enum by its [Enum.name], so reordering constants never corrupts existing rows. */
 internal inline fun <reified E : Enum<E>> Table.enumName(name: String): Column<E> =
-    varchar(name, ENUM_LENGTH).transform({ enumValueOf<E>(it) }, { it.name })
+    text(name).transform({ enumValueOf<E>(it) }, { it.name })
 
 internal fun Table.artifactIds(name: String): Column<List<ArtifactId>> =
     text(name).transform(ArtifactIdsJson::decode, ArtifactIdsJson::encode)

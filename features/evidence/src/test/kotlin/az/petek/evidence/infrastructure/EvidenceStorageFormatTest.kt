@@ -1,6 +1,8 @@
 package az.petek.evidence.infrastructure
 
 import az.petek.core.ids.ArtifactId
+import az.petek.core.ids.CorrelationId
+import az.petek.core.ids.StepId
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.evidence.infrastructure.EvidenceFixtures.assertion
 import az.petek.evidence.infrastructure.EvidenceFixtures.run
@@ -26,6 +28,58 @@ class EvidenceStorageFormatTest {
 
             tables shouldContainAll
                 listOf("run", "run_resource", "step", "event", "receipt", "artifact", "assertion", "finding", "usage")
+        }
+
+    @Test
+    fun `no column is a bounded VARCHAR, so no value can be refused for its length`() =
+        withStore(dir) { _, db ->
+            val schema = db.column("SELECT sql FROM sqlite_master WHERE type = 'table' AND name <> 'sqlite_sequence'")
+
+            schema.filter { it.contains("VARCHAR", ignoreCase = true) } shouldBe emptyList()
+        }
+
+    @Test
+    fun `long ids, labels and resource keys are stored in full`() =
+        withStore(dir) { store, _ ->
+            val long = "x".repeat(1_000)
+            val run = run().copy(campaignHash = "sha256:$long", repeatGroup = "grp_$long", repeatIndex = 1)
+            val resource = EvidenceFixtures.resource("ext_$long").copy(kind = "kind_$long")
+            val step =
+                step("stp_$long").copy(scenarioStep = "announce_$long", correlationId = CorrelationId("cor_$long"))
+            val event = EvidenceFixtures.event("evt_$long").copy(name = "created_$long", objectIdSource = "dom_$long")
+            val receipt = EvidenceFixtures.receipt("evt_$long", EvidenceFixtures.A07, t1 = EvidenceFixtures.at(1))
+            val artifact = EvidenceFixtures.artifact("art_$long").copy(stepId = StepId("stp_$long"), sha256 = "sha_$long")
+            val assertion = assertion("type_$long", artifactIds = listOf(ArtifactId("art_$long")))
+            val finding = EvidenceFixtures.finding("fnd_$long").copy(scenarioStep = "announce_$long")
+
+            store.create(run)
+            store.addResource(resource)
+            store.step(step)
+            store.event(event)
+            store.receipt(receipt)
+            store.artifact(artifact)
+            store.assertion(assertion)
+            store.finding(finding)
+
+            store.find(EvidenceFixtures.RUN) shouldBe run
+            store.byRepeatGroup("grp_$long") shouldContainExactly listOf(run)
+            store.resources(EvidenceFixtures.RUN) shouldContainExactly listOf(resource)
+            store.steps(EvidenceFixtures.RUN) shouldContainExactly listOf(step)
+            store.events(EvidenceFixtures.RUN) shouldContainExactly listOf(event)
+            store.receipts(EvidenceFixtures.RUN) shouldContainExactly listOf(receipt)
+            store.artifacts(EvidenceFixtures.RUN) shouldContainExactly listOf(artifact)
+            store.assertions(EvidenceFixtures.RUN) shouldContainExactly listOf(assertion)
+            store.findings(EvidenceFixtures.RUN) shouldContainExactly listOf(finding)
+        }
+
+    @Test
+    fun `instants beyond year 9999 are still stored and read back unchanged`() =
+        withStore(dir) { store, _ ->
+            val farFuture = step("stp_1", startedAt = Instant.parse("+10000-01-01T00:00:00.000000001Z"))
+
+            store.step(farFuture)
+
+            store.steps(EvidenceFixtures.RUN) shouldContainExactly listOf(farFuture)
         }
 
     @Test

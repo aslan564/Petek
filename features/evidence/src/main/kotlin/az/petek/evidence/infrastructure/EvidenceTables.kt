@@ -25,26 +25,27 @@ import org.jetbrains.exposed.v1.core.Table
  * - Records with a natural id are unique per run (`run_id` + id), so re-recording the same id is idempotent.
  * - There are deliberately no foreign keys: evidence is an append-mostly log, and a record must never be lost
  *   because it arrived before its run row (e.g. a harness step recorded while the run is still being created).
+ * - Every string column is `TEXT` (see EvidenceColumns.kt): no id, label or enum name is ever refused for its length.
  */
 
-private fun Table.runIdColumn(): Column<RunId> = varchar("run_id", ID_LENGTH).transform(::RunId, RunId::value)
+private fun Table.runIdColumn(): Column<RunId> = text("run_id").transform(::RunId, RunId::value)
 
-private fun Table.agentIdColumn(name: String): Column<AgentId> = varchar(name, ID_LENGTH).transform(::AgentId, AgentId::value)
+private fun Table.agentIdColumn(name: String): Column<AgentId> = text(name).transform(::AgentId, AgentId::value)
 
-private fun Table.stepIdColumn(): Column<StepId> = varchar("step_id", ID_LENGTH).transform(::StepId, StepId::value)
+private fun Table.stepIdColumn(): Column<StepId> = text("step_id").transform(::StepId, StepId::value)
 
 internal object RunTable : Table("run") {
     val seq = long("seq").autoIncrement()
     val runId = runIdColumn()
-    val runTag = varchar("run_tag", ID_LENGTH).transform(::RunTag, RunTag::value)
-    val campaignHash = varchar("campaign_hash", ID_LENGTH)
+    val runTag = text("run_tag").transform(::RunTag, RunTag::value)
+    val campaignHash = text("campaign_hash")
     val campaignName = text("campaign_name")
     val seed = long("seed")
     val target = text("target")
     val startedAt = instant("started_at")
     val endedAt = instant("ended_at").nullable()
     val result = enumName<RunResult>("result")
-    val repeatGroup = varchar("repeat_group", ID_LENGTH).nullable()
+    val repeatGroup = text("repeat_group").nullable()
     val repeatIndex = integer("repeat_index").nullable()
 
     override val primaryKey = PrimaryKey(seq)
@@ -59,8 +60,8 @@ internal object RunTable : Table("run") {
 internal object RunResourceTable : Table("run_resource") {
     val seq = long("seq").autoIncrement()
     val runId = runIdColumn()
-    val kind = varchar("kind", ID_LENGTH)
-    val externalId = varchar("external_id", ID_LENGTH)
+    val kind = text("kind")
+    val externalId = text("external_id")
     val createdAt = instant("created_at")
 
     override val primaryKey = PrimaryKey(seq)
@@ -75,7 +76,7 @@ internal object StepTable : Table("step") {
     val runId = runIdColumn()
     val stepId = stepIdColumn()
     val agentId = agentIdColumn("agent_id").nullable()
-    val scenarioStep = varchar("scenario_step", ID_LENGTH)
+    val scenarioStep = text("scenario_step")
     val kind = enumName<StepKind>("kind")
     val action = text("action")
     val llmReason = text("llm_reason").nullable()
@@ -84,7 +85,7 @@ internal object StepTable : Table("step") {
     val durationMs = long("duration_ms")
     val status = enumName<StepStatus>("status")
     val detail = text("detail").nullable()
-    val correlationId = varchar("correlation_id", ID_LENGTH).transform(::CorrelationId, CorrelationId::value)
+    val correlationId = text("correlation_id").transform(::CorrelationId, CorrelationId::value)
 
     override val primaryKey = PrimaryKey(seq)
 
@@ -97,11 +98,11 @@ internal object StepTable : Table("step") {
 internal object EventTable : Table("event") {
     val seq = long("seq").autoIncrement()
     val runId = runIdColumn()
-    val eventId = varchar("event_id", ID_LENGTH).transform(::EventId, EventId::value)
-    val name = varchar("name", ID_LENGTH)
+    val eventId = text("event_id").transform(::EventId, EventId::value)
+    val name = text("name")
     val emitter = agentIdColumn("emitter")
     val objectId = text("object_id").nullable()
-    val objectIdSource = varchar("object_id_source", ID_LENGTH).nullable()
+    val objectIdSource = text("object_id_source").nullable()
     val payloadJson = text("payload_json")
     val t0 = instant("t0")
 
@@ -116,7 +117,7 @@ internal object EventTable : Table("event") {
 internal object ReceiptTable : Table("receipt") {
     val seq = long("seq").autoIncrement()
     val runId = runIdColumn()
-    val eventId = varchar("event_id", ID_LENGTH).transform(::EventId, EventId::value)
+    val eventId = text("event_id").transform(::EventId, EventId::value)
     val receiver = agentIdColumn("receiver")
     val received = bool("received")
     val t1 = instant("t1").nullable()
@@ -133,11 +134,11 @@ internal object ReceiptTable : Table("receipt") {
 internal object ArtifactTable : Table("artifact") {
     val seq = long("seq").autoIncrement()
     val runId = runIdColumn()
-    val artifactId = varchar("artifact_id", ID_LENGTH).transform(::ArtifactId, ArtifactId::value)
+    val artifactId = text("artifact_id").transform(::ArtifactId, ArtifactId::value)
     val stepId = stepIdColumn()
     val type = enumName<ArtifactType>("type")
     val relativePath = text("relative_path")
-    val sha256 = varchar("sha256", SHA256_HEX_LENGTH)
+    val sha256 = text("sha256")
     val sizeBytes = long("size_bytes")
 
     override val primaryKey = PrimaryKey(seq)
@@ -152,8 +153,8 @@ internal object AssertionTable : Table("assertion") {
     val runId = runIdColumn()
     val stepId = stepIdColumn()
     val agentId = agentIdColumn("agent_id").nullable()
-    val scenarioStep = varchar("scenario_step", ID_LENGTH)
-    val type = varchar("type", ID_LENGTH)
+    val scenarioStep = text("scenario_step")
+    val type = text("type")
     val evidenceSource = enumName<EvidenceSource>("source")
     val expected = text("expected")
     val observed = text("observed").nullable()
@@ -172,9 +173,9 @@ internal object AssertionTable : Table("assertion") {
 internal object FindingTable : Table("finding") {
     val seq = long("seq").autoIncrement()
     val runId = runIdColumn()
-    val findingId = varchar("finding_id", ID_LENGTH).transform(::FindingId, FindingId::value)
+    val findingId = text("finding_id").transform(::FindingId, FindingId::value)
     val stepId = stepIdColumn().nullable()
-    val scenarioStep = varchar("scenario_step", ID_LENGTH)
+    val scenarioStep = text("scenario_step")
     val agentId = agentIdColumn("agent_id").nullable()
     val findingClass = enumName<FindingClass>("finding_class")
     val a = text("a").nullable()
@@ -207,8 +208,6 @@ internal object UsageTable : Table("usage") {
         uniqueIndex(runId, agentId)
     }
 }
-
-private const val SHA256_HEX_LENGTH = 64
 
 /** Every table of the evidence store, in creation order. */
 internal val evidenceTables: Array<Table> =

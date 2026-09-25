@@ -24,9 +24,9 @@ import az.petek.evidence.domain.RunRepository
  * - [create] throws [IllegalArgumentException] for an existing run id, [finish] for an unknown one. Adding a
  *   resource twice keeps the first registration; removing a missing one does nothing.
  *
- * Storage rules, relevant when reading the file with other tools: instants are ISO-8601 UTC text with nine
- * fractional digits (lossless, and text order is time order), enums are stored by name, and artifact id lists
- * are JSON arrays of strings.
+ * Storage rules, relevant when reading the file with other tools: every string is an unbounded `TEXT` column (no
+ * value is refused for its length), instants are ISO-8601 UTC text with nine fractional digits (lossless, and text
+ * order is time order), enums are stored by name, and artifact id lists are JSON arrays of strings.
  */
 class SqliteEvidenceStore(
     db: SqliteDatabase,
