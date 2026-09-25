@@ -703,6 +703,74 @@ class PlaywrightBrowserSessionTest {
             session.drainDialogs().shouldBeEmpty()
         }
 
+    @Test
+    fun `a form post is recorded with the redirect that accepted it and a repeat with the refusal`() =
+        withSession { session ->
+            session.navigate("/ticket?id=form-race")
+            val start = clock.now()
+
+            session.clickSelector("#approve")
+            session.currentUrl() shouldContain "approved=1"
+            session.clickSelector("#approve")
+
+            session.waitForText("Bu müraciət artıq qərarlaşdırılıb", 3.seconds).found shouldBe true
+            val mutations = session.mutations(start)
+            mutations.map { it.describe() } shouldContainExactly
+                listOf("POST /tickets/form-race/approve -> 303", "POST /tickets/form-race/approve -> 409")
+            mutations.forEach { it.at.monotonicNanos shouldBeGreaterThanOrEqualTo start.monotonicNanos }
+            (mutations[0].at.monotonicNanos <= mutations[1].at.monotonicNanos) shouldBe true
+        }
+
+    @Test
+    fun `fetch calls that change something are recorded with their answers and reads are not`() =
+        withSession { session ->
+            session.navigate("/ticket?id=api-race")
+            val start = clock.now()
+
+            listOf("#api" to "call 1: POST 200", "#api" to "call 2: POST 409", "#update" to "call 3: PUT 200")
+                .plus(listOf("#delete" to "call 4: DELETE 403", "#read" to "call 5: GET 401"))
+                .forEach { (button, result) ->
+                    session.clickSelector(button)
+                    session.waitForText(result, 3.seconds).found shouldBe true
+                }
+
+            session.mutations(start).map { it.describe() } shouldContainExactly
+                listOf(
+                    "POST /api/tickets/api-race/approve -> 200",
+                    "POST /api/tickets/api-race/approve -> 409",
+                    "PUT /api/tickets/api-race -> 200",
+                    "DELETE /api/tickets/api-race -> 403",
+                )
+        }
+
+    @Test
+    fun `only the requests answered since the given time are returned`() =
+        withSession { session ->
+            session.navigate("/ticket?id=window")
+            session.clickSelector("#api")
+            session.waitForText("call 1: POST 200", 3.seconds).found shouldBe true
+            // Catch up on everything answered so far, then mark the start of the next action.
+            session.mutations(clock.now())
+            val actionStart = clock.now()
+
+            session.clickSelector("#api")
+            session.waitForText("call 2: POST 409", 3.seconds).found shouldBe true
+
+            session.mutations(actionStart).map { it.describe() } shouldContainExactly listOf("POST /api/tickets/window/approve -> 409")
+        }
+
+    @Test
+    fun `page loads and the session's own probes are not the page's mutations`() =
+        withSession { session ->
+            val start = clock.now()
+            session.navigate("/ticket?id=probe")
+
+            session.request("POST", "/api/echo", "{}").status shouldBe 201
+            session.request("POST", "/api/tickets/probe/approve").status shouldBe 200
+
+            session.mutations(start).shouldBeEmpty()
+        }
+
     private suspend fun login(
         session: BrowserSession,
         user: String,
