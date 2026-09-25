@@ -1,0 +1,13 @@
+<!-- Console logging for `./gradlew :testing:fake-target:run` (selected explicitly by FakeTargetMain, so it never
+     competes with the logback.xml of an application that uses this module as a library). -->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{24} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <logger name="io.ktor" level="WARN"/>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>
