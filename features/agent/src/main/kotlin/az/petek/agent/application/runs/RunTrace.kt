@@ -1,8 +1,10 @@
 package az.petek.agent.application.runs
 
 import az.petek.agent.application.StepEvidence
+import az.petek.agent.application.dialogNote
 import az.petek.agent.application.quote
 import az.petek.agent.application.redact
+import az.petek.agent.application.withNote
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.AgentRuntime
@@ -18,7 +20,8 @@ import kotlin.time.Duration
  * (`login: fill login.email "…"`), and the concluding `run <name>` step with a screenshot (plus the
  * accessibility tree when it did not succeed). Elements are addressed by [az.petek.campaign.domain.TargetProfile]
  * keys, so the evidence reads the same whatever selectors a campaign overrides. The password is typed only through
- * [fillPassword] and shows as `***`.
+ * [fillPassword] and shows as `***`. JavaScript dialogs a sub-action made the page open (the browser accepts them)
+ * are noted in that sub-action's detail, and any left over in the concluding step's detail.
  */
 internal class RunTrace(
     private val evidence: StepEvidence,
@@ -54,10 +57,11 @@ internal class RunTrace(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                record(description, started, StepStatus.ERROR, e.message ?: e::class.simpleName)
+                val reason = e.message ?: e::class.simpleName.orEmpty()
+                record(description, started, StepStatus.ERROR, withNote(reason, session.dialogNote()))
                 throw e
             }
-        record(description, started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, null)
+        record(description, started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, session.dialogNote())
         return result
     }
 
@@ -123,7 +127,7 @@ internal class RunTrace(
                 ActionStatus.BLOCKED -> StepStatus.BLOCKED
                 ActionStatus.ERROR -> StepStatus.ERROR
             }
-        val detail = (result.failureReason?.let { "${it.key}: " } ?: "") + result.summary
+        val detail = withNote((result.failureReason?.let { "${it.key}: " } ?: "") + result.summary, session.dialogNote())
         val stepId = evidence.record(runtime, step, StepKind.RUN, "run $function", null, startedAt, status, detail)
         evidence.capture(runtime, stepId, screenshot = true, accessibility = !result.succeeded)
         return result

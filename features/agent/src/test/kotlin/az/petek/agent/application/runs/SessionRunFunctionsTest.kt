@@ -6,6 +6,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.AgentTestData.sel
 import az.petek.agent.testing.RunFunctionFixture
+import az.petek.browser.domain.DialogType
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.StepStatus
 import az.petek.mail.domain.MailPurpose
@@ -15,6 +16,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
@@ -71,6 +73,41 @@ class SessionRunFunctionsTest {
             fixture.artifactsOf(ArtifactType.SCREENSHOT).single().stepId shouldBe final.stepId
             fixture.artifactsOf(ArtifactType.A11Y) shouldHaveSize 0
             fixture.assertPasswordNotRecorded()
+        }
+
+    @Test
+    fun `a dialog a sub-action made the page open is noted in that sub-action's evidence`() =
+        runTest {
+            fixture.site.existingAccount(identity)
+            val submit = "clickSelector ${sel("login.submit")}"
+            fixture.browser.onAction = { action ->
+                if (action == submit) fixture.browser.openDialog(DialogType.ALERT, "Xoş gəlmisiniz, ${identity.displayName}")
+            }
+
+            val outcome = fixture.run("login")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            val click = fixture.steps.single { it.action == "login: click login.submit" }
+            click.detail shouldBe "Browser dialogs (accepted): alert \"Xoş gəlmisiniz, ${identity.displayName}\"."
+            fixture.steps.filter { it != click }.forEach { it.detail.orEmpty() shouldNotContain "Browser dialogs" }
+        }
+
+    @Test
+    fun `each dialog is noted once, by the sub-action that caused it, not again when the function concludes`() =
+        runTest {
+            fixture.site.existingAccount(identity)
+            fixture.browser.onAction = { action ->
+                if (action.startsWith("saveStorageState")) fixture.browser.openDialog(DialogType.CONFIRM, "Səhifədən çıxılsın?")
+            }
+
+            fixture.run("login")
+
+            fixture.steps.single { it.action == "login: save storage state" }.detail shouldBe
+                "Browser dialogs (accepted): confirm \"Səhifədən çıxılsın?\"."
+            fixture.steps
+                .last()
+                .detail
+                .orEmpty() shouldNotContain "Browser dialogs"
         }
 
     @Test

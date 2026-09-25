@@ -68,7 +68,9 @@ private val logger = KotlinLogging.logger {}
  *
  * Evidence per turn: one DO [az.petek.evidence.domain.StepRecord] (readable action, the model's reason, harness
  * timings, the scenario step's correlation id), a screenshot after every executed action, and the accessibility
- * tree on the first turn, the last turn and every turn that did not pass. The password never reaches the model or
+ * tree on the first turn, the last turn and every turn that did not pass. JavaScript dialogs the page opened during
+ * the turn (the browser accepts them) are added to the turn's observation ([dialogNote]), so the model sees them in
+ * its history and the report in the step detail. The password never reaches the model or
  * the evidence: the model types `{self.password}`, and page text going back to it is redacted.
  *
  * Stateless between executions: one instance serves every agent concurrently.
@@ -500,11 +502,12 @@ class DefaultAgentLoop(
                 (turn.outcome ?: guardOutcome(turn))
                     ?.let { it.copy(summary = runtime.redact(it.summary), stepsTaken = decisions) }
                     ?.also { concluded = it }
+            val observation = withNote(turn.observation, runtime.session.dialogNote())
             val detail =
                 if (outcome == null) {
-                    turn.observation
+                    observation
                 } else {
-                    "${turn.observation} | outcome: ${outcome.status}${outcome.failureReason?.let {
+                    "$observation | outcome: ${outcome.status}${outcome.failureReason?.let {
                         " ${it.key}"
                     } ?: ""}: ${outcome.summary}"
                 }
@@ -516,7 +519,7 @@ class DefaultAgentLoop(
                 screenshot = turn.actionFailed != null || last,
                 accessibility = turns == 1 || last || turn.status != StepStatus.PASSED,
             )
-            history += ActionHistoryEntry(turns, runtime.redact(turn.action), runtime.redact(turn.observation))
+            history += ActionHistoryEntry(turns, runtime.redact(turn.action), runtime.redact(observation))
             logger.debug { "$label turn $turns: ${runtime.redact(turn.action)} -> ${turn.status}" }
             return outcome
         }
@@ -548,7 +551,8 @@ class DefaultAgentLoop(
             outcome: ActionOutcome,
         ): ActionOutcome {
             val result = outcome.copy(stepsTaken = decisions)
-            val stepId = evidence.record(runtime, step, StepKind.DO, action, null, evidence.now(), StepStatus.FAILED, result.summary)
+            val detail = withNote(result.summary, runtime.session.dialogNote())
+            val stepId = evidence.record(runtime, step, StepKind.DO, action, null, evidence.now(), StepStatus.FAILED, detail)
             evidence.capture(runtime, stepId, screenshot = true, accessibility = true)
             return result
         }

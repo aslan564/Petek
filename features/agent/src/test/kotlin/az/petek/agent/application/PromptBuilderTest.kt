@@ -5,6 +5,7 @@ import az.petek.agent.testing.AgentTestData
 import az.petek.browser.domain.PageElement
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.testing.FakeBrowserSession
+import az.petek.core.model.Role
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -73,6 +74,39 @@ class PromptBuilderTest {
         system shouldContain "Sahil Quliyev - manager of the HR department - ${AgentTestData.hrManager.email}"
         system shouldContain "Əli Kərimov - admin (company owner)"
         system shouldContain "Vəli Həsənov - manager of the IT department - ${identity.email} (you)"
+    }
+
+    @Test
+    fun `a large run lists the most relevant people and counts the rest, so the prompt size stays bounded`() {
+        val departments = listOf("IT", "HR", "Satış", "Maliyyə")
+        val managers = (2..9).map { AgentTestData.identity(it, Role.MANAGER, departments[(it - 2) % 4], name = "Rəhbər $it") }
+        val employees = (10..500).map { AgentTestData.identity(it, Role.EMPLOYEE, departments[it % 4], name = "İşçi $it") }
+        val roster = listOf(AgentTestData.admin) + managers + employees
+        val self = employees.first { it.agentId.index == 250 && it.department == "Satış" }
+
+        val system = PromptBuilder(protocol, rosterLimit = 20).system(AgentTestData.runtime(FakeBrowserSession(), self, roster))
+
+        val people = system.lines().filter { it.startsWith("  - ") && it.contains("@test.kadrohr.com") }
+        people.size shouldBe 20
+        system shouldContain "İşçi 250 - employee in the Satış department - ${self.email} (you)"
+        system shouldContain "Əli Kərimov - admin (company owner)"
+        managers.filter { it.department == "Satış" }.forEach { system shouldContain "${it.displayName} - manager of the Satış" }
+        system shouldContain "  - … and 480 more colleagues, not listed here"
+        system shouldContain "Departments: IT, HR, Satış, Maliyyə"
+        val listedIds = people.mapNotNull { line -> roster.firstOrNull { line.contains(it.email) }?.agentId }
+        listedIds shouldBe listedIds.sorted()
+        listedIds.size shouldBe 20
+        roster.filter { it.agentId in listedIds }.mapNotNull { it.department }.toSet() shouldBe setOf("Satış")
+    }
+
+    @Test
+    fun `a run within the roster limit lists everyone`() {
+        val roster = (1..40).map { AgentTestData.identity(it, if (it == 1) Role.ADMIN else Role.EMPLOYEE, name = "Nəfər $it") }
+
+        val system = prompts.system(AgentTestData.runtime(FakeBrowserSession(), roster[5], roster))
+
+        roster.forEach { system shouldContain "${it.displayName} - " }
+        system shouldNotContain "more colleagues"
     }
 
     @Test
