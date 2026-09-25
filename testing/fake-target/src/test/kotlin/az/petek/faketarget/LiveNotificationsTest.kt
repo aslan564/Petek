@@ -8,7 +8,6 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
 import io.ktor.client.request.get
-import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.runBlocking
@@ -96,11 +95,7 @@ class LiveNotificationsTest {
     fun `the event stream is served as text-event-stream without caching`() =
         runBlocking<Unit> {
             val team = fake.team()
-            LiveStream(team.itEmployee.browser).use { it.awaitConnected() }
-            val headers =
-                team.itEmployee.browser.client
-                    .prepareGet(fake.web("/events"))
-                    .execute { it.headers }
+            val headers = LiveStream(team.itEmployee.browser).use { it.headers() }
             headers[HttpHeaders.ContentType]!! shouldStartWith "text/event-stream"
             headers[HttpHeaders.CacheControl] shouldBe "no-store"
         }

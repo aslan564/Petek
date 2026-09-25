@@ -43,9 +43,9 @@ internal class EventsRoute(
                     heartbeat { period = HEARTBEAT }
                     val stream = notifications.open(user.email, after)
                     stream.subscription.use { subscription ->
-                        // A comment first, so the client sees the stream open even when nothing is pending.
-                        send(ServerSentEvent(comments = "connected", retry = RETRY_MILLIS))
                         stream.backlog.forEach { send(it.toEvent()) }
+                        // Marks "backlog delivered, now live" and makes the stream visibly open even when nothing is pending.
+                        send(ServerSentEvent(comments = "connected", retry = RETRY_MILLIS))
                         for (notification in subscription.notifications) send(notification.toEvent())
                     }
                 },

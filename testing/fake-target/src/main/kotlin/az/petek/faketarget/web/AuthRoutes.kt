@@ -132,7 +132,7 @@ internal class AuthRoutes(
             val user = accounts.user(email)
             when {
                 user == null -> call.respondHtml { verificationProblemPage("verify-error", Failure.NO_PENDING_VERIFICATION.message) }
-                user.emailVerified && !user.phoneVerified -> call.seeOther(verifyPhoneLocation(user.email))
+                user.emailVerified && accounts.phoneStepPending(user) -> call.seeOther(verifyPhoneLocation(user.email))
                 user.emailVerified -> call.seeOther("/login")
                 else -> call.respondHtml { verifyPage(user.email, error = null) }
             }

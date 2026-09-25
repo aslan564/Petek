@@ -11,10 +11,12 @@ import az.petek.faketarget.service.InviteRequest
 import az.petek.faketarget.service.NotificationService
 import az.petek.faketarget.service.Outcome
 import az.petek.faketarget.service.TicketService
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.encodeURLParameter
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.html.respondHtml
+import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.uri
 import io.ktor.server.routing.Route
@@ -37,10 +39,16 @@ internal class AppRoutes(
         route.ticketRoutes()
     }
 
-    /** The logged-in user, or null after redirecting to the login page (which comes back here afterwards). */
+    /**
+     * The logged-in user, or null after redirecting to the login page. A page (GET) is resumed after the login; a form
+     * post is not replayed, so it simply goes to the login page.
+     */
     suspend fun currentUserOrLogin(call: ApplicationCall): User? {
         val user = accounts.userBySession(SessionCookie.read(call))
-        if (user == null) call.seeOther("/login?next=${call.request.uri.encodeURLParameter()}")
+        if (user == null) {
+            val resume = call.request.httpMethod == HttpMethod.Get
+            call.seeOther(if (resume) "/login?next=${call.request.uri.encodeURLParameter()}" else "/login")
+        }
         return user
     }
 

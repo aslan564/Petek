@@ -12,6 +12,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.html.respondHtml
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.ContentTransformationException
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
@@ -39,6 +40,9 @@ internal class WebApplication(
         application.install(SSE)
         application.install(StatusPages) {
             exception<BadRequestException> { call, _ -> call.respondProblem(HttpStatusCode.BadRequest, Failure.INVALID_REQUEST.message) }
+            exception<ContentTransformationException> { call, _ ->
+                call.respondProblem(HttpStatusCode.UnsupportedMediaType, Failure.INVALID_REQUEST.message)
+            }
             exception<Throwable> { call, cause ->
                 logger.error(cause) { "Request ${call.request.path()} failed" }
                 call.respondProblem(HttpStatusCode.InternalServerError, "Daxili xəta baş verdi.")

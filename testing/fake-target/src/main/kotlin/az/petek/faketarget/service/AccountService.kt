@@ -181,6 +181,9 @@ internal class AccountService(
     /** The person a verification page talks about; null when nobody signed up with [email]. */
     fun user(email: String): User? = store.user(Inputs.email(email))
 
+    /** Whether [user] still has to confirm the phone before a session is opened. */
+    fun phoneStepPending(user: User): Boolean = config.requirePhoneOtp && !user.phoneVerified
+
     fun verifyEmail(
         email: String,
         code: String,
