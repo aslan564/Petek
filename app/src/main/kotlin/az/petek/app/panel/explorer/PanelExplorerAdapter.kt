@@ -17,7 +17,6 @@ import az.petek.evidence.domain.ArtifactRecord
 import az.petek.explorer.application.ExploreSiteUseCase
 import az.petek.explorer.application.ExplorerSettings
 import az.petek.explorer.application.ScenarioRequest
-import az.petek.explorer.application.ScenarioSettings
 import az.petek.explorer.domain.ExplorationBudget
 import az.petek.explorer.domain.ExplorationEvent
 import az.petek.explorer.domain.ExplorationId
@@ -280,11 +279,8 @@ internal class PanelExplorerAdapter(
             }
         update(run) { tracker ->
             tracker.apply(event)
-            if (event is ExplorationEvent.UnknownRaised &&
-                prefilled != null
-            ) {
-                tracker.answered(event.unknown.id, prefilled, tracker.grounding)
-            }
+            val unknown = (event as? ExplorationEvent.UnknownRaised)?.unknown
+            if (unknown != null && prefilled != null) tracker.answered(unknown.id, prefilled, tracker.grounding)
         }
     }
 
@@ -313,7 +309,7 @@ internal class PanelExplorerAdapter(
             stored ?: model?.let {
                 try {
                     container
-                        .scenarioGenerator(ScenarioSettings())
+                        .scenarioGenerator(DraftSettings.of(run.instructions?.departments.orEmpty()))
                         .compose(it, ScenarioRequest(id, grounding.ifBlank { null }, testApi = testApi(run.target)))
                         .yaml
                 } catch (e: Exception) {

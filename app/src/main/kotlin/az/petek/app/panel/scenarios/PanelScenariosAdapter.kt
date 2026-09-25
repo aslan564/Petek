@@ -3,8 +3,8 @@ package az.petek.app.panel.scenarios
 import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.RunPlans
+import az.petek.app.panel.explorer.DraftSettings
 import az.petek.app.panel.explorer.PanelExplorerAdapter
-import az.petek.campaign.domain.DefaultActorExpressionParser
 import az.petek.core.ids.RunTags
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.FieldProblem
@@ -18,7 +18,6 @@ import az.petek.dashboard.domain.ScenarioVersionView
 import az.petek.dashboard.domain.ScenarioView
 import az.petek.explorer.application.ScenarioGenerationException
 import az.petek.explorer.application.ScenarioRequest
-import az.petek.explorer.application.ScenarioSettings
 import az.petek.scenarios.domain.ScenarioFileException
 import az.petek.scenarios.domain.ScenarioInvalidException
 import az.petek.scenarios.domain.ScenarioNotFoundException
@@ -68,7 +67,7 @@ internal class PanelScenariosAdapter(
 
     override suspend fun generateScenario(): ScenarioView {
         val source = explorer.draftSource()
-        val settings = ScenarioSettings(departments = usableDepartments(source.departments) ?: ScenarioSettings().departments)
+        val settings = DraftSettings.of(source.departments)
         val draft =
             try {
                 container
@@ -257,13 +256,6 @@ internal class PanelScenariosAdapter(
         }
         logger.info { "scenarios/${file.name} imported and approved as ${result.version.label}" }
         return catalog.approve(result.version.id)
-    }
-
-    /** The owner's departments when every one of them can be named in an actor expression; null otherwise. */
-    private fun usableDepartments(departments: List<String>): List<String>? {
-        val names = departments.map { it.trim() }
-        if (names.isEmpty() || names.any { it.isEmpty() || it.any { c -> c in DefaultActorExpressionParser.RESERVED_CHARS } }) return null
-        return names.takeIf { it.map(String::lowercase).toSet().size == it.size }
     }
 
     private companion object {

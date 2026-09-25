@@ -97,12 +97,14 @@ internal fun interface SetupRuns {
  * the test API before the trial touch writes anything. [RoleSessions.close] closes the sessions and tears the company
  * down through the same teardown every run uses.
  *
- * Anywhere else (writes not allowed, another site than `PETEK_TARGET`, no test token) nothing is written and the
- * sessions are [RoleSessions.none] with the reason.
+ * Anywhere else (writes not allowed, another site than `PETEK_TARGET`, no test token, a target whose [testApi] does not
+ * answer like the test API of docs/TARGET_CONTRACT.md) nothing is written and the sessions are [RoleSessions.none] with
+ * the reason.
  */
 internal class TestCompanyRoleSessions(
     private val container: AppContainer,
     private val runs: SetupRuns,
+    private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain),
 ) : RoleSessionSource {
     override suspend fun open(
         request: RoleSessionRequest,
@@ -110,6 +112,7 @@ internal class TestCompanyRoleSessions(
         progress: (String) -> Unit,
     ): RoleSessions {
         refusal(request)?.let { return RoleSessions.none(it) }
+        testApi.refusal()?.let { return RoleSessions.none("Rollarla gəzinti buraxıldı: $it") }
         val campaign = campaign(request)
         progress("Rollarla gəzinti üçün müvəqqəti test şirkəti yaradılır (admin, menecer, işçi)…")
         val setup =

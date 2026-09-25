@@ -56,11 +56,16 @@ class TestCompanyRoleSessionsTest {
 
     private fun sessions(
         panel: PanelHarness,
+        testApi: TestApiProbe = TestApiProbe { null },
         setup: suspend (Campaign) -> SetupRun?,
-    ) = TestCompanyRoleSessions(panel.panel.container) { campaign ->
-        campaigns += campaign
-        setup(campaign)
-    }
+    ) = TestCompanyRoleSessions(
+        panel.panel.container,
+        { campaign ->
+            campaigns += campaign
+            setup(campaign)
+        },
+        testApi,
+    )
 
     @Test
     fun `nothing is written without the owner's permission, on another site or without a test token`() =
@@ -81,6 +86,21 @@ class TestCompanyRoleSessionsTest {
 
             campaigns.shouldBeEmpty()
             opened.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a target whose test API does not answer gets nothing written, whatever the token says`() =
+        runBlocking<Unit> {
+            val panel = harness()
+
+            val roles =
+                sessions(panel, testApi = { "hədəfdə test API-si yoxdur" }) { error("nothing may be created") }
+                    .open(request(panel), factory) { progress += it }
+            val real = TestCompanyRoleSessions(panel.panel.container, { error("nothing may be created") })
+
+            roles.note shouldBe "Rollarla gəzinti buraxıldı: hədəfdə test API-si yoxdur"
+            real.open(request(panel), factory) { }.note.shouldNotBeNull() shouldContain "test API-si cavab vermədi"
+            campaigns.shouldBeEmpty()
         }
 
     @Test

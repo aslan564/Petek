@@ -115,16 +115,18 @@ internal class PanelRunsAdapter(
                     it.isNotBlank()
                 }?.let { PanelTargets.allowed(it, container.config.targetPolicy, PanelInstructions.TARGET) }
         val lease = targets.lease(target)
-        try {
-            val campaign = load(version, lease, request.testers)
-            PanelTargets.allowed(campaign.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
-            val (runId, _) = launch(campaign, lease, RunOptions(), request.headful)
-            warnAboutUncoveredSteps(campaign, lease.container)
-            return RunStartView(runId, version.id.value, campaign.settings.testers)
-        } catch (e: Exception) {
-            if (e !is LaunchedException) lease.close()
-            throw (e as? LaunchedException)?.cause ?: e
-        }
+        val campaign =
+            try {
+                load(version, lease, request.testers).also {
+                    PanelTargets.allowed(it.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
+                }
+            } catch (e: Exception) {
+                lease.close()
+                throw e
+            }
+        val (runId, _) = launch(campaign, lease, RunOptions(), request.headful)
+        warnAboutUncoveredSteps(campaign, lease.container)
+        return RunStartView(runId, version.id.value, campaign.settings.testers)
     }
 
     override suspend fun cancelRun(): Boolean {
@@ -191,8 +193,6 @@ internal class PanelRunsAdapter(
                 launch(campaign, lease, RunOptions(keepData = true), headful = false)
             } catch (_: PanelConflictException) {
                 return null
-            } catch (e: LaunchedException) {
-                throw e.cause
             }
         return try {
             SetupRun(runId, job.await()?.outcome)
@@ -209,8 +209,9 @@ internal class PanelRunsAdapter(
     // --- running --------------------------------------------------------------------------------------------------
 
     /**
-     * Starts [campaign] in the run slot and returns its run id once the runner created its record. The lease is
-     * closed when the run ends. Failures after the job took the lease are wrapped in [LaunchedException].
+     * Starts [campaign] in the run slot and returns its run id once the runner created its record. From the call on,
+     * [lease] is this function's: it is closed at once when the slot is taken ([PanelConflictException]), otherwise when
+     * the run ends. A run that does not start is a [PanelUnavailableException].
      */
     private suspend fun launch(
         campaign: Campaign,
@@ -222,7 +223,10 @@ internal class PanelRunsAdapter(
         val entered = AtomicBoolean(false)
         val job =
             synchronized(lock) {
-                if (current?.isActive == true) throw PanelConflictException("Artıq bir run gedir. Bitməsini gözləyin və ya dayandırın.")
+                if (current?.isActive == true) {
+                    lease.close()
+                    throw PanelConflictException("Artıq bir run gedir. Bitməsini gözləyin və ya dayandırın.")
+                }
                 watch.expect(campaign, started)
                 val config = lease.container.config
                 val runner = lease.container.campaignRunner(headless = config.browserHeadless && !headful)
@@ -254,11 +258,11 @@ internal class PanelRunsAdapter(
             } catch (e: CancellationException) {
                 if (currentCoroutineContext().isActive) null else throw e
             } catch (e: Exception) {
-                throw LaunchedException(PanelUnavailableException("Run başlamadı: ${e.message ?: e::class.simpleName}"))
+                throw PanelUnavailableException("Run başlamadı: ${e.message ?: e::class.simpleName}")
             }
         if (runId == null) {
             job.cancel()
-            throw LaunchedException(PanelUnavailableException("Run başlamadı; səbəb loglardadır (evidence/logs/petek.log)."))
+            throw PanelUnavailableException("Run başlamadı; səbəb loglardadır (evidence/logs/petek.log).")
         }
         return runId to job
     }
@@ -456,11 +460,6 @@ internal class PanelRunsAdapter(
     }
 
     private fun withoutContacts(text: String): String = Contacts.masked(text)
-
-    /** A failure after the run job took over the lease (the job closes it; the caller must not). */
-    private class LaunchedException(
-        override val cause: Exception,
-    ) : Exception(cause.message, cause)
 
     private companion object {
         const val HISTORY_LIMIT = 50

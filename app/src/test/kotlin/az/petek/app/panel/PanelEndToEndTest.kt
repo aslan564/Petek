@@ -100,7 +100,18 @@ class PanelEndToEndTest {
                 .map { it.urlPattern }
                 .shouldNotBeEmpty()
             page.waitFor("() => document.body.innerText.includes('Bitdi')")
-            page.shoot("e2e-2-kesfiyyat")
+            page.shoot("e2e-2-kesfiyyat", full = true)
+
+            // The explorer's first question is answered on the page; the answer joins the instructions.
+            if (explored.unknowns.isNotEmpty()) {
+                page.locator(".question textarea").first().fill("Bəli, hamı onu canlı görməlidir")
+                page.button("Cavab ver").first().click()
+                page.waitFor("() => document.querySelectorAll('.question .answered').length > 0")
+                panel.backend
+                    .exploration()
+                    .shouldNotBeNull()
+                    .instructions shouldContain "Cavab: Bəli, hamı onu canlı görməlidir"
+            }
 
             // The draft goes to the scenarios and is approved there.
             page.button("Ssenarilərə göndər").first().click()
@@ -167,10 +178,18 @@ class PanelEndToEndTest {
                 )
             }
             page.shoot("e2e-10-triaj")
-            panel.backend
-                .triage(runId)
-                .shouldNotBeNull()
-                .runId shouldBe runId
+            val triage = panel.backend.triage(runId).shouldNotBeNull()
+            triage.runId shouldBe runId
+            if (triage.verdicts.any { it.evidence.isNotEmpty() }) {
+                // The evidence a verdict cites opens from the page (a screenshot of the run).
+                val href =
+                    page
+                        .locator(".verdict .proofs a")
+                        .first()
+                        .getAttribute("href")
+                        .shouldNotBeNull()
+                page.request().get(panel.url.resolve(href).toString()).status() shouldBe 200
+            }
 
             // The page itself never failed.
             errors.shouldBeEmpty()

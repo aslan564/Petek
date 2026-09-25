@@ -126,9 +126,12 @@ class PanelScenariosTest {
         runBlocking<Unit> {
             val panel = harness()
             shouldThrow<PanelConflictException> { panel.backend.generateScenario() }.message shouldStartWith "Əvvəlcə saytı kəşf edin"
-            val explored = panel.explored()
+            val explored = panel.explored(PanelHarness.instructions(panel.site.base.toString()).copy(departments = listOf("Satış", "IT")))
 
             val generated = panel.backend.generateScenario()
+
+            generated.yaml shouldBe explored.draftYaml
+            generated.yaml shouldContain "departments: [\"Satış\", \"IT\"]"
 
             generated.version.status shouldBe ScenarioStatus.DRAFT
             generated.version.source shouldBe ScenarioSource.EXPLORER
