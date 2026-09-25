@@ -18,8 +18,8 @@ class AzerbaijaniNameCatalogTest {
 
     @Test
     fun `first names and surnames have no duplicates, ignoring case`() {
-        catalog.firstNames.map { it.lowercase() }.shouldNotContainDuplicates()
-        catalog.surnames.map { it.lowercase() }.shouldNotContainDuplicates()
+        catalog.firstNames.map(NameAllocator::key).shouldNotContainDuplicates()
+        catalog.surnames.map(NameAllocator::key).shouldNotContainDuplicates()
     }
 
     @Test

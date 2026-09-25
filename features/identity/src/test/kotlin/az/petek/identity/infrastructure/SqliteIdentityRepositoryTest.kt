@@ -129,6 +129,17 @@ class SqliteIdentityRepositoryTest {
         }
 
     @Test
+    fun `replacing with an empty plan clears the run`() =
+        runBlocking<Unit> {
+            val repository = repository()
+            repository.replaceAll(runId, plan)
+
+            repository.replaceAll(runId, IdentityPlan(RUN_TAG, emptyList()))
+
+            repository.findByRun(runId).shouldBeEmpty()
+        }
+
+    @Test
     fun `runs are stored side by side without touching each other`() =
         runBlocking<Unit> {
             val repository = repository()
