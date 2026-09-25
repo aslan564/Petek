@@ -114,7 +114,7 @@ class RunnerConcurrencyTest {
                         managers(),
                         waitFor = "ticket_created",
                         parallel = parallel,
-                        assertions = listOf(AssertionSpec.OnlyOneSucceeds),
+                        assertions = listOf(AssertionSpec.OnlyOneSucceeds()),
                     ),
                 ),
         )
@@ -174,12 +174,27 @@ class RunnerConcurrencyTest {
             summary.outcome shouldBe RunOutcome.FAILED
         }
 
+    /** In the race step each manager's page posts the approval and the target answers with [statuses]. */
+    private fun RunnerFixture.approvals(
+        statuses: Map<String, Int>,
+        outcome: (AgentId) -> ActionOutcome = { ok },
+    ) {
+        agents.script = { call, _ ->
+            if (call.scenarioStep == "race") {
+                statuses[call.agentId.value]?.let { browser.session(call.agentId.value).mutated("POST", "/tickets/t1/approve", it) }
+                outcome(call.agentId)
+            } else {
+                ok
+            }
+        }
+    }
+
     @Test
     fun `only_one_succeeds is judged once over all actors of the step`() =
         runTest {
             val f = fixture()
-            f.agents.script = { call, _ ->
-                if (call.agentId == AgentId("a03")) ActionOutcome(ActionStatus.FAILED, "already decided") else ok
+            f.approvals(mapOf("a02" to 303, "a03" to 409)) { agent ->
+                if (agent == AgentId("a03")) ActionOutcome(ActionStatus.FAILED, "already decided") else ok
             }
 
             val summary = f.runner().run(raceCampaign(parallel = true))
@@ -190,7 +205,7 @@ class RunnerConcurrencyTest {
             val group = f.evidence.assertionList.single { it.type == "only_one_succeeds" }
             group.verdict shouldBe Verdict.PASSED
             group.agentId shouldBe null
-            f.verify.actorCalls.none { (specs, _) -> AssertionSpec.OnlyOneSucceeds in specs } shouldBe true
+            f.verify.actorCalls.none { (specs, _) -> specs.any { it is AssertionSpec.OnlyOneSucceeds } } shouldBe true
             f.steps("race", StepKind.SYSTEM).single().status shouldBe StepStatus.PASSED
             summary.assertionsFailed shouldBe 0
         }
@@ -199,6 +214,7 @@ class RunnerConcurrencyTest {
     fun `two winners of a race fail the group assertion`() =
         runTest {
             val f = fixture()
+            f.approvals(mapOf("a02" to 303, "a03" to 303))
 
             val summary = f.runner().run(raceCampaign(parallel = true))
 

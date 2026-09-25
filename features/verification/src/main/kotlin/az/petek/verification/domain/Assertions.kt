@@ -36,13 +36,25 @@ data class AssertionResult(
     val note: String?,
     /** Raw oracle/HTTP body to keep as evidence, if any. */
     val rawEvidence: String? = null,
+    /**
+     * The target's test API answer behind part of a verdict whose [rawEvidence] is something else (the oracle
+     * condition of `only_one_succeeds`); kept as an ORACLE artifact.
+     */
+    val oracleEvidence: String? = null,
 )
 
-/** Outcome of one actor in a parallel step, for `only_one_succeeds`. */
+/**
+ * Outcome of one actor in a parallel step, for `only_one_succeeds`. [succeeded] is decided by code from the actor's
+ * own requests ([race], see [RaceEvidence]), never by the agent; [summary] is the agent's text, kept as evidence only.
+ */
 data class ActorResult(
     val agentId: AgentId,
     val succeeded: Boolean,
     val summary: String,
+    /** The requests [succeeded] was decided from; null when the action never ran (awaited event missing, template error). */
+    val race: RaceEvidence? = null,
+    /** The actor lost the race: refused because the object was already decided (an expected outcome, not a failure). */
+    val lostRace: Boolean = false,
 )
 
 /**
@@ -57,4 +69,15 @@ interface AssertionEvaluator {
 
     /** `only_one_succeeds`: exactly one of [results] succeeded. */
     fun evaluateOnlyOneSucceeds(results: List<ActorResult>): AssertionResult
+
+    /**
+     * `only_one_succeeds` as [spec] asks: exactly one of [results] succeeded and, when [spec] names an oracle
+     * condition and the test API is available, the target's final state matches it ([input] renders its templates).
+     * Implementations without an oracle keep the default, which judges the results alone.
+     */
+    suspend fun evaluateOnlyOneSucceeds(
+        spec: AssertionSpec.OnlyOneSucceeds,
+        results: List<ActorResult>,
+        input: AssertionInput,
+    ): AssertionResult = evaluateOnlyOneSucceeds(results)
 }

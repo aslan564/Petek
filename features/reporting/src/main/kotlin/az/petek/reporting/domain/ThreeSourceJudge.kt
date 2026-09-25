@@ -20,10 +20,12 @@ import az.petek.evidence.domain.Verdict
  * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human.
  *
  * The step overload adds one finding per (scenario step, agent, failure key) for agent actions that failed with a
- * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), any other key AGENT_FAILURE. An environment
+ * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), `request_failed` INVESTIGATE (the target
+ * turned down a racer's own request although its agent claimed success), any other key AGENT_FAILURE. An environment
  * problem such as `mail_unavailable` (the test inbox was unreachable) is an AGENT_FAILURE whose note says so, never a
- * finding about the target. An expected refusal (`permission_denied` in a forbidden-action test) is not a failure and
- * yields none.
+ * finding about the target. An expected refusal (`permission_denied` in a forbidden-action test) and a lost race
+ * (`lost_race`, including the loser agent's own records of that action) are not failures and yield none
+ * ([ExpectedOutcomes]).
  */
 class ThreeSourceJudge(
     private val ids: IdGenerator,
@@ -106,14 +108,16 @@ class ThreeSourceJudge(
     private fun stepFindings(
         run: RunRecord,
         steps: List<StepRecord>,
-    ): List<FindingRecord> =
-        steps
+    ): List<FindingRecord> {
+        val expected = ExpectedOutcomes(steps.filter { it.runId == run.runId })
+        return steps
             .asSequence()
             .filter { it.runId == run.runId && it.agentId != null && it.kind !in NOT_AGENT_ACTIONS }
-            .mapNotNull { step -> FailureKeys.of(step)?.let { key -> step to key } }
+            .mapNotNull { step -> expected.failureKey(step)?.let { key -> step to key } }
             .distinctBy { (step, key) -> Triple(step.scenarioStep, step.agentId, key) }
             .map { (step, key) -> stepFinding(run, step, key) }
             .toList()
+    }
 
     private fun stepFinding(
         run: RunRecord,
@@ -121,13 +125,19 @@ class ThreeSourceJudge(
         key: String,
     ): FindingRecord {
         val noMail = key == FailureKeys.MAIL_TIMEOUT
+        val refused = key == FailureKeys.REQUEST_FAILED
         return FindingRecord(
             findingId = ids.findingId(),
             runId = run.runId,
             stepId = step.stepId,
             scenarioStep = step.scenarioStep,
             agentId = step.agentId,
-            findingClass = if (noMail) FindingClass.BACKEND else FindingClass.AGENT_FAILURE,
+            findingClass =
+                when {
+                    noMail -> FindingClass.BACKEND
+                    refused -> FindingClass.INVESTIGATE
+                    else -> FindingClass.AGENT_FAILURE
+                },
             a = compact(step.action),
             b = step.detail?.let(::compact),
             c = if (noMail) NO_EMAIL_SENT else null,
@@ -141,6 +151,7 @@ class ThreeSourceJudge(
         noMail: Boolean,
     ): String {
         if (noMail) return "$NO_EMAIL_SENT ($key)."
+        if (key == FailureKeys.REQUEST_FAILED) return NOTE_REQUEST_FAILED
         val environment = FailureKeys.environmentProblem(key) ?: return "Agent failure: $key."
         return "Agent failure: $key ($environment: an environment problem, not an error of the target)."
     }
@@ -208,5 +219,7 @@ class ThreeSourceJudge(
         const val NOTE_SENDER_ONLY = "The sender's check (A) failed and there is no receiver or oracle evidence to attribute it."
         const val NOTE_NO_ORACLE = "The receiver (B) disagrees and there is no oracle evidence (C) to attribute it."
         const val NOTE_DISAGREE = "The sources disagree in a way the three-source rule cannot attribute."
+        const val NOTE_REQUEST_FAILED =
+            "The target turned down the actor's own request (B shows it) although its agent reported success (request_failed)."
     }
 }

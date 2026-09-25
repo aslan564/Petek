@@ -81,6 +81,11 @@ private val logger = KotlinLogging.logger {}
  * and fatal [Error]s are rethrown after cleanup). A `permission_denied` refusal in a main step is not a failure by
  * itself: permission tests expect it and their assertions decide.
  *
+ * Live views: besides the agent board, the [monitor] gets the orchestrator's task plan ([MonitorView.planReady], sent
+ * once the agents' sessions are open and again before a step whenever the agents it resolves to changed), every
+ * step × agent task transition ([MonitorView.taskUpdated]; tasks a run never reached end SKIPPED) and every event
+ * published and received.
+ *
  * Wiring: every browser call an agent makes counts as progress for [watchdog] (the runner hands each agent a
  * progress-reporting view of its session). Wrap the recorder given to the agent loop and run functions in a
  * [ProgressTrackingRecorder] reporting to the same [watchdog] as well, so that recorded evidence also counts (e.g. a
@@ -137,9 +142,10 @@ class DefaultCampaignRunner(
         )
         val run = RunState(runId, campaign, options, startedAt, busFactory(), sharedStateFactory())
         val board = AgentBoard(monitor, clock)
+        val tasks = TaskBoard(monitor, clock)
         lateinit var summary: RunSummary
         try {
-            withContext(diagnostics.of(runId, null)) { execute(run, board) }
+            withContext(diagnostics.of(runId, null)) { execute(run, board, tasks) }
         } catch (e: Exception) {
             if (e is CancellationException && !currentCoroutineContext().isActive) {
                 run.abort("run cancelled")
@@ -153,7 +159,7 @@ class DefaultCampaignRunner(
             run.abort("fatal error: ${e::class.simpleName}: ${e.message}")
             throw e
         } finally {
-            summary = withContext(NonCancellable + diagnostics.of(runId, null)) { conclude(run, board) }
+            summary = withContext(NonCancellable + diagnostics.of(runId, null)) { conclude(run, board, tasks) }
         }
         return summary
     }
@@ -161,12 +167,13 @@ class DefaultCampaignRunner(
     private suspend fun execute(
         run: RunState,
         board: AgentBoard,
+        tasks: TaskBoard,
     ) {
         val completed =
             withTimeoutOrNull(run.budget) {
                 planIdentities(run)
                 startAgents(run, board)
-                runSteps(run, board)
+                runSteps(run, board, tasks)
                 true
             }
         if (completed == null) {
@@ -256,10 +263,13 @@ class DefaultCampaignRunner(
     private suspend fun runSteps(
         run: RunState,
         board: AgentBoard,
+        tasks: TaskBoard,
     ) {
-        val executor = StepExecutor(run, services(board))
+        val executor = StepExecutor(run, services(board, tasks))
         for (step in run.campaign.allSteps) {
             if (run.aborted) break
+            // Announced again only when an agent that failed meanwhile changes who runs the remaining steps.
+            tasks.announce(RunPlans.of(run, actors))
             run.startedSteps += step.id
             val result = executor.execute(step)
             if (step.phase == StepPhase.SETUP) applySetupOutcome(run, board, result)
@@ -270,20 +280,23 @@ class DefaultCampaignRunner(
         }
     }
 
-    private fun services(board: AgentBoard) =
-        StepServices(
-            resolver = actors,
-            renderer = renderer,
-            verify = verify,
-            watchdog = watchdog,
-            objectIds = objectIds,
-            recorder = recorder,
-            evidence = evidence,
-            board = board,
-            clock = clock,
-            ids = ids,
-            diagnostics = diagnostics,
-        )
+    private fun services(
+        board: AgentBoard,
+        tasks: TaskBoard,
+    ) = StepServices(
+        resolver = actors,
+        renderer = renderer,
+        verify = verify,
+        watchdog = watchdog,
+        objectIds = objectIds,
+        recorder = recorder,
+        evidence = evidence,
+        board = board,
+        tasks = tasks,
+        clock = clock,
+        ids = ids,
+        diagnostics = diagnostics,
+    )
 
     private suspend fun applySetupOutcome(
         run: RunState,
@@ -358,10 +371,12 @@ class DefaultCampaignRunner(
     private suspend fun conclude(
         run: RunState,
         board: AgentBoard,
+        tasks: TaskBoard,
     ): RunSummary {
         run.abortedBecause?.let { reason ->
             safely(run, "abort record") { recordAbort(run, reason, board) }
         }
+        tasks.closeOpen(run.abortedBecause?.let { "run aborted: $it" } ?: "not run")
         safely(run, "network observation") { recordNetworkObservations(run) }
         safely(run, "company registration") {
             registerCompany(run)

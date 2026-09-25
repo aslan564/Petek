@@ -254,7 +254,7 @@ class ScreenAssertionsTest {
     fun `results come back in the order of the specs`() =
         runTest {
             session.fake.visibleTexts += "a"
-            val specs = listOf(Count("#x", 0), VisibleText("a", 1.seconds), NotVisible("b", null), AssertionSpec.OnlyOneSucceeds)
+            val specs = listOf(Count("#x", 0), VisibleText("a", 1.seconds), NotVisible("b", null), AssertionSpec.OnlyOneSucceeds())
 
             val results = evaluator.evaluate(specs, assertionInput(session))
 
@@ -264,7 +264,7 @@ class ScreenAssertionsTest {
     @Test
     fun `only_one_succeeds inside a per-actor evaluation is skipped as group-level`() =
         runTest {
-            val result = evaluateOne(AssertionSpec.OnlyOneSucceeds)
+            val result = evaluateOne(AssertionSpec.OnlyOneSucceeds())
 
             result.verdict shouldBe Verdict.SKIPPED
             result.source shouldBe EvidenceSource.SENDER

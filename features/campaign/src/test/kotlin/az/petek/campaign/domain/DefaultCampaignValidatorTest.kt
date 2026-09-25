@@ -449,13 +449,13 @@ class DefaultCampaignValidatorTest {
 
         @Test
         fun `only_one_succeeds needs parallel actors`() {
-            val issue = issue(asserting(AssertionSpec.OnlyOneSucceeds, actor = "manager[IT] | manager[HR]"), "needs parallel: true")
+            val issue = issue(asserting(AssertionSpec.OnlyOneSucceeds(), actor = "manager[IT] | manager[HR]"), "needs parallel: true")
             issue.message shouldContain "step 'check', only_one_succeeds"
         }
 
         @Test
         fun `only_one_succeeds needs actors that can match two testers`() {
-            fun racing(actor: String) = asserting(AssertionSpec.OnlyOneSucceeds, actor = actor, parallel = true)
+            fun racing(actor: String) = asserting(AssertionSpec.OnlyOneSucceeds(), actor = actor, parallel = true)
 
             issues(racing("manager[IT] | manager[HR]")).shouldBeEmpty()
             issues(racing("employee[n=1] | employee[n=2]")).shouldBeEmpty()
@@ -470,7 +470,7 @@ class DefaultCampaignValidatorTest {
         fun `only_one_succeeds needs an action whose outcomes are compared`() {
             val waiting =
                 asserting(
-                    AssertionSpec.OnlyOneSucceeds,
+                    AssertionSpec.OnlyOneSucceeds(),
                     actor = "manager[IT] | manager[HR]",
                     parallel = true,
                     action = StepAction.None,
@@ -478,12 +478,78 @@ class DefaultCampaignValidatorTest {
             issue(waiting, "needs a do or run").message shouldContain "step 'check', only_one_succeeds"
             val running =
                 asserting(
-                    AssertionSpec.OnlyOneSucceeds,
+                    AssertionSpec.OnlyOneSucceeds(),
                     actor = "manager[IT] | manager[HR]",
                     parallel = true,
                     action = StepAction.Run("login"),
                 )
             issues(running).shouldBeEmpty()
+        }
+
+        private fun race(spec: AssertionSpec.OnlyOneSucceeds) =
+            asserting(spec, actor = "manager[IT] | manager[HR]", parallel = true, action = StepAction.Do("Approve {last_id}"))
+
+        @Test
+        fun `only_one_succeeds accepts a request of any mutating method and a path regex`() {
+            listOf("POST", "PUT", "PATCH", "DELETE").forEach { method ->
+                issues(race(AssertionSpec.OnlyOneSucceeds(RequestPattern(method, ".+/approve")))).shouldBeEmpty()
+            }
+            issues(race(AssertionSpec.OnlyOneSucceeds(RequestPattern(null, "/api/.*")))).shouldBeEmpty()
+        }
+
+        @Test
+        fun `only_one_succeeds refuses a request that no race can be decided by`() {
+            val read = issue(race(AssertionSpec.OnlyOneSucceeds(RequestPattern("GET", "/tickets/.+"))), "request method 'GET'")
+            read.message shouldContain "step 'check', only_one_succeeds"
+            read.message shouldContain "POST, PUT, PATCH, DELETE"
+            read.line shouldBe 70
+            issue(race(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", "/tickets/(unclosed"))), "is not a valid regular expression")
+        }
+
+        @Test
+        fun `only_one_succeeds checks its oracle path and templates`() {
+            val oracle = { path: String -> AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition(path, "status", "approved")) }
+
+            issues(race(oracle("/test/tickets/{last_id}"))).shouldBeEmpty()
+            issue(race(oracle("https://evil.example/steal")), "oracle path must be a path on the target")
+            issue(race(oracle("/test/tickets/{event.nothing.id}")), "{event.nothing.id} refers to 'nothing', which no step emits")
+            issue(
+                race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/1", " ", null))),
+                "oracle field must not be blank",
+            )
+            issue(
+                race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/1", "status", "{self.password}"))),
+                "placeholder {self.password} is not available",
+            )
+        }
+
+        @Test
+        fun `only_one_succeeds refuses an oracle that names one actor, because it is checked once for the group`() {
+            val byEmail = OracleCondition("/test/tickets/latest?by={self.email}", "status", "approved")
+
+            val issue = issue(race(AssertionSpec.OnlyOneSucceeds(oracle = byEmail)), "{self.email} has no actor to refer to")
+            issue.message shouldContain "step 'check', only_one_succeeds"
+            issue(
+                race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "assignee", "{self.name}"))),
+                "{self.name} has no actor to refer to",
+            )
+            issues(race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "status", "approved"))))
+                .shouldBeEmpty()
+        }
+
+        @Test
+        fun `only_one_succeeds may be asserted once per step`() {
+            val twice =
+                race(AssertionSpec.OnlyOneSucceeds()).let { campaign ->
+                    campaign.copy(
+                        steps =
+                            campaign.steps.map { step ->
+                                if (step.id == "check") step.copy(assertions = step.assertions + AssertionSpec.OnlyOneSucceeds()) else step
+                            },
+                    )
+                }
+
+            issue(twice, "may appear only once per step").message shouldContain "step 'check', only_one_succeeds"
         }
 
         @Test

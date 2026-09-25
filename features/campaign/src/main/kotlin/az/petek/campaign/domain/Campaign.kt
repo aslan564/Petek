@@ -190,7 +190,31 @@ sealed interface AssertionSpec {
         override val type = "latency_max"
     }
 
-    data object OnlyOneSucceeds : AssertionSpec {
+    /**
+     * Exactly one actor of a `parallel` step wins, judged by code from each actor's own requests (CLAUDE.md rule 2),
+     * never from what the agent says: an actor won when one of its requests matching [request] was accepted
+     * (status < 400) and none was refused (403, 409, 422). YAML `only_one_succeeds: true` checks every mutating
+     * request ([request] null); the map form `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}`
+     * narrows the requests and adds a check of the target's final state through its test API ([oracle]).
+     */
+    data class OnlyOneSucceeds(
+        val request: RequestPattern? = null,
+        val oracle: OracleCondition? = null,
+    ) : AssertionSpec {
         override val type = "only_one_succeeds"
+
+        /** The requests that decide: [request], or any mutating request to the target. */
+        val effectiveRequest: RequestPattern get() = request ?: RequestPattern.ANY_MUTATION
     }
 }
+
+/**
+ * What the target's test API must say after a race, e.g. `{path: "/test/tickets/{last_id}", field: status, equals:
+ * approved}`: `GET` [path] answers 2xx and, with [field], that field exists; with [equals], the field (or the whole
+ * body without [field]) equals it. Same rules as the `oracle` assertion.
+ */
+data class OracleCondition(
+    val path: String,
+    val field: String? = null,
+    val equals: String? = null,
+)

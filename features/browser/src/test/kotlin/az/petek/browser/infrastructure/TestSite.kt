@@ -9,8 +9,10 @@ import io.ktor.server.request.contentType
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.sse.SSE
 import io.ktor.server.sse.sse
@@ -19,12 +21,17 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A small local website for the real-browser tests (no internet): forms, a cookie login, SSE, polling, a WebSocket
- * attempt and a slow page. Pages are plain HTML with inline scripts so that what the browser does is obvious.
+ * attempt, a slow page and a ticket that can be approved only once (form post: 303, then 409; JSON API: 200, then
+ * 409). Pages are plain HTML with inline scripts so that what the browser does is obvious.
  */
 internal class TestSite : AutoCloseable {
+    /** Ticket ids already approved; each test uses its own id. */
+    private val approved = ConcurrentHashMap.newKeySet<String>()
+
     private val server =
         embeddedServer(CIO, host = "127.0.0.1", port = 0) {
             install(SSE)
@@ -77,6 +84,25 @@ internal class TestSite : AutoCloseable {
                 get("/csp.js") { call.respondText(CSP_SCRIPT, ContentType.Text.JavaScript) }
                 get("/shadow") { call.respondText(SHADOW_PAGE, ContentType.Text.Html) }
                 get("/dialogs") { call.respondText(DIALOG_PAGE, ContentType.Text.Html) }
+                get("/ticket") { call.respondText(ticketPage(call.request.queryParameters["id"].orEmpty()), ContentType.Text.Html) }
+                post("/tickets/{id}/approve") {
+                    val id = call.parameters["id"].orEmpty()
+                    if (approved.add(id)) {
+                        call.response.headers.append("Location", "/ticket?id=$id&approved=1")
+                        call.respondText("", status = HttpStatusCode.SeeOther)
+                    } else {
+                        call.respondText(DECIDED_PAGE, ContentType.Text.Html, HttpStatusCode.Conflict)
+                    }
+                }
+                post("/api/tickets/{id}/approve") {
+                    val first = approved.add(call.parameters["id"].orEmpty())
+                    call.respondText(
+                        if (first) "approved" else "decided",
+                        status = if (first) HttpStatusCode.OK else HttpStatusCode.Conflict,
+                    )
+                }
+                put("/api/tickets/{id}") { call.respondText("updated") }
+                delete("/api/tickets/{id}") { call.respondText("gone", status = HttpStatusCode.Forbidden) }
             }
         }.start(wait = false)
 
@@ -90,6 +116,35 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        /** A ticket with a form post, API calls by `fetch` and one read; `#result` shows each call's status. */
+        fun ticketPage(id: String): String =
+            """
+            <!doctype html>
+            <html><head><title>Bilet $id</title></head><body>
+            <form method="post" action="/tickets/$id/approve?token=abc"><button id="approve">Təsdiqlə</button></form>
+            <button id="api" onclick="call('POST', '/api/tickets/$id/approve')">API ilə təsdiqlə</button>
+            <button id="update" onclick="call('PUT', '/api/tickets/$id')">Yenilə</button>
+            <button id="delete" onclick="call('DELETE', '/api/tickets/$id')">Sil</button>
+            <button id="read" onclick="call('GET', '/api/me')">Oxu</button>
+            <p id="result"></p>
+            <script>
+              var calls = 0;
+              function call(method, path) {
+                fetch(path, { method: method }).then(function (response) {
+                  calls += 1;
+                  document.getElementById('result').textContent = 'call ' + calls + ': ' + method + ' ' + response.status;
+                });
+              }
+            </script>
+            </body></html>
+            """.trimIndent()
+
+        val DECIDED_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Xəta</title></head><body><p>Bu müraciət artıq qərarlaşdırılıb</p></body></html>
+            """.trimIndent()
+
         val DIALOG_PAGE =
             """
             <!doctype html>

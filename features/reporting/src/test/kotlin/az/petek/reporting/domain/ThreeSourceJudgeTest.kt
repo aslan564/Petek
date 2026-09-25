@@ -380,6 +380,19 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a racer whose own request the target turned down is investigated, not blamed on the agent`() {
+            val detail = "request_failed: POST /tickets/t2/approve -> 500; agent: Ticket approved"
+            val steps = listOf(step("race", "a03", StepStatus.FAILED, detail = detail, action = "do: Eyni ticketi approve et"))
+
+            val finding = judge.findings(run, emptyList(), steps).single()
+
+            finding.findingClass shouldBe FindingClass.INVESTIGATE
+            finding.note shouldContain "turned down the actor's own request"
+            finding.b shouldBe detail
+            finding.c.shouldBeNull()
+        }
+
+        @Test
         fun `an unreachable test inbox is an agent failure explained as an environment problem`() {
             val steps =
                 listOf(

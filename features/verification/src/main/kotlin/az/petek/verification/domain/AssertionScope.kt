@@ -10,7 +10,7 @@ import az.petek.campaign.domain.AssertionSpec
 val AssertionSpec.isGroupLevel: Boolean
     get() =
         when (this) {
-            AssertionSpec.OnlyOneSucceeds -> true
+            is AssertionSpec.OnlyOneSucceeds -> true
 
             is AssertionSpec.VisibleText,
             is AssertionSpec.NotVisible,

@@ -10,7 +10,9 @@ import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.OnFail
+import az.petek.campaign.domain.OracleCondition
 import az.petek.campaign.domain.RegistrationQuota
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.SourceLines
@@ -481,15 +483,40 @@ internal class CampaignYamlMapper(
             return fields.int("ms", required = true)?.let { AssertionSpec.LatencyMax(it.milliseconds) }
         }
 
+        /** `true`, or the map `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}` (both optional). */
         private fun onlyOneSucceeds(
             node: YamlNode?,
             path: String,
-        ): AssertionSpec? =
-            when (reader.bool(node, path)) {
-                true -> AssertionSpec.OnlyOneSucceeds
-                false -> reader.problem(path, "'$path' can only be true")
-                null -> if (node == null) reader.problem(path, "'$path' needs the value true") else null
+        ): AssertionSpec? {
+            if (node is YamlMap) return raceSpec(node, path)
+            return when (reader.bool(node, path)) {
+                true -> AssertionSpec.OnlyOneSucceeds()
+                false -> reader.problem(path, "'$path' can only be true or a map with $RACE_FORM")
+                null -> if (node == null) reader.problem(path, "'$path' needs the value true or a map with $RACE_FORM") else null
             }
+        }
+
+        private fun raceSpec(
+            node: YamlMap,
+            path: String,
+        ): AssertionSpec? {
+            val fields = reader.map(node, path, ONLY_ONE_SUCCEEDS_KEYS) ?: return null
+            val requestPath = fields.pathOf("request")
+            val request =
+                fields.valued("request")?.let { reader.text(it, requestPath) }?.let { raw ->
+                    RequestPattern.parse(raw)
+                        ?: reader.problem(
+                            requestPath,
+                            "'$requestPath' must be \"<METHOD> <path regex>\", e.g. \"POST .+/approve\", was '$raw'",
+                        )
+                }
+            val oracle =
+                fields.valued("oracle")?.let { reader.map(it, fields.pathOf("oracle"), RACE_ORACLE_KEYS) }?.let { oracle ->
+                    oracle.text("path", required = true)?.let { OracleCondition(it, oracle.text("field"), oracle.text("equals")) }
+                }
+            if ((fields.declares("request") && request == null) || (fields.declares("oracle") && oracle == null)) return null
+            return AssertionSpec.OnlyOneSucceeds(request, oracle)
+        }
     }
 
     private companion object {
@@ -529,5 +556,8 @@ internal class CampaignYamlMapper(
         val HTTP_STATUS_KEYS = linkedSetOf("path", "method", "equals")
         val COUNT_KEYS = linkedSetOf("selector", "equals")
         val LATENCY_KEYS = linkedSetOf("ms")
+        val ONLY_ONE_SUCCEEDS_KEYS = linkedSetOf("request", "oracle")
+        val RACE_ORACLE_KEYS = linkedSetOf("path", "field", "equals")
+        const val RACE_FORM = "request (\"<METHOD> <path regex>\") and/or oracle ({path, field, equals})"
     }
 }

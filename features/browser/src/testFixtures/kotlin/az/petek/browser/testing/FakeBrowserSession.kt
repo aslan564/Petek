@@ -6,6 +6,7 @@ import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
+import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
@@ -19,6 +20,8 @@ import kotlin.time.Duration
  * In-memory browser for unit tests. Tests set [snapshotProvider], [visibleTexts], [selectorTexts] and
  * [httpResponses]; every call is appended to [actions] as a readable string (e.g. `click 3`, `fillSelector #x=abc`).
  * Dialogs: [openDialog] queues one for [drainDialogs]; [onAction] lets a dialog appear as the effect of an action.
+ * Requests: [observedMutations] is what [mutations] reads (filtered by time); [mutated] adds one at the clock's now.
+ * Reading mutations is not an action and is not listed in [actions].
  */
 class FakeBrowserSession(
     override val label: String = "fake",
@@ -41,6 +44,9 @@ class FakeBrowserSession(
     var failOn: ((String) -> Boolean) = { false }
     var closed = false
     private val pendingDialogs = ArrayList<DialogEvent>()
+
+    /** The mutating requests "the page sent"; tests add to it directly or through [mutated]. */
+    val observedMutations = CopyOnWriteArrayList<ObservedMutation>()
 
     private fun record(action: String) {
         if (failOn(action)) throw BrowserActionException("scripted failure: $action")
@@ -142,6 +148,25 @@ class FakeBrowserSession(
             pendingDialogs.clear()
             drained
         }
+
+    /** Simulates the page sending a mutating request that the target answered with [status], seen now. */
+    fun mutated(
+        method: String,
+        path: String,
+        status: Int,
+    ): ObservedMutation {
+        val at = clock?.now() ?: HarnessTimestamp(Instant.EPOCH, 0)
+        return ObservedMutation(method.uppercase(), path, status, at).also { observedMutations += it }
+    }
+
+    /** When set, [mutations] throws it, as a broken session would. */
+    @Volatile
+    var mutationsFailure: Exception? = null
+
+    override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> {
+        mutationsFailure?.let { throw it }
+        return observedMutations.filter { it.at.monotonicNanos >= since.monotonicNanos }
+    }
 
     override suspend fun close() {
         closed = true

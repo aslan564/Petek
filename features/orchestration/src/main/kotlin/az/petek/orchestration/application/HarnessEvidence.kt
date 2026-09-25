@@ -44,8 +44,9 @@ internal class HarnessEvidence(
         correlationId: CorrelationId,
         tally: Tally,
         stepId: StepId = ids.stepId(),
+        /** When the recorded work ended; now by default. Given when the record is written later than that. */
+        endedAt: HarnessTimestamp = clock.now(),
     ): StepId {
-        val endedAt = clock.now()
         recorder.step(
             StepRecord(
                 stepId = stepId,
@@ -151,7 +152,7 @@ internal class HarnessEvidence(
                 is AssertionSpec.HttpStatus -> "http_status ${spec.method} ${spec.path} == ${spec.equals}"
                 is AssertionSpec.Count -> "count ${spec.selector} == ${spec.equals}"
                 is AssertionSpec.LatencyMax -> "latency_max ${spec.max}"
-                AssertionSpec.OnlyOneSucceeds -> "only_one_succeeds"
+                is AssertionSpec.OnlyOneSucceeds -> "only_one_succeeds" + (spec.request?.let { " ${it.describe()}" } ?: "")
             }
     }
 }

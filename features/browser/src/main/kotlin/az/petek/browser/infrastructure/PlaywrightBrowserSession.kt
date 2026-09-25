@@ -5,10 +5,12 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
+import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
+import az.petek.core.time.HarnessTimestamp
 import com.microsoft.playwright.BrowserContext
 import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
@@ -56,6 +58,8 @@ private val logger = KotlinLogging.logger {}
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
  * - JavaScript dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are accepted as they open and kept until
  *   [drainDialogs] reports them; see [PlaywrightHandles].
+ * - Mutating requests the page sends to the target's origin (form posts, `fetch`, XHR) are recorded with their
+ *   answer's status and the harness time the session saw it, for [mutations]; see [MutationRecorder].
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
  *   text typed with [fill] is masked in error messages. Text typed into a password field is remembered and masked
  *   in every later snapshot, [readText] and [currentUrl], even after the page reveals the field or echoes the value.
@@ -68,6 +72,7 @@ internal class PlaywrightBrowserSession private constructor(
     private val handles: PlaywrightHandles,
     private val traffic: RealtimeTrafficRecorder,
     private val dialogs: DialogRecorder,
+    private val mutations: MutationRecorder,
     private val onClosed: (PlaywrightBrowserSession) -> Unit,
 ) : BrowserSession {
     private val closed = AtomicBoolean(false)
@@ -235,6 +240,13 @@ internal class PlaywrightBrowserSession private constructor(
             // As above: the round trip dispatches a dialog event already received, so the handler answers it first.
             runCatching { page.title() }
             dialogs.drain { message -> SecretRedactor.redactText(message, typedSecrets) }
+        }
+
+    override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> =
+        perform("read the page's requests") {
+            // As above: the round trip dispatches answers already received, so they are recorded (and timed) first.
+            runCatching { page.title() }
+            mutations.since(since)
         }
 
     /**
@@ -423,9 +435,10 @@ internal class PlaywrightBrowserSession private constructor(
             val thread = ConfinedThread("browser-${options.label}")
             val traffic = RealtimeTrafficRecorder()
             val dialogs = DialogRecorder()
+            val mutations = MutationRecorder(options.baseUrl)
             val handles =
                 try {
-                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, clock) }
+                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock) }
                 } catch (e: BrowserActionException) {
                     thread.close()
                     throw e
@@ -434,7 +447,7 @@ internal class PlaywrightBrowserSession private constructor(
                     val reason = if (e is PlaywrightException) PlaywrightFailures.reasonOf(e.message.orEmpty()) else e.message
                     throw BrowserActionException("could not open browser session '${options.label}': $reason", e)
                 }
-            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, onClosed)
+            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, onClosed)
             try {
                 currentCoroutineContext().ensureActive()
             } catch (e: CancellationException) {

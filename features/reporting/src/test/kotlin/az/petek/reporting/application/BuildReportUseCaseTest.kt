@@ -2,6 +2,7 @@ package az.petek.reporting.application
 
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.ArtifactId
+import az.petek.core.ids.CorrelationId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.StepId
 import az.petek.evidence.domain.ArtifactRecord
@@ -179,6 +180,48 @@ class BuildReportUseCaseTest {
             model.summary.stepsPassed shouldBe 1
             model.summary.stepsFailed shouldBe 1
             model.failedAgents shouldContainExactly listOf(FailedAgentRow("a13", "a13", "forbidden", "blocked"))
+        }
+
+    @Test
+    fun `a lost race counts as passed, is no failed agent and its rows say so`() =
+        runTest {
+            evidence.create(run())
+            val loser = CorrelationId("cor_race_a03")
+            listOf(
+                step("race", "a02", StepStatus.PASSED, detail = "Approved; request: POST /tickets/t2/approve -> 303", stepId = "w1"),
+                step(
+                    "race",
+                    "a03",
+                    StepStatus.PASSED,
+                    detail = "Clicked [4]",
+                    action = "click [4]",
+                    stepId = "l1",
+                ).copy(correlationId = loser),
+                step(
+                    "race",
+                    "a03",
+                    StepStatus.FAILED,
+                    detail = "Problem reported | outcome: FAILED problem_reported: Bu müraciət artıq qərarlaşdırılıb",
+                    action = "report_problem",
+                    stepId = "l2",
+                ).copy(correlationId = loser),
+                step(
+                    "race",
+                    "a03",
+                    StepStatus.PASSED,
+                    detail = "lost_race: POST /tickets/t2/approve -> 409; won by a02; agent: Bu müraciət artıq qərarlaşdırılıb",
+                    stepId = "l3",
+                ).copy(correlationId = loser),
+                step("race", "a04", StepStatus.ERROR, detail = "browser_error: page crashed", stepId = "c1"),
+            ).forEach { evidence.step(it) }
+
+            val model = useCase.build(RUN_ID)
+
+            model.summary.stepsPassed shouldBe 4
+            model.summary.stepsFailed shouldBe 1
+            model.failedAgents shouldContainExactly listOf(FailedAgentRow("a04", "a04", "race", "browser_error"))
+            model.steps.map { it.agentId to it.lostRace } shouldContainExactly
+                listOf("a02" to false, "a03" to false, "a03" to true, "a03" to true, "a04" to false)
         }
 
     @Test

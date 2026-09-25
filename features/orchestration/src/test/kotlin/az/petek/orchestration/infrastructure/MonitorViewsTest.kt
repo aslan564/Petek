@@ -1,13 +1,21 @@
 package az.petek.orchestration.infrastructure
 
+import az.petek.campaign.domain.StepPhase
 import az.petek.core.ids.AgentId
+import az.petek.core.ids.EventId
 import az.petek.core.ids.RunId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.orchestration.domain.AgentState
 import az.petek.orchestration.domain.AgentStatus
 import az.petek.orchestration.domain.MonitorView
+import az.petek.orchestration.domain.PlannedActionKind
+import az.petek.orchestration.domain.PlannedStep
+import az.petek.orchestration.domain.PublishedEvent
 import az.petek.orchestration.domain.RunOutcome
+import az.petek.orchestration.domain.RunPlan
 import az.petek.orchestration.domain.RunSummary
+import az.petek.orchestration.domain.TaskState
+import az.petek.orchestration.domain.TaskUpdate
 import az.petek.orchestration.testing.RecordingMonitor
 import com.github.ajalt.mordant.rendering.AnsiLevel
 import com.github.ajalt.mordant.terminal.Terminal
@@ -377,6 +385,114 @@ class MonitorViewsTest {
         logger.lines[3].second shouldBe "a02 (employee) blocked in 'announce': agent blocked"
         logger.lines.last().second shouldContain "PASSED"
         logger.lines.last().second shouldContain "evidence/run_1/report"
+    }
+
+    private val plan =
+        RunPlan(
+            runId,
+            listOf(
+                PlannedStep(
+                    "join",
+                    StepPhase.SETUP,
+                    "employee[*]",
+                    PlannedActionKind.RUN,
+                    "register_and_login",
+                    null,
+                    null,
+                    false,
+                    emptyList(),
+                    listOf(AgentId.of(2), AgentId.of(3)),
+                ),
+                PlannedStep(
+                    "race",
+                    StepPhase.MAIN,
+                    "manager[*]",
+                    PlannedActionKind.DO,
+                    "Approve",
+                    null,
+                    "ticket",
+                    true,
+                    listOf("only_one_succeeds"),
+                    listOf(AgentId.of(4)),
+                ),
+            ),
+        )
+
+    private val event = PublishedEvent(EventId("evt_1"), "ticket", "t1", AgentId.of(2), at, 1)
+
+    private fun task(
+        state: TaskState,
+        detail: String? = null,
+    ) = TaskUpdate("race", AgentId.of(4), state, detail, at)
+
+    @Test
+    fun `the composite forwards the task plan, task updates and events to every view`() {
+        val first = RecordingMonitor()
+        val second = RecordingMonitor()
+        val composite = CompositeMonitorView(listOf(first, second))
+
+        composite.planReady(plan)
+        composite.taskUpdated(task(TaskState.RUNNING))
+        composite.eventPublished(event)
+        composite.eventReceived("ticket", AgentId.of(3), 120, received = true)
+
+        first.timeline shouldContainExactly
+            listOf("plan join=a02,a03 race=a04", "task race a04 RUNNING", "published ticket by a02", "received ticket by a03")
+        second.timeline shouldBe first.timeline
+        second.plans.single() shouldBe plan
+    }
+
+    @Test
+    fun `a view that ignores the task plan still works through the default bodies`() {
+        val minimal =
+            object : MonitorView {
+                override fun runStarted(
+                    runId: RunId,
+                    agents: List<AgentStatus>,
+                ) = Unit
+
+                override fun agentUpdated(status: AgentStatus) = Unit
+
+                override fun stepStarted(scenarioStep: String) = Unit
+
+                override fun message(text: String) = Unit
+
+                override fun runFinished(summary: RunSummary) = Unit
+            }
+        val healthy = RecordingMonitor()
+
+        CompositeMonitorView(listOf(minimal, NoOpMonitorView, healthy)).apply {
+            planReady(plan)
+            taskUpdated(task(TaskState.PASSED))
+            eventPublished(event)
+            eventReceived("ticket", AgentId.of(3), null, received = false)
+        }
+
+        healthy.timeline shouldContainExactly
+            listOf("plan join=a02,a03 race=a04", "task race a04 PASSED", "published ticket by a02", "missed ticket by a03")
+    }
+
+    @Test
+    fun `the logging view logs the plan, events and troubled tasks at info and the rest at debug`() {
+        val logger = CapturingLogger()
+        val view = LoggingMonitorView(logger)
+
+        view.planReady(plan)
+        view.taskUpdated(task(TaskState.RUNNING, "do: Approve"))
+        view.taskUpdated(task(TaskState.LOST_RACE, "lost_race: POST /tickets/t1/approve -> 409"))
+        view.taskUpdated(task(TaskState.FAILED))
+        view.eventPublished(event)
+        view.eventReceived("ticket", AgentId.of(3), 120, received = true)
+        view.eventReceived("ticket", AgentId.of(5), null, received = false)
+
+        logger.lines.map { it.first } shouldContainExactly
+            listOf(Level.INFO, Level.DEBUG, Level.DEBUG, Level.DEBUG, Level.INFO, Level.INFO, Level.INFO, Level.DEBUG, Level.INFO)
+        logger.lines[0].second shouldBe "run run_1 plan: 2 steps, 3 tasks"
+        logger.lines[1].second shouldBe "plan step 'join' (setup, run): a02, a03"
+        logger.lines[4].second shouldBe "task 'race' a04 lost_race: lost_race: POST /tickets/t1/approve -> 409"
+        logger.lines[6].second shouldBe "event ticket published by a02 (object t1)"
+        logger.lines[7].second shouldBe "a03 received ticket after 120 ms"
+        logger.lines[8].second shouldBe "a05 missed ticket"
     }
 
     private class CapturingLogger : KLogger {

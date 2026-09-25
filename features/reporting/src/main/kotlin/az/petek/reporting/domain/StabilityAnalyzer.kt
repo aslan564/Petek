@@ -5,9 +5,9 @@ import az.petek.evidence.domain.Verdict
 
 /**
  * Compares the runs of one `--repeat` group step by step (docs/PLAN.md Faza 5). A scenario step passed in a run
- * when none of its assertions failed, none of its step records is a failure ([FailureKeys.isFailure]: FAILED,
- * ERROR or BLOCKED, except an expected refusal), and something about it actually passed (a PASSED step record or
- * assertion). SKIPPED evidence is neutral, as in the judge, so a step that was only skipped in a run (no actors,
+ * when none of its assertions failed, none of its step records is a failure ([ExpectedOutcomes.isFailure]: FAILED,
+ * ERROR or BLOCKED, except an expected refusal or a lost race), and something about it actually passed (a PASSED
+ * step record or assertion). SKIPPED evidence is neutral, as in the judge, so a step that was only skipped in a run (no actors,
  * all of them excluded) did not pass there, just like a step missing from a run (e.g. the run aborted before it).
  * A step that passes only sometimes is therefore [StabilityRow.flaky].
  */
@@ -26,11 +26,12 @@ class StabilityAnalyzer {
     }
 
     private fun passedSteps(run: RepeatRunEvidence): Set<String> {
+        val expected = ExpectedOutcomes(run.steps)
         val passed =
-            run.steps.filter { it.status == StepStatus.PASSED || FailureKeys.isExpectedRefusal(it) }.map { it.scenarioStep } +
+            run.steps.filter { it.status == StepStatus.PASSED || expected.isExpected(it) }.map { it.scenarioStep } +
                 run.assertions.filter { it.verdict == Verdict.PASSED }.map { it.scenarioStep }
         val failed =
-            run.steps.filter(FailureKeys::isFailure).map { it.scenarioStep } +
+            run.steps.filter(expected::isFailure).map { it.scenarioStep } +
                 run.assertions.filter { it.verdict == Verdict.FAILED }.map { it.scenarioStep }
         return passed.toSet() - failed.toSet()
     }

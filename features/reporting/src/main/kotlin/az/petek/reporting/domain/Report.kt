@@ -64,6 +64,8 @@ data class StepRow(
     val detail: String?,
     /** Artifact id of the step's last screenshot; resolve it through [ReportModel.artifactLinks]. */
     val screenshot: String?,
+    /** The row belongs to an action that lost a race: expected, shown as such (see [ExpectedOutcomes.showsLostRace]). */
+    val lostRace: Boolean = false,
 )
 
 data class LatencyStats(

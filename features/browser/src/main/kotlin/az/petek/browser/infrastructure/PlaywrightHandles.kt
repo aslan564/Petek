@@ -55,6 +55,7 @@ internal class PlaywrightHandles private constructor(
             connector: BrowserConnector,
             traffic: RealtimeTrafficRecorder,
             dialogs: DialogRecorder,
+            mutations: MutationRecorder,
             clock: HarnessClock,
         ): PlaywrightHandles {
             val playwright = Playwright.create()
@@ -64,6 +65,7 @@ internal class PlaywrightHandles private constructor(
                 context.setDefaultTimeout(options.defaultTimeout.toPlaywrightTimeout())
                 val page = context.newPage()
                 observeRealtimeTraffic(page, traffic, clock)
+                observeMutations(page, mutations, clock)
                 acceptDialogs(page, dialogs, clock)
                 return PlaywrightHandles(playwright, browser, context, page)
             } catch (e: Exception) {
@@ -108,6 +110,21 @@ internal class PlaywrightHandles private constructor(
             page.onWebSocket { socket -> traffic.webSocketOpened(socket.url()) }
             page.onRequest { request -> if (request.resourceType() == "eventsource") traffic.eventStreamSeen(request.url()) }
             page.onResponse { response -> recordResponse(response, traffic, clock) }
+        }
+
+        /**
+         * Every answer the page gets goes to [mutations], which keeps the mutating ones sent to the target. The harness
+         * time is taken as the handler runs on the session thread, i.e. when Playwright dispatches the answer.
+         */
+        private fun observeMutations(
+            page: Page,
+            mutations: MutationRecorder,
+            clock: HarnessClock,
+        ) {
+            page.onResponse { response ->
+                val request = response.request()
+                mutations.responded(request.method(), request.url(), response.status(), clock.now())
+            }
         }
 
         private fun recordResponse(

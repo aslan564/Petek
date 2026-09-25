@@ -107,6 +107,30 @@ data class DialogEvent(
 )
 
 /**
+ * A mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) the session's page sent to the target's origin and the answer it
+ * got: a form post as well as a `fetch`/XHR call. It is what a race verdict rests on (`only_one_succeeds`): code reads
+ * which request the target accepted or refused instead of trusting the agent's summary (CLAUDE.md rule 2).
+ *
+ * [path] is the URL path without query string or fragment (those may carry tokens), [status] the HTTP status of the
+ * answer (a redirect after a form post counts with its own status, e.g. 303), and [at] the harness time the session saw
+ * the answer (rule 1).
+ */
+data class ObservedMutation(
+    val method: String,
+    val path: String,
+    val status: Int,
+    val at: HarnessTimestamp,
+) {
+    /** `POST /tickets/t2/approve -> 303`, the form used in verdicts and reports. */
+    fun describe(): String = "$method $path -> $status"
+
+    companion object {
+        /** The methods that change something on the target; only these are recorded. */
+        val METHODS: Set<String> = setOf("POST", "PUT", "PATCH", "DELETE")
+    }
+}
+
+/**
  * One isolated browser context owned by one agent (own cookies, localStorage, sessionStorage).
  * Implementations confine every underlying browser call to the session's own thread (CLAUDE.md rule 9);
  * callers may invoke these suspend functions from any coroutine.
@@ -195,6 +219,19 @@ interface BrowserSession {
      * see dialogs keep the default: none.
      */
     suspend fun drainDialogs(): List<DialogEvent> = emptyList()
+
+    /**
+     * The mutating requests the page sent to the target's origin (scheme, host and port of [SessionOptions.baseUrl])
+     * whose answers the session saw at or after [since], oldest first. Unlike [drainDialogs] nothing is forgotten, so
+     * several readers may ask for overlapping windows. Requests to other origins (analytics, CDNs) and requests made
+     * by [request] (assertion probes, not the page) are not included.
+     *
+     * An answer is timestamped when the session sees it, which may be a moment after it arrived; reading makes the
+     * session catch up first. A caller that wants only the requests of one action therefore reads once right before
+     * taking the action's start time (so answers to earlier requests are seen, and timestamped, before it) and once
+     * after the action. Sessions that cannot see network traffic keep the default: none.
+     */
+    suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> = emptyList()
 
     suspend fun close()
 }
