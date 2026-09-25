@@ -12,4 +12,5 @@ dependencies {
     testImplementation(testFixtures(project(":core:domain")))
     testImplementation(testFixtures(project(":features:browser")))
     testImplementation(testFixtures(project(":features:oracle")))
+    testImplementation(testFixtures(project(":features:evidence")))
 }
