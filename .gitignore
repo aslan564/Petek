@@ -1,0 +1,27 @@
+# Build
+.gradle/
+build/
+out/
+.kotlin/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/*
+!.idea/vcs.xml
+!.idea/.gitignore
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# Secrets and runtime output (never commit)
+.env
+evidence/
+reports/
+storage_state/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+.DS_Store

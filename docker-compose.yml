@@ -1,0 +1,12 @@
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.2   # pinned: reproducible and reviewed updates
+    container_name: petek-mailpit
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP — the target's test mode sends here
+      - "127.0.0.1:8025:8025"   # REST API + UI (http://localhost:8025)
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    restart: unless-stopped

@@ -1,0 +1,41 @@
+package az.petek.core.security
+
+import java.net.URI
+
+/**
+ * Guards against pointing test agents at production by accident (CLAUDE.md rule 8).
+ * A target whose host exactly matches an entry of [productionHosts] is refused unless [allowProduction] is set explicitly.
+ */
+data class TargetPolicy(
+    val productionHosts: Set<String>,
+    val allowProduction: Boolean,
+) {
+    fun verify(target: URI): TargetVerdict {
+        val host = target.host?.lowercase() ?: return TargetVerdict.Refused("Target URL has no host: $target")
+        if (target.scheme !in setOf("http", "https")) return TargetVerdict.Refused("Only http(s) targets are supported: $target")
+        val isProduction = productionHosts.any { host == it.trim().lowercase() }
+        return when {
+            !isProduction -> {
+                TargetVerdict.Allowed
+            }
+
+            allowProduction -> {
+                TargetVerdict.Allowed
+            }
+
+            else -> {
+                TargetVerdict.Refused(
+                    "Target '$host' is a production host. Use a staging target or set PETEK_ALLOW_PRODUCTION=true deliberately.",
+                )
+            }
+        }
+    }
+}
+
+sealed interface TargetVerdict {
+    data object Allowed : TargetVerdict
+
+    data class Refused(
+        val reason: String,
+    ) : TargetVerdict
+}
