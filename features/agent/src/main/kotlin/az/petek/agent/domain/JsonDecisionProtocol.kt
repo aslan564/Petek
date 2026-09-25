@@ -246,7 +246,7 @@ class JsonDecisionProtocol : DecisionProtocol {
                     }
                     property(ARG_REF, "integer", "click/type/select: element number from the Elements list.")
                     property(ARG_TEXT, "string", "type: text to enter (placeholders allowed); wait_text: text to wait for.")
-                    property(ARG_URL, "string", "navigate: a path such as /tickets or an absolute http(s) URL.")
+                    property(ARG_URL, "string", "navigate: a path such as /tickets or an absolute http(s) URL of the same site.")
                     property(ARG_SELECTOR, "string", "read_text: CSS selector of the element to read.")
                     property(ARG_OPTION, "string", "select: label or value of the option to choose.")
                     property(ARG_SUBMIT, "boolean", "type: press Enter after typing (default false).")
@@ -283,7 +283,7 @@ class JsonDecisionProtocol : DecisionProtocol {
             """
             Answer with exactly one JSON object: {"reason": "<why>", "tool": "<tool name>", ...arguments of that tool}.
             Tools:
-            - $NAVIGATE(url): open a page of the site by path, e.g. "/tickets", or by absolute http(s) URL.
+            - $NAVIGATE(url): open a page of the site by path, e.g. "/tickets", or by an absolute http(s) URL of the same site.
             - $CLICK(ref): click element [ref] of the Elements list.
             - $TYPE(ref, text, submit?): replace the content of input [ref] with text; submit=true presses Enter afterwards.
             - $SELECT(ref, option): choose the option with this label or value in select [ref].

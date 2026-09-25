@@ -35,6 +35,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.net.URI
+import java.net.URISyntaxException
 
 private val logger = KotlinLogging.logger {}
 
@@ -43,6 +45,8 @@ private val logger = KotlinLogging.logger {}
  * `report_problem`, or a guard stops it. Guards, all decided by code (CLAUDE.md rules 2 and 3):
  * - [StepContext.maxSteps] LLM decisions -> `step_limit`; the whole execution runs within [StepContext.timeout] -> `timeout`;
  * - the same action chosen repeatedly (per [LoopDetector]) -> `loop_detected`, the repeat is not executed;
+ * - a ref that is not on the page, a placeholder that does not resolve or an absolute URL on another host is an
+ *   invalid decision (fed back, nothing executed);
  * - [MAX_INVALID_DECISIONS] invalid decisions in a row -> `invalid_decision`;
  * - [MAX_FAILED_ACTIONS] failed browser/mail actions in a row -> `browser_error`;
  * - no verification e-mail for `get_email_code` -> `mail_timeout`;
@@ -202,11 +206,21 @@ class DefaultAgentLoop(
             }
         }
 
-        /** Checks what the protocol cannot know: the ref exists on this page and every placeholder resolves. */
+        /**
+         * Checks what the protocol cannot know: the ref exists on this page, every placeholder resolves, and an
+         * absolute URL stays on the site under test (the target policy of CLAUDE.md rule 8 is checked once for the
+         * target; an agent must not wander to another host, such as production, because a page or its task says so).
+         */
         private fun prepare(
             action: AgentAction,
             snapshot: PageSnapshot,
         ): Preparation {
+            if (action is AgentAction.Navigate && !staysOnSite(action.url, snapshot.url)) {
+                return Preparation.Rejected(
+                    "Only pages of the site under test can be opened. Use a path such as /tickets" +
+                        (hostOf(snapshot.url)?.let { " or an absolute URL on $it" } ?: "") + ".",
+                )
+            }
             val ref =
                 when (action) {
                     is AgentAction.Click -> action.ref
@@ -504,6 +518,23 @@ class DefaultAgentLoop(
     }
 
     private fun JsonObject.reason(): String? = (this["reason"] as? JsonPrimitive)?.contentOrNull
+
+    /** A path always resolves against the session's base URL; an absolute URL must keep the current page's host. */
+    private fun staysOnSite(
+        url: String,
+        currentUrl: String,
+    ): Boolean {
+        if (url.startsWith("/")) return true
+        val current = hostOf(currentUrl) ?: return false
+        return hostOf(url) == current
+    }
+
+    private fun hostOf(url: String): String? =
+        try {
+            URI(url).host?.lowercase()?.takeIf { it.isNotEmpty() }
+        } catch (_: URISyntaxException) {
+            null
+        }
 
     companion object {
         /** Consecutive invalid decisions that end the loop. */

@@ -277,6 +277,42 @@ class DefaultAgentLoopTest {
         }
 
     @Test
+    fun `the agent cannot navigate to another host, only within the site under test`() =
+        runTest {
+            val llm =
+                scripted(
+                    decision("navigate", """"url": "https://kadrohr.com/register""""),
+                    decision("navigate", """"url": "https://STAGING.kadrohr.test/tickets""""),
+                    decision("navigate", """"url": "/announcements""""),
+                    decision("done", """"summary": "ok""""),
+                )
+
+            execute(llm).status shouldBe ActionStatus.SUCCEEDED
+
+            browser.actions shouldContainExactly listOf("navigate https://STAGING.kadrohr.test/tickets", "navigate /announcements")
+            llm.userTurn(1) shouldContain
+                "INVALID: Only pages of the site under test can be opened. Use a path such as /tickets or an absolute URL on staging.kadrohr.test."
+            evidence.stepList.first().status shouldBe StepStatus.FAILED
+        }
+
+    @Test
+    fun `on a blank page only paths can be opened`() =
+        runTest {
+            browser.url = "about:blank"
+            val llm =
+                scripted(
+                    decision("navigate", """"url": "https://staging.kadrohr.test/login""""),
+                    decision("navigate", """"url": "/login""""),
+                    decision("done", """"summary": "ok""""),
+                )
+
+            execute(llm)
+
+            browser.actions shouldContainExactly listOf("navigate /login")
+            llm.userTurn(1) shouldContain "INVALID: Only pages of the site under test can be opened. Use a path such as /tickets."
+        }
+
+    @Test
     fun `an unknown placeholder is reported to the model instead of being typed`() =
         runTest {
             val llm = scripted(decision("type", """"ref": 1, "text": "{self.salary}""""), decision("done", """"summary": "ok""""))
