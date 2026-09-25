@@ -79,10 +79,17 @@ fun interface PasswordDeriver {
     ): Secret
 }
 
-/** Azerbaijani first names and surnames used after the user's names are exhausted. */
+/**
+ * Azerbaijani first names and surnames used after the user's names are exhausted. The registry never runs out of
+ * names: once every first name × surname pair is used it adds a patronymic ([patronymic], from [fatherNames]), and
+ * once those are used too, an ordinal (`Əli Məmmədov II`).
+ */
 interface NameCatalog {
     val firstNames: List<String>
     val surnames: List<String>
+
+    /** Given names that serve as fathers' names in a [patronymic]; by default every first name. */
+    val fatherNames: List<String> get() = firstNames
 
     /**
      * The form of [surname] that goes with [firstName]. Azerbaijani surnames agree with gender
@@ -93,6 +100,16 @@ interface NameCatalog {
         firstName: String,
         surname: String,
     ): String = surname
+
+    /**
+     * The part between first name and surname that names the father of a person called [firstName]: Azerbaijani
+     * `Vüqar oğlu` / `Vüqar qızı`. Catalogs without such a rule keep the default, the father's name as a middle name.
+     * Must be injective per first name, so distinct fathers stay distinct display names.
+     */
+    fun patronymic(
+        firstName: String,
+        fatherName: String,
+    ): String = fatherName
 }
 
 /** Port: identities persisted per run (UNIQUE(email), UNIQUE(run_id, display_name)). */

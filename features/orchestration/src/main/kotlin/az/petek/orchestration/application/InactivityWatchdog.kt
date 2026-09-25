@@ -20,7 +20,7 @@ import kotlin.time.Duration
 
 /**
  * Detects agents that stopped making progress (docs/ARCHITECTURE.md "Watchdog") so one stuck agent never holds up
- * the other 29. Progress is reported through [progress], normally by [ProgressTrackingRecorder] whenever the agent
+ * all the others. Progress is reported through [progress], normally by [ProgressTrackingRecorder] whenever the agent
  * records evidence.
  *
  * [guard] runs an action and cancels it once its agent has made no progress for `timeout`, returning a

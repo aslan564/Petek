@@ -48,6 +48,19 @@ class LatencyStatisticsTest {
     }
 
     @Test
+    fun `receivers are listed by agent number, so a100 and a1000 come after a99`() {
+        val receipts =
+            listOf("a1000", "a100", "a99", "a101", "a02").mapIndexed { i, receiver ->
+                receipt("evt_1", receiver, if (receiver == "a100") null else 100L * (i + 1), received = receiver != "a100")
+            } + receipt("evt_1", "a999", null, received = false)
+
+        val stats = LatencyStatistics.compute(listOf(event("evt_1")), receipts).single()
+
+        stats.perReceiverMs.keys.toList() shouldContainExactly listOf("a02", "a99", "a100", "a101", "a999", "a1000")
+        stats.missing shouldContainExactly listOf("a100", "a999")
+    }
+
+    @Test
     fun `a receipt that saw the event without a measured latency counts as received only`() {
         val receipts = listOf(receipt("evt_1", "a02", 500), receipt("evt_1", "a03", null, received = true))
 

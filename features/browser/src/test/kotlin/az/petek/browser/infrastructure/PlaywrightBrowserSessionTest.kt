@@ -5,6 +5,7 @@ import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.BrowserTopology
+import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.browser.domain.SessionOptions
 import az.petek.core.time.SystemHarnessClock
@@ -646,6 +647,60 @@ class PlaywrightBrowserSessionTest {
 
             waiting.await().found shouldBe false
             queued.await().exceptionOrNull()?.message shouldBe "browser session 'queued' is closed"
+        }
+
+    @Test
+    fun `a confirm dialog is accepted and reported once with its type and message`() =
+        withSession { session ->
+            session.navigate("/dialogs")
+            val before = clock.now()
+
+            session.clickSelector("#confirm")
+
+            session.readText("#answer") shouldBe "silindi"
+            val dialogs = session.drainDialogs()
+            dialogs.map { it.type to it.message } shouldContainExactly listOf(DialogType.CONFIRM to "Bileti silək?")
+            (dialogs.single().at.monotonicNanos >= before.monotonicNanos) shouldBe true
+            session.drainDialogs().shouldBeEmpty()
+        }
+
+    @Test
+    fun `a prompt gets its default text and every dialog is reported in the order it opened`() =
+        withSession { session ->
+            session.navigate("/dialogs")
+
+            session.clickSelector("#prompt")
+            session.readText("#answer") shouldBe "ad=Əli"
+            session.clickSelector("#alert")
+
+            session.readText("#answer") shouldBe "bağlandı"
+            val dialogs = session.drainDialogs()
+            dialogs.map { it.type to it.message } shouldContainExactly
+                listOf(DialogType.PROMPT to "Adınız?", DialogType.ALERT to "Yadda saxlandı")
+            (dialogs[0].at.monotonicNanos <= dialogs[1].at.monotonicNanos) shouldBe true
+        }
+
+    @Test
+    fun `a dialog echoing a typed password shows it masked`() =
+        withSession { session ->
+            session.navigate("/dialogs")
+            session.fillSelector("#pw", "Gizli-Parol-77")
+
+            session.clickSelector("#echo")
+
+            session.readText("#answer") shouldBe "göstərildi"
+            val message = session.drainDialogs().single().message
+            message shouldBe "Şifrəniz: ${SecretRedactor.MASK}"
+            message shouldNotContain "Gizli-Parol-77"
+        }
+
+    @Test
+    fun `a page without dialogs reports none`() =
+        withSession { session ->
+            session.navigate("/form")
+            session.clickSelector("[data-testid=submit]")
+
+            session.drainDialogs().shouldBeEmpty()
         }
 
     private suspend fun login(

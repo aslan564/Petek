@@ -87,14 +87,16 @@ class SqliteIdentityRepositoryTest {
     }
 
     @Test
-    fun `identities are ordered by agent number, also beyond a99`() =
+    fun `identities are ordered by agent number, also beyond a99 and a999`() =
         runBlocking<Unit> {
             val repository = repository()
-            val big = generator().generate(spec(testers = 120), RUN_TAG)
+            val big = generator().generate(spec(testers = 1_050, managers = 20), RUN_TAG)
 
             repository.replaceAll(runId, big)
 
-            repository.findByRun(runId).map { it.agentId } shouldBe (1..120).map { AgentId.of(it) }
+            val stored = repository.findByRun(runId)
+            stored.map { it.agentId } shouldBe (1..1_050).map { AgentId.of(it) }
+            stored shouldBe big.identities
         }
 
     @Test

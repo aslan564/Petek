@@ -22,6 +22,7 @@ import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -73,6 +74,131 @@ class MonitorViewsTest {
             output shouldContain "working"
             output shouldContain "do: Elan yarat"
             output shouldContain "mail_timeout"
+            view.close()
+        }
+
+    @Test
+    fun `a board with more agents than the terminal fits shows the ones that need attention and counts the rest`() =
+        runTest {
+            val recorder = TerminalRecorder(ansiLevel = AnsiLevel.NONE, width = 160, height = 20, outputInteractive = true)
+            val view = board(recorder)
+            val states =
+                (1..100).map { i ->
+                    when (i) {
+                        in 40..42 -> AgentState.WORKING
+                        55 -> AgentState.BLOCKED
+                        77 -> AgentState.FAILED
+                        in 90..91 -> AgentState.WAITING
+                        in 1..33 -> AgentState.DONE
+                        else -> AgentState.IDLE
+                    }
+                }
+
+            view.runStarted(runId, states.mapIndexed { i, state -> status(i + 1, state, "announce", "action ${i + 1}") })
+            runCurrent()
+
+            val frame = recorder.output()
+            frame.trimEnd().lines().size shouldBeLessThanOrEqual 20
+            frame shouldContain "100 agents · idle 60  working 3  waiting 2  blocked 1  failed 1  done 33"
+            listOf("a40", "a41", "a42", "a55", "a77", "a90", "a91").forEach { frame shouldContain "$it " }
+            // 20 lines - 7 fixed = 13 rows: the 7 agents above plus the 6 idle ones with the lowest ids.
+            listOf("a34", "a35", "a36", "a37", "a38", "a39").forEach { frame shouldContain "$it " }
+            frame shouldNotContain "a43 "
+            frame shouldNotContain "a01 "
+            frame shouldContain "… 87 more: 54 idle, 33 done"
+            val shownIds = Regex("\\ba(\\d+) ").findAll(frame).map { it.groupValues[1].toInt() }.toList()
+            shownIds shouldBe shownIds.sorted()
+            view.close()
+        }
+
+    @Test
+    fun `the row budget leaves room for messages and follows a fixed limit when one is given`() =
+        runTest {
+            val recorder = recorder()
+            val view =
+                MordantMonitorView(
+                    Terminal(terminalInterface = recorder),
+                    250.milliseconds,
+                    StandardTestDispatcher(testScheduler),
+                    maxRows = 5,
+                )
+
+            view.runStarted(runId, (1..500).map { status(it, if (it % 100 == 0) AgentState.WORKING else AgentState.IDLE) })
+            view.message("a07 failed setup step 'join' (mail_timeout)")
+            runCurrent()
+
+            val frame = recorder.output()
+            listOf("a100", "a200", "a300", "a400", "a500").forEach { frame shouldContain "$it " }
+            frame shouldContain "… 495 more: 495 idle"
+            frame shouldContain "mail_timeout"
+            view.close()
+        }
+
+    @Test
+    fun `a board that fits shows every agent and no summary of hidden ones`() =
+        runTest {
+            val recorder = recorder()
+            val view = board(recorder)
+
+            view.runStarted(runId, (1..30).map { status(it) })
+            runCurrent()
+
+            val frame = recorder.output()
+            (1..30).forEach { frame shouldContain "${AgentId.of(it)} " }
+            frame shouldNotContain "more:"
+            view.close()
+        }
+
+    @Test
+    fun `long names and actions are shortened so every agent stays on one line`() =
+        runTest {
+            val recorder = recorder()
+            val view = board(recorder)
+            val long = AgentStatus(AgentId.of(1), "Ə".repeat(80), "admin", AgentState.WORKING, "s", "x".repeat(200), at)
+
+            view.runStarted(runId, listOf(long))
+            runCurrent()
+
+            val frame = recorder.output()
+            frame shouldContain "Ə".repeat(31) + "…"
+            frame shouldNotContain "Ə".repeat(32)
+            frame shouldContain "x".repeat(59) + "…"
+            frame shouldNotContain "x".repeat(60)
+            view.close()
+        }
+
+    @Test
+    fun `on a narrow terminal no line is wider than the terminal, so the frame is exactly as tall as it looks`() =
+        runTest {
+            val recorder = TerminalRecorder(ansiLevel = AnsiLevel.NONE, width = 80, height = 24, outputInteractive = true)
+            val view = board(recorder)
+            val longRun = RunId("0199aa11-2b3c-7d4e-8f50-6172839405ab")
+            val name = "Günel Vüqar qızı Məmmədova"
+            val action = "do: Elan yarat və bütün işçilərə göndər, sonra oxunmanı yoxla"
+
+            view.runStarted(longRun, (1..200).map { AgentStatus(AgentId.of(it), name, "employee", AgentState.WORKING, "s", action, at) })
+            view.stepStarted("announce_and_read_receipts")
+            view.message("a07 failed setup step 'join' (mail_timeout): no verification e-mail arrived within 90 s\nfor the address")
+            runCurrent()
+
+            val frame = recorder.output().trimEnd().lines()
+            frame.forEach { line -> line.length shouldBeLessThanOrEqual 80 }
+            frame.size shouldBeLessThanOrEqual 24
+            frame.first() shouldBe "Pətək run 0199aa11-2b3c-7d4e-8f50-6172839405ab · step announce_and_read_receipt…"
+            frame.last() shouldStartWith "• a07 failed setup step 'join' (mail_timeout)"
+
+            recorder.clearOutput()
+            view.runFinished(summary.copy(runId = longRun))
+            advanceTimeBy(300.milliseconds)
+            runCurrent()
+
+            val final = recorder.output().trimEnd().lines()
+            final.forEach { line -> line.length shouldBeLessThanOrEqual 80 }
+            final.size shouldBeLessThanOrEqual 24
+            // The summary is wrapped, not cut: every number is still there.
+            final.takeLast(2).joinToString(" ") shouldBe
+                "Run 0199aa11-2b3c-7d4e-8f50-6172839405ab: PASSED · steps passed 12, failed 0 · assertions failed 0 · " +
+                "failed agents 0 · 65 s"
             view.close()
         }
 

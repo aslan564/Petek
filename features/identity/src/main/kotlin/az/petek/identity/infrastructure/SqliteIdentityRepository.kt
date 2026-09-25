@@ -84,7 +84,7 @@ class SqliteIdentityRepository(
                     .selectAll()
                     .where { IdentityTable.runId eq runId.value }
                     .map { it.toIdentity() }
-            }.sortedBy { it.agentId.index }
+            }.sortedBy { it.agentId }
 
     override suspend fun updateStatus(
         runId: RunId,

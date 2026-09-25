@@ -118,7 +118,7 @@ class DefaultActorResolverTest {
     }
 
     @Test
-    fun `three digit agent ids sort numerically`() {
+    fun `agent ids of any length sort numerically`() {
         fun employee(index: Int) =
             Identity(
                 agentId = AgentId.of(index),
@@ -130,10 +130,11 @@ class DefaultActorResolverTest {
                 department = "IT",
                 registration = RegistrationMode.INVITE,
             )
-        val many = listOf(employee(100), employee(99), employee(101))
+        val many = listOf(employee(1000), employee(100), employee(99), employee(101), employee(999), employee(10))
 
-        ids(resolver.resolve(employees(), many)) shouldBe listOf("a99", "a100", "a101")
-        ids(resolver.resolve(employees(nth = 2), many)) shouldBe listOf("a100")
+        ids(resolver.resolve(employees(), many)) shouldBe listOf("a10", "a99", "a100", "a101", "a999", "a1000")
+        ids(resolver.resolve(employees(nth = 3), many)) shouldBe listOf("a100")
+        ids(resolver.resolve(employees(nth = 6), many)) shouldBe listOf("a1000")
     }
 
     @Test

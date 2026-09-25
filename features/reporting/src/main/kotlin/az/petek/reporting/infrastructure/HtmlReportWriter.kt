@@ -303,7 +303,7 @@ class HtmlReportWriter : ReportWriter {
         section {
             h2 { +"İstifadə: token və xərc" }
             dataTable(listOf("Agent", "Giriş", "Çıxış", "Keşdən oxunan", "Çağırışlar", "Xərc"), numeric = setOf(1, 2, 3, 4, 5)) {
-                model.usage.sortedBy { it.agentId.index }.forEach { u ->
+                model.usage.sortedBy { it.agentId }.forEach { u ->
                     tr {
                         td { +u.agentId.value }
                         numbers(

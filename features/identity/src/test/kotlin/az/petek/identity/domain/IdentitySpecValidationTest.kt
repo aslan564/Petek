@@ -6,6 +6,7 @@ import az.petek.identity.IdentityTestData.generator
 import az.petek.identity.IdentityTestData.spec
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
@@ -89,10 +90,25 @@ class IdentitySpecValidationTest {
     }
 
     @Test
-    fun `tester counts outside a01 to a999 are rejected`() {
+    fun `a tester count below one is rejected`() {
         conflict(spec(testers = 0, names = emptyList(), managers = 0, employees = -1)) shouldContain
-            "testers must be between 1 and 999"
-        conflict(spec(testers = 1000, managers = 5)) shouldContain "testers must be between 1 and 999"
+            "testers must be at least 1, was 0"
+    }
+
+    @Test
+    fun `there is no fixed maximum of testers below the fake phone range`() {
+        val plan = generator().generate(spec(testers = 1_000, managers = 20), RUN_TAG)
+
+        plan.identities shouldHaveSize 1_000
+        plan.identities
+            .last()
+            .agentId.value shouldBe "a1000"
+    }
+
+    @Test
+    fun `more testers than distinct fake phone numbers are rejected`() {
+        conflict(spec(testers = 2_000_001, managers = 5, names = emptyList())) shouldContain
+            "testers must not exceed 2000000, the number of distinct fake phone numbers (one per tester), was 2000001"
     }
 
     @Test
@@ -137,10 +153,23 @@ class IdentitySpecValidationTest {
     }
 
     @Test
-    fun `a catalog too small for the testers is rejected`() {
-        val small = SmallCatalog(firstNames = listOf("Anar", "Emin"), surnames = listOf("Kərimov", "Əliyev"))
-        conflict(spec(testers = 10, names = emptyList()), small) shouldContain
-            "the name catalog offers only 4 unique names but 10 more are needed"
+    fun `a catalog without first names or surnames cannot name the testers without a given name`() {
+        val noFirstNames = SmallCatalog(firstNames = emptyList(), surnames = listOf("Kərimov"))
+        conflict(spec(testers = 10, names = listOf("Əli")), noFirstNames) shouldContain
+            "the name catalog has no first names or no surnames, but 9 more names are needed"
+        val noSurnames = SmallCatalog(firstNames = listOf("Anar"), surnames = emptyList())
+        conflict(spec(testers = 10, names = listOf("Əli Kərimov")), noSurnames) shouldContain
+            "the name catalog has no first names or no surnames, but 9 more names are needed"
+    }
+
+    @Test
+    fun `an empty catalog is fine when the campaign names every tester in full`() {
+        val empty = SmallCatalog(firstNames = emptyList(), surnames = emptyList())
+        val names = listOf("Əli Kərimov", "Vəli Həsənov", "Günel Quliyeva")
+
+        val plan = generator(empty).generate(spec(testers = 3, managers = 1, names = names), RUN_TAG)
+
+        plan.identities.map { it.displayName } shouldBe names
     }
 
     @Test

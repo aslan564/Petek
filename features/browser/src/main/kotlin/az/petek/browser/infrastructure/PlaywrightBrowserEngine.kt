@@ -15,7 +15,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Path
@@ -31,11 +33,14 @@ private val logger = KotlinLogging.logger {}
  * Every session is a [PlaywrightBrowserSession]: its own thread, its own `Playwright` instance and its own isolated
  * browser context (CLAUDE.md rule 9). Where the browser comes from depends on [BrowserEngineConfig.topology]:
  *
- * **SHARED_SERVER** starts one Chromium as a Playwright *browser server* in a child process, and every session
- * connects to it with `BrowserType.connect(wsEndpoint)`. The host is Playwright's own Node.js driver from the jar
- * running [BundledScripts.browserServer]: the public `launchServer` API behind Playwright's hidden `launch-server`
- * command, plus a watchdog that closes the browser when the JVM disappears. Why this and not the alternative of
- * launching Chromium with `--remote-debugging-port` and `connectOverCDP`:
+ * **SHARED_SERVER** runs Chromium as Playwright *browser servers* in child processes, and every session connects to
+ * one with `BrowserType.connect(wsEndpoint)`. A server hosts at most [BrowserEngineConfig.contextsPerBrowser]
+ * sessions; the first starts with the engine, further ones start lazily when every running server is full, and a
+ * new session goes to the least-loaded server with room ([BrowserServerPool]). So any number of agents can run,
+ * spread over as many browsers as they need. The host is Playwright's own Node.js driver from the jar running
+ * [BundledScripts.browserServer]: the public `launchServer` API behind Playwright's hidden `launch-server` command,
+ * plus a watchdog that closes the browser when the JVM disappears. Why this and not the alternative of launching
+ * Chromium with `--remote-debugging-port` and `connectOverCDP`:
  * - `connect` speaks the full Playwright protocol, exactly as a locally launched browser does; Playwright documents
  *   CDP connections as significantly lower fidelity.
  * - The server owns the browser independently of any session: no Playwright instance (and thus no thread) has to
@@ -43,17 +48,19 @@ private val logger = KotlinLogging.logger {}
  * - The server removes the contexts of a connection when it closes, so a lost agent does not leak contexts.
  * - Client and server always have the same version, since both come from the same jar.
  *
- * The costs: one extra Node.js process, a dependency on Playwright's `impl.driver` package to locate that Node.js,
- * and a WebSocket hop per call. The server binds to 127.0.0.1 only and its URL carries a random path. The browser
- * process tree is killed by [stop], by a JVM shutdown hook, and (through the host's stdin watchdog) even when the JVM
- * is killed outright.
+ * The costs: one extra Node.js process per server, a dependency on Playwright's `impl.driver` package to locate that
+ * Node.js, and a WebSocket hop per call. Servers bind to 127.0.0.1 only and their URLs carry a random path. Every
+ * browser server's process tree is killed by [stop], by a JVM shutdown hook, and (through the host's stdin watchdog)
+ * even when the JVM is killed outright.
  *
  * **PER_SESSION** lets every session launch its own Chromium on its own thread: heavier, but independent of the
  * server protocol. Those browsers end with their session, or with their Playwright driver when the JVM exits.
  *
- * Chromium is installed on [start] when missing (a download on first use only). [start] fails with a
+ * Opening a session starts a Playwright driver process, so at most [EngineSettings.maxConcurrentOpens] sessions open
+ * at the same moment; hundreds of agents starting together then queue briefly instead of overloading the machine
+ * and timing out. Chromium is installed on [start] when missing (a download on first use only). [start] fails with a
  * [BrowserActionException] explaining the reason when no browser can be started. [stop] closes all open sessions,
- * then the server, and is idempotent. With a shared server, a session still busy after a grace period (e.g. in a
+ * then every server, and is idempotent. With shared servers, a session still busy after a grace period (e.g. in a
  * long wait) does not hold [stop] up: stopping the browser under it makes its pending call fail. After [stop] the
  * engine can be started again.
  */
@@ -75,11 +82,14 @@ class PlaywrightBrowserEngine internal constructor(
             withContext(Dispatchers.IO) { driver.installChromium() }
             val engine =
                 when (config.topology) {
-                    BrowserTopology.SHARED_SERVER -> startSharedServer(config)
+                    BrowserTopology.SHARED_SERVER -> startSharedServers(config)
                     BrowserTopology.PER_SESSION -> startPerSession(config)
                 }
             running = engine
-            logger.info { "browser engine started (${config.topology}, headless=${config.headless})" }
+            logger.info {
+                "browser engine started (${config.topology}, headless=${config.headless}, " +
+                    "contextsPerBrowser=${config.contextsPerBrowser})"
+            }
             BrowserSessionFactory { options -> engine.open(options) }
         }
 
@@ -94,16 +104,37 @@ class PlaywrightBrowserEngine internal constructor(
         }
     }
 
-    /** The shared browser server's current process tree; empty for PER_SESSION or when stopped. For tests. */
-    internal fun browserServerProcesses(): List<ProcessHandle> = running?.server?.processTree().orEmpty()
+    /** Every shared browser server's current process tree, flattened; empty for PER_SESSION or when stopped. For tests. */
+    internal fun browserServerProcesses(): List<ProcessHandle> =
+        running
+            ?.servers
+            ?.processTrees()
+            .orEmpty()
+            .flatten()
 
-    /** The shared browser server itself, when running. For tests. */
-    internal fun browserServer(): BrowserServerProcess? = running?.server
+    /** The first shared browser server, when running. For tests. */
+    internal fun browserServer(): BrowserServerProcess? = running?.servers?.processes()?.firstOrNull()
 
-    /** The JVM shutdown hook registered for the shared browser server, when running. For tests. */
-    internal fun serverShutdownHook(): Thread? = running?.shutdownHook
+    /** All shared browser servers in start order. For tests. */
+    internal fun browserServers(): List<BrowserServerProcess> = running?.servers?.processes().orEmpty()
 
-    private suspend fun startSharedServer(config: BrowserEngineConfig): RunningEngine {
+    /** Open sessions per shared browser server, in start order. For tests. */
+    internal fun sessionsPerServer(): List<Int> = running?.servers?.sessionsPerServer().orEmpty()
+
+    /** The JVM shutdown hook registered for the first shared browser server, when running. For tests. */
+    internal fun serverShutdownHook(): Thread? = running?.servers?.firstShutdownHook()
+
+    private suspend fun startSharedServers(config: BrowserEngineConfig): RunningEngine {
+        val pool = BrowserServerPool(config.contextsPerBrowser) { launchServer(config) }
+        pool.startFirst()
+        return RunningEngine(clock, settings, servers = pool)
+    }
+
+    private fun startPerSession(config: BrowserEngineConfig): RunningEngine =
+        RunningEngine(clock, settings, ownBrowser = BrowserConnector.OwnBrowser(config.headless, config.slowMo))
+
+    /** Starts one browser server and registers the JVM shutdown hook that kills it. */
+    private suspend fun launchServer(config: BrowserEngineConfig): LaunchedServer {
         val options = BrowserServerOptions(headless = config.headless, executablePath = settings.chromiumExecutable)
         val command = withContext(Dispatchers.IO) { driver.browserServerCommand(options.toJson()) }
         val server =
@@ -114,38 +145,42 @@ class PlaywrightBrowserEngine internal constructor(
             }
         val hook = Thread({ server.stop() }, "petek-browser-server-shutdown")
         Runtime.getRuntime().addShutdownHook(hook)
-        val connector = BrowserConnector.SharedServer(server.wsEndpoint, config.slowMo)
-        return RunningEngine(connector, clock, settings.sessionCloseGrace, server, hook)
+        return LaunchedServer(server, BrowserConnector.SharedServer(server.wsEndpoint, config.slowMo), hook)
     }
 
-    private fun startPerSession(config: BrowserEngineConfig): RunningEngine =
-        RunningEngine(BrowserConnector.OwnBrowser(config.headless, config.slowMo), clock, settings.sessionCloseGrace)
-
-    /** One started run of the engine: the way sessions get a browser, the sessions still open, and the server. */
+    /**
+     * One started run of the engine: where sessions get their browser (a slot in [pool] for SHARED_SERVER, their own
+     * browser through [ownBrowser] for PER_SESSION) and the sessions still open.
+     */
     private class RunningEngine(
-        private val connector: BrowserConnector,
         private val clock: HarnessClock,
-        private val sessionCloseGrace: Duration,
-        val server: BrowserServerProcess? = null,
-        val shutdownHook: Thread? = null,
+        private val settings: EngineSettings,
+        val servers: BrowserServerPool? = null,
+        private val ownBrowser: BrowserConnector? = null,
     ) {
         private val lock = Any()
         private val sessions = LinkedHashSet<PlaywrightBrowserSession>()
+        private val opening = Semaphore(settings.maxConcurrentOpens)
         private var accepting = true
 
         suspend fun open(options: SessionOptions): BrowserSession {
-            if (!isAccepting()) throw BrowserActionException("the browser engine is stopped; cannot open session '${options.label}'")
-            val session = PlaywrightBrowserSession.open(options, connector, clock, onClosed = ::forget)
-            val registered =
-                synchronized(lock) {
-                    if (accepting) sessions += session
-                    accepting
-                }
-            if (!registered) {
-                session.close()
-                throw BrowserActionException("the browser engine was stopped while session '${options.label}' was opening")
+            requireAccepting(options.label)
+            return opening.withPermit {
+                requireAccepting(options.label)
+                val lease = servers?.reserve()
+                val connector = lease?.connector ?: requireNotNull(ownBrowser)
+                val session =
+                    try {
+                        PlaywrightBrowserSession.open(options, connector, clock) { closed ->
+                            forget(closed)
+                            lease?.release()
+                        }
+                    } catch (e: Throwable) {
+                        lease?.release()
+                        throw e
+                    }
+                register(session, options.label)
             }
-            return session
         }
 
         suspend fun shutdown() {
@@ -156,22 +191,41 @@ class PlaywrightBrowserEngine internal constructor(
                 }
             coroutineScope {
                 val closing = launch { supervisorScope { open.forEach { session -> launch { session.close() } } } }
-                if (withTimeoutOrNull(sessionCloseGrace) { closing.join() } == null) {
+                if (withTimeoutOrNull(settings.sessionCloseGrace) { closing.join() } == null) {
                     logger.warn {
-                        if (server != null) {
-                            "browser sessions still busy after $sessionCloseGrace; stopping the browser under them"
+                        if (servers != null) {
+                            "browser sessions still busy after ${settings.sessionCloseGrace}; stopping the browsers under them"
                         } else {
-                            "browser sessions still busy after $sessionCloseGrace; waiting for their current calls to time out"
+                            "browser sessions still busy after ${settings.sessionCloseGrace}; waiting for their current calls to time out"
                         }
                     }
                 }
-                if (server != null) withContext(Dispatchers.IO) { server.stop() }
+                servers?.stopAll()
                 closing.join()
             }
-            shutdownHook?.let { hook -> runCatching { Runtime.getRuntime().removeShutdownHook(hook) } }
         }
 
-        private fun isAccepting(): Boolean = synchronized(lock) { accepting }
+        private suspend fun register(
+            session: PlaywrightBrowserSession,
+            label: String,
+        ): BrowserSession {
+            val registered =
+                synchronized(lock) {
+                    if (accepting) sessions += session
+                    accepting
+                }
+            if (!registered) {
+                session.close()
+                throw BrowserActionException("the browser engine was stopped while session '$label' was opening")
+            }
+            return session
+        }
+
+        private fun requireAccepting(label: String) {
+            if (!synchronized(lock) { accepting }) {
+                throw BrowserActionException("the browser engine is stopped; cannot open session '$label'")
+            }
+        }
 
         private fun forget(session: PlaywrightBrowserSession) {
             synchronized(lock) { sessions -= session }
@@ -182,8 +236,22 @@ class PlaywrightBrowserEngine internal constructor(
 /** Engine tuning that production leaves at its defaults; tests shorten it or point it at a broken browser. */
 internal data class EngineSettings(
     val serverStartTimeout: Duration = 60.seconds,
-    /** How long [PlaywrightBrowserEngine.stop] lets busy sessions finish before stopping the browser under them. */
+    /** How long [PlaywrightBrowserEngine.stop] lets busy sessions finish before stopping the browsers under them. */
     val sessionCloseGrace: Duration = 10.seconds,
-    /** Chromium binary for the shared server; null uses the one Playwright installed. */
+    /** Chromium binary for the shared servers; null uses the one Playwright installed. */
     val chromiumExecutable: Path? = null,
-)
+    /** Sessions that may be opening at the same moment (each starts a Playwright driver process). */
+    val maxConcurrentOpens: Int = defaultConcurrentOpens(),
+) {
+    init {
+        require(maxConcurrentOpens >= 1) { "maxConcurrentOpens must be at least 1, was $maxConcurrentOpens" }
+    }
+
+    private companion object {
+        /** One opening session per core keeps start-up fast without starving the sessions already running. */
+        fun defaultConcurrentOpens(): Int = Runtime.getRuntime().availableProcessors().coerceIn(MIN_CONCURRENT_OPENS, MAX_CONCURRENT_OPENS)
+
+        const val MIN_CONCURRENT_OPENS = 4
+        const val MAX_CONCURRENT_OPENS = 16
+    }
+}

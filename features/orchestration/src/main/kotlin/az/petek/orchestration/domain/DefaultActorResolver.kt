@@ -12,18 +12,19 @@ import az.petek.identity.domain.Identity
  *   stable for a given registry; an index past the end (or below 1) selects nobody instead of failing the run;
  * - the expression is the union of its selectors, de-duplicated and ordered by agent id.
  *
- * Agent ids are compared by their numeric index, so `a100` sorts after `a99`.
+ * Agent ids are compared by their numeric index ([az.petek.core.ids.AgentId] is ordered that way), so `a100` sorts
+ * after `a99` and `a1000` after `a999`.
  */
 class DefaultActorResolver : ActorResolver {
     override fun resolve(
         expression: ActorExpression,
         identities: List<Identity>,
     ): List<Identity> {
-        val ordered = identities.sortedBy { it.agentId.index }
+        val ordered = identities.sortedBy { it.agentId }
         return expression.selectors
             .flatMap { select(it, ordered) }
             .distinctBy { it.agentId }
-            .sortedBy { it.agentId.index }
+            .sortedBy { it.agentId }
     }
 
     private fun select(

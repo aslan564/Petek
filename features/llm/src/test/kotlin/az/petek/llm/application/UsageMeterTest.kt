@@ -29,6 +29,15 @@ class UsageMeterTest {
     }
 
     @Test
+    fun `totals are ordered by agent number, not by text, with other labels after the agents`() {
+        val meter = UsageMeter()
+        listOf("a100/x", "doctor", "a02/x", "a1000/x", "a99/x", "capacity").forEach { meter.record(it, LlmTestData.response(usage)) }
+
+        meter.snapshot().keys.toList() shouldBe listOf("a02", "a99", "a100", "a1000", "capacity", "doctor")
+        meter.drain().keys.toList() shouldBe listOf("a02", "a99", "a100", "a1000", "capacity", "doctor")
+    }
+
+    @Test
     fun `a label without a slash is its own key`() {
         UsageMeter.agentKey("doctor") shouldBe "doctor"
         UsageMeter.agentKey("a01/") shouldBe "a01"

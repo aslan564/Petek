@@ -11,6 +11,8 @@ import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.FakeVerification
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.DialogEvent
+import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.PageElement
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.testing.FakeBrowserSession
@@ -216,6 +218,48 @@ class DefaultAgentLoopTest {
             steps.last().detail!! shouldContain "outcome: SUCCEEDED: ok"
             artifactsOf(ArtifactType.SCREENSHOT).map { it.stepId } shouldContainExactly steps.map { it.stepId }
             artifactsOf(ArtifactType.A11Y).map { it.stepId } shouldContainExactly listOf(steps.first().stepId, steps.last().stepId)
+        }
+
+    @Test
+    fun `a dialog opened by an action is shown to the model and recorded in the step detail`() =
+        runTest {
+            browser.onAction = { action -> if (action == "click 3") browser.openDialog(DialogType.CONFIRM, "Çıxmaq istəyirsiniz?") }
+            val llm = scripted(decision("click", """"ref": 3"""), decision("done", """"summary": "ok""""))
+
+            execute(llm)
+
+            val clicked = evidence.stepList.first()
+            clicked.detail shouldBe "OK: clicked. Browser dialogs (accepted): confirm \"Çıxmaq istəyirsiniz?\"."
+            llm.userTurn(1) shouldContain
+                "1. click [3] \"Daxil ol\" -> OK: clicked. Browser dialogs (accepted): confirm \"Çıxmaq istəyirsiniz?\"."
+            evidence.stepList.last().detail!! shouldNotContain "Browser dialogs"
+        }
+
+    @Test
+    fun `a dialog echoing the password reaches neither the model nor the evidence`() =
+        runTest {
+            browser.onAction = { action -> if (action == "click 3") browser.openDialog(DialogType.ALERT, "Parolunuz: $password") }
+            val llm = scripted(decision("click", """"ref": 3"""), decision("done", """"summary": "ok""""))
+
+            execute(llm)
+
+            evidence.stepList.first().detail shouldBe "OK: clicked. Browser dialogs (accepted): alert \"Parolunuz: {self.password}\"."
+            llm.requests.forEach { request -> request.messages.single().content shouldNotContain password }
+        }
+
+    @Test
+    fun `dialogs that cannot be read never fail the turn`() =
+        runTest {
+            val broken =
+                object : BrowserSession by browser {
+                    override suspend fun drainDialogs(): List<DialogEvent> = throw BrowserActionException("page crashed")
+                }
+            val llm = scripted(decision("click", """"ref": 3"""), decision("done", """"summary": "ok""""))
+
+            val outcome = execute(llm, target = AgentTestData.runtime(broken, identity))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            evidence.stepList.first().detail shouldBe "OK: clicked."
         }
 
     @Test

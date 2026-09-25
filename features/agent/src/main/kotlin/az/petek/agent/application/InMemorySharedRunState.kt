@@ -10,7 +10,7 @@ import kotlin.time.Duration
 
 /**
  * [SharedRunState] for one run inside one process. Writers replace the whole map atomically, and waiters suspend on
- * the state flow until their key appears (no polling), so thirty agents waiting for `company_code` cost nothing
+ * the state flow until their key appears (no polling), so any number of agents waiting for `company_code` cost nothing
  * until the admin publishes it. A later [put] of the same key overwrites the value.
  */
 class InMemorySharedRunState : SharedRunState {

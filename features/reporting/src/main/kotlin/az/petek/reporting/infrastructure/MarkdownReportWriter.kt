@@ -187,7 +187,7 @@ class MarkdownReportWriter : ReportWriter {
             )
         table(
             listOf("Agent", "Giriş", "Çıxış", "Keşdən oxunan", "Çağırışlar", "Xərc"),
-            model.usage.sortedBy { it.agentId.index }.map { u ->
+            model.usage.sortedBy { it.agentId }.map { u ->
                 listOf(
                     md(u.agentId.value),
                     ReportFormat.count(u.inputTokens),
