@@ -93,10 +93,11 @@ internal fun interface SetupRuns {
  * Role sessions from a small test company created for the exploration: with the owner's permission to write
  * ([RoleSessionRequest.allowWrites]) on the configured target, whose test API confirms test data, it runs a setup-only
  * campaign (one admin signs up and creates the company, a manager and an employee join, all by the deterministic run
- * functions, never the LLM) as an ordinary run the owner sees on the board, keeping its data. The testers' saved
- * browser states then become the explorer's logged-in sessions, and the company's `is_test` flag is checked through
- * the test API before the trial touch writes anything. [RoleSessions.close] closes the sessions and tears the company
- * down through the same teardown every run uses.
+ * functions, never the LLM) as an ordinary run the owner sees on the board, keeping its data. The campaign signs up
+ * with the site's own target profile from [profiles] (the flows and selectors of the site's scenario, else the
+ * contract defaults). The testers' saved browser states then become the explorer's logged-in sessions, and the
+ * company's `is_test` flag is checked through the test API before the trial touch writes anything.
+ * [RoleSessions.close] closes the sessions and tears the company down through the same teardown every run uses.
  *
  * Anywhere else (writes not allowed, another site than `PETEK_TARGET`, no test token, a target whose [testApi] does not
  * answer like the test API of docs/TARGET_CONTRACT.md) nothing is written and the sessions are [RoleSessions.none] with
@@ -107,6 +108,7 @@ internal class TestCompanyRoleSessions(
     private val runs: SetupRuns,
     private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain),
     private val teardown: TeardownUseCase = container.teardown,
+    private val profiles: SetupProfileSource = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator),
 ) : RoleSessionSource {
     override suspend fun open(
         request: RoleSessionRequest,
@@ -115,8 +117,9 @@ internal class TestCompanyRoleSessions(
     ): RoleSessions {
         refusal(request)?.let { return RoleSessions.none(it) }
         testApi.refusal()?.let { return RoleSessions.none("Rollarla gəzinti buraxıldı: $it") }
-        val campaign = campaign(request)
-        progress("Rollarla gəzinti üçün müvəqqəti test şirkəti yaradılır (admin, menecer, işçi)…")
+        val profile = profiles.profile()
+        val campaign = campaign(request, profile.profile)
+        progress("Rollarla gəzinti üçün müvəqqəti test şirkəti yaradılır (admin, menecer, işçi); qeydiyyat axınları: ${profile.origin}…")
         val setup =
             try {
                 runs.runKeepingData(campaign)
@@ -213,8 +216,11 @@ internal class TestCompanyRoleSessions(
         }
     }
 
-    /** Admin, one manager and one employee (by invitation and with the company code), all by run functions. */
-    private fun campaign(request: RoleSessionRequest): Campaign {
+    /** Admin, one manager and one employee (by invitation and with the company code), all by run functions over [profile]. */
+    private fun campaign(
+        request: RoleSessionRequest,
+        profile: TargetProfile,
+    ): Campaign {
         val department =
             request.departments.firstOrNull { it.isNotBlank() && it.none { c -> c in DefaultActorExpressionParser.RESERVED_CHARS } }
                 ?: DEPARTMENT
@@ -273,7 +279,7 @@ internal class TestCompanyRoleSessions(
                         onFail = OnFail.ABORT,
                         name = NAME,
                     ),
-                target = TargetProfile(emptyMap(), emptyMap(), emptyMap()),
+                target = profile,
                 setup = steps,
                 steps = emptyList(),
                 sourceHash = SOURCE_HASH,

@@ -5,6 +5,7 @@ import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.Campaign
+import az.petek.campaign.domain.TargetProfile
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
@@ -132,10 +133,34 @@ class TestCompanyRoleSessionsTest {
             campaign.settings.departments shouldContainExactly listOf("Satış")
             campaign.setup.map { it.id } shouldContainExactly listOf("owner_signup", "seed", "join")
             campaign.steps.shouldBeEmpty()
+            campaign.target shouldBe TargetProfile.DEFAULT
+            progress.first() shouldContain "qeydiyyat axınları: docs/TARGET_CONTRACT.md default"
             roles.testCheck.check(panel.config.target).shouldBeInstanceOf<TestTargetVerdict.Refused>()
 
             roles.close()
             opened.all { it.second.closed } shouldBe true
+        }
+
+    @Test
+    fun `the setup campaign signs up with the target profile of the site's own scenario`() =
+        runBlocking<Unit> {
+            val ownFile =
+                PanelHarness.tinyCampaign(name = "real-site") +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#giris-email'
+                    """.trimIndent() + "\n"
+            val panel = PanelHarness(dir, scenarios = mapOf("real-site.yaml" to ownFile)).also { open += it }
+            panel.backend.scenarios().map { it.name } shouldContainExactly listOf("real-site") // waits for the start-up import
+            val source = sessions(panel) { SetupRun(RunId("run_profile"), RunOutcome.ABORTED) }
+
+            source.open(request(panel), factory) { progress += it }
+
+            val campaign = campaigns.single()
+            campaign.target.selector("login.email") shouldBe "#giris-email"
+            campaign.target.selector("login.password") shouldBe TargetProfile.DEFAULT.selector("login.password")
+            progress.first() shouldContain "qeydiyyat axınları: real-site v1"
         }
 
     @Test
