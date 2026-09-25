@@ -34,6 +34,7 @@ include(
     ":features:orchestration",
     ":features:reporting",
     ":features:capacity",
+    ":features:scenarios",
     ":app",
     ":testing:fake-target",
     ":e2e",

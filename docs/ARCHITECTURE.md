@@ -28,6 +28,7 @@ ordered by number everywhere.
 | `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
+| `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
 | `app` | CLI (`plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`), `.env` config, composition root, logging | — | Clikt, logback |
 | `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
@@ -36,14 +37,15 @@ ordered by number everywhere.
 
 ```mermaid
 flowchart TD
-  app --> orchestration & reporting & capacity & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
+  app --> orchestration & reporting & capacity & scenarios & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
   orchestration --> agent & verification & identity & evidence & campaign
+  scenarios --> campaign & evidence & llm
   agent --> browser & llm & mail & oracle & evidence & identity & campaign
   verification --> browser & oracle & evidence & campaign
   reporting --> evidence
   capacity --> browser
-  identity & evidence --> sqlite
-  campaign & identity & evidence & mail & oracle & browser & llm & capacity --> core[core/domain]
+  identity & evidence & scenarios --> sqlite
+  campaign & identity & evidence & mail & oracle & browser & llm & capacity & scenarios --> core[core/domain]
 ```
 
 Inside a feature, `domain` imports nothing from `application` or `infrastructure`, and nothing from frameworks.
@@ -116,6 +118,33 @@ sessions through the `BrowserEngine` and measures the memory growth of the brows
 `/proc/<pid>/smaps_rollup` over the JVM's descendants). The notes always add that LLM throughput
 (`PETEK_LLM_CONCURRENCY`, the Claude plan's rate limits) limits how fast testers act, not how many can run. `run`
 computes the fast estimate first and only warns when the campaign asks for more; `plan` prints it as information.
+
+## Scenario catalog and triage (Faza 7)
+
+`features/scenarios` keeps every campaign text the owner works with as an immutable, numbered version and turns a
+finished run's surprises into explainable verdicts. The web panel (Faza 8) is built on its use cases.
+
+- **Versions.** `ScenarioCatalog` imports files, stores drafts (from the owner, the explorer or triage), approves,
+  freezes, lists, diffs and exports. Every version must load and pass the campaign validator, exactly as `petek run`
+  would. `DRAFT -> APPROVED -> FROZEN`: approving supersedes the previous `APPROVED` version of the name
+  (`SUPERSEDED`), a `FROZEN` baseline never changes again, and only `APPROVED`/`FROZEN` versions run by default. The
+  SQLite schema enforces the invariants itself (one approved version per name, immutable text and frozen rows).
+  Texts are exported byte-exact, so a run's `campaign_hash` points back to the version it executed.
+- **Surprises.** Per actor and scenario step, a run's `report_problem` steps, failed concluding steps and findings
+  form one surprise with all of that actor's evidence. `permission_denied` in a main step (an expected refusal), the
+  losers of a race whose `only_one_succeeds` passed, environment failures (`mail_unavailable`, `llm_unavailable`)
+  together with the checks run after the action they broke, and receivers whose `wait_for` timed out for an event
+  nobody published (the emitter's failure is the surprise) are listed as ignored instead.
+- **Triage.** `TriageRunUseCase` works on finished runs only and asks the LLM one structured question per surprise
+  (redacted evidence facts plus the scenario YAML, both marked as data) and validates the answer in code:
+  `SYSTEM_BUG` (the target is wrong), `MODEL_GAP` (our knowledge of the site is wrong), `SCENARIO_BUG` (the scenario is
+  wrong). Each verdict links only to the steps, artifacts and findings the question showed. A proposed change is a
+  list of exact text edits; it is kept only if the edited YAML passes the campaign validator and keeps the campaign's
+  identity settings (the target also as written, since `PETEK_TARGET` hides it once loaded), otherwise it is rejected
+  with the reason and the verdict stays. The usable changes of a run become one `DRAFT` (source `TRIAGE`, parent = the
+  executed version) for the owner to review as a diff; a later execution of the same run (deferred or retried
+  questions) builds its draft on top of that one, so the newest triage draft of a run carries all of its changes.
+  Re-running triage resumes: decided surprises are not asked again.
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 
