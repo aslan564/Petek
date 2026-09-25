@@ -33,9 +33,31 @@ interface Mailbox {
         unreadOnly: Boolean = true,
     ): MailMessage?
 
+    /**
+     * Messages to [to] received at or after [since], newest first, at most [limit]; unread only when [unreadOnly].
+     * Reading them has no side effect on their read state (only [markRead] changes it). This lets a reader skip a newer
+     * unrelated message (a welcome mail right after the code) and still reach the usable one below it.
+     * The default only sees [findLatest]; adapters that can list the inbox override it.
+     */
+    suspend fun findRecent(
+        to: String,
+        since: Instant,
+        unreadOnly: Boolean = true,
+        limit: Int = 10,
+    ): List<MailMessage> = listOfNotNull(findLatest(to, since, unreadOnly))
+
     /** Marks a message read so an old code is never reused. */
     suspend fun markRead(messageId: String)
 }
+
+/**
+ * The inbox could not be read: unreachable, timed out or answered something unexpected. Distinct from
+ * [MailTimeoutException] ("reachable, but the target sent nothing"), which is a finding about the target.
+ */
+class MailboxException(
+    message: String,
+    cause: Throwable? = null,
+) : PetekException(message, cause)
 
 /** Pulls a 4–8 digit code and/or a confirmation/invite link out of a message. Pure. */
 interface VerificationExtractor {
