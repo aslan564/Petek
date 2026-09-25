@@ -29,6 +29,7 @@ ordered by number everywhere.
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
 | `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
+| `features/dashboard` | Local web panel: live agent board, instructions, explorer, scenarios, orchestrator task matrix, reports | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS) |
 | `app` | CLI (`plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`), `.env` config, composition root, logging | — | Clikt, logback |
 | `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
@@ -37,7 +38,8 @@ ordered by number everywhere.
 
 ```mermaid
 flowchart TD
-  app --> orchestration & reporting & capacity & scenarios & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
+  app --> dashboard & orchestration & reporting & capacity & scenarios & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
+  dashboard --> orchestration & identity & evidence
   orchestration --> agent & verification & identity & evidence & campaign
   scenarios --> campaign & evidence & llm
   agent --> browser & llm & mail & oracle & evidence & identity & campaign
@@ -145,6 +147,7 @@ finished run's surprises into explainable verdicts. The web panel (Faza 8) is bu
   executed version) for the owner to review as a diff; a later execution of the same run (deferred or retried
   questions) builds its draft on top of that one, so the newest triage draft of a run carries all of its changes.
   Re-running triage resumes: decided surprises are not asked again.
+## Web panel (`features/dashboard`)
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 
