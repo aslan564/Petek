@@ -15,6 +15,8 @@ import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityPlan
 import az.petek.identity.domain.IdentityStatus
+import az.petek.orchestration.application.TeardownResult
+import az.petek.orchestration.application.TeardownUseCase
 import az.petek.orchestration.domain.RunOutcome
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -23,6 +25,10 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -155,6 +161,72 @@ class TestCompanyRoleSessionsTest {
                 .note
                 .shouldNotBeNull() shouldContain "the test API is down"
             opened.shouldBeEmpty()
+        }
+
+    @Test
+    fun `stopping the exploration while the sessions open closes the opened ones and removes the test company`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val run = RunId("run_stopped_while_opening")
+            val removed = CopyOnWriteArrayList<RunId?>()
+            val second = CompletableDeferred<Unit>()
+            val slow =
+                BrowserSessionFactory { options ->
+                    val session = FakeBrowserSession(options.label).also { opened += options to it }
+                    if (opened.size == 2) {
+                        second.complete(Unit)
+                        awaitCancellation()
+                    }
+                    session
+                }
+            val source =
+                TestCompanyRoleSessions(
+                    panel.panel.container,
+                    {
+                        store(panel, run)
+                        SetupRun(run, RunOutcome.PASSED)
+                    },
+                    { null },
+                    recording(removed),
+                )
+
+            val opening = async { source.open(request(panel), slow) { progress += it } }
+            second.await()
+            opening.cancelAndJoin()
+
+            opening.isCancelled shouldBe true
+            opened.first().second.closed shouldBe true
+            removed shouldContainExactly listOf(run)
+        }
+
+    @Test
+    fun `a failed or stopped setup run is removed once, and sessions that cannot open remove the company too`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val removed = CopyOnWriteArrayList<RunId?>()
+            val broken = BrowserSessionFactory { error("no browser") }
+
+            TestCompanyRoleSessions(panel.panel.container, { SetupRun(RunId("run_stopped"), null) }, { null }, recording(removed))
+                .open(request(panel), factory) { }
+            TestCompanyRoleSessions(
+                panel.panel.container,
+                {
+                    store(panel, RunId("run_no_browser"))
+                    SetupRun(RunId("run_no_browser"), RunOutcome.PASSED)
+                },
+                { null },
+                recording(removed),
+            ).open(request(panel), broken) { }.note.shouldNotBeNull() shouldContain "Rol sessiyaları açıla bilmədi"
+
+            removed shouldContainExactly listOf(RunId("run_stopped"), RunId("run_no_browser"))
+        }
+
+    private fun recording(removed: MutableList<RunId?>) =
+        object : TeardownUseCase {
+            override suspend fun teardown(runId: RunId?): TeardownResult {
+                removed += runId
+                return TeardownResult(runId, emptyList(), emptyList())
+            }
         }
 
     /** What a finished setup run leaves: one active tester per role with a saved browser state. */

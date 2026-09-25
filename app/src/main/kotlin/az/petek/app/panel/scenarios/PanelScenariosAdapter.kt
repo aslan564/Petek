@@ -31,6 +31,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
@@ -65,7 +67,12 @@ internal class PanelScenariosAdapter(
     /** The start-up import; every read waits for it, so the list is never shown half imported. */
     private val imported: Deferred<Unit> = scope.async { importOwnerFiles() }
 
-    override suspend fun generateScenario(): ScenarioView {
+    /** One generation at a time: a double click must not store the same draft twice. */
+    private val generating = Mutex()
+
+    override suspend fun generateScenario(): ScenarioView = generating.withLock { generate() }
+
+    private suspend fun generate(): ScenarioView {
         val source = explorer.draftSource()
         val settings = DraftSettings.of(source.departments)
         val draft =

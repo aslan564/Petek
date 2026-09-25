@@ -22,6 +22,7 @@ import az.petek.campaign.domain.TemplateRenderer
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.UuidV7IdGenerator
+import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.time.HarnessClock
@@ -342,8 +343,11 @@ class AppContainer(
         ScenarioCatalog(scenarioVersions, scenarioValidator, FileSystemScenarioFiles(), clock, scenarioIds)
     }
 
-    /** Triage of finished runs; evidence shown to the model is redacted with every configured secret. */
-    val triage: TriageRunUseCase by lazy {
+    /**
+     * Triage of finished runs. Evidence shown to the model is redacted with every configured secret plus [secrets]
+     * (the triaged run's test passwords, which only its identities know): nothing secret reaches the LLM (rule 10).
+     */
+    fun triage(secrets: Collection<Secret> = emptyList()): TriageRunUseCase =
         TriageRunUseCase(
             llm = llm,
             evidence = evidenceQuery,
@@ -353,9 +357,8 @@ class AppContainer(
             validator = scenarioValidator,
             clock = clock,
             ids = scenarioIds,
-            redactor = SecretRedactor(listOfNotNull(config.testToken, config.anthropicApiKey, config.identitySecret)),
+            redactor = SecretRedactor(listOfNotNull(config.testToken, config.anthropicApiKey, config.identitySecret) + secrets),
         )
-    }
 
     val triageResults: TriageResults by lazy { TriageResults(triageStore) }
 

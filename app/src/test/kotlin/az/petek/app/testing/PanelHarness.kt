@@ -2,6 +2,7 @@ package az.petek.app.testing
 
 import az.petek.app.config.PetekConfig
 import az.petek.app.di.AppContainer
+import az.petek.app.di.AppOverrides
 import az.petek.app.panel.WebPanel
 import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.SetupRuns
@@ -29,7 +30,8 @@ import java.nio.file.Path
 /**
  * A [WebPanel] on a free port with production wiring except for the LLM ([llm]), the runs' browser ([runs], no
  * Chromium) and the explorer's browser ([site], a scripted site). Scenario files given in [scenarios] are written to
- * `scenarios/` before the panel starts (it imports them at start). Close it after the test.
+ * `scenarios/` before the panel starts (it imports them at start); [decorate] may change the rest of the wiring. Close it
+ * after the test.
  */
 internal class PanelHarness(
     val dir: Path,
@@ -40,6 +42,8 @@ internal class PanelHarness(
     allowProduction: Boolean = false,
     testToken: String? = "dev-token",
     roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
+    /** Changes the panel's overrides further, e.g. to hold its repositories at a gate. */
+    decorate: (AppOverrides) -> AppOverrides = { it },
 ) : AutoCloseable {
     val config =
         PetekConfig(
@@ -65,7 +69,7 @@ internal class PanelHarness(
                 config,
                 overrides,
                 ->
-                AppContainer(config, overrides.copy(llm = llm.client, browser = runs, explorerBrowser = site))
+                AppContainer(config, decorate(overrides.copy(llm = llm.client, browser = runs, explorerBrowser = site)))
             },
             workingDirectory = dir,
             capacityAdvice = RecommendCapacityUseCase({ HostResources(16L shl 30, 8L shl 30, 8) }),

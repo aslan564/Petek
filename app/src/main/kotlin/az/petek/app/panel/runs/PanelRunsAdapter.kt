@@ -124,7 +124,9 @@ internal class PanelRunsAdapter(
                 lease.close()
                 throw e
             }
-        val (runId, _) = launch(campaign, lease, RunOptions(), request.headful)
+        val (started, job) = begin(campaign, lease, RunOptions(), request.headful)
+        // A closed browser tab cancels this request, never the run: it goes on and the board shows it.
+        val runId = awaitStart(started, job)
         warnAboutUncoveredSteps(campaign, lease.container)
         return RunStartView(runId, version.id.value, campaign.settings.testers)
     }
@@ -188,19 +190,28 @@ internal class PanelRunsAdapter(
 
     override suspend fun runKeepingData(campaign: Campaign): SetupRun? {
         val lease = targets.lease(null)
-        val (runId, job) =
+        val (started, job) =
             try {
-                launch(campaign, lease, RunOptions(keepData = true), headful = false)
+                begin(campaign, lease, RunOptions(keepData = true), headful = false)
             } catch (_: PanelConflictException) {
                 return null
             }
-        return try {
-            SetupRun(runId, job.await()?.outcome)
+        var runId: RunId? = null
+        try {
+            runId = awaitStart(started, job)
+            return SetupRun(runId, job.await()?.outcome)
         } catch (e: CancellationException) {
-            if (currentCoroutineContext().isActive) return SetupRun(runId, null)
+            // The run itself was stopped (the owner's "Dayandır"): the caller decides what to do with its data.
+            if (runId != null && currentCoroutineContext().isActive) return SetupRun(runId, null)
+            // The caller was cancelled, also while the run was still starting: nobody else would ever remove the data
+            // a keep-data run leaves behind, so stop the run and tear it down here.
             withContext(NonCancellable) {
                 job.cancelAndJoin()
-                runCatching { container.teardown.teardown(runId) }.onFailure { logger.warn(it) { "Teardown of run $runId failed" } }
+                val created = runId ?: if (started.isCompleted) runCatching { started.await() }.getOrNull() else null
+                if (created != null) {
+                    runCatching { container.teardown.teardown(created) }
+                        .onFailure { logger.warn(it) { "Teardown of run $created failed" } }
+                }
             }
             throw e
         }
@@ -209,16 +220,16 @@ internal class PanelRunsAdapter(
     // --- running --------------------------------------------------------------------------------------------------
 
     /**
-     * Starts [campaign] in the run slot and returns its run id once the runner created its record. From the call on,
-     * [lease] is this function's: it is closed at once when the slot is taken ([PanelConflictException]), otherwise when
-     * the run ends. A run that does not start is a [PanelUnavailableException].
+     * Starts [campaign] in the run slot and returns the deferred run id (completed once the runner created its record)
+     * with the run's job. From the call on, [lease] is this function's: it is closed at once when the slot is taken
+     * ([PanelConflictException]), otherwise when the run ends.
      */
-    private suspend fun launch(
+    private fun begin(
         campaign: Campaign,
         lease: RunTarget,
         options: RunOptions,
         headful: Boolean,
-    ): Pair<RunId, Deferred<RunSummary?>> {
+    ): Pair<CompletableDeferred<RunId>, Deferred<RunSummary?>> {
         val started = CompletableDeferred<RunId>()
         val entered = AtomicBoolean(false)
         val job =
@@ -248,10 +259,27 @@ internal class PanelRunsAdapter(
                         }
                     }.also { job ->
                         // A job cancelled before its body ran never reaches the finally above.
-                        job.invokeOnCompletion { if (!entered.get()) lease.close() }
+                        job.invokeOnCompletion {
+                            if (!entered.get()) {
+                                started.cancel()
+                                lease.close()
+                            }
+                        }
                         current = job
                     }
             }
+        return started to job
+    }
+
+    /**
+     * The run id of a run [begin] started, once its record exists. A run that does not start is a
+     * [PanelUnavailableException] (and is stopped); a cancelled caller gets the [CancellationException] and the run
+     * goes on.
+     */
+    private suspend fun awaitStart(
+        started: CompletableDeferred<RunId>,
+        job: Deferred<RunSummary?>,
+    ): RunId {
         val runId =
             try {
                 withTimeoutOrNull(RUN_START_TIMEOUT) { started.await() }
@@ -264,7 +292,7 @@ internal class PanelRunsAdapter(
             job.cancel()
             throw PanelUnavailableException("Run başlamadı; səbəb loglardadır (evidence/logs/petek.log).")
         }
-        return runId to job
+        return runId
     }
 
     /** Exports [version] byte-exact, loads it like `petek run` and applies the tester count. */
@@ -382,7 +410,8 @@ internal class PanelRunsAdapter(
 
     private suspend fun triageNow(runId: RunId): List<TriageItem> =
         try {
-            container.triage.execute(runId).items
+            val passwords = container.identities.findByRun(runId).map { it.password }
+            container.triage(passwords).execute(runId).items
         } catch (e: ScenarioNotInCatalogException) {
             throw PanelConflictException(
                 "Bu run kataloqdakı heç bir ssenari versiyasının mətni ilə getməyib; triaj ssenarinin mətnini istəyir.",

@@ -22,6 +22,7 @@ import az.petek.core.model.RegistrationMode
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.identity.domain.IdentityStatus
+import az.petek.orchestration.application.TeardownUseCase
 import az.petek.orchestration.domain.RunOutcome
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -105,6 +106,7 @@ internal class TestCompanyRoleSessions(
     private val container: AppContainer,
     private val runs: SetupRuns,
     private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain),
+    private val teardown: TeardownUseCase = container.teardown,
 ) : RoleSessionSource {
     override suspend fun open(
         request: RoleSessionRequest,
@@ -124,6 +126,22 @@ internal class TestCompanyRoleSessions(
                 logger.warn(e) { "The explorer's test company could not be created" }
                 return RoleSessions.none("Test şirkəti yaradıla bilmədi: ${e.message ?: e::class.simpleName}")
             } ?: return RoleSessions.none("Başqa run gedir; rollarla gəzinti üçün test şirkəti yaradılmadı.")
+        return try {
+            sessionsOf(setup, request, sessions, progress)
+        } catch (e: CancellationException) {
+            // Stopped between the setup run and the sessions: the company would stay behind otherwise.
+            withContext(NonCancellable) { tearDown(setup.runId) }
+            throw e
+        }
+    }
+
+    /** The logged-in sessions of [setup]'s testers; tears the company down itself unless it returns sessions. */
+    private suspend fun sessionsOf(
+        setup: SetupRun,
+        request: RoleSessionRequest,
+        sessions: BrowserSessionFactory,
+        progress: (String) -> Unit,
+    ): RoleSessions {
         val identities = container.identities.findByRun(setup.runId)
         val active =
             identities
@@ -150,11 +168,10 @@ internal class TestCompanyRoleSessions(
                     )
             }
         } catch (e: Exception) {
-            withContext(NonCancellable) {
-                closeAll(opened.values)
-                tearDown(setup.runId)
-            }
+            withContext(NonCancellable) { closeAll(opened.values) }
+            // A cancellation is torn down by the caller.
             if (e is CancellationException) throw e
+            withContext(NonCancellable) { tearDown(setup.runId) }
             logger.warn(e) { "The explorer's role sessions could not be opened" }
             return RoleSessions.none("Rol sessiyaları açıla bilmədi: ${e::class.simpleName}")
         }
@@ -278,7 +295,7 @@ internal class TestCompanyRoleSessions(
 
     private suspend fun tearDown(runId: RunId) {
         try {
-            val result = container.teardown.teardown(runId)
+            val result = teardown.teardown(runId)
             if (result.failures.isNotEmpty()) {
                 logger.warn {
                     "Teardown of the explorer's test company (run $runId) failed: ${result.failures}"

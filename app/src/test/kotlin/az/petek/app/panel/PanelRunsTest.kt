@@ -1,12 +1,16 @@
 package az.petek.app.panel
 
+import az.petek.app.panel.explorer.RoleSessionSource
+import az.petek.app.panel.explorer.RoleSessions
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelHarness.Companion.tinyCampaign
 import az.petek.app.testing.PanelLlm
 import az.petek.app.testing.PanelWaits
 import az.petek.app.testing.PanelWaits.ended
+import az.petek.app.testing.PanelWaits.exploration
 import az.petek.core.ids.RunId
+import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.PanelNotFoundException
@@ -16,14 +20,19 @@ import az.petek.dashboard.domain.ScenarioSource
 import az.petek.dashboard.domain.ScenarioStatus
 import az.petek.dashboard.domain.TaskState
 import az.petek.dashboard.domain.TriageCategory
+import az.petek.evidence.domain.RunRecord
+import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResult
+import az.petek.evidence.domain.StepStatus
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.scenarios.domain.ScenarioVersionId
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -32,6 +41,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -229,6 +239,100 @@ class PanelRunsTest {
                 .triaged shouldBe true
             panel.backend.triage(started.runId) shouldBe triage
             shouldThrow<PanelNotFoundException> { panel.backend.runTriage(RunId("run_unknown")) }
+        }
+
+    @Test
+    fun `triage never shows the model the run's test passwords`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm(failingSteps = setOf("look"))
+            val panel = harness(llm = llm)
+            val started = panel.backend.startRun(RunRequest(scenarioId = panel.approved()))
+            panel.ended(started.runId)
+            val container = panel.panel.container
+            val tester = container.identities.findByRun(started.runId).single { it.agentId.value == "a02" }
+            val password = tester.password.reveal()
+            val last =
+                container.evidenceQuery
+                    .steps(started.runId)
+                    .filter { it.agentId == tester.agentId && it.scenarioStep == "look" }
+                    .maxBy { it.endedAt }
+            // Evidence that quotes a typed password without saying so (the known-secret patterns cannot catch it).
+            container.recorder.step(
+                last.copy(
+                    stepId = container.ids.stepId(),
+                    status = StepStatus.FAILED,
+                    detail = "typed $password into the sign-in form",
+                    startedAt = last.endedAt,
+                    endedAt = last.endedAt.plusMillis(1),
+                ),
+            )
+
+            panel.backend.runTriage(started.runId)
+
+            val prompts =
+                llm.client.requests
+                    .filter {
+                        it.label.startsWith(
+                            "triage/",
+                        )
+                    }.flatMap { request -> request.messages.map { it.content } }
+            prompts.shouldNotBeEmpty()
+            prompts.none { it.contains(password) } shouldBe true
+            prompts.any { it.contains("typed *** into the sign-in form") } shouldBe true
+        }
+
+    @Test
+    fun `an exploration stopped while its test company run starts stops that run too, so nothing is left behind`() =
+        runBlocking<Unit> {
+            val creating = CompletableDeferred<Unit>()
+            val gate = CompletableDeferred<Unit>()
+            val llm = PanelLlm()
+            lateinit var panel: PanelHarness
+            panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    llm = llm,
+                    scenarios = mapOf("tiny.yaml" to tinyCampaign()),
+                    roleSessions = { setup ->
+                        RoleSessionSource { _, _, _ ->
+                            val check =
+                                panel.panel.container.scenarioValidator
+                                    .check(tinyCampaign(), "tiny.yaml")
+                            setup.runKeepingData(checkNotNull(check.campaign))
+                            RoleSessions.none("not reached")
+                        }
+                    },
+                    // The run is held while its record is created, before the panel learns its id.
+                    decorate = { overrides ->
+                        val board = checkNotNull(overrides.runsDecorator)
+                        overrides.copy(runsDecorator = { store -> board(held(store, creating, gate)) })
+                    },
+                ).also { open += it }
+
+            panel.backend.startExploration(PanelHarness.instructions(panel.site.base.toString(), allowWrites = true))
+            withTimeout(PanelWaits.TIMEOUT) { creating.await() }
+            panel.backend.cancelExploration() shouldBe true
+            panel.exploration { it.status == ExplorationStatus.CANCELLED }
+            gate.complete(Unit)
+
+            panel.backend.cancelRun() shouldBe false
+            panel.backend.runs() shouldBe emptyList()
+            llm.client.requests.shouldBeEmpty()
+        }
+
+    /** [store] whose run creation waits for [gate] (after telling [creating]). */
+    private fun held(
+        store: RunRepository,
+        creating: CompletableDeferred<Unit>,
+        gate: CompletableDeferred<Unit>,
+    ): RunRepository =
+        object : RunRepository by store {
+            override suspend fun create(run: RunRecord) {
+                creating.complete(Unit)
+                gate.await()
+                store.create(run)
+            }
         }
 
     @Test
