@@ -20,7 +20,7 @@ import kotlin.time.Duration
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
  *   actors that can match two or more testers; its `request` names a mutating method (or `*`) and a regex that
- *   compiles;
+ *   compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder;
  * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
  *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
@@ -481,10 +481,18 @@ class DefaultCampaignValidator(
 
             private fun raceOracleProblems(oracle: OracleCondition?): List<String> {
                 oracle ?: return emptyList()
+                // Checked once for the whole group, after every racer: there is no actor for {self.*} to refer to.
+                val actorBound =
+                    listOfNotNull(oracle.path, oracle.equals)
+                        .flatMap { templates.placeholders(it) }
+                        .distinct()
+                        // Other self fields are refused for every template already.
+                        .filter { (Placeholder.parse(it) as? Placeholder.Self)?.field in Placeholder.CAMPAIGN_SELF_FIELDS }
+                        .map { "oracle is checked once for all actors, so {$it} has no actor to refer to" }
                 return listOfNotNull(
                     relativePathProblem(oracle.path)?.let { "oracle path $it" },
                     "oracle field must not be blank".takeIf { oracle.field?.isBlank() == true },
-                )
+                ) + actorBound
             }
 
             private fun assertionTemplates(assertion: AssertionSpec): List<String> =

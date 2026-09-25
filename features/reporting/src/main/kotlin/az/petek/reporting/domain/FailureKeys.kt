@@ -36,6 +36,13 @@ object FailureKeys {
      */
     const val LOST_RACE = "lost_race"
 
+    /**
+     * The orchestrator fails a race action with this key when its agent claimed success but the target turned down the
+     * actor's own request (e.g. `request_failed: POST /tickets/t2/approve -> 500`): the request decides, not the agent.
+     * Neither the agent's fault nor proven a target bug on its own, so the judge asks for an investigation.
+     */
+    const val REQUEST_FAILED = "request_failed"
+
     /** Implied by [StepStatus.BLOCKED] when the watchdog left no key of its own. */
     const val BLOCKED = "blocked"
 
@@ -58,6 +65,7 @@ object FailureKeys {
             "missing_prerequisite",
             BLOCKED,
             LOST_RACE,
+            REQUEST_FAILED,
         )
 
     /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
@@ -81,10 +89,12 @@ object FailureKeys {
      */
     fun find(detail: String?): String? {
         if (detail.isNullOrBlank()) return null
-        return leadingKeyPattern.find(detail)?.groupValues?.get(1)
+        return leadingKey(detail)
             ?: outcomeKeyPattern.find(detail)?.groupValues?.get(1)
             ?: knownPattern.find(detail)?.groupValues?.get(1)
     }
+
+    private fun leadingKey(detail: String?): String? = detail?.let { leadingKeyPattern.find(it)?.groupValues?.get(1) }
 
     /**
      * A BLOCKED step the target refused on purpose ([PERMISSION_DENIED]). The key is looked up in the detail and,
@@ -93,8 +103,12 @@ object FailureKeys {
     fun isExpectedRefusal(step: StepRecord): Boolean =
         step.status == StepStatus.BLOCKED && (find(step.detail) ?: find(step.action)) == PERMISSION_DENIED
 
-    /** The orchestrator's record of an action that lost a race: PASSED, detail `lost_race: ...`. */
-    fun isLostRace(step: StepRecord): Boolean = step.status == StepStatus.PASSED && find(step.detail) == LOST_RACE
+    /**
+     * The orchestrator's record of an action that lost a race: PASSED, detail starting with `lost_race:`. Only the
+     * leading key counts: a passed record that merely mentions the word (an agent's summary, page text) is no lost
+     * race, and treating it as one would hide the agent's failures of that action ([ExpectedOutcomes]).
+     */
+    fun isLostRace(step: StepRecord): Boolean = step.status == StepStatus.PASSED && leadingKey(step.detail) == LOST_RACE
 
     /**
      * The action did not complete and that was not the expected outcome. Judged from [step] alone: the agent's own

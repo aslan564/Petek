@@ -117,10 +117,13 @@ is decided by code from each actor's own requests (CLAUDE.md rule 2), never by w
    won when one matching request was accepted (status < 400) and none was refused (403, 409, 422); a refusal of the
    same request it had already won (a double submit) does not count. Only a winner emits the step's event.
 3. **Lost race.** An actor that was refused as already decided (409/422), or that gave its answer (success claimed,
-   a problem or a refusal reported) without an accepted request while another actor won, did what a race expects:
-   its action is recorded PASSED with detail `lost_race: <decisive request>; won by <agent>; agent: <summary>` and it
-   is no failed agent. Reporting treats it like the expected `permission_denied` refusal, including the agent's own
-   records of that action (same correlation id); the report shows "yarışı uduzdu".
+   a problem or a refusal reported) without sending a matching request while another actor won, did what a race
+   expects: its action is recorded PASSED with detail `lost_race: <decisive request>; won by <agent>; agent: <summary>`
+   and it is no failed agent. Reporting treats it like the expected `permission_denied` refusal, including the agent's
+   own records of that action (same correlation id); the report shows "yarışı uduzdu". Any other answer to the
+   actor's own request (403, 400, 404, 5xx) is never a lost race: when its agent claimed success anyway, the action is
+   FAILED with `request_failed: <request>; agent: <summary>` (an INVESTIGATE finding), otherwise the agent's own
+   failure stands. A race interrupted by the budget or an abort still records the racers that already acted.
 4. **Verdict.** `verification` passes when exactly one actor won and the requests of every actor could be read; the
    observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve -> 303; a03 POST
    /tickets/t2/approve -> 409`). With `oracle: {path, field, equals}` and a test API, the target's final state must

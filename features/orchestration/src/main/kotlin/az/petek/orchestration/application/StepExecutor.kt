@@ -40,14 +40,17 @@ import az.petek.verification.domain.AssertionInput
 import az.petek.verification.domain.RaceEvidence
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.Instant
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.time.Duration
 
 private val logger = KotlinLogging.logger {}
@@ -90,10 +93,12 @@ internal data class StepResult(
  * summary (CLAUDE.md rule 2). The session is read once right before the action's start time is taken (so answers to
  * earlier requests are timestamped before it) and once after the action. Only an actor whose requests succeeded
  * emits the step's event. An actor that lost the race — the target refused it with 409/422, or it gave its answer
- * (success, a reported problem or a refusal) without an accepted request while another actor won — did what a race
- * expects: its action is recorded PASSED with detail `lost_race: ...`, it does not count as a failed agent, and the
- * group assertion decides. Because that needs every actor's evidence, the action records of a race step are written
- * once all its actors are done (with their own start and end times).
+ * (success, a reported problem or a refusal) without sending a matching request while another actor won — did what a
+ * race expects: its action is recorded PASSED with detail `lost_race: ...`, it does not count as a failed agent, and
+ * the group assertion decides. Any other refusal or error answer to its own request is no lost race; when its agent
+ * claimed success anyway, the action is FAILED with `request_failed: ...`. Because all that needs every actor's
+ * evidence, the action records of a race step are written once all its actors are done (with their own start and end
+ * times); when the step is interrupted first (budget, abort), the racers that already acted are recorded unjudged.
  *
  * Every task transition (waiting, running, final state) and every event published or received is reported to the
  * [TaskBoard].
@@ -120,12 +125,21 @@ internal class StepExecutor(
         }
         val race = raceSpec(step)
         val barrier = if (step.parallel) StartBarrier(chosen.size) else null
+        val raced = ConcurrentLinkedQueue<ActorRun.Raced>()
         val runs =
-            coroutineScope {
-                chosen
-                    .map { identity ->
-                        async(services.diagnostics.of(run.runId, identity.agentId)) { runActor(step, identity, barrier, race) }
-                    }.awaitAll()
+            try {
+                coroutineScope {
+                    chosen
+                        .map { identity ->
+                            async(services.diagnostics.of(run.runId, identity.agentId)) {
+                                runActor(step, identity, barrier, race).also { if (it is ActorRun.Raced) raced += it }
+                            }
+                        }.awaitAll()
+                }
+            } catch (e: Exception) {
+                // Cancelled (budget, abort) or an actor crashed: racers that already acted still leave their records.
+                withContext(NonCancellable) { settleUnjudged(raced, e) }
+                throw e
             }
         val results = settle(runs)
         return StepResult(step, results, groupFailed = verifyGroup(step, results))
@@ -472,10 +486,31 @@ internal class StepExecutor(
     }
 
     /**
+     * The step stopped before every racer was done ([cause]): the ones that acted are recorded and concluded on their
+     * own evidence, without a winner to lose to. A failure to record is attached to [cause] instead of hiding it.
+     */
+    private suspend fun settleUnjudged(
+        racers: Collection<ActorRun.Raced>,
+        cause: Exception,
+    ) {
+        racers.forEach { raced ->
+            val acted = raced.acted
+            try {
+                recordAction(acted.actor, acted.performed, actionRecord(acted.actor.step, acted.performed.outcome, acted.requests, null))
+                conclude(acted, lost = null)
+            } catch (e: Exception) {
+                cause.addSuppressed(e)
+            }
+        }
+    }
+
+    /**
      * Why [acted] lost the race, or null when it did not: the target refused it as already decided (409/422), or it
-     * answered (success claimed, problem or refusal reported) without an accepted request while another actor won.
-     * A 403 is a permission refusal, an actor that crashed, timed out or was blocked did not get to answer, and one
-     * whose requests could not be read may have won as well.
+     * answered (success claimed, problem or refusal reported) without sending a matching request at all while another
+     * actor won (it found the object decided). Any other answer to its own request (403, 400, 404, a 5xx) is not a
+     * lost race but something the report must show: a permission refusal, or the target failing under the race. An
+     * actor that crashed, timed out or was blocked did not get to answer, and one whose requests could not be read
+     * may have won as well.
      */
     private fun lostRace(
         acted: Acted,
@@ -486,9 +521,25 @@ internal class StepExecutor(
         val others = winners.filter { it != acted.agentId }
         val lost =
             requests.refusedAsDecided ||
-                (others.isNotEmpty() && requests.decisive?.status != FORBIDDEN && answered(acted.performed.outcome))
+                (requests.decisive == null && others.isNotEmpty() && answered(acted.performed.outcome))
         return if (lost) LostRace(requests, others) else null
     }
+
+    /**
+     * The agent claimed success, but the target turned down the actor's own request in this race (status >= 400 and
+     * not a lost race): code decides (CLAUDE.md rule 2), so the action failed with [REQUEST_FAILED].
+     */
+    private fun refutedClaim(
+        outcome: ActionOutcome,
+        requests: RaceEvidence?,
+        lost: LostRace?,
+    ): Boolean =
+        lost == null &&
+            outcome.succeeded &&
+            requests != null &&
+            requests.unavailable == null &&
+            !requests.succeeded &&
+            requests.decisive != null
 
     private fun answered(outcome: ActionOutcome): Boolean =
         outcome.status == ActionStatus.SUCCEEDED ||
@@ -658,10 +709,15 @@ internal class StepExecutor(
     ): ActorStepResult {
         val actor = acted.actor
         val outcome = acted.performed.outcome
+        val refuted = refutedClaim(outcome, acted.requests, lost)
         val failureKey =
             when {
                 lost == null && !outcome.succeeded && !isExpectedRefusal(actor.step, outcome) -> {
                     outcome.failureReason?.key ?: outcome.status.name.lowercase()
+                }
+
+                refuted -> {
+                    REQUEST_FAILED
                 }
 
                 acted.emitted?.problem != null -> {
@@ -697,7 +753,12 @@ internal class StepExecutor(
                 lost != null -> TaskState.LOST_RACE
                 else -> TaskState.PASSED
             }
-        val detail = if (lost != null && failureKey == null) lostDetail(lost, outcome) else "$result: ${outcome.summary}"
+        val detail =
+            when {
+                lost != null && failureKey == null -> lostDetail(lost, outcome)
+                refuted -> refutedDetail(requireNotNull(acted.requests), outcome)
+                else -> "$result: ${outcome.summary}"
+            }
         tasks.update(actor.step.id, actor.agentId, task, detail)
         return ActorStepResult(actor.identity, outcome, failureKey, acted.requests, lostRace = lost != null)
     }
@@ -726,8 +787,9 @@ internal class StepExecutor(
         }
 
     /**
-     * How an action is recorded: a lost race is PASSED with `lost_race: ...` (expected); otherwise the agent's outcome
-     * decides, and in a race step the detail adds what the actor's requests showed.
+     * How an action is recorded: a lost race is PASSED with `lost_race: ...` (expected); a success claim the actor's
+     * own request refutes is FAILED with `request_failed: ...`; otherwise the agent's outcome decides, and in a race
+     * step the detail adds what the actor's requests showed.
      */
     private fun actionRecord(
         step: ScenarioStep,
@@ -736,6 +798,9 @@ internal class StepExecutor(
         lost: LostRace?,
     ): ActionRecord {
         if (lost != null) return ActionRecord(StepStatus.PASSED, lostDetail(lost, outcome), Tally.PASS)
+        if (race != null && refutedClaim(outcome, race, lost = null)) {
+            return ActionRecord(StepStatus.FAILED, refutedDetail(race, outcome), Tally.FAIL)
+        }
         val detail =
             listOfNotNull(detailOf(outcome), race?.let { "request: ${it.describe()}" })
                 .joinToString("; ")
@@ -751,6 +816,16 @@ internal class StepExecutor(
         buildString {
             append(LOST_RACE).append(": ").append(lost.requests.describe())
             if (lost.winners.isNotEmpty()) append("; won by ").append(lost.winners.joinToString(", ") { it.value })
+            if (outcome.summary.isNotBlank()) append("; agent: ").append(outcome.summary)
+        }
+
+    /** `request_failed: POST /tickets/t2/approve -> 500; agent: <summary>`. */
+    private fun refutedDetail(
+        requests: RaceEvidence,
+        outcome: ActionOutcome,
+    ): String =
+        buildString {
+            append(REQUEST_FAILED).append(": ").append(requests.describe())
             if (outcome.summary.isNotBlank()) append("; agent: ").append(outcome.summary)
         }
 
@@ -866,8 +941,13 @@ internal class StepExecutor(
         /** Detail key of an action that lost a race: an expected outcome, not a failure (see reporting's FailureKeys). */
         const val LOST_RACE = "lost_race"
 
+        /**
+         * Failure key of a race action whose agent claimed success while the target turned down the actor's own
+         * request (e.g. a 500 or 403 on the approval): the request, not the agent, decides (CLAUDE.md rule 2).
+         */
+        const val REQUEST_FAILED = "request_failed"
+
         private const val VISIBLE_TEXT_TYPE = "visible_text"
-        private const val FORBIDDEN = 403
         private val NOTHING_TO_DO = ActionOutcome(ActionStatus.SUCCEEDED, "nothing to do")
 
         fun selfFields(identity: Identity): Map<String, String> =

@@ -10,6 +10,7 @@ import az.petek.core.ids.AgentId
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
+import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.TaskState
 import az.petek.orchestration.testing.AgentCall
@@ -26,10 +27,12 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -313,6 +316,98 @@ class RunnerRaceTest {
             f.actionOf("a02").status shouldBe StepStatus.FAILED
             f.actionOf("a03").detail!! shouldStartWith "lost_race:"
             summary.failedAgents shouldBe 1
+        }
+
+    @Test
+    fun `a server error under the race is no lost race and refutes the agent's claim of success`() =
+        runTest {
+            val f = fixture()
+            f.racing(
+                requests = mapOf("a02" to listOf(TICKET to 303), "a03" to listOf(TICKET to 500)),
+                outcomes = mapOf("a03" to ActionOutcome(ActionStatus.SUCCEEDED, "Ticket approved")),
+            )
+
+            val summary = f.runner().run(race())
+
+            // Exactly one approval was accepted, so the race itself holds ...
+            f.evidence.assertionList
+                .single { it.type == "only_one_succeeds" }
+                .verdict shouldBe Verdict.PASSED
+            // ... but the 500 is not hidden behind the agent's word or a lost race.
+            val record = f.actionOf("a03")
+            record.status shouldBe StepStatus.FAILED
+            record.detail shouldBe "request_failed: POST /tickets/t1/approve -> 500; agent: Ticket approved"
+            f.verify.groupCalls
+                .single()
+                .last()
+                .lostRace shouldBe false
+            f.monitor.statesOf("race", "a03").last() shouldBe TaskState.FAILED
+            f.monitor.tasks
+                .last { it.stepId == "race" && it.agentId == AgentId("a03") }
+                .detail shouldBe "request_failed: POST /tickets/t1/approve -> 500; agent: Ticket approved"
+            summary.failedAgents shouldBe 1
+            summary.stepsFailed shouldBe 1
+        }
+
+    @Test
+    fun `an error answer is no lost race even when the agent says the ticket was already decided`() =
+        runTest {
+            listOf(400, 401, 404, 500, 503).forEach { status ->
+                val g = fixture()
+                val decided =
+                    ActionOutcome(ActionStatus.FAILED, "Bu müraciət artıq qərarlaşdırılıb", failureReason = FailureReason.PROBLEM_REPORTED)
+                g.racing(
+                    requests = mapOf("a02" to listOf(TICKET to 303), "a03" to listOf(TICKET to status)),
+                    outcomes =
+                        mapOf("a03" to decided),
+                )
+
+                val summary = g.runner().run(race())
+
+                val record = g.actionOf("a03")
+                record.status shouldBe StepStatus.FAILED
+                record.detail shouldBe "problem_reported: Bu müraciət artıq qərarlaşdırılıb; request: POST /tickets/t1/approve -> $status"
+                g.verify.groupCalls
+                    .single()
+                    .last()
+                    .lostRace shouldBe false
+                summary.failedAgents shouldBe 1
+            }
+        }
+
+    @Test
+    fun `a success claim refuted by a permission refusal fails the action`() =
+        runTest {
+            val f = fixture()
+            f.racing(requests = mapOf("a02" to listOf(TICKET to 303), "a03" to listOf(TICKET to 403)))
+
+            val summary = f.runner().run(race())
+
+            val record = f.actionOf("a03")
+            record.status shouldBe StepStatus.FAILED
+            record.detail shouldBe "request_failed: POST /tickets/t1/approve -> 403; agent: ok"
+            summary.failedAgents shouldBe 1
+        }
+
+    @Test
+    fun `racers that already acted keep their records when the time budget ends the race`() =
+        runTest {
+            val f = fixture()
+            f.racing(requests = mapOf("a02" to listOf(TICKET to 303))) { call ->
+                if (call.scenarioStep == "race" && call.agentId == AgentId("a03")) awaitCancellation()
+            }
+            val campaign = race().let { it.copy(settings = it.settings.copy(budget = it.settings.budget.copy(maxMinutes = 2))) }
+
+            val summary = f.runner().run(campaign, RunOptions(inactivityTimeout = 10.minutes))
+
+            summary.outcome shouldBe RunOutcome.ABORTED
+            val winner = f.actionOf("a02")
+            winner.status shouldBe StepStatus.PASSED
+            winner.detail shouldBe "ok; request: POST /tickets/t1/approve -> 303"
+            f.steps("race", StepKind.DO).map { it.agentId?.value } shouldBe listOf("a02")
+            f.monitor.statesOf("race", "a02").last() shouldBe TaskState.PASSED
+            f.monitor.statesOf("race", "a03").last() shouldBe TaskState.SKIPPED
+            f.evidence.assertionList.none { it.type == "only_one_succeeds" } shouldBe true
         }
 
     @Test

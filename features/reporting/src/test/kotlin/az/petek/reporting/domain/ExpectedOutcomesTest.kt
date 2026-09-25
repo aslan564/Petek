@@ -118,6 +118,28 @@ class ExpectedOutcomesTest {
     }
 
     @Test
+    fun `a passed record that only mentions lost_race does not hide the action's failures`() {
+        val mention = action("a03", StepStatus.PASSED, "ok: the page said lost_race somewhere", "a03_summary")
+        val crashed = action("a03", StepStatus.ERROR, "browser_error: page crashed", "a03_turn")
+        val expected = ExpectedOutcomes(listOf(mention, crashed))
+
+        FailureKeys.isLostRace(mention) shouldBe false
+        expected.isLostRace(crashed) shouldBe false
+        expected.isFailure(crashed) shouldBe true
+        expected.failureKey(crashed) shouldBe "browser_error"
+    }
+
+    @Test
+    fun `a racer whose success claim its own request refuted is a failure`() {
+        val refuted = action("a03", StepStatus.FAILED, "request_failed: POST /tickets/t2/approve -> 500; agent: Approved", "a03_summary")
+        val expected = ExpectedOutcomes(winner + refuted)
+
+        expected.isLostRace(refuted) shouldBe false
+        expected.isFailure(refuted) shouldBe true
+        expected.failureKey(refuted) shouldBe FailureKeys.REQUEST_FAILED
+    }
+
+    @Test
     fun `only the orchestrator's record and the agent's failing ones show as a lost race`() {
         val expected = ExpectedOutcomes(reportedLoser)
 

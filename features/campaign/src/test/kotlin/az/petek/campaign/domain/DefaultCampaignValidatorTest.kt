@@ -524,6 +524,20 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `only_one_succeeds refuses an oracle that names one actor, because it is checked once for the group`() {
+            val byEmail = OracleCondition("/test/tickets/latest?by={self.email}", "status", "approved")
+
+            val issue = issue(race(AssertionSpec.OnlyOneSucceeds(oracle = byEmail)), "{self.email} has no actor to refer to")
+            issue.message shouldContain "step 'check', only_one_succeeds"
+            issue(
+                race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "assignee", "{self.name}"))),
+                "{self.name} has no actor to refer to",
+            )
+            issues(race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "status", "approved"))))
+                .shouldBeEmpty()
+        }
+
+        @Test
         fun `only_one_succeeds may be asserted once per step`() {
             val twice =
                 race(AssertionSpec.OnlyOneSucceeds()).let { campaign ->
