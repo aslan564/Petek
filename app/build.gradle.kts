@@ -26,6 +26,7 @@ dependencies {
 application {
     mainClass.set("az.petek.app.MainKt")
     applicationName = "petek"
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.named<JavaExec>("run") {

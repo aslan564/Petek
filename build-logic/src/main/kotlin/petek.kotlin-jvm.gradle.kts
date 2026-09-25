@@ -32,6 +32,8 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     maxHeapSize = "1g"
+    // sqlite-jdbc and Playwright load native code; JDK 25 warns unless native access is granted explicitly.
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
     testLogging {
         events("failed", "skipped")
         exceptionFormat = TestExceptionFormat.FULL
