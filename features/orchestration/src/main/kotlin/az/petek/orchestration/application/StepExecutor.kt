@@ -9,6 +9,7 @@ import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.EmitSpec
+import az.petek.campaign.domain.Pacing
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
@@ -67,9 +68,10 @@ internal data class StepResult(
 
 /**
  * Executes one scenario step for all its actors (docs/ARCHITECTURE.md "Run lifecycle", step 3). Per actor:
- * `wait_for` on the bus -> reception checks -> render templates -> (start barrier) -> perform under the watchdog ->
- * `emits` -> the remaining assertions. All actors of a step run concurrently; `only_one_succeeds` is judged once
- * all of them are done.
+ * `wait_for` on the bus -> reception checks -> render templates -> (start barrier) -> (pacing) -> perform under the
+ * watchdog -> `emits` -> the remaining assertions. All actors of a step run concurrently; `only_one_succeeds` is judged
+ * once all of them are done. The campaign's pacing ([StartPacer]) staggers and limits the actions of a step that is
+ * not `parallel`.
  *
  * Reception checks: in a step with `wait_for`, `visible_text` (and the `latency_max` that reads its latency) are
  * evaluated right after the event arrives, before the actor's own action. Their deadline is t0 + `within`, so
@@ -95,12 +97,18 @@ internal class StepExecutor(
             return StepResult(step, emptyList(), groupFailed = false)
         }
         val barrier = if (step.parallel) StartBarrier(chosen.size) else null
+        val pacing = if (step.parallel) Pacing.NONE else run.campaign.settings.pacing
         val results =
             coroutineScope {
-                chosen
-                    .map { identity ->
-                        async(services.diagnostics.of(run.runId, identity.agentId)) { runActor(step, identity, barrier) }
-                    }.awaitAll()
+                val pacer = StartPacer(this, pacing, chosen.map { it.agentId })
+                try {
+                    chosen
+                        .map { identity ->
+                            async(services.diagnostics.of(run.runId, identity.agentId)) { runActor(step, identity, barrier, pacer) }
+                        }.awaitAll()
+                } finally {
+                    pacer.close()
+                }
             }
         return StepResult(step, results, groupFailed = verifyGroup(step, results))
     }
@@ -119,6 +127,7 @@ internal class StepExecutor(
         step: ScenarioStep,
         identity: Identity,
         barrier: StartBarrier?,
+        pacer: StartPacer,
     ): ActorStepResult {
         var arrived = false
         try {
@@ -143,7 +152,10 @@ internal class StepExecutor(
                 arrived = true
                 barrier.awaitOpen()
             }
-            val outcome = perform(actor, action, templates)
+            val outcome =
+                pacer.paced(identity.agentId, { board.update(identity.agentId, AgentState.WAITING, step.id, it) }) {
+                    perform(actor, action, templates)
+                }
             val emitted = if (outcome.succeeded) step.emits?.let { emit(actor, it, outcome, templates) } else null
             val lastId = emitted?.event?.objectId ?: waited?.event?.objectId
             val checks =
