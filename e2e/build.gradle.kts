@@ -1,3 +1,12 @@
+/*
+ * Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
+ * Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
+ *
+ * Licensed under the Business Source License 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. See the LICENSE file in the repository root. Change Date: 2030-09-25;
+ * Change License: Apache License, Version 2.0. The Licensed Work is provided "AS IS", without warranty.
+ */
+
 plugins {
     id("petek.kotlin-jvm")
 }
@@ -15,6 +24,11 @@ dependencies {
 }
 
 // Architecture tests run with the normal build; browser end-to-end runs are opt-in (heavier).
+// Konsist scans the repository from the working directory, so every test task runs from the root.
+tasks.withType<Test>().configureEach {
+    workingDir = rootProject.projectDir
+}
+
 tasks.register<Test>("e2eTest") {
     description = "End-to-end runs against the fake target with a real Chromium."
     group = "verification"

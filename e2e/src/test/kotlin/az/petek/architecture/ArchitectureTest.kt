@@ -1,0 +1,114 @@
+/*
+ * Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
+ * Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
+ *
+ * Licensed under the Business Source License 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. See the LICENSE file in the repository root. Change Date: 2030-09-25;
+ * Change License: Apache License, Version 2.0. The Licensed Work is provided "AS IS", without warranty.
+ */
+
+package az.petek.architecture
+
+import com.lemonappdev.konsist.api.Konsist
+import com.lemonappdev.konsist.api.architecture.KoArchitectureCreator.assertArchitecture
+import com.lemonappdev.konsist.api.architecture.Layer
+import com.lemonappdev.konsist.api.container.KoScope
+import com.lemonappdev.konsist.api.declaration.KoFileDeclaration
+import com.lemonappdev.konsist.api.ext.list.withPackage
+import com.lemonappdev.konsist.api.verify.assertFalse
+import com.lemonappdev.konsist.api.verify.assertTrue
+import org.junit.jupiter.api.Test
+
+/**
+ * The architecture rules of CLAUDE.md, checked on every build (ADR-0001): feature-based clean architecture with three
+ * layers per feature, dependencies through ports, `app` as the only composition root. Production sources of every
+ * module are in scope; the e2e task runs from the repository root so Konsist sees all of them.
+ */
+class ArchitectureTest {
+    private val scope: KoScope = Konsist.scopeFromProduction()
+
+    private val domainFiles: List<KoFileDeclaration> = scope.files.withPackage("az.petek..domain..")
+    private val applicationFiles: List<KoFileDeclaration> = scope.files.withPackage("az.petek..application..")
+    private val infrastructureFiles: List<KoFileDeclaration> = scope.files.withPackage("az.petek..infrastructure..")
+
+    @Test
+    fun `layers depend inwards only, domain on nothing, application on domain, infrastructure on both`() {
+        scope.assertArchitecture {
+            val domain = Layer("Domain", "az.petek..domain..")
+            val application = Layer("Application", "az.petek..application..")
+            val infrastructure = Layer("Infrastructure", "az.petek..infrastructure..")
+            domain.dependsOnNothing()
+            application.dependsOn(domain)
+            infrastructure.dependsOn(domain, application)
+        }
+    }
+
+    @Test
+    fun `the domain layer is pure Kotlin without framework imports`() {
+        domainFiles.assertFalse(testName = "domain imports a framework") { file ->
+            file.hasImport { import -> FRAMEWORK_PREFIXES.any { import.name.startsWith(it) } }
+        }
+    }
+
+    @Test
+    fun `the domain layer never imports application or infrastructure code`() {
+        domainFiles.assertFalse { file ->
+            file.hasImport { it.name.contains(".application.") || it.name.contains(".infrastructure.") }
+        }
+    }
+
+    @Test
+    fun `the application layer never imports infrastructure`() {
+        applicationFiles.assertFalse { file -> file.hasImport { it.name.contains(".infrastructure.") } }
+    }
+
+    @Test
+    fun `infrastructure imports only its own feature's infrastructure, other features' through ports`() {
+        infrastructureFiles.assertTrue { file ->
+            val own = featureOf(file.packagee?.name.orEmpty())
+            file.imports.all { import ->
+                INFRASTRUCTURE_IMPORT
+                    .find(import.name)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.let { it == own } ?: true
+            }
+        }
+    }
+
+    @Test
+    fun `only the app is the composition root, nothing else imports it`() {
+        scope.files
+            .filterNot {
+                it.packagee
+                    ?.name
+                    .orEmpty()
+                    .startsWith("az.petek.app")
+            }.assertFalse { file -> file.hasImport { it.name.startsWith("az.petek.app.") } }
+    }
+
+    @Test
+    fun `every feature keeps its three layers under its own package root`() {
+        (domainFiles + applicationFiles + infrastructureFiles).assertTrue { file ->
+            LAYER_PACKAGE.matches(file.packagee?.name.orEmpty())
+        }
+    }
+
+    private fun featureOf(packageName: String): String = packageName.removePrefix("az.petek.").substringBefore('.')
+
+    private companion object {
+        val FRAMEWORK_PREFIXES =
+            listOf(
+                "io.ktor",
+                "com.microsoft.playwright",
+                "org.jetbrains.exposed",
+                "com.anthropic",
+                "com.github.ajalt",
+                "java.sql",
+                "org.slf4j",
+                "ch.qos.logback",
+            )
+        val INFRASTRUCTURE_IMPORT = Regex("""^az\.petek\.([a-z]+)\.infrastructure\.""")
+        val LAYER_PACKAGE = Regex("""^az\.petek\.[a-z]+\.(domain|application|infrastructure)(\..+)?$""")
+    }
+}
