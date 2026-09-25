@@ -21,6 +21,8 @@ jobs:
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
+      # Chromium is installed below with the exact Playwright version; the Java driver must not fetch every browser again.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +38,9 @@ jobs:
           validate-wrappers: true
 
       - name: Install the Chromium Playwright needs (browser tests run in the normal build)
-        run: npx --yes playwright@1.63.0 install --with-deps chromium
+        run: |
+          PW=$(grep -E '^playwright = ' gradle/libs.versions.toml | cut -d'"' -f2)
+          npx --yes "playwright@${PW}" install --with-deps chromium
 
       - name: Build
         run: ./gradlew build --no-daemon --console=plain
@@ -59,6 +63,7 @@ jobs:
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -66,11 +71,20 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v4
-      - run: npx --yes playwright@1.63.0 install --with-deps chromium
-      - run: ./gradlew :e2e:e2eTest --no-daemon --console=plain
+      - name: Install the Chromium Playwright needs
+        run: |
+          PW=$(grep -E '^playwright = ' gradle/libs.versions.toml | cut -d'"' -f2)
+          npx --yes "playwright@${PW}" install --with-deps chromium
+      - name: End-to-end runs against the fake target
+        run: ./gradlew :e2e:e2eTest --no-daemon --console=plain
+      - name: Isolation proofs at scale (5 000 testers through the orchestrator, 30 real Chromium contexts)
+        run: ./gradlew :features:orchestration:test :features:browser:isolationTest -Dpetek.isolation.testers=5000 --no-daemon --console=plain
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-reports
-          path: e2e/build/reports/tests/
+          path: |
+            e2e/build/reports/tests/
+            features/browser/build/reports/tests/
+            features/orchestration/build/reports/tests/
           retention-days: 7

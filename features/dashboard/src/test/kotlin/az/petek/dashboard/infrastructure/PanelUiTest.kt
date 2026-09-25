@@ -234,7 +234,10 @@ class PanelUiTest {
         page.count(".lanes .cell") shouldBe 1 + 1 + 39 + 1 + 34 + 1 + 1 + 2 + 2
 
         page.locator(".nav-item[data-screen=hesabatlar]").click()
-        page.waitFor("() => document.querySelectorAll('.screen:not([hidden]) tbody tr').length === 6")
+        // The run list and the stability card load separately; wait for both before counting (as the reports test does).
+        page.waitFor(
+            "() => document.querySelectorAll('.screen:not([hidden]) tbody tr').length === 6 && document.querySelectorAll('.stab-card').length === 1",
+        )
         page.count(".stab-card") shouldBe 1
 
         page.locator(".nav-item[data-screen=agentler]").click()

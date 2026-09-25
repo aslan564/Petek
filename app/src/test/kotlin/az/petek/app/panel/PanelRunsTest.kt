@@ -77,7 +77,12 @@ class PanelRunsTest {
                 it
         }
 
-    private suspend fun PanelHarness.approved(): String = backend.scenarios().single { it.status == ScenarioStatus.APPROVED }.id
+    /** The imported and approved `tiny` scenario; names what the catalog holds instead when the start-up import went wrong. */
+    private suspend fun PanelHarness.approved(): String {
+        val versions = backend.scenarios()
+        return versions.singleOrNull { it.status == ScenarioStatus.APPROVED }?.id
+            ?: error("no approved scenario after the start-up import; catalog: ${versions.map { "${it.name} v${it.version} ${it.status}" }}")
+    }
 
     @Test
     fun `an approved scenario runs with the chosen tester count and fills the board, the orchestrator, the history and the report`() =
