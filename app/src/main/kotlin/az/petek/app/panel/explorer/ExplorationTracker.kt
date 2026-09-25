@@ -32,7 +32,8 @@ import az.petek.dashboard.domain.Provenance as ViewProvenance
 /**
  * One exploration as the "Kəşfiyyat" screen shows it, folded from the explorer's events as they arrive (or as they are
  * replayed from the stored log after a restart) plus what the panel adds around them: preparing role sessions,
- * the owner's answers, the final site model with its test ideas and the draft preview.
+ * the owner's answers, the final site model with its test ideas and the draft preview. The view's page budget is the
+ * total over the crawl passes known so far, since the explorer's own budget bounds each pass.
  *
  * While the exploration runs, the site model is built from the events (pages visited, actions discovered); when it
  * ends, [finished] replaces it with the stored model, which also has forms, purposes and real-time channels. Lists the
@@ -238,7 +239,7 @@ internal class ExplorationTracker(
             status = status,
             startedAt = startedAt.wall,
             elapsedMs = endedMs ?: startedAt.elapsedUntil(now).inWholeMilliseconds.coerceAtLeast(0),
-            budget = budget,
+            budget = budget.copy(maxPages = budget.maxPages * crawlPasses()),
             phases =
                 phases.map { (phase, track) ->
                     PhaseProgress(ViewPhase.valueOf(phase.name), track.state, track.pages, track.roles)
@@ -318,6 +319,13 @@ internal class ExplorationTracker(
         runningPhase?.let { phase -> phases.getValue(phase).takeIf { it.state == PhaseState.RUNNING }?.state = PhaseState.DONE }
         runningPhase = null
     }
+
+    /**
+     * How many crawl passes the page budget applies to: the explorer bounds each pass separately (the anonymous one and
+     * one per role of the role-based walk; the trial touch visits no pages), so the screen's total is per pass times
+     * passes. Known passes only: it grows when the role-based walk starts.
+     */
+    private fun crawlPasses(): Int = maxOf(1, CRAWLING_PHASES.sumOf { phases.getValue(it).roles.size })
 
     private fun elapsedAt(at: Instant): Long = (at.toEpochMilli() - startedAt.wall.toEpochMilli()).coerceAtLeast(0)
 
@@ -417,6 +425,8 @@ internal class ExplorationTracker(
         const val FAILED = "FAILED"
         const val NOTE = "NOTE"
         const val SESSIONS = "SESSIONS"
+
+        private val CRAWLING_PHASES = listOf(ExplorationPhase.ANONYMOUS, ExplorationPhase.ROLE_BASED)
 
         const val VISITED_LIMIT = 500
         const val ACTIVITY_LIMIT = 300

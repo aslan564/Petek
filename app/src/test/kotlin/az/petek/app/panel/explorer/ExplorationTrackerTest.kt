@@ -70,6 +70,22 @@ class ExplorationTrackerTest {
     }
 
     @Test
+    fun `the page budget shown is per crawl pass times the passes known so far`() {
+        val tracker = tracker()
+        tracker.view(at(1)).budget.maxPages shouldBe 40
+
+        tracker.apply(ExplorerFixtures.started())
+        tracker.apply(ExplorerFixtures.phaseStarted(ExplorationPhase.ANONYMOUS))
+        tracker.view(at(2)).budget.maxPages shouldBe 40
+        tracker.apply(ExplorerFixtures.phaseStarted(ExplorationPhase.ROLE_BASED, roles = listOf("admin", "employee", "manager")))
+        tracker.apply(ExplorerFixtures.phaseStarted(ExplorationPhase.TRIAL_TOUCH, roles = listOf("admin", "employee", "manager")))
+
+        val view = tracker.view(at(3))
+        view.budget.maxPages shouldBe 160
+        view.budget.maxMinutes shouldBe 30
+    }
+
+    @Test
     fun `visited pages are newest first, the current page is the latest and the live model groups actions by page`() {
         val tracker = tracker(previous = 2)
         tracker.apply(ExplorerFixtures.started())
