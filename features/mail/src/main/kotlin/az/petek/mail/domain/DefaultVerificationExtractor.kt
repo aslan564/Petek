@@ -37,6 +37,18 @@ class DefaultVerificationExtractor : VerificationExtractor {
         return if (satisfied) VerificationCode(code = code, link = link, messageId = message.id) else null
     }
 
+    /**
+     * Like the link rule above, but a link counts when its text (or its percent-decoded text) contains a match of
+     * [pattern] instead of one of the built-in hints, so a site's own link shape (`set-password?token=`) is found.
+     */
+    override fun extractLink(
+        message: MailMessage,
+        pattern: Regex,
+    ): VerificationCode? {
+        val link = findLink(message, pattern) ?: return null
+        return VerificationCode(code = findCode(message), link = link, messageId = message.id)
+    }
+
     private fun findCode(message: MailMessage): String? {
         val html = message.html?.takeIf { it.isNotBlank() }
         return bestCode(message.subject + "\n" + message.text)
@@ -128,13 +140,16 @@ class DefaultVerificationExtractor : VerificationExtractor {
         return CodeCandidate(token.value, token.range.first, tier, weighted)
     }
 
-    private fun findLink(message: MailMessage): URI? {
+    private fun findLink(
+        message: MailMessage,
+        hint: Regex = LINK_HINT,
+    ): URI? {
         val html = message.html?.takeIf { it.isNotBlank() }
         val hrefs = html?.let { HtmlText.anchorHrefs(it) }.orEmpty().asSequence()
         val textUrls = urlsIn(message.text)
         val htmlTextUrls = html?.let { urlsIn(HtmlText.toPlainText(it)) } ?: emptySequence()
         return (hrefs + textUrls + htmlTextUrls)
-            .filter { LINK_HINT.containsMatchIn(it) || LINK_HINT.containsMatchIn(percentDecoded(it)) }
+            .filter { hint.containsMatchIn(it) || hint.containsMatchIn(percentDecoded(it)) }
             .mapNotNull(::toHttpUri)
             .firstOrNull()
     }

@@ -65,6 +65,20 @@ interface VerificationExtractor {
         message: MailMessage,
         purpose: MailPurpose,
     ): VerificationCode?
+
+    /**
+     * The first http(s) link of [message] containing a match of [pattern] (a site's own link shape, e.g.
+     * `set-password\?token=`), with the message's code if it has one; null when no link matches. The default only
+     * checks the link [extract] picks for [MailPurpose.LINK]; extractors that see every link override it.
+     */
+    fun extractLink(
+        message: MailMessage,
+        pattern: Regex,
+    ): VerificationCode? {
+        val found = extract(message, MailPurpose.LINK) ?: return null
+        val link = found.link?.toString() ?: return null
+        return found.takeIf { pattern.containsMatchIn(link) }
+    }
 }
 
 class MailTimeoutException(
