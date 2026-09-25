@@ -15,7 +15,7 @@ dependencies {
 }
 
 // Architecture tests run with the normal build; browser end-to-end runs are opt-in (heavier).
-val e2eTest by tasks.registering(Test::class) {
+tasks.register<Test>("e2eTest") {
     description = "End-to-end runs against the fake target with a real Chromium."
     group = "verification"
     testClassesDirs =
@@ -28,7 +28,7 @@ val e2eTest by tasks.registering(Test::class) {
     shouldRunAfter(tasks.test)
 }
 
-val liveTest by tasks.registering(Test::class) {
+tasks.register<Test>("liveTest") {
     description = "Opt-in runs that call the real LLM provider (uses your Claude plan/quota)."
     group = "verification"
     testClassesDirs =
