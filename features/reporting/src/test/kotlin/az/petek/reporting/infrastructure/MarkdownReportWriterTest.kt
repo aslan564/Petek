@@ -1,6 +1,8 @@
 package az.petek.reporting.infrastructure
 
+import az.petek.reporting.ReportTestData
 import az.petek.reporting.domain.StepRow
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.paths.shouldExist
 import io.kotest.matchers.shouldBe
@@ -100,6 +102,17 @@ class MarkdownReportWriterTest {
         md shouldContain "| a02 | 234 567 | 9 012 | 100 | 4 | $0.0020 |"
         md shouldContain "| **Cəmi** | 1 234 567 | 89 012 | 1 600 | 16 | $0.0420 |"
         md.indexOf("| a01 | 1 000 000") shouldBeLessThan md.indexOf("| a02 | 234 567")
+    }
+
+    @Test
+    fun `usage rows follow the agent number, so a100 comes after a99`() {
+        val usage = listOf("a100", "a99", "a1000", "a02").map { ReportTestData.usage(it, input = 10, output = 1, cost = null) }
+
+        val md = writer.render(SampleReport.model().copy(usage = usage))
+
+        val rows = listOf("| a02 |", "| a99 |", "| a100 |", "| a1000 |").map(md::indexOf)
+        rows.forEach { it shouldBeGreaterThan -1 }
+        rows shouldBe rows.sorted()
     }
 
     @Test

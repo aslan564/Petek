@@ -144,7 +144,7 @@ class BuildReportUseCase(
                     scenarioStep = scenarioStep,
                     reason = failures.map(::reason).distinct().joinToString(", "),
                 )
-            }.sortedBy { AgentId(it.agentId).index }
+            }.sortedBy { AgentId(it.agentId) }
 
     private fun reason(step: StepRecord): String =
         FailureKeys.of(step)

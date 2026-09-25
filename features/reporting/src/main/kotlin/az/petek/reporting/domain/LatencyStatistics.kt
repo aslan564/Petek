@@ -42,7 +42,7 @@ object LatencyStatistics {
             receipts
                 .groupBy { it.receiver }
                 .mapValues { (_, own) -> own.firstOrNull { it.received } ?: own.last() }
-                .toSortedMap(compareBy { it.index })
+                .toSortedMap()
         val received = perReceiver.values.filter { it.received }
         val latencies = received.mapNotNull { it.latencyMs }
         return LatencyStats(

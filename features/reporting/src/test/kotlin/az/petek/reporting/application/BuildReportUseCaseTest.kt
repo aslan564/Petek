@@ -241,6 +241,17 @@ class BuildReportUseCaseTest {
         }
 
     @Test
+    fun `failed agents are listed by agent number, also past a99 and a999`() =
+        runTest {
+            evidence.create(run())
+            listOf("a1000", "a100", "a99", "a09").forEach { agent ->
+                evidence.step(step("join", agent, StepStatus.FAILED, StepKind.RUN, detail = "mail_timeout", stepId = "stp_$agent"))
+            }
+
+            useCase.build(RUN_ID).failedAgents.map { it.agentId } shouldContainExactly listOf("a09", "a99", "a100", "a1000")
+        }
+
+    @Test
     fun `a failure without key or detail is explained by its status`() =
         runTest {
             evidence.create(run())
