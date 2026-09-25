@@ -32,19 +32,23 @@ internal class TargetFlows(
     }
 
     /**
-     * Drives the journey from [start] until the user is signed in. Each step is taken at most once: a site that
-     * asks for the same step again is reported instead of looping.
+     * Drives the journey from [start] until the user is signed in. Each step is taken at most
+     * [MAX_VISITS_PER_STEP] times: a site may legitimately show the login page twice (a retry signs in an unverified
+     * account, the site asks for the e-mail code and then lands on the login page again), but a site that keeps
+     * asking for the same step is reported instead of looping.
      */
     suspend fun signIn(
         trace: RunTrace,
         start: PageState,
     ) {
-        val done = mutableSetOf<PageState>()
+        val visits = mutableMapOf<PageState, Int>()
         var state = start
         while (state != PageState.LOGGED_IN) {
-            if (!done.add(state)) {
+            val visit = (visits[state] ?: 0) + 1
+            visits[state] = visit
+            if (visit > MAX_VISITS_PER_STEP) {
                 val reason = if (state == PageState.LOGIN_PAGE) FailureReason.LOGIN_FAILED else FailureReason.REGISTRATION_FAILED
-                throw RunFailure(reason, "The site asked for ${state.label} again (${trace.currentUrl()}).")
+                throw RunFailure(reason, "The site asked for ${state.label} $visit times (${trace.currentUrl()}).")
             }
             state =
                 when (state) {
@@ -170,7 +174,7 @@ internal class TargetFlows(
         }
         val phone = trace.runtime.identity.phone
         val code =
-            trace.act("read the phone code for $phone from the test API") { retryOracle { oracle.latestOtp(phone) } }
+            trace.lookup("read the phone code for $phone from the test API") { retryOracle { oracle.latestOtp(phone) } }
                 ?: throw RunFailure(FailureReason.REGISTRATION_FAILED, "The test API has no phone code for $phone.")
         trace.fill("verify.phone_code", code)
         trace.click("verify.phone_submit")
@@ -214,6 +218,9 @@ internal class TargetFlows(
 
     companion object {
         const val USER_NAME = "session.user_name"
+
+        /** How often one journey step may come up while signing in once. */
+        const val MAX_VISITS_PER_STEP = 2
 
         fun normalizeName(name: String): String = Normalizer.normalize(name.trim().replace(WHITESPACE, " "), Normalizer.Form.NFC)
 

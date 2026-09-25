@@ -78,7 +78,7 @@ class DefaultAgentLoop(
         step: StepContext,
     ): ActionOutcome {
         val execution = Execution(runtime, instruction, step)
-        val outcome = withTimeoutOrNull(step.timeout) { execution.run() } ?: execution.timedOut()
+        val outcome = withTimeoutOrNull(step.timeout) { execution.run() } ?: execution.interrupted()
         logger.info {
             "${runtime.identity.agentId}/${step.scenarioStep}: do finished ${outcome.status}" +
                 (outcome.failureReason?.let { " (${it.key})" } ?: "") + " after ${outcome.stepsTaken} decisions"
@@ -101,6 +101,9 @@ class DefaultAgentLoop(
         private var invalidStreak = 0
         private var failedActionStreak = 0
 
+        /** The outcome of the turn that ended the loop, set before that turn's evidence is written. */
+        private var concluded: ActionOutcome? = null
+
         suspend fun run(): ActionOutcome {
             while (decisions < step.maxSteps) {
                 val startedAt = evidence.now()
@@ -109,8 +112,12 @@ class DefaultAgentLoop(
             return finishWithoutTurn("step limit", failed(FailureReason.STEP_LIMIT, "Task not finished within ${step.maxSteps} decisions."))
         }
 
-        suspend fun timedOut(): ActionOutcome =
-            finishWithoutTurn(
+        /**
+         * The step timeout fired. When the loop had already ended (the timeout hit while the last turn's evidence
+         * was being captured), that ending stands: the model finished within its budget. Otherwise it is `timeout`.
+         */
+        suspend fun interrupted(): ActionOutcome =
+            concluded ?: finishWithoutTurn(
                 "timeout",
                 failed(FailureReason.TIMEOUT, "Task not finished within ${step.timeout} ($decisions decisions made)."),
             )
@@ -124,9 +131,10 @@ class DefaultAgentLoop(
                 } catch (e: Exception) {
                     return Turn("snapshot", StepStatus.ERROR, "ERROR: could not read the page: ${describe(e)}", actionFailed = true)
                 }
+            val request = request(snapshot)
             val output =
                 try {
-                    llm.complete(request(snapshot)).output
+                    llm.complete(request).output
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: LlmException.InvalidOutput) {
@@ -402,11 +410,9 @@ class DefaultAgentLoop(
                 null -> Unit
             }
             val outcome =
-                (
-                    turn.outcome ?: guardOutcome(
-                        turn,
-                    )
-                )?.let { it.copy(summary = runtime.redact(it.summary), stepsTaken = decisions) }
+                (turn.outcome ?: guardOutcome(turn))
+                    ?.let { it.copy(summary = runtime.redact(it.summary), stepsTaken = decisions) }
+                    ?.also { concluded = it }
             val detail =
                 if (outcome == null) {
                     turn.observation

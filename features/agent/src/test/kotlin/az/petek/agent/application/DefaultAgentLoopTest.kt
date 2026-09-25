@@ -10,6 +10,7 @@ import az.petek.agent.domain.JsonDecisionProtocol
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.FakeVerification
 import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.PageElement
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.testing.FakeBrowserSession
@@ -32,6 +33,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -44,6 +46,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 import java.net.URI
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -569,6 +573,45 @@ class DefaultAgentLoopTest {
             currentTime shouldBe 90_000
             evidence.stepList.last().action shouldBe "timeout"
             artifactsOf(ArtifactType.A11Y).last().stepId shouldBe evidence.stepList.last().stepId
+        }
+
+    @Test
+    fun `a task finished just before the timeout keeps its outcome while its evidence is still being captured`() =
+        runTest {
+            val slowCamera =
+                object : BrowserSession by browser {
+                    override suspend fun screenshot(): ByteArray {
+                        delay(5.seconds)
+                        return browser.screenshot()
+                    }
+                }
+            val llm =
+                scripted(decision("done", """"summary": "Elan yaradıldı", "object_id": "a7""""), before = {
+                    delay(58.seconds)
+                })
+
+            val outcome = execute(llm, timeout = 60.seconds, target = AgentTestData.runtime(slowCamera, identity))
+
+            outcome shouldBe ActionOutcome(ActionStatus.SUCCEEDED, "Elan yaradıldı", objectId = "a7", stepsTaken = 1)
+            currentTime shouldBe 60_000
+            evidence.stepList.map { it.action } shouldContainExactly listOf("done success=true \"Elan yaradıldı\" object_id=a7")
+        }
+
+    @Test
+    fun `a password that a GET form put into the page URL is redacted too`() =
+        runTest {
+            val encoded = URLEncoder.encode(password, StandardCharsets.UTF_8)
+            encoded shouldNotBe password
+            browser.url = "https://staging.kadrohr.test/login?email=x&password=$encoded"
+            val llm = scripted(decision("read_text", """"selector": "#echo""""), decision("done", """"summary": "ok""""))
+            browser.selectorTexts["#echo"] = "query: password=$encoded"
+
+            execute(llm)
+
+            llm.requests.forEach { request -> request.messages.single().content shouldNotContain encoded }
+            llm.userTurn(0) shouldContain "password={self.password}"
+            llm.userTurn(1) shouldContain "query: password={self.password}"
+            evidence.stepList.forEach { step -> listOfNotNull(step.action, step.detail).forEach { it shouldNotContain encoded } }
         }
 
     @Test

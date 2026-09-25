@@ -7,6 +7,11 @@ import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.AgentTestData.sel
 import az.petek.agent.testing.RunFunctionFixture
 import az.petek.agent.testing.SimulatedKadro
+import az.petek.evidence.domain.StepStatus
+import az.petek.oracle.domain.OracleException
+import az.petek.oracle.domain.TargetOracle
+import az.petek.oracle.domain.TestCompany
+import az.petek.oracle.testing.FakeTargetOracle
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
@@ -58,6 +63,42 @@ class RegisterOwnerRunFunctionTest {
             outcome.status shouldBe ActionStatus.SUCCEEDED
             outcome.objectId.shouldBeNull()
             fixture.shared.get(SharedRunState.COMPANY_ID).shouldBeNull()
+        }
+
+    @Test
+    fun `a failing company lookup does not undo a successful sign-up`() =
+        runTest {
+            val failing = { inner: FakeTargetOracle ->
+                object : TargetOracle by inner {
+                    override suspend fun companyByOwner(ownerEmail: String): TestCompany? =
+                        throw OracleException("HTTP 500 from /test/companies")
+                }
+            }
+            val fixture = RunFunctionFixture(admin, oracleOverride = failing)
+
+            val outcome = fixture.run("register_owner")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            outcome.objectId.shouldBeNull()
+            outcome.summary shouldContain "The company was not published: the test API failed (HTTP 500 from /test/companies)."
+            fixture.shared.get(SharedRunState.COMPANY_ID).shouldBeNull()
+            fixture.storageStateSaved() shouldBe true
+            fixture.steps.single { it.action == "register_owner: look up the company owned by ${admin.email}" }.status shouldBe
+                StepStatus.ERROR
+        }
+
+    @Test
+    fun `a company the test API does not know yet is reported, not published`() =
+        runTest {
+            val fixture = RunFunctionFixture(admin)
+            fixture.site.registerCompanyInOracle = false
+
+            val outcome = fixture.run("register_owner")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            outcome.summary shouldContain "the test API does not know it yet"
+            fixture.steps.single { it.action == "register_owner: look up the company owned by ${admin.email}" }.status shouldBe
+                StepStatus.FAILED
         }
 
     @Test

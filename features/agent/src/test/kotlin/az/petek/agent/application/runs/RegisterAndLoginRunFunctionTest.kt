@@ -107,6 +107,7 @@ class RegisterAndLoginRunFunctionTest {
             outcome.summary shouldContain "No company code was published within 5m"
             currentTime shouldBe 300_000
             fixture.attempts() shouldHaveSize 1
+            fixture.steps.single { it.action == "register_and_login: wait for the company code" }.status shouldBe StepStatus.FAILED
         }
 
     @Test
@@ -183,6 +184,44 @@ class RegisterAndLoginRunFunctionTest {
             fixture.attempts() shouldHaveSize 2
             val failure = fixture.steps.single { it.action == "register_and_login: attempt 1 failed" }
             failure.detail!! shouldContain "no newer code arrived within 1m"
+        }
+
+    @Test
+    fun `a retry that verifies the e-mail and lands on the login page again signs in within the same attempt`() =
+        runTest {
+            val fixture = RunFunctionFixture(invited)
+            fixture.shared.put(SharedRunState.inviteLink(invited.email), fixture.site.invite(invited))
+            fixture.site.rejectEmailCodes = 1
+            fixture.site.resendCodeOnReject = false
+            fixture.site.landOnLoginAfterVerification = true
+
+            val outcome = fixture.run("register_and_login")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            fixture.attempts() shouldHaveSize 2
+            fixture.clicks("login.submit") shouldBe 2
+            fixture.site.signedIn?.email shouldBe invited.email.lowercase()
+        }
+
+    @Test
+    fun `a site that asks for the e-mail code after every login is stopped instead of looping`() =
+        runTest {
+            val fixture = RunFunctionFixture(invited)
+            fixture.shared.put(SharedRunState.inviteLink(invited.email), fixture.site.invite(invited))
+            fixture.site.forgetEmailVerification = true
+            fixture.site.landOnLoginAfterVerification = true
+
+            val outcome = fixture.run("register_and_login")
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.failureReason shouldBe FailureReason.LOGIN_FAILED
+            outcome.summary shouldContain "last: The site asked for the login page 3 times"
+            fixture.attempts() shouldHaveSize 3
+            fixture.site.submittedEmailCodes shouldHaveSize 6
+            fixture.clicks("login.submit") shouldBe 6
+            fixture.steps
+                .single { it.action == "register_and_login: attempt 1 failed" }
+                .detail!! shouldContain "The site asked for the e-mail code step 3 times"
         }
 
     @Test

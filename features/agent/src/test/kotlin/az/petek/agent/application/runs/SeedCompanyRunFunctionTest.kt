@@ -6,7 +6,9 @@ import az.petek.agent.domain.SharedRunState
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.RunFunctionFixture
 import az.petek.agent.testing.SimulatedKadro
+import az.petek.evidence.domain.StepStatus
 import az.petek.oracle.domain.Invitee
+import az.petek.oracle.domain.OracleSafetyException
 import az.petek.oracle.domain.SeedCompanyRequest
 import az.petek.oracle.domain.SeedCompanyResult
 import az.petek.oracle.domain.TargetOracle
@@ -108,6 +110,28 @@ class SeedCompanyRunFunctionTest {
             outcome.summary shouldContain "knows no company owned by ${admin.email}"
             currentTime shouldBe 4_000
             fixture.oracle.seeded.shouldBeEmpty()
+            fixture.steps.single { it.action == "seed_company: look up the company owned by ${admin.email}" }.status shouldBe
+                StepStatus.FAILED
+        }
+
+    @Test
+    fun `a test API that refuses to seed is a missing prerequisite, not an unexpected error`() =
+        runTest {
+            val refusing = { inner: FakeTargetOracle ->
+                object : TargetOracle by inner {
+                    override suspend fun seedCompany(request: SeedCompanyRequest): SeedCompanyResult =
+                        throw OracleSafetyException("company ${request.companyId} is not a test company")
+                }
+            }
+            val fixture = RunFunctionFixture(admin, oracleOverride = refusing)
+            fixture.oracle.ownedCompany()
+
+            val outcome = fixture.run("seed_company")
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.failureReason shouldBe FailureReason.MISSING_PREREQUISITE
+            outcome.summary shouldBe "Test API refused: company c1 is not a test company"
+            fixture.shared.get(SharedRunState.COMPANY_ID).shouldBeNull()
         }
 
     @Test

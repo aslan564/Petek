@@ -124,7 +124,7 @@ internal class RegisterAndLoginRunFunction(
         val identity = runtime.identity
         val code =
             runtime.shared.get(SharedRunState.COMPANY_CODE)
-                ?: act("wait for the company code") { runtime.shared.await(SharedRunState.COMPANY_CODE, settings.companyCodeTimeout) }
+                ?: lookup("wait for the company code") { runtime.shared.await(SharedRunState.COMPANY_CODE, settings.companyCodeTimeout) }
                 ?: throw RunFailure(
                     FailureReason.MISSING_PREREQUISITE,
                     "No company code was published within ${settings.companyCodeTimeout}; did seed_company run?",

@@ -13,8 +13,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 
 /**
- * Inbox-like [AwaitVerificationUseCase]: tests (or the simulated site) "send" codes and links; each await consumes
- * the oldest unread one for that address, polling in virtual time and throwing [MailTimeoutException] like the real one.
+ * Inbox-like [AwaitVerificationUseCase]: tests (or the simulated site) "send" codes and links; like the real use case
+ * (`Mailbox.findLatest`), each await consumes the newest unread one for that address, polling in virtual time and
+ * throwing [MailTimeoutException] when nothing arrives. Older unread messages stay unread.
  */
 class FakeVerification : AwaitVerificationUseCase {
     private data class Mail(
@@ -73,7 +74,7 @@ class FakeVerification : AwaitVerificationUseCase {
     ): VerificationCode? =
         synchronized(inbox) {
             val mail =
-                inbox.firstOrNull { mail ->
+                inbox.lastOrNull { mail ->
                     mail.to == to &&
                         when (purpose) {
                             MailPurpose.CODE -> mail.code.code != null

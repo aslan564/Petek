@@ -49,6 +49,9 @@ class SimulatedKadro(
     var publishPhoneCodes = true
     var landOnUnknownPage = false
 
+    /** A broken site: an accepted e-mail code is forgotten, so every login asks for a new one. */
+    var forgetEmailVerification = false
+
     var signedIn: Account? = null
         private set
     private var pendingEmail: String? = null
@@ -177,7 +180,7 @@ class SimulatedKadro(
             return showEmailCodeStep(account)
         }
         if (code != codes[account.email]) return showEmailCodeStep(account)
-        account.emailVerified = true
+        account.emailVerified = !forgetEmailVerification
         continueAfterEmail(account)
     }
 

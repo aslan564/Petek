@@ -75,7 +75,7 @@ internal class SeedCompanyRunFunction(
     private suspend fun RunTrace.ownedCompany(): TestCompany {
         val email = runtime.identity.email
         val company =
-            act("look up the company owned by $email") { flows.retryOracle { oracle.companyByOwner(email) } }
+            lookup("look up the company owned by $email") { flows.retryOracle { oracle.companyByOwner(email) } }
                 ?: throw RunFailure(
                     FailureReason.MISSING_PREREQUISITE,
                     "The test API knows no company owned by $email; the owner sign-up must succeed first.",

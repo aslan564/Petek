@@ -9,6 +9,7 @@ import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.mail.domain.MailTimeoutException
 import az.petek.oracle.domain.OracleException
+import az.petek.oracle.domain.OracleSafetyException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -47,6 +48,8 @@ internal suspend fun RunTrace.outcomeOf(body: suspend RunTrace.() -> ActionOutco
         failed(FailureReason.BROWSER_ERROR, "Browser error: ${e.message}")
     } catch (e: OracleException) {
         failed(FailureReason.MISSING_PREREQUISITE, "Test API call failed: ${e.message}")
+    } catch (e: OracleSafetyException) {
+        failed(FailureReason.MISSING_PREREQUISITE, "Test API refused: ${e.message}")
     } catch (e: Exception) {
         ActionOutcome(ActionStatus.ERROR, "Unexpected ${e::class.simpleName}: ${e.message}")
     }

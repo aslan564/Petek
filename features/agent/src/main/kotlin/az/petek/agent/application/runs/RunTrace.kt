@@ -61,6 +61,12 @@ internal class RunTrace(
         return result
     }
 
+    /** Like [act] for something that is looked up: the step is FAILED, not PASSED, when nothing was found. */
+    suspend fun <T : Any> lookup(
+        description: String,
+        block: suspend () -> T?,
+    ): T? = probe(description, block) { it != null }
+
     /** Records an observation that took no browser action, e.g. `e-mail code rejected`. */
     suspend fun note(
         description: String,
@@ -98,7 +104,7 @@ internal class RunTrace(
         timeout: Duration,
     ): Boolean = probe("wait for $key", { session.waitForSelector(target.selector(key), timeout).found }) { it }
 
-    suspend fun readText(key: String): String? = act("read $key") { session.readText(target.selector(key)) }
+    suspend fun readText(key: String): String? = lookup("read $key") { session.readText(target.selector(key)) }
 
     suspend fun saveStorageState() = act("save storage state") { session.saveStorageState(runtime.storageStatePath) }
 

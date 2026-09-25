@@ -7,6 +7,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
 import az.petek.agent.domain.StepContext
 import az.petek.core.model.RegistrationMode
+import az.petek.oracle.domain.OracleException
 import az.petek.oracle.domain.TargetOracle
 import az.petek.oracle.domain.TestCompany
 
@@ -45,12 +46,15 @@ internal class RegisterOwnerRunFunction(
             flows.signIn(this, state)
             val shown = flows.verifyIdentity(this)
             saveStorageState()
-            val created = publishCompany()
-            succeeded(
-                "Registered ${identity.email} as owner of '$company'. $shown." + (created?.let { " Company id ${it.id}." } ?: ""),
-                objectId = created?.id,
-            )
+            val published = publishCompany()
+            succeeded("Registered ${identity.email} as owner of '$company'. $shown.${published.note}", objectId = published.company?.id)
         }
+
+    /** What the test API said about the new company; [note] is appended to the summary. */
+    private class Publication(
+        val company: TestCompany?,
+        val note: String,
+    )
 
     private suspend fun RunTrace.submitSignUp(company: String) {
         val identity = runtime.identity
@@ -66,13 +70,23 @@ internal class RegisterOwnerRunFunction(
         click("register.submit")
     }
 
-    private suspend fun RunTrace.publishCompany(): TestCompany? {
-        if (!oracle.isAvailable) return null
+    /**
+     * Publishes the new company for the other testers. The sign-up itself already succeeded at this point, so a test
+     * API that lags or fails does not fail it: the failed lookup is recorded, the summary says so, and `seed_company`
+     * looks the company up again.
+     */
+    private suspend fun RunTrace.publishCompany(): Publication {
+        if (!oracle.isAvailable) return Publication(null, "")
         val email = runtime.identity.email
-        val company = act("look up the company owned by $email") { flows.retryOracle { oracle.companyByOwner(email) } } ?: return null
+        val company =
+            try {
+                lookup("look up the company owned by $email") { flows.retryOracle { oracle.companyByOwner(email) } }
+            } catch (e: OracleException) {
+                return Publication(null, " The company was not published: the test API failed (${e.message}).")
+            } ?: return Publication(null, " The company was not published: the test API does not know it yet.")
         runtime.shared.put(SharedRunState.COMPANY_ID, company.id)
         company.code?.let { runtime.shared.put(SharedRunState.COMPANY_CODE, it) }
-        return company
+        return Publication(company, " Company id ${company.id}.")
     }
 
     companion object {
