@@ -12,12 +12,14 @@ import az.petek.dashboard.domain.DashboardUpdate.AssertionRecorded
 import az.petek.dashboard.domain.DashboardUpdate.EventRecorded
 import az.petek.dashboard.domain.DashboardUpdate.FindingRecorded
 import az.petek.dashboard.domain.DashboardUpdate.Message
+import az.petek.dashboard.domain.DashboardUpdate.PlanReady
 import az.petek.dashboard.domain.DashboardUpdate.ReceiptRecorded
 import az.petek.dashboard.domain.DashboardUpdate.RunCreated
 import az.petek.dashboard.domain.DashboardUpdate.RunEnded
 import az.petek.dashboard.domain.DashboardUpdate.RunStarted
 import az.petek.dashboard.domain.DashboardUpdate.ScenarioStepStarted
 import az.petek.dashboard.domain.DashboardUpdate.StepRecorded
+import az.petek.dashboard.domain.DashboardUpdate.TaskUpdated
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.FindingClass
@@ -48,7 +50,11 @@ import java.time.Instant
  * - **Screenshots**: the agent's latest SCREENSHOT artifact, attributed through the artifact path
  *   (`<run>/<agent>/<file>`, see `ArtifactStore`).
  * - **Bounds**: the run timeline keeps the newest [TIMELINE_LIMIT] entries, each agent's own timeline the newest
- *   [AGENT_TIMELINE_LIMIT], the findings list the newest [FINDINGS_LIMIT] (the counter counts all).
+ *   [AGENT_TIMELINE_LIMIT], the findings list the newest [FINDINGS_LIMIT] (the counter counts all), the event list the
+ *   newest [EVENTS_LIMIT].
+ * - **Orchestrator**: the latest plan and the latest task report per (step, agent); [orchestratorVersion] grows only
+ *   when the plan, a task, an event or the run header changed, so the orchestrator screen is not redrawn for every
+ *   agent action.
  *
  * Instances compare by identity: states are large, and every applied update produces a new [version] anyway.
  */
@@ -63,6 +69,12 @@ class DashboardState private constructor(
     private val tally: Tally,
     private val eventNames: Map<EventId, String>,
     private val nextSeq: Long,
+    /** Grows by one with every update that changed what the orchestrator screen shows. */
+    val orchestratorVersion: Long,
+    private val plan: RunPlanView?,
+    /** Latest task report per plan step, then per agent. */
+    private val tasks: Map<String, Map<AgentId, TaskStateView>>,
+    private val events: List<EventView>,
 ) {
     /** The run on the board, or null before any run was seen. */
     val runId: RunId? get() = run?.runId
@@ -86,8 +98,11 @@ class DashboardState private constructor(
                 is ReceiptRecorded -> scoped(update.record.runId, update.at)?.onReceipt(update)
                 is AssertionRecorded -> scoped(update.record.runId, update.at)?.onAssertion(update)
                 is FindingRecorded -> scoped(update.record.runId, update.at)?.onFinding(update)
+                is PlanReady -> onPlanReady(update)
+                is TaskUpdated -> scoped(update.task.runId, update.at)?.onTask(update)
             } ?: return this
-        return next.copy(version = version + 1)
+        val orchestrated = next.plan !== plan || next.tasks !== tasks || next.events !== events || next.run !== run
+        return next.copy(version = version + 1, orchestratorVersion = orchestratorVersion + if (orchestrated) 1 else 0)
     }
 
     fun applyAll(updates: Iterable<DashboardUpdate>): DashboardState = updates.fold(this) { state, update -> state.apply(update) }
@@ -106,11 +121,37 @@ class DashboardState private constructor(
         )
     }
 
+    /** The orchestrator screen's view at [now]: plan, task matrix and events of the shown run. */
+    fun orchestrator(now: HarnessTimestamp): OrchestratorSnapshot {
+        val refs = agents.values.map { AgentRef(it.card.agentId, it.card.displayName, it.card.role) }.sortedBy { it.agentId.index }
+        val steps = plan?.steps.orEmpty()
+        val order = steps.withIndex().associate { (index, step) -> step.id to index }
+        val reported =
+            tasks.values
+                .flatMap { it.values }
+                .sortedWith(compareBy<TaskStateView>({ order[it.stepId] ?: Int.MAX_VALUE }, { it.stepId }, { it.agentId.index }))
+        val cells = steps.flatMap { step -> step.agentIds.map { tasks[step.id]?.get(it)?.state ?: TaskState.PENDING } }
+        val byState = cells.groupingBy { it }.eachCount()
+        return OrchestratorSnapshot(
+            version = orchestratorVersion,
+            generatedAt = now.wall,
+            run = runView(now),
+            plan = plan,
+            agents = refs,
+            tasks = reported,
+            taskCounts = TaskState.entries.associateWith { byState[it] ?: 0 },
+            events = events,
+        )
+    }
+
     /** The agent's card and its own newest timeline entries; null for an agent the board has never seen. */
     fun agentDetail(agentId: AgentId): AgentDetail? = agents[agentId]?.let { AgentDetail(it.card, agentTimelines[agentId].orEmpty()) }
 
-    /** Same state with [version] moved to [atLeast] if it is behind, e.g. when a replayed state replaces a live one. */
-    fun withVersionAtLeast(atLeast: Long): DashboardState = if (version >= atLeast) this else copy(version = atLeast)
+    /**
+     * An empty board that continues this one's versions and timeline order, e.g. to replay a recorded run in place of
+     * the live one without views mistaking the replay for something they have already shown.
+     */
+    fun cleared(): DashboardState = EMPTY.copy(version = version + 1, nextSeq = nextSeq, orchestratorVersion = orchestratorVersion + 1)
 
     // --- run scope ------------------------------------------------------------------------------------------------
 
@@ -141,7 +182,8 @@ class DashboardState private constructor(
     private fun fresh(
         runId: RunId,
         at: HarnessTimestamp,
-    ): DashboardState = EMPTY.copy(version = version, nextSeq = nextSeq, run = RunTrack.started(runId, at))
+    ): DashboardState =
+        EMPTY.copy(version = version, nextSeq = nextSeq, orchestratorVersion = orchestratorVersion, run = RunTrack.started(runId, at))
 
     private fun onRunCreated(update: RunCreated): DashboardState {
         val record = update.run
@@ -303,21 +345,44 @@ class DashboardState private constructor(
         return withCard(owner) { it.copy(lastScreenshotArtifactId = record.artifactId) }
     }
 
-    private fun onEvent(update: EventRecorded): DashboardState {
+    private fun onEvent(update: EventRecorded): DashboardState? {
         val record = update.record
-        return copy(tally = tally.copy(events = tally.events + 1), eventNames = eventNames + (record.eventId to record.name))
-            .log(record.t0, record.emitter, TimelineKind.EVENT, TimelineStatus.OK, TimelineTexts.event(record))
+        if (record.eventId in eventNames) return null
+        val view = EventView(record.eventId, record.name, record.emitter, record.objectId, record.t0, emptyList())
+        return copy(
+            tally = tally.copy(events = tally.events + 1),
+            eventNames = eventNames + (record.eventId to record.name),
+            events = (listOf(view) + events).take(EVENTS_LIMIT),
+        ).log(record.t0, record.emitter, TimelineKind.EVENT, TimelineStatus.OK, TimelineTexts.event(record))
     }
 
-    private fun onReceipt(update: ReceiptRecorded): DashboardState {
+    private fun onReceipt(update: ReceiptRecorded): DashboardState? {
         val record = update.record
+        val shown = events.indexOfFirst { it.eventId == record.eventId }
+        val event = events.getOrNull(shown)
+        if (event != null && event.receipts.any { it.receiver == record.receiver }) return null
+        val withReceipt =
+            if (event == null) {
+                events
+            } else {
+                val receipts =
+                    (
+                        event.receipts +
+                            ReceiptView(
+                                record.receiver,
+                                record.received,
+                                record.latencyMs,
+                            )
+                    ).sortedBy { it.receiver.index }
+                events.toMutableList().also { it[shown] = event.copy(receipts = receipts) }
+            }
         val counted =
             if (record.received) {
                 tally.copy(receiptsReceived = tally.receiptsReceived + 1)
             } else {
                 tally.copy(receiptsMissing = tally.receiptsMissing + 1)
             }
-        return copy(tally = counted).log(
+        return copy(tally = counted, events = withReceipt).log(
             at = record.t1 ?: update.at.wall,
             agentId = record.receiver,
             kind = TimelineKind.RECEIPT,
@@ -383,6 +448,21 @@ class DashboardState private constructor(
                 text = TimelineTexts.finding(record),
                 scenarioStep = record.scenarioStep,
             )
+    }
+
+    // --- orchestrator ---------------------------------------------------------------------------------------------
+
+    private fun onPlanReady(update: PlanReady): DashboardState {
+        val runId = update.plan.runId
+        val scoped = if (runId == null) this else claimed(runId, update.at)
+        return scoped.copy(plan = update.plan)
+    }
+
+    private fun onTask(update: TaskUpdated): DashboardState? {
+        val task = update.task.copy(updatedAt = update.task.updatedAt ?: update.at.wall)
+        val step = tasks[task.stepId].orEmpty()
+        if (step[task.agentId] == task) return null
+        return copy(tasks = tasks + (task.stepId to step + (task.agentId to task)))
     }
 
     // --- building blocks ------------------------------------------------------------------------------------------
@@ -463,7 +543,25 @@ class DashboardState private constructor(
         tally: Tally = this.tally,
         eventNames: Map<EventId, String> = this.eventNames,
         nextSeq: Long = this.nextSeq,
-    ) = DashboardState(version, run, agents, timeline, agentTimelines, findings, tally, eventNames, nextSeq)
+        orchestratorVersion: Long = this.orchestratorVersion,
+        plan: RunPlanView? = this.plan,
+        tasks: Map<String, Map<AgentId, TaskStateView>> = this.tasks,
+        events: List<EventView> = this.events,
+    ) = DashboardState(
+        version,
+        run,
+        agents,
+        timeline,
+        agentTimelines,
+        findings,
+        tally,
+        eventNames,
+        nextSeq,
+        orchestratorVersion,
+        plan,
+        tasks,
+        events,
+    )
 
     private data class RunTrack(
         val runId: RunId,
@@ -530,10 +628,25 @@ class DashboardState private constructor(
         const val TIMELINE_LIMIT = 300
         const val AGENT_TIMELINE_LIMIT = 30
         const val FINDINGS_LIMIT = 200
+        const val EVENTS_LIMIT = 200
 
         /** Nothing seen yet. */
         val EMPTY: DashboardState =
-            DashboardState(0, null, emptyMap(), emptyList(), emptyMap(), emptyList(), Tally(), emptyMap(), 1)
+            DashboardState(
+                0,
+                null,
+                emptyMap(),
+                emptyList(),
+                emptyMap(),
+                emptyList(),
+                Tally(),
+                emptyMap(),
+                1,
+                0,
+                null,
+                emptyMap(),
+                emptyList(),
+            )
 
         private const val NANOS_PER_MILLI = 1_000_000
         private val FAILED_STEPS = setOf(StepStatus.FAILED, StepStatus.ERROR, StepStatus.BLOCKED)

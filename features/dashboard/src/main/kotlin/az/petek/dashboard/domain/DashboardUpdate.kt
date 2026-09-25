@@ -19,7 +19,10 @@ import az.petek.orchestration.domain.RunOutcome
  * Run scoping (see [DashboardState.apply]): [RunCreated] and [RunStarted] name the run being shown and start a fresh
  * board when they name a different one. Updates that carry a run id ([AgentsPlanned], the evidence records) adopt
  * their run when nothing is shown yet or the shown run has ended, and are ignored while another run is still going.
- * Updates without a run id apply to whatever is shown.
+ * Updates without a run id apply to whatever is shown. [PlanReady] names its run like [RunStarted] does.
+ *
+ * Events and receipts are idempotent: the same event id (or the same receiver of an event) counts once, so both the
+ * evidence recorder and the orchestrator may report them.
  */
 sealed interface DashboardUpdate {
     val at: HarnessTimestamp
@@ -97,6 +100,18 @@ sealed interface DashboardUpdate {
 
     data class FindingRecorded(
         val record: FindingRecord,
+        override val at: HarnessTimestamp,
+    ) : DashboardUpdate
+
+    /** The orchestrator's plan of a run; a plan without a run id applies to whatever run is shown. */
+    data class PlanReady(
+        val plan: RunPlanView,
+        override val at: HarnessTimestamp,
+    ) : DashboardUpdate
+
+    /** One cell of the task matrix changed; the latest report per (step, agent) wins. */
+    data class TaskUpdated(
+        val task: TaskStateView,
         override val at: HarnessTimestamp,
     ) : DashboardUpdate
 }

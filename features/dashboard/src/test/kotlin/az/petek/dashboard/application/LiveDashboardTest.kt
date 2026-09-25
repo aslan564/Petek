@@ -4,14 +4,21 @@ import az.petek.core.model.Role
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.time.SystemHarnessClock
 import az.petek.dashboard.domain.DashboardSnapshot
+import az.petek.dashboard.domain.OrchestratorSnapshot
+import az.petek.dashboard.domain.PlanStepView
 import az.petek.dashboard.domain.RunPhase
+import az.petek.dashboard.domain.RunPlanView
+import az.petek.dashboard.domain.TaskState
+import az.petek.dashboard.domain.TaskStateView
 import az.petek.dashboard.testing.FailingClock
 import az.petek.dashboard.testing.Records.OTHER_RUN
 import az.petek.dashboard.testing.Records.RUN
 import az.petek.dashboard.testing.Records.a
 import az.petek.dashboard.testing.Records.artifact
 import az.petek.dashboard.testing.Records.assertion
+import az.petek.dashboard.testing.Records.event
 import az.petek.dashboard.testing.Records.identity
+import az.petek.dashboard.testing.Records.receipt
 import az.petek.dashboard.testing.Records.runRecord
 import az.petek.dashboard.testing.Records.status
 import az.petek.dashboard.testing.Records.step
@@ -274,6 +281,54 @@ class LiveDashboardTest {
             dashboard.artifact(shot.artifactId).shouldNotBeNull()
             dashboard.reportPath shouldBe "/tmp/report"
         }
+
+    @Test
+    fun `plan, task and event reports reach the orchestrator view and duplicates count once`() =
+        runBlocking<Unit> {
+            val dashboard = LiveDashboard(FakeHarnessClock())
+            val recorder = DashboardEvidenceRecorder(InMemoryEvidence(), dashboard)
+            val announced = event(1)
+            dashboard.planReady(RunPlanView(RUN, "Elan axını", listOf(announceStep)))
+
+            dashboard.taskUpdated(TaskStateView(RUN, "announce", a(1), TaskState.RUNNING))
+            recorder.event(announced)
+            dashboard.eventPublished(announced)
+            dashboard.eventReceived(receipt(announced, 2))
+            recorder.receipt(receipt(announced, 2))
+
+            val view = dashboard.orchestrator()
+            view.plan!!
+                .steps
+                .single()
+                .id shouldBe "announce"
+            view.tasks.single().state shouldBe TaskState.RUNNING
+            view.events.single().receipts shouldHaveSize 1
+            dashboard.snapshot().counters.events shouldBe 1
+            dashboard.snapshot().counters.receiptsReceived shouldBe 1
+        }
+
+    @Test
+    fun `the orchestrator stream moves only when its screen changes`() =
+        runTest {
+            val dashboard = LiveDashboard(SchedulerClock(testScheduler))
+            dashboard.planReady(RunPlanView(RUN, "Elan axını", listOf(announceStep)))
+            val seen = mutableListOf<OrchestratorSnapshot>()
+            backgroundScope.launch { dashboard.orchestratorUpdates.collect { seen += it } }
+            runCurrent()
+
+            dashboard.runStarted(RUN, listOf(status(1)))
+            dashboard.agentUpdated(status(1, AgentState.WORKING, "announce", "click [12]"))
+            advanceTimeBy(1.seconds)
+            dashboard.taskUpdated(TaskStateView(RUN, "announce", a(1), TaskState.PASSED))
+            advanceTimeBy(1.seconds)
+            runCurrent()
+
+            seen shouldHaveSize 2
+            seen.last().taskCounts[TaskState.PASSED] shouldBe 1
+        }
+
+    private val announceStep =
+        PlanStepView("announce", false, "a01", listOf(a(1)), "do", "Elan yarat", "announcement_created", null, false, emptyList())
 
     private companion object {
         const val UPDATES_PER_AGENT = 20

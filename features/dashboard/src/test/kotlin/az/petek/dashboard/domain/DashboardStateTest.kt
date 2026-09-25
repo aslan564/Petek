@@ -550,10 +550,20 @@ class DashboardStateTest {
     }
 
     @Test
-    fun `a replayed state can take over a live version`() {
-        val replayed = board(running)
+    fun `a cleared board continues the versions and the timeline order of the old one`() {
+        val old = board(running, StepRecorded(step(2), at(1)), Message("hello", at(2)))
 
-        replayed.withVersionAtLeast(100).version shouldBe 100
-        replayed.withVersionAtLeast(0) shouldBeSameInstanceAs replayed
+        val cleared = old.cleared()
+        val replayed = cleared.apply(RunCreated(runRecord(runId = OTHER_RUN), at(3))).apply(Message("again", at(4)))
+
+        cleared.version shouldBe old.version + 1
+        cleared.orchestratorVersion shouldBe old.orchestratorVersion + 1
+        cleared.view().agents.shouldBeEmpty()
+        cleared.runId.shouldBeNull()
+        replayed
+            .view()
+            .timeline
+            .single()
+            .seq shouldBeGreaterThan old.view().timeline.maxOf { it.seq }
     }
 }

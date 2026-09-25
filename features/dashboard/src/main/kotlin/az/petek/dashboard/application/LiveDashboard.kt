@@ -9,7 +9,12 @@ import az.petek.dashboard.domain.AgentDetail
 import az.petek.dashboard.domain.DashboardSnapshot
 import az.petek.dashboard.domain.DashboardState
 import az.petek.dashboard.domain.DashboardUpdate
+import az.petek.dashboard.domain.OrchestratorSnapshot
+import az.petek.dashboard.domain.RunPlanView
+import az.petek.dashboard.domain.TaskStateView
 import az.petek.evidence.domain.ArtifactRecord
+import az.petek.evidence.domain.EventReceipt
+import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.RunRecord
 import az.petek.identity.domain.Identity
@@ -43,12 +48,16 @@ private val logger = KotlinLogging.logger {}
  *
  * [updates] emits the current snapshot to each new collector at once, then at most one snapshot per
  * [refreshInterval] (4 per second by default), always the latest; nothing is emitted while nothing changes.
+ * [orchestratorUpdates] does the same for the orchestrator screen, and only when its part changed.
  *
  * App integration contract (the composition root, `app`):
  * 1. Create one `LiveDashboard(clock)` per process.
  * 2. Wrap the evidence recorder with [DashboardEvidenceRecorder] as the outermost decorator, and hand the wrapped
  *    recorder to everything that records (runner, agent loop, run functions, verification, finalizer).
- * 3. Pass the dashboard to the runner as a [MonitorView], in a `CompositeMonitorView` with the console board.
+ * 3. Pass the dashboard to the runner as a [MonitorView], in a `CompositeMonitorView` with the console board, and let
+ *    the orchestrator report its plan ([planReady]) and every task change ([taskUpdated]). Events and receipts arrive
+ *    through the recorder; [eventPublished] and [eventReceived] exist for callers that do not record them (duplicates
+ *    count once).
  * 4. Give the runner `DashboardRunRepository(runs, dashboard)` and `DashboardIdentityRepository(identities, dashboard)`
  *    (optional: without them the header lacks campaign and target, and cards lack department and registration).
  * 5. Start `DashboardServer(dashboard, artifacts, reportDirectory)` before the run, print its URL and open it in the
@@ -76,16 +85,14 @@ class LiveDashboard(
     fun snapshot(): DashboardSnapshot = state.value.snapshot(clock.now())
 
     /** Throttled live snapshots (see the class comment). Cold: every collector gets its own pace. */
-    val updates: Flow<DashboardSnapshot> =
-        flow {
-            var seen = -1L
-            while (true) {
-                val current = state.first { it.version != seen }
-                seen = current.version
-                emit(current.snapshot(clock.now()))
-                delay(refreshInterval)
-            }
-        }
+    val updates: Flow<DashboardSnapshot> = throttled({ it.version }) { current, now -> current.snapshot(now) }
+
+    /** The orchestrator screen's view: plan, task matrix and events of the run on the board. */
+    fun orchestrator(): OrchestratorSnapshot = state.value.orchestrator(clock.now())
+
+    /** Throttled like [updates], emitted only when the plan, a task, an event or the run header changed. */
+    val orchestratorUpdates: Flow<OrchestratorSnapshot> =
+        throttled({ it.orchestratorVersion }) { current, now -> current.orchestrator(now) }
 
     /** The agent's card with its own recent timeline; null for an agent not on the board. */
     fun agentDetail(agentId: AgentId): AgentDetail? = state.value.agentDetail(agentId)
@@ -115,6 +122,18 @@ class LiveDashboard(
     override fun runFinished(summary: RunSummary) =
         submit { DashboardUpdate.RunEnded(summary.runId, summary.outcome, summary.durationMs, summary.reportDirectory, it) }
 
+    // --- orchestrator ---------------------------------------------------------------------------------------------
+
+    /** The orchestrator resolved its plan: steps in order with their agents, emits and wait_for. */
+    fun planReady(plan: RunPlanView) = submit { DashboardUpdate.PlanReady(plan, it) }
+
+    /** One task (step × agent) changed state. */
+    fun taskUpdated(task: TaskStateView) = submit { DashboardUpdate.TaskUpdated(task, it) }
+
+    fun eventPublished(record: EventRecord) = submit { DashboardUpdate.EventRecorded(record, it) }
+
+    fun eventReceived(receipt: EventReceipt) = submit { DashboardUpdate.ReceiptRecorded(receipt, it) }
+
     // --- replay ---------------------------------------------------------------------------------------------------
 
     /**
@@ -128,13 +147,27 @@ class LiveDashboard(
         reportPath: String? = null,
     ): DashboardSnapshot {
         val replay = EvidenceReplay.load(run, query, identities, reportPath)
-        val replayed = DashboardState.EMPTY.applyAll(replay.updates)
-        state.update { old -> replayed.withVersionAtLeast(old.version + 1) }
+        state.update { old -> old.cleared().applyAll(replay.updates) }
         artifacts.replaceWith(run.runId, replay.artifacts)
         return snapshot()
     }
 
     // --- feeding --------------------------------------------------------------------------------------------------
+
+    /** At once for a new collector, then at most once per [refreshInterval] and only when [key] moved; always the latest. */
+    private fun <T> throttled(
+        key: (DashboardState) -> Long,
+        view: (DashboardState, HarnessTimestamp) -> T,
+    ): Flow<T> =
+        flow {
+            var seen: Long? = null
+            while (true) {
+                val current = state.first { key(it) != seen }
+                seen = key(current)
+                emit(view(current, clock.now()))
+                delay(refreshInterval)
+            }
+        }
 
     /** Applies the update [build] makes for the harness's current time; never throws, never waits. */
     internal fun submit(build: (HarnessTimestamp) -> DashboardUpdate) {
