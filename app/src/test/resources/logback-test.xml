@@ -1,0 +1,12 @@
+<!-- Tests log to the console only, so no log file appears in the module directory. -->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level [%X{run_id:--} %X{agent_id:--}] %logger{24} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <logger name="Exposed" level="WARN"/>
+  <root level="WARN">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>

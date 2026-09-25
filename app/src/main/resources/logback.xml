@@ -1,0 +1,50 @@
+<!--
+  Pətək logging. Properties are set by az.petek.app.logging.LoggingSetup once the configuration is loaded:
+  petek.log.dir (<evidence>/logs), petek.log.level (INFO, DEBUG with verbose output) and petek.console.level
+  (WARN under the live board, INFO in CI, DEBUG with verbose output). Every line carries run_id and agent_id (MDC).
+-->
+<configuration>
+  <property name="LOG_DIR" value="${petek.log.dir:-evidence/logs}"/>
+
+  <!-- stderr, so command output on stdout stays machine-readable. -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>${petek.console.level:-WARN}</level>
+    </filter>
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level [%X{run_id:--} %X{agent_id:--}] %logger{24} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_DIR}/petek.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_DIR}/petek.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+      <maxFileSize>20MB</maxFileSize>
+      <maxHistory>14</maxHistory>
+      <totalSizeCap>1GB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [run_id=%X{run_id:--} agent_id=%X{agent_id:--}] %logger - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="az.petek" level="${petek.log.level:-INFO}"/>
+  <!-- The live board's log copy: file only, so it never draws over the board itself. -->
+  <logger name="az.petek.board" level="INFO" additivity="false">
+    <appender-ref ref="FILE"/>
+  </logger>
+  <logger name="com.microsoft.playwright" level="WARN"/>
+  <logger name="io.ktor" level="WARN"/>
+  <!-- Exposed logs SQL with bound values at DEBUG, which includes test passwords (CLAUDE.md rule 10). -->
+  <logger name="Exposed" level="WARN"/>
+  <logger name="org.jetbrains.exposed" level="WARN"/>
+  <logger name="com.anthropic" level="WARN"/>
+  <logger name="okhttp3" level="WARN"/>
+
+  <root level="WARN">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="FILE"/>
+  </root>
+</configuration>
