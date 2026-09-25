@@ -18,9 +18,13 @@ dependencies {
     implementation(project(":features:reporting"))
     implementation(project(":features:capacity"))
     implementation(project(":features:dashboard"))
+    implementation(project(":features:explorer"))
+    implementation(project(":features:scenarios"))
     // The start menu's demo runs the local fake KadroHR in-process; it is a test stand-in, never a production target.
     implementation(project(":testing:fake-target"))
     implementation(libs.clikt)
+    // The explorer's stored answers (a small JSON file next to the evidence).
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.mordant)
     implementation(libs.kotlin.logging)
     // Compile access: the MDC helper and the programmatic log setup (log directory from the configuration).
@@ -30,7 +34,12 @@ dependencies {
     testImplementation(testFixtures(project(":features:llm")))
     testImplementation(testFixtures(project(":features:evidence")))
     testImplementation(testFixtures(project(":features:identity")))
+    testImplementation(testFixtures(project(":features:explorer")))
+    testImplementation(testFixtures(project(":features:scenarios")))
+    testImplementation(testFixtures(project(":features:oracle")))
     testImplementation(project(":testing:fake-target"))
+    // The panel end-to-end test drives the real page in Chromium and takes screenshots (tag "e2e").
+    testImplementation(libs.playwright)
 }
 
 application {

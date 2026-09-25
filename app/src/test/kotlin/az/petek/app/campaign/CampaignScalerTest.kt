@@ -149,4 +149,43 @@ class CampaignScalerTest {
         CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver()).map { it.id } shouldContainExactly
             listOf("finance_only")
     }
+
+    @Test
+    fun `resizing up shares the new seats in the campaign's ratios and keeps a manager per department`() {
+        val campaign = kadrohrLike()
+
+        val resized = CampaignScaler.resize(campaign, 60)
+
+        resized.settings.testers shouldBe 60
+        resized.settings.roles shouldBe RoleQuota(admin = 1, manager = 10, employee = 49)
+        resized.settings.registration.invite + resized.settings.registration.companyCode shouldBe 59
+        (resized.settings.registration.invite >= resized.settings.roles.manager) shouldBe true
+        resized.settings.name shouldBe "kadrohr-core"
+        resized.sourceHash shouldBe campaign.sourceHash
+        DefaultCampaignValidator().validate(resized, emptySet()).shouldBeEmpty()
+    }
+
+    @Test
+    fun `resizing up a small team still gives every department a manager while an employee is left`() {
+        val small = CampaignScaler.scale(kadrohrLike(), 6)
+        small.settings.roles.manager shouldBe 1
+
+        val grown = CampaignScaler.resize(small.copy(settings = small.settings.copy(name = "kadrohr-core")), 8)
+
+        grown.settings.roles shouldBe RoleQuota(admin = 1, manager = 5, employee = 2)
+        grown.settings.registration.invite shouldBe 5
+        DefaultCampaignValidator().validate(grown, emptySet()).shouldBeEmpty()
+    }
+
+    @Test
+    fun `resizing down works like scaling but keeps the campaign's name`() {
+        val campaign = kadrohrLike()
+
+        val resized = CampaignScaler.resize(campaign, 12)
+
+        resized.settings.roles shouldBe CampaignScaler.scale(campaign, 12).settings.roles
+        resized.settings.name shouldBe "kadrohr-core"
+        CampaignScaler.resize(campaign, 30) shouldBeSameInstanceAs campaign
+        shouldThrow<ScalingException> { CampaignScaler.resize(campaign, 0) }
+    }
 }

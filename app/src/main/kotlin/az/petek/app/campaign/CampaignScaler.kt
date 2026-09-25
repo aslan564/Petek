@@ -48,6 +48,51 @@ object CampaignScaler {
         )
     }
 
+    /**
+     * The web panel's tester count: [campaign] with exactly [testers] testers, fewer or more than it has. Shrinking works
+     * like [scale] but keeps the campaign's name (the panel shows the count next to it, and triage finds the scenario by
+     * it). Growing shares the seats in the campaign's ratios as well, and additionally keeps at least one manager per
+     * department when the campaign has managers (so `manager[<department>]` steps keep an actor) while leaving an
+     * employee when it has employees. Invitations always cover the managers. The result still has to pass the
+     * campaign validator (the caller checks it).
+     */
+    fun resize(
+        campaign: Campaign,
+        testers: Int,
+    ): Campaign {
+        val settings = campaign.settings
+        if (testers < 1) throw ScalingException("the tester count must be at least 1, was $testers")
+        if (testers == settings.testers) return campaign
+        if (testers < settings.testers) return scale(campaign, testers).let { it.copy(settings = it.settings.copy(name = settings.name)) }
+        val roles = settings.roles
+        val admins = minOf(roles.admin, 1)
+        val others = testers - admins
+        val shares = apportion(others, listOf(roles.manager, roles.employee))
+        var managers = shares[0]
+        var employees = shares[1]
+        if (roles.manager > 0) {
+            val keepEmployee = if (roles.employee > 0) 1 else 0
+            val wanted = minOf(settings.departments.size, others - keepEmployee)
+            if (managers < wanted) {
+                employees -= wanted - managers
+                managers = wanted
+            }
+        }
+        val joining = managers + employees
+        val invite =
+            apportion(joining, listOf(settings.registration.invite, settings.registration.companyCode))[0]
+                .coerceAtLeast(managers)
+                .coerceAtMost(joining)
+        return campaign.copy(
+            settings =
+                settings.copy(
+                    testers = testers,
+                    roles = RoleQuota(admin = admins, manager = managers, employee = employees),
+                    registration = RegistrationQuota(invite = invite, companyCode = joining - invite),
+                ),
+        )
+    }
+
     /** Steps of [campaign] whose actor expression matches none of [identities]. */
     fun uncoveredSteps(
         campaign: Campaign,
