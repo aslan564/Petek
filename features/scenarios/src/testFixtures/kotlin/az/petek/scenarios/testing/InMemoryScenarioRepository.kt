@@ -48,10 +48,15 @@ class InMemoryScenarioRepository : ScenarioRepository {
                 val stored = staged[update.id] ?: throw ScenarioNotFoundException(update.id)
                 if (stored.status == ScenarioStatus.FROZEN) throw FrozenScenarioException(update.id)
                 if (stored.status != update.before.status) throw ConcurrentScenarioChangeException(update.id)
-                staged[update.id] = update.after
+                val after = update.after
+                val approvedElsewhere =
+                    staged.values.any {
+                        it.name == after.name && it.id != after.id &&
+                            it.status == ScenarioStatus.APPROVED
+                    }
+                if (after.status == ScenarioStatus.APPROVED && approvedElsewhere) throw ConcurrentScenarioChangeException(update.id)
+                staged[update.id] = after
             }
-            val approved = staged.values.filter { it.status == ScenarioStatus.APPROVED }.groupBy { it.name }
-            approved.values.firstOrNull { it.size > 1 }?.let { error("two APPROVED versions of '${it.first().name}'") }
             versions.clear()
             versions.putAll(staged)
             appliedUpdates += updates

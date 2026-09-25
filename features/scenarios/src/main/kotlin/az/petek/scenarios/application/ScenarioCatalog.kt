@@ -83,11 +83,11 @@ class ScenarioCatalog(
      * Approves a draft (idempotent for APPROVED and FROZEN versions). The text is validated again, because the
      * harness may have changed since the draft was written (e.g. a run function was renamed).
      */
-    suspend fun approve(id: ScenarioVersionId): ScenarioVersion =
-        reviewed(id) { target ->
-            if (target.status == ScenarioStatus.DRAFT) drafts.check(target.yaml, target.fileName)
-            ScenarioLifecycle.approve(target, repository.history(target.name), clock.now().wall)
-        }
+    suspend fun approve(id: ScenarioVersionId): ScenarioVersion {
+        val target = get(id)
+        if (target.status == ScenarioStatus.DRAFT) drafts.check(target.yaml, target.fileName)
+        return reviewed(id) { current -> ScenarioLifecycle.approve(current, repository.history(current.name), clock.now().wall) }
+    }
 
     /** Freezes an approved version (idempotent for FROZEN). A frozen version never changes again. */
     suspend fun freeze(id: ScenarioVersionId): ScenarioVersion =
@@ -169,6 +169,10 @@ class ScenarioCatalog(
     }
 
     private companion object {
-        const val REVIEW_ATTEMPTS = 3
+        /**
+         * Each lost compare-and-set means another review of the name completed meanwhile, so this many attempts
+         * always succeed with up to this many reviews of one scenario racing; the owner reviews one at a time.
+         */
+        const val REVIEW_ATTEMPTS = 10
     }
 }

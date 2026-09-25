@@ -12,8 +12,10 @@ import kotlin.uuid.Uuid
  * - version numbers count per name from 1 without gaps, assigned atomically by [add];
  * - content never changes, and a FROZEN version never changes at all ([FrozenScenarioException]);
  * - at most one APPROVED version per name;
- * - [update] is all-or-nothing: each update applies only while the stored status equals its `before` status,
- *   otherwise nothing of the batch is applied and [ConcurrentScenarioChangeException] is thrown.
+ * - [update] is all-or-nothing: each update applies only while the stored status equals its `before` status, and an
+ *   update to APPROVED only while no other version of the name is APPROVED (after the batch's earlier updates, which
+ *   supersede the version approved when the batch was computed). Otherwise nothing of the batch is applied and
+ *   [ConcurrentScenarioChangeException] is thrown: another review won, recompute and retry.
  */
 interface ScenarioRepository {
     /** Stores [draft] as the next version of its name, status DRAFT, and returns it. Throws for an existing id. */

@@ -136,6 +136,23 @@ abstract class ScenarioRepositoryContract {
         }
 
     @Test
+    fun `an approval computed before another approval was applied is refused as concurrent`() =
+        test { repo ->
+            val v1 = repo.add(draft("scn_1"))
+            val v2 = repo.add(draft("scn_2"))
+            val snapshot = repo.history("mini")
+            val first = ScenarioLifecycle.approve(v1, snapshot, t0)
+            val second = ScenarioLifecycle.approve(v2, snapshot, t0.plusSeconds(1))
+
+            repo.update(first)
+            shouldThrow<ConcurrentScenarioChangeException> { repo.update(second) }
+
+            repo.history("mini").map { it.status } shouldBe listOf(ScenarioStatus.APPROVED, ScenarioStatus.DRAFT)
+            repo.update(ScenarioLifecycle.approve(v2, repo.history("mini"), t0.plusSeconds(2)))
+            repo.history("mini").map { it.status } shouldBe listOf(ScenarioStatus.SUPERSEDED, ScenarioStatus.APPROVED)
+        }
+
+    @Test
     fun `a frozen version never changes again`() =
         test { repo ->
             val v1 = repo.add(draft("scn_1"))

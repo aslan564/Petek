@@ -15,6 +15,7 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.max
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
@@ -104,6 +105,7 @@ class SqliteScenarioRepository(
                 if (stored.status == ScenarioStatus.FROZEN) throw FrozenScenarioException(update.id)
                 if (stored.status != update.before.status) throw ConcurrentScenarioChangeException(update.id)
                 val after = update.after
+                if (after.status == ScenarioStatus.APPROVED && approvedOtherThan(after)) throw ConcurrentScenarioChangeException(update.id)
                 val changed =
                     ScenarioVersionTable.update({
                         (ScenarioVersionTable.id eq update.id) and (ScenarioVersionTable.status eq update.before.status)
@@ -117,6 +119,16 @@ class SqliteScenarioRepository(
             }
         }
     }
+
+    /** Another version of [version]'s name is APPROVED: someone approved it after this batch was computed. */
+    private fun JdbcTransaction.approvedOtherThan(version: ScenarioVersion): Boolean =
+        !ScenarioVersionTable
+            .selectAll()
+            .where {
+                (ScenarioVersionTable.name eq version.name) and
+                    (ScenarioVersionTable.status eq ScenarioStatus.APPROVED) and
+                    (ScenarioVersionTable.id neq version.id)
+            }.empty()
 
     private fun JdbcTransaction.findRow(id: ScenarioVersionId): ScenarioVersion? =
         ScenarioVersionTable
