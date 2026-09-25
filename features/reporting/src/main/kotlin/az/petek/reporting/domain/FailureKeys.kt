@@ -16,6 +16,12 @@ object FailureKeys {
     const val MAIL_TIMEOUT = "mail_timeout"
 
     /**
+     * The test inbox (Mailpit) could not be read at all. Unlike [MAIL_TIMEOUT] this says nothing about the target:
+     * it is an environment problem ([environmentProblem]), reported as an agent failure.
+     */
+    const val MAIL_UNAVAILABLE = "mail_unavailable"
+
+    /**
      * The agent BLOCKs an action with this key when the target refuses it (`report_problem(permission_denied)`).
      * The agent contract calls that the EXPECTED outcome of forbidden-action tests, whose verdict comes from their
      * assertions (`not_visible`, `http_status` 403), so such a step is not a failure (see [isExpectedRefusal]).
@@ -28,6 +34,7 @@ object FailureKeys {
     val KNOWN: List<String> =
         listOf(
             MAIL_TIMEOUT,
+            MAIL_UNAVAILABLE,
             "otp_rejected",
             "registration_failed",
             "login_failed",
@@ -43,6 +50,9 @@ object FailureKeys {
             "missing_prerequisite",
             BLOCKED,
         )
+
+    /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
+    private val ENVIRONMENT_PROBLEMS: Map<String, String> = mapOf(MAIL_UNAVAILABLE to "test inbox unreachable")
 
     /** Statuses that mean an action did not complete. */
     val FAILING_STATUSES: Set<StepStatus> = setOf(StepStatus.FAILED, StepStatus.ERROR, StepStatus.BLOCKED)
@@ -70,6 +80,12 @@ object FailureKeys {
 
     /** The action did not complete and that was not the expected outcome. */
     fun isFailure(step: StepRecord): Boolean = step.status in FAILING_STATUSES && !isExpectedRefusal(step)
+
+    /**
+     * What went wrong in the test environment when [key] names such a problem (`mail_unavailable` -> "test inbox
+     * unreachable"), or null for keys that are about the target or the agent. The report must not read those as bugs.
+     */
+    fun environmentProblem(key: String): String? = ENVIRONMENT_PROBLEMS[key]
 
     /** The failure key of a failed step; null for completed steps, expected refusals and failures without a key. */
     fun of(step: StepRecord): String? {

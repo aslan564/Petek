@@ -31,6 +31,23 @@ class FailureKeysTest {
     }
 
     @Test
+    fun `an unreachable test inbox has its own key, distinct from a mail timeout`() {
+        FailureKeys.find("mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025") shouldBe
+            FailureKeys.MAIL_UNAVAILABLE
+        FailureKeys.find("agent stopped (mail_unavailable) after 60s") shouldBe "mail_unavailable"
+        FailureKeys.of(step("join", "a02", StepStatus.ERROR, detail = "mail_unavailable: Mailpit is down")) shouldBe
+            "mail_unavailable"
+    }
+
+    @Test
+    fun `only environment problems carry an environment explanation`() {
+        FailureKeys.environmentProblem(FailureKeys.MAIL_UNAVAILABLE) shouldBe "test inbox unreachable"
+        FailureKeys.environmentProblem(FailureKeys.MAIL_TIMEOUT).shouldBeNull()
+        FailureKeys.environmentProblem("otp_rejected").shouldBeNull()
+        FailureKeys.environmentProblem("quota_exceeded").shouldBeNull()
+    }
+
+    @Test
     fun `a plain timeout is still a key`() {
         FailureKeys.find("Navigation timeout of 30000 ms exceeded") shouldBe "timeout"
     }
