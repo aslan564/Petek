@@ -66,18 +66,23 @@ internal class FlowRunner(
     }
 
     /**
-     * Finishes a sign-up: runs the `login` flow when [loginFirst] or when the page shows no signed-in user, then
-     * `verify_identity` unless a flow already asserted the identity, and saves the session unless a flow saved it.
-     * With the contract flows a registration ends signed in and checked, so nothing is left to do; a site that sends
-     * its new users to the login page (KadroHR) signs them in here.
+     * Finishes a sign-up: runs the `login` flow when [loginFirst] or when the tester is not known to be signed in (no
+     * flow asserted the identity and the page shows no `session.user_name`), then `verify_identity` unless a flow
+     * already asserted the identity, and saves the session unless a flow saved it. With the contract flows a
+     * registration ends signed in and checked, so nothing is left to do; a site that sends its new users to the login
+     * page (KadroHR) signs them in here. A flow that asserted the identity with a literal selector of its own counts as
+     * signed in, so it is not sent through a second login (which a signed-in site may answer with a redirect).
+     * [company] is `{campaign.company}` in those flows, as in the sign-up's own.
      */
     suspend fun completeSignIn(
         trace: RunTrace,
         progress: FlowProgress,
         loginFirst: Boolean = false,
+        company: String = RegisterOwnerRunFunction.DEFAULT_COMPANY,
     ) {
-        if (loginFirst || !trace.isVisible(TargetFlows.USER_NAME)) run(trace, FlowNames.LOGIN, progress, FailureReason.LOGIN_FAILED)
-        if (progress.identityShown == null) run(trace, FlowNames.VERIFY_IDENTITY, progress, FailureReason.LOGIN_FAILED)
+        val signedIn = progress.identityShown != null || trace.isVisible(TargetFlows.USER_NAME)
+        if (loginFirst || !signedIn) run(trace, FlowNames.LOGIN, progress, FailureReason.LOGIN_FAILED, company)
+        if (progress.identityShown == null) run(trace, FlowNames.VERIFY_IDENTITY, progress, FailureReason.LOGIN_FAILED, company)
         if (!progress.sessionSaved) {
             trace.saveStorageState()
             progress.sessionSaved = true
@@ -215,9 +220,13 @@ internal class FlowRunner(
         private suspend fun emailLink(step: FlowStep.EmailLink) {
             val identity = runtime.identity
             val kind = MAIL_KIND.getValue(step.purpose)
+            // Only this tester's own earlier link is reused: a `shared.<key>` target may hold another tester's invitation.
             val known =
                 if (step.purpose == LinkPurpose.INVITE) {
-                    stored(step.target) ?: runtime.shared.get(SharedRunState.inviteLink(identity.email))
+                    step.target
+                        .takeIf { it.scope == ValueTarget.Scope.VARS }
+                        ?.let(::stored)
+                        ?: runtime.shared.get(SharedRunState.inviteLink(identity.email))
                 } else {
                     null
                 }
@@ -425,7 +434,7 @@ internal class FlowRunner(
                     val page =
                         (state as? State.On)?.page
                             ?: throw RunFailure(
-                                FailureReason.REGISTRATION_FAILED,
+                                defaultReason,
                                 "Unexpected page while ${journey.label}: ${trace.currentUrl()}.",
                             )
                     val visit = visits.merge(page.label, 1, Int::plus) ?: 1

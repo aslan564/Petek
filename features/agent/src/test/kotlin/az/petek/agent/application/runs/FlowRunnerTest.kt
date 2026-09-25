@@ -341,6 +341,85 @@ class FlowRunnerTest {
         }
 
     @Test
+    fun `a sign-up that asserted the identity with its own selector is not sent through the login flow again`() =
+        runTest {
+            val signUp = Flow(listOf(Goto("/register"), Click("#go"), AssertIdentity("#me")))
+            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to KADRO_LOGIN)
+            site.page("/register", "#go")
+            site.page("/welcome", "#me", texts = mapOf("#me" to owner.displayName))
+            site.on("clickSelector #go") { site.show("/welcome") }
+
+            val outcome = fixture.run("register_owner")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            outcome.summary shouldContain "The session shows '${owner.displayName}'."
+            fixture.browser.actions.filter { it.startsWith("navigate") } shouldContainExactly listOf("navigate /register")
+            fixture.actions("register_owner").count { it.startsWith("register_owner: current user is") } shouldBe 1
+            fixture.storageStateSaved() shouldBe true
+        }
+
+    @Test
+    fun `a sign-up that ends signed out is signed in with the login flow and then checked`() =
+        runTest {
+            val signUp = Flow(listOf(Goto("/register"), Click("#go"), WaitFor(emptyList(), "Hesab yaradıldı")))
+            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to KADRO_LOGIN)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
+            site.page("/register", "#go")
+            site.page("/done", visibleTexts = setOf("Hesab yaradıldı"))
+            site.on("clickSelector #go") { site.show("/done") }
+
+            val outcome = fixture.run("register_owner")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            fixture.browser.actions.filter { it.startsWith("navigate") } shouldContainExactly
+                listOf("navigate /register", "navigate /login")
+            fixture.actions("register_owner") shouldContainAll
+                listOf("register_owner: wait for session.user_name", "register_owner: current user is '${owner.displayName}'")
+            fixture.storageStateSaved() shouldBe true
+        }
+
+    @Test
+    fun `the owner's company argument is also the company of the login flow that finishes the sign-up`() =
+        runTest {
+            val signUp = Flow(listOf(Goto("/register"), Fill("#company", "{campaign.company}"), Click("#go")))
+            val login =
+                Flow(
+                    listOf(Goto("/tenant-login"), Fill("#tenant", "{campaign.company}"), Click("#enter"), WaitFor(listOf(USER_NAME), null)),
+                )
+            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to login)
+            site.page("/register", "#company", "#go")
+            site.page("/tenant-login", "#tenant", "#enter")
+            site.on("clickSelector #enter") { site.show("/home") }
+
+            val outcome = fixture.run("register_owner", args = mapOf("company" to "Kadro Sınaq MMC"))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            fixture.browser.actions shouldContainAll listOf("fillSelector #company=Kadro Sınaq MMC", "fillSelector #tenant=Kadro Sınaq MMC")
+        }
+
+    @Test
+    fun `an invitation link another tester stored under a shared key is never reused`() =
+        runTest {
+            val join =
+                Flow(
+                    listOf(
+                        EmailLink(LinkPurpose.INVITE, "set-password\\?token=", open = false, into = ValueTarget.shared("last_invite")),
+                        AccountCreated,
+                    ),
+                )
+            val (fixture, _) = fixture(invited, FlowNames.JOIN_BY_INVITE to join, FlowNames.LOGIN to KADRO_LOGIN)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
+            fixture.shared.put("last_invite", "https://api.kadrohr.test/api/v1/auth/set-password?token=someone-else")
+            fixture.verification.sendLink(invited.email, INVITE_LINK)
+
+            val outcome = fixture.run("register_and_login")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            fixture.verification.calls shouldContainExactly listOf(invited.email to MailPurpose.LINK)
+            fixture.shared.get("last_invite") shouldBe INVITE_LINK
+        }
+
+    @Test
     fun `a value no earlier step stored is a missing prerequisite`() =
         runTest {
             val (fixture, _) = fixture(employee, FlowNames.LOGIN to Flow(listOf(Goto("/login"), Fill("#x", "{vars.nope}"))))
@@ -533,22 +612,27 @@ class FlowRunnerTest {
         }
 
     @Test
-    fun `an unknown page in a journey is reported with the journey's label`() =
+    fun `an unknown page in a journey is reported with the journey's label under the run function's reason`() =
         runTest {
-            val login =
-                Flow(
-                    listOf(
-                        Goto("/login"),
-                        FlowStep.Journey(
-                            "entering the app",
-                            "#home",
-                            listOf(JourneyPage("the terms page", "#terms", listOf(Click("#accept")))),
-                        ),
-                    ),
+            val journey =
+                FlowStep.Journey(
+                    "entering the app",
+                    "#home",
+                    listOf(JourneyPage("the terms page", "#terms", listOf(Click("#accept")))),
                 )
-            val (fixture, _) = fixture(employee, FlowNames.LOGIN to login)
+            val (fixture, _) = fixture(employee, FlowNames.LOGIN to Flow(listOf(Goto("/login"), journey)))
 
-            fixture.run("login").summary shouldBe "Unexpected page while entering the app: /login."
+            val login = fixture.run("login")
+
+            login.summary shouldBe "Unexpected page while entering the app: /login."
+            login.failureReason shouldBe FailureReason.LOGIN_FAILED
+
+            val (joiner, _) = fixture(employee, FlowNames.JOIN_BY_CODE to Flow(listOf(Goto("/join"), journey)))
+
+            val join = joiner.run("register_and_login")
+
+            join.failureReason shouldBe FailureReason.REGISTRATION_FAILED
+            join.summary shouldBe "Registration failed after 3 attempts; last: Unexpected page while entering the app: /join."
         }
 
     @Test

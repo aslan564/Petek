@@ -17,8 +17,8 @@ import kotlin.time.Duration
  * `{self.<field>}` ([Placeholder.FLOW_SELF_FIELDS]; `{self.password}` only in `fill` values), `{shared.<key>}`
  * (published for the whole run: `company_code`, `company_id`, `invite_link` = this tester's invitation; awaited until
  * published), `{vars.<key>}` (this tester's own values: `email_code` and whatever `email_link` or `read` stored) and
- * `{campaign.company}`. Regular expressions (`expect_url`, `read.regex`, `email_link.pattern`) are not templates.
- * Flow values never reach the LLM.
+ * `{campaign.company}` (the `company` argument of `register_owner`, else its default). Regular expressions
+ * (`expect_url`, `read.regex`, `email_link.pattern`) are not templates. Flow values never reach the LLM.
  */
 data class Flow(
     val steps: List<FlowStep>,
@@ -116,8 +116,9 @@ sealed interface FlowStep {
      * Awaits this tester's newest e-mail with a link of [purpose] (only mail received after the run started, each used
      * once), stores the link in [into] (default [LinkPurpose.defaultTarget]) and opens it when [open]. [pattern] is a
      * regular expression the link must contain a match of; without it the inbox's own heuristic picks the link. For
-     * [LinkPurpose.INVITE] the link the admin's `seed_company` published for this tester is used first, and a link
-     * stored by an earlier attempt is reused (an invitation link does not change).
+     * [LinkPurpose.INVITE] a link an earlier attempt stored in this tester's own `{vars.<key>}` is reused (an
+     * invitation link does not change), else the link the admin's `seed_company` published for this tester; a
+     * `shared.<key>` target is never read back, since another tester may have stored their invitation there.
      */
     data class EmailLink(
         val purpose: LinkPurpose,
@@ -217,7 +218,8 @@ sealed interface FlowStep {
      * - A page asked for more than [maxVisits] times fails with its [JourneyPage.reason], so a site that keeps asking
      *   is reported instead of looping; a page that is still shown after its steps fails with [JourneyPage.stuck] when
      *   given (and is otherwise simply visited again).
-     * - A page that is none of them is `registration_failed`: "Unexpected page while <label>".
+     * - A page that is none of them fails with the run function's own reason (`registration_failed` for the sign-ups,
+     *   `login_failed` for `login` and `verify_identity`): "Unexpected page while <label>".
      */
     data class Journey(
         /** What the journey does, as it reads in messages: `signing in`. */

@@ -44,7 +44,7 @@ internal class RegisterOwnerRunFunction(
             val progress = FlowProgress()
             flows.run(this, FlowNames.REGISTER_OWNER, progress, FailureReason.REGISTRATION_FAILED, company)
             val published = publishCompany()
-            flows.completeSignIn(this, progress)
+            flows.completeSignIn(this, progress, company = company)
             val shown = progress.identityShown ?: "The session was checked"
             succeeded("Registered ${identity.email} as owner of '$company'. $shown.${published.note}", objectId = published.company?.id)
         }
