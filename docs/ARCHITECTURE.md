@@ -22,6 +22,7 @@ feature follows **clean architecture** (domain → application → infrastructur
 | `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds) | `AssertionEvaluator`, `VerifyStepUseCase` | — |
 | `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
+| `features/explorer` | Explorer agent (PLAN.md Faza 6–7): learns a site model, records findings, generates campaign drafts, diffs model versions | `ExplorationRepository`, `ExplorationObserver`, `TestTargetCheck` | SQLite repository |
 | `app` | CLI (`plan`, `run`, `report`, `teardown`, `smoke`, `doctor`), `.env` config, composition root, logging | — | Clikt, logback |
 | `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
@@ -35,6 +36,7 @@ flowchart TD
   agent --> browser & llm & mail & oracle & evidence & identity & campaign
   verification --> browser & oracle & evidence & campaign
   reporting --> evidence
+  explorer --> browser & llm & campaign & evidence & sqlite
   identity & evidence --> sqlite
   campaign & identity & evidence & mail & oracle & browser & llm --> core[core/domain]
 ```
@@ -86,6 +88,45 @@ sequenceDiagram
    that are not `is_test`.
 6. **Finalize.** The judge turns assertion records into findings. The report (Markdown + HTML) is written to
    `evidence/<run_id>/report/`.
+
+## Explorer (`features/explorer`, PLAN.md Faza 6)
+
+The explorer learns a site from the owner's target URL and plain-language instructions and turns what it learned into
+campaign drafts. The composition root (and later the web panel) drives it through three use cases:
+
+- `ExploreSiteUseCase.execute(request, roleSessions, observer)` runs the requested phases in order:
+  - **ANONYMOUS**: its own browser session crawls without logging in.
+  - **ROLE_BASED**: the caller's logged-in sessions (role name → session) crawl again. Comparing what each role reached
+    and was offered fills `reachableBy` and infers `forbiddenRoles`.
+  - **TRIAL_TOUCH**: submits each observed CREATE form once with harmless data. It runs only with `allowWrites` *and* a
+    `TestTargetCheck` confirmation that the target holds test data (`is_test`); otherwise it is skipped with the reason.
+- `GenerateScenarioUseCase` turns the model's top test ideas (`TestPatternLibrary`, grounded by the instructions) into a
+  campaign YAML draft. The draft is assembled by code and validated with `DefaultCampaignValidator` before it is stored.
+- `CompareExplorationsUseCase` diffs two model versions of a target (Faza 7 "fərq kəşfiyyatı"). Partial models are
+  skipped for the "latest" diff.
+
+A crawl is breadth-first and one page per URL pattern: `/tickets/t1` becomes `/tickets/{id}`. It stays within the page,
+depth and time budgets, and links that match the instructions are opened first. Every address is checked with a GET
+before it is opened. For each page, the explorer stores a screenshot and a DOM snapshot as evidence. Code heuristics
+extract forms, fields and buttons. **One structured LLM question** per page adds a purpose, named actions and questions
+for the owner, and code validates the answer: element refs must exist in the snapshot and kinds must be known. Code,
+never the LLM, records findings (broken links, HTTP errors, slow pages, accessibility, leaked error text) and the
+live-update transports seen in the traffic.
+
+Safety is enforced in code:
+- Crawls see the browser only through a read-only session. It cannot click, type, select, send non-GET requests or
+  leave the target's origin.
+- Logout, delete and unsubscribe links (English and Azerbaijani), `/api/`, `/test/`, file downloads and `robots.txt`
+  exclusions are never followed.
+- Prompts show URL patterns instead of addresses, mask secret-looking field values and remove tokens.
+- The target must pass `TargetPolicy`.
+
+Every model element carries `OBSERVED`/`INFERRED` provenance and the artifact ids of its evidence. Each exploration
+stores one model version: the previous version for the same target + 1, marked `partial` when the exploration timed
+out, was cancelled or failed. Everything is stored in the process database by `SqliteExplorationRepository`, in the
+tables `exploration`, `site_model_version`, `exploration_finding`, `exploration_event`, `exploration_artifact` and
+`scenario_draft`. Events (`ExplorationEvent`) are numbered per exploration, stored before they are published, and
+replayable, so a live view can catch up (`FlowExplorationObserver` offers them as a flow).
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 
