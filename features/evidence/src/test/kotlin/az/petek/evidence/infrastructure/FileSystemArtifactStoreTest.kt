@@ -90,7 +90,7 @@ class FileSystemArtifactStoreTest {
                     "run_1/a07/0001-screenshot.png",
                     "run_1/a07/0002-a11y.yaml",
                     "run_1/a07/0003-dom.html",
-                    "run_1/a07/0004-http.json",
+                    "run_1/a07/0004-http.txt",
                     "run_1/a07/0005-mail.json",
                     "run_1/a07/0006-oracle.json",
                     "run_1/a07/0007-prompt.txt",
