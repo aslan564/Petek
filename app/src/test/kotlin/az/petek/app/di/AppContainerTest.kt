@@ -167,6 +167,38 @@ class AppContainerTest {
     }
 
     @Test
+    fun `explorations use a browser engine of their own unless one is given`() {
+        val runs = FakeBrowserEngine()
+        val explorer = FakeBrowserEngine()
+
+        AppContainer(config(), AppOverrides(browser = runs, explorerBrowser = explorer)).use { container ->
+            container.explorerBrowserEngine shouldBeSameInstanceAs explorer
+            container.browserEngine shouldBeSameInstanceAs runs
+        }
+        AppContainer(config(), AppOverrides(browser = runs)).use { it.explorerBrowserEngine shouldBeSameInstanceAs runs }
+        AppContainer(config()).use { container ->
+            (container.explorerBrowserEngine === container.browserEngine) shouldBe false
+        }
+    }
+
+    @Test
+    fun `a container given its caller's database shares it and leaves it open`() =
+        runBlocking<Unit> {
+            val owner = AppContainer(config(), AppOverrides(monitor = NoOpMonitorView))
+            owner.runs.latest() shouldBe null
+            val other = config().copy(target = URI("http://127.0.0.2:9"), dbPath = dir.resolve("never.db"))
+
+            AppContainer(other, AppOverrides(monitor = NoOpMonitorView, database = owner.database)).use { shared ->
+                shared.database shouldBeSameInstanceAs owner.database
+                shared.scenarioCatalog.list() shouldBe emptyList()
+            }
+
+            owner.runs.latest() shouldBe null
+            Files.exists(dir.resolve("never.db")) shouldBe false
+            owner.close()
+        }
+
+    @Test
     fun `without a terminal the monitor writes log lines`() {
         AppContainer(config()).use { container -> container.monitor.shouldBeInstanceOf<LoggingMonitorView>() }
     }

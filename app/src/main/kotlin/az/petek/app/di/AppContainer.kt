@@ -108,7 +108,11 @@ private val logger = KotlinLogging.logger {}
  * creates a database.
  *
  * Wiring decisions:
- * - one SQLite database and one [SqliteEvidenceStore] (recorder + query + runs) per process;
+ * - one SQLite database and one [SqliteEvidenceStore] (recorder + query + runs) per process; the explorer's
+ *   repository, the scenario catalog and triage live in the same database (a container built with
+ *   [AppOverrides.database] shares its caller's instead of opening its own);
+ * - explorations get their own browser engine ([explorerBrowserEngine]), so a run stopping its browsers never closes
+ *   an exploration's pages;
  * - the LLM is `Metered(Retrying(ConcurrencyLimited(provider, PETEK_LLM_CONCURRENCY)))`: a permit covers one attempt,
  *   and metering counts one call per agent decision; the [usageMeter] is flushed into the evidence store per run by
  *   the [finalizer] ([UsageFlushingFinalizer]) before the report is written;

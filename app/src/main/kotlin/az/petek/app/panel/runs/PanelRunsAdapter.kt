@@ -462,7 +462,8 @@ internal class PanelRunsAdapter(
     private fun withoutContacts(text: String): String = Contacts.masked(text)
 
     private companion object {
-        const val HISTORY_LIMIT = 50
+        /** The newest runs the history shows; each summary reads its run's evidence, so the list stays bounded. */
+        const val HISTORY_LIMIT = 100
 
         /** The orchestrator files its own housekeeping (browser, network, teardown) under this step; no scenario step. */
         const val HARNESS_STEP = "harness"
