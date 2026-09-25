@@ -22,12 +22,12 @@ dependencies {
     testRuntimeOnly(libs.logback.classic)
 }
 
-// A simulated, lively run for looking at the dashboard by hand: ./gradlew :features:dashboard:dashboardDemo
-val dashboardDemo by tasks.registering(JavaExec::class) {
-    description = "Serves the live dashboard for a simulated run on http://127.0.0.1:7070 (args: --agents N --port P)."
+// The whole panel with simulated data, for looking at it by hand: ./gradlew :features:dashboard:panelDemo
+val panelDemo by tasks.registering(JavaExec::class) {
+    description = "Serves the Pətək panel with a simulated backend on http://127.0.0.1:7070 (args: --port P --agents N --no-run)."
     group = "application"
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("az.petek.dashboard.demo.DashboardDemoKt")
+    mainClass.set("az.petek.dashboard.demo.PanelDemoKt")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     standardInput = System.`in`
 }
