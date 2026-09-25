@@ -102,7 +102,13 @@ class DashboardServer(
                 } catch (e: Exception) {
                     throw IllegalStateException("Cannot start the dashboard on $host:$port (is the port already in use?)", e)
                 }
-            val boundPort = runBlocking { started.engine.resolvedConnectors().first().port }
+            val boundPort =
+                runBlocking {
+                    started.engine
+                        .resolvedConnectors()
+                        .first()
+                        .port
+                }
             val uri = URI("http://${urlHost()}:$boundPort/")
             server = started
             address = uri
@@ -170,7 +176,9 @@ class DashboardServer(
             heartbeat { period = HEARTBEAT }
             send(ServerSentEvent(comments = "connected", retry = RETRY_MILLIS))
             dashboard.updates.collect { snapshot ->
-                send(ServerSentEvent(data = DashboardJson.snapshot(snapshot, reportReady()), event = "snapshot", id = "${snapshot.version}"))
+                send(
+                    ServerSentEvent(data = DashboardJson.snapshot(snapshot, reportReady()), event = "snapshot", id = "${snapshot.version}"),
+                )
             }
         }
     }

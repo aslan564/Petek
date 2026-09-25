@@ -35,12 +35,16 @@ import az.petek.orchestration.domain.AgentState
 import az.petek.orchestration.domain.AgentStatus
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 /**
  * A simulated KadroHR run that drives a [LiveDashboard] exactly the way the app will: through the monitor port and
- * the dashboard decorators around an in-memory evidence store. [tick] lets time pass (a real delay in the demo, a fake
- * clock advance in tests), so the same script serves the manual demo and the UI test.
+ * the dashboard decorators around an in-memory evidence store. [pause] lets time pass (a real delay in the demo, a fake
+ * clock advance in tests), so the same script serves the manual demo ([play]) and the UI test ([populate]).
  */
 class DemoRun(
     private val agentCount: Int,
@@ -48,28 +52,33 @@ class DemoRun(
     private val artifacts: ArtifactStore,
     private val clock: HarnessClock,
     private val ids: IdGenerator,
-    private val tick: suspend (millis: Long) -> Unit,
+    private val pause: suspend (millis: Long) -> Unit,
     seed: Long = 7,
 ) {
     /** Everything recorded, as the evidence store saw it. */
     val evidence = InMemoryEvidence()
-    val identityStore = InMemoryIdentityRepository()
+    private val identityStore = InMemoryIdentityRepository()
     private val recorder = DashboardEvidenceRecorder(evidence, dashboard)
     private val runs = DashboardRunRepository(evidence, dashboard)
     private val identityRepository = DashboardIdentityRepository(identityStore, dashboard)
     private val random = Random(seed)
+    private val screenshots = AtomicInteger()
+    private var started: RunStart? = null
 
-    lateinit var runId: RunId
-        private set
-    lateinit var agents: List<Identity>
-        private set
+    private class RunStart(
+        val runId: RunId,
+        val agents: List<Identity>,
+        val at: az.petek.core.time.HarnessTimestamp,
+    )
 
-    private var screenshots = 0
-    private val startedAt by lazy { clock.now() }
-
+    val runId: RunId get() = begun().runId
+    val agents: List<Identity> get() = begun().agents
     val admin: Identity get() = agents.first { it.role == Role.ADMIN }
     val managers: List<Identity> get() = agents.filter { it.role == Role.MANAGER }
     val employees: List<Identity> get() = agents.filter { it.role == Role.EMPLOYEE }
+
+    /** The employee whose registration fails in every script (the tenth, when there is one). */
+    val dropout: Identity? get() = employees.getOrNull(DROPOUT_INDEX)
 
     class Act(
         val action: String,
@@ -79,22 +88,24 @@ class DemoRun(
     )
 
     suspend fun start() {
-        runId = ids.runId()
-        startedAt.wall
+        check(started == null) { "the demo run was already started" }
+        val runId = ids.runId()
+        val now = clock.now()
         runs.create(
             RunRecord(
                 runId = runId,
                 runTag = RunTags.forRun(runId),
                 campaignName = "KadroHR · elan və tapşırıq axını",
                 campaignHash = "demo",
-                seed = 42,
+                seed = SEED,
                 target = "https://staging.kadrohr.az",
-                startedAt = startedAt.wall,
+                startedAt = now.wall,
             ),
         )
         val plan = registry().generate(spec(), RunTags.forRun(runId))
         identityRepository.replaceAll(runId, plan)
-        agents = plan.identities.sortedBy { it.agentId.index }
+        val agents = plan.identities.sortedBy { it.agentId.index }
+        started = RunStart(runId, agents, now)
         dashboard.runStarted(runId, agents.map { status(it, AgentState.IDLE, null, null) })
     }
 
@@ -119,10 +130,10 @@ class DemoRun(
         after: AgentState? = AgentState.IDLE,
         toast: String? = null,
     ) {
-        val started = clock.now()
+        val begin = clock.now()
         state(agent, AgentState.WORKING, step, act.action)
-        tick(random.nextLong(250, 1_400))
-        val ended = clock.now()
+        pause(between(250, 1_400))
+        val end = clock.now()
         val stepId = ids.stepId()
         recorder.step(
             StepRecord(
@@ -133,16 +144,16 @@ class DemoRun(
                 kind = act.kind,
                 action = act.action,
                 llmReason = act.reason,
-                startedAt = started.wall,
-                endedAt = ended.wall,
-                durationMs = started.elapsedUntil(ended).inWholeMilliseconds,
+                startedAt = begin.wall,
+                endedAt = end.wall,
+                durationMs = begin.elapsedUntil(end).inWholeMilliseconds,
                 status = status,
                 detail = detail,
                 correlationId = ids.correlationId(),
             ),
         )
         val error = detail?.takeIf { status != StepStatus.PASSED }?.substringBefore(':')
-        val png = FakeScreens.png(act.page, agent.displayName, screenshots++ % 5, toast, error)
+        val png = FakeScreens.png(act.page, agent.displayName, screenshots.getAndIncrement() % VARIANTS, toast, error)
         recorder.artifact(artifacts.write(runId, stepId, agent.agentId.value, ArtifactType.SCREENSHOT, png))
         if (after != null) {
             val summary = if (status == StepStatus.PASSED) "ok: ${act.action}" else "${detail ?: status.name.lowercase()}: ${act.action}"
@@ -160,7 +171,7 @@ class DemoRun(
         return record
     }
 
-    /** [receiver] sees (or misses) [event]; a visible_text assertion follows either way. */
+    /** [receiver] sees [event] after [latencyMs] (or misses it when null); a visible_text assertion follows either way. */
     suspend fun receive(
         receiver: Identity,
         event: EventRecord,
@@ -218,10 +229,30 @@ class DemoRun(
         b: String?,
         c: String?,
         note: String,
-    ) = recorder.finding(FindingRecord(ids.findingId(), runId, null, step, agent?.agentId, findingClass, a, b, c, note, emptyList()))
+    ) {
+        val proof = agent?.let { evidence.artifactList.lastOrNull { record -> record.relativePath.contains("/${it.agentId}/") } }
+        recorder.finding(
+            FindingRecord(
+                ids.findingId(),
+                runId,
+                null,
+                step,
+                agent?.agentId,
+                findingClass,
+                a,
+                b,
+                c,
+                note,
+                listOfNotNull(proof?.artifactId),
+            ),
+        )
+    }
 
-    fun finish(outcome: RunOutcome) {
-        agents.forEach { dashboard.agentUpdated(status(it, AgentState.DONE, null, null)) }
+    fun finish(
+        outcome: RunOutcome,
+        reportDirectory: String? = null,
+    ) {
+        agents.forEach { if (it != dropout) dashboard.agentUpdated(status(it, AgentState.DONE, null, null)) }
         dashboard.runFinished(
             RunSummary(
                 runId = runId,
@@ -229,83 +260,178 @@ class DemoRun(
                 stepsPassed = evidence.stepList.count { it.status == StepStatus.PASSED },
                 stepsFailed = evidence.stepList.count { it.status != StepStatus.PASSED },
                 assertionsFailed = evidence.assertionList.count { it.verdict == Verdict.FAILED },
-                failedAgents = 0,
-                reportDirectory = null,
-                durationMs = startedAt.elapsedUntil(clock.now()).inWholeMilliseconds,
+                failedAgents = if (dropout == null) 0 else 1,
+                reportDirectory = reportDirectory,
+                durationMs = begun().at.elapsedUntil(clock.now()).inWholeMilliseconds,
             ),
         )
     }
 
     /**
-     * A deterministic, lively moment of a run: everybody signed up (one failed), the admin and managers announced,
-     * employees received it (some did not), and the team is in the middle of creating tickets.
+     * A deterministic, lively moment of a run, one agent after the other: everybody signed up (one failed), the admin
+     * announced, employees received it (some did not), and the team is in the middle of creating tickets.
      */
     suspend fun populate() {
         start()
         scenarioStep(REGISTER)
-        agents.forEachIndexed { i, agent ->
-            val page = if (i % 3 == 0) Page.JOIN else Page.LOGIN
-            if (agent == employees.getOrNull(9)) {
-                act(agent, REGISTER, Act("run register_and_login", page, null, StepKind.RUN), StepStatus.FAILED, "verification_code_missing: e-poçt kodu 60 s-də gəlmədi", after = null)
-                state(agent, AgentState.FAILED, REGISTER, "failed setup: verification_code_missing")
-                message("${agent.agentId} failed setup step '$REGISTER' (verification_code_missing) and is excluded from later steps")
-            } else {
-                act(agent, REGISTER, Act("run register_and_login", page, null, StepKind.RUN))
-            }
-        }
+        agents.forEachIndexed { i, agent -> register(agent, if (i % 3 == 0) Page.JOIN else Page.LOGIN) }
         scenarioStep(ANNOUNCE)
         for (act in ANNOUNCE_ACTS) act(admin, ANNOUNCE, act)
         val announced = event(admin, "announcement_created", "184")
         oracleCheck(admin, ANNOUNCE, passed = true)
         managers.forEach { act(it, ANNOUNCE, READ_ACTS.first()) }
         scenarioStep(RECEIVE)
-        val receivers = employees.filterNot { it == employees.getOrNull(9) }
-        receivers.forEachIndexed { i, agent ->
-            when {
-                i % 11 == 4 -> {
-                    state(agent, AgentState.WAITING, RECEIVE, "wait_for announcement_created")
-                    receive(agent, announced, RECEIVE, null)
-                    state(agent, AgentState.IDLE, RECEIVE, "not_received: announcement_created")
-                }
-
-                else -> {
-                    receive(agent, announced, RECEIVE, 280L + (i * 137L) % 2300)
-                    act(agent, RECEIVE, READ_ACTS.last(), toast = "Yeni elan: Yeni iş qrafiki")
-                }
+        receivers().forEachIndexed { i, agent ->
+            if (i % MISS_EVERY == MISS_AT) {
+                state(agent, AgentState.WAITING, RECEIVE, "wait_for announcement_created")
+                receive(agent, announced, RECEIVE, null)
+                state(agent, AgentState.IDLE, RECEIVE, "not_received: announcement_created")
+            } else {
+                receive(agent, announced, RECEIVE, 280L + (i * 137L) % 2_300)
+                act(agent, RECEIVE, READ_ACTS.last(), toast = "Yeni elan: Yeni iş qrafiki")
             }
         }
-        finding(receivers.getOrNull(4), FindingClass.DELIVERY_UI, RECEIVE, "a01 elanı dərc etdi (t0)", "görünmədi (10 s)", "oracle: elan mövcuddur", "Elan backend-də var, amma alıcının ekranına çatmadı.")
-        finding(null, FindingClass.INVESTIGATE, RECEIVE, "a01 elanı dərc etdi", "3 alıcı gecikmə ilə gördü (> 2 s)", "oracle: elan mövcuddur", "Gecikmə yüksəkdir; real-time kanalı yoxlanmalıdır.")
+        deliveryFindings()
         scenarioStep(TICKETS)
-        receivers.forEachIndexed { i, agent ->
-            when (i % 6) {
-                0, 1, 2 -> {
-                    act(agent, TICKETS, TICKET_ACTS[0])
-                    act(agent, TICKETS, TICKET_ACTS[1 + i % 3], after = AgentState.WORKING)
-                }
-
-                3 -> {
-                    act(agent, TICKETS, TICKET_ACTS[0])
-                    state(agent, AgentState.WAITING, TICKETS, "wait_for ticket_assigned")
-                }
-
-                4 -> {
-                    act(agent, TICKETS, TICKET_ACTS[0])
-                }
-
-                else -> {
-                    act(agent, TICKETS, TICKET_ACTS[3], StepStatus.FAILED, "assertion_failed: 'Tapşırıq göndərildi' görünmədi")
-                }
-            }
-        }
-        receivers.getOrNull(2)?.let {
-            act(it, TICKETS, TICKET_ACTS[2], StepStatus.BLOCKED, "no_progress: 120 s ərzində irəliləyiş yoxdur", after = AgentState.BLOCKED)
-        }
+        receivers().forEachIndexed { i, agent -> ticket(agent, i) }
+        receivers().getOrNull(2)?.let { blocked(it) }
         managers.forEachIndexed { i, manager ->
             act(manager, TICKETS, MANAGER_ACTS[i % MANAGER_ACTS.size], after = if (i % 2 == 0) AgentState.WORKING else AgentState.WAITING)
         }
         state(admin, AgentState.WAITING, TICKETS, "wait_for ticket_created")
     }
+
+    /** The same story with every agent acting at once and real pauses, for watching the board move. */
+    suspend fun play() =
+        coroutineScope {
+            start()
+            scenarioStep(REGISTER)
+            agents
+                .mapIndexed { i, agent ->
+                    launch {
+                        pause(between(0, 4_000))
+                        register(agent, if (i % 3 == 0) Page.JOIN else Page.LOGIN)
+                    }
+                }.joinAll()
+            pause(1_500)
+            scenarioStep(ANNOUNCE)
+            receivers().forEach { state(it, AgentState.WAITING, RECEIVE, "wait_for announcement_created") }
+            for (act in ANNOUNCE_ACTS) act(admin, ANNOUNCE, act, after = AgentState.WORKING)
+            val announced = event(admin, "announcement_created", "184")
+            oracleCheck(admin, ANNOUNCE, passed = true)
+            state(admin, AgentState.IDLE, ANNOUNCE, "ok: announcement published")
+            scenarioStep(RECEIVE)
+            val readers =
+                receivers().mapIndexed { i, agent ->
+                    launch {
+                        if (i % MISS_EVERY == MISS_AT) {
+                            pause(10_000)
+                            receive(agent, announced, RECEIVE, null)
+                            state(agent, AgentState.IDLE, RECEIVE, "not_received: announcement_created")
+                        } else {
+                            val latency = between(250, 3_000)
+                            pause(latency)
+                            receive(agent, announced, RECEIVE, latency)
+                            act(agent, RECEIVE, READ_ACTS.last(), toast = "Yeni elan: Yeni iş qrafiki")
+                        }
+                    }
+                } + managers.map { launch { act(it, ANNOUNCE, READ_ACTS.first()) } }
+            readers.joinAll()
+            deliveryFindings()
+            pause(1_500)
+            scenarioStep(TICKETS)
+            val workers =
+                receivers().mapIndexed { i, agent ->
+                    launch {
+                        pause(between(0, 2_500))
+                        ticket(agent, i)
+                        if (i == 2) blocked(agent)
+                        pause(between(500, 2_000))
+                        state(agent, AgentState.DONE, TICKETS, "ok: ticket flow")
+                    }
+                } +
+                    managers.mapIndexed { i, manager ->
+                        launch {
+                            repeat(3) {
+                                pause(between(1_500, 4_000))
+                                act(manager, TICKETS, MANAGER_ACTS[(i + it) % MANAGER_ACTS.size], after = AgentState.WAITING)
+                            }
+                        }
+                    }
+            workers.joinAll()
+        }
+
+    private suspend fun register(
+        agent: Identity,
+        page: Page,
+    ) {
+        val act = Act("run register_and_login", page, null, StepKind.RUN)
+        if (agent != dropout) return act(agent, REGISTER, act)
+        act(agent, REGISTER, act, StepStatus.FAILED, "verification_code_missing: e-poçt kodu 60 s-də gəlmədi", after = null)
+        state(agent, AgentState.FAILED, REGISTER, "failed setup: verification_code_missing")
+        message("${agent.agentId} failed setup step '$REGISTER' (verification_code_missing) and is excluded from later steps")
+    }
+
+    private suspend fun ticket(
+        agent: Identity,
+        i: Int,
+    ) {
+        when (i % TICKET_KINDS) {
+            0, 1, 2 -> {
+                act(agent, TICKETS, TICKET_ACTS[0])
+                act(agent, TICKETS, TICKET_ACTS[1 + i % 3], after = AgentState.WORKING)
+            }
+
+            3 -> {
+                act(agent, TICKETS, TICKET_ACTS[0])
+                state(agent, AgentState.WAITING, TICKETS, "wait_for ticket_assigned")
+            }
+
+            4 -> {
+                act(agent, TICKETS, TICKET_ACTS[0])
+            }
+
+            else -> {
+                act(agent, TICKETS, TICKET_ACTS[3], StepStatus.FAILED, "assertion_failed: 'Tapşırıq göndərildi' görünmədi")
+            }
+        }
+    }
+
+    private suspend fun blocked(agent: Identity) =
+        act(agent, TICKETS, TICKET_ACTS[2], StepStatus.BLOCKED, "no_progress: 120 s ərzində irəliləyiş yoxdur", after = AgentState.BLOCKED)
+
+    private suspend fun deliveryFindings() {
+        val missed = receivers().filterIndexed { i, _ -> i % MISS_EVERY == MISS_AT }
+        missed.take(2).forEach {
+            finding(
+                it,
+                FindingClass.DELIVERY_UI,
+                RECEIVE,
+                "${admin.agentId} elanı dərc etdi (t0)",
+                "${it.agentId}: 10 s ərzində görünmədi",
+                "oracle: elan mövcuddur",
+                "Elan backend-də var, amma ${it.displayName} onu ekranda görmədi.",
+            )
+        }
+        finding(
+            null,
+            FindingClass.INVESTIGATE,
+            RECEIVE,
+            "${admin.agentId} elanı dərc etdi",
+            "3 alıcı elanı 2 s-dən gec gördü",
+            "oracle: elan mövcuddur",
+            "Gecikmə yüksəkdir; real-time kanalı yoxlanmalıdır.",
+        )
+    }
+
+    private fun receivers(): List<Identity> = employees.filter { it != dropout }
+
+    private fun between(
+        from: Long,
+        until: Long,
+    ): Long = synchronized(random) { random.nextLong(from, until) }
+
+    private fun begun(): RunStart = checkNotNull(started) { "call start() first" }
 
     private fun status(
         agent: Identity,
@@ -318,12 +444,12 @@ class DemoRun(
 
     private fun spec(): IdentitySpec {
         val departments = listOf("Satış", "Maliyyə", "İnsan resursları", "IT", "Marketinq")
-        val managers = minOf(departments.size, maxOf(0, (agentCount - 1) / 6))
+        val managers = minOf(departments.size, maxOf(0, (agentCount - 1) / MANAGER_EVERY))
         val employees = agentCount - 1 - managers
         val invite = managers + employees / 2
         return IdentitySpec(
             testers = agentCount,
-            seed = 42,
+            seed = SEED,
             names = emptyList(),
             admins = 1,
             managers = managers,
@@ -340,6 +466,14 @@ class DemoRun(
         const val ANNOUNCE = "announce"
         const val RECEIVE = "receive_announcement"
         const val TICKETS = "create_ticket"
+
+        private const val SEED = 42L
+        private const val VARIANTS = 5
+        private const val DROPOUT_INDEX = 9
+        private const val MISS_EVERY = 11
+        private const val MISS_AT = 4
+        private const val TICKET_KINDS = 6
+        private const val MANAGER_EVERY = 6
 
         val ANNOUNCE_ACTS =
             listOf(

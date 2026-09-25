@@ -119,7 +119,11 @@ object FakeScreens {
             g.fillRoundRect(40, y + 14, 8, 34, 4, 4)
             g.color = INK
             g.font = Font(Font.SANS_SERIF, Font.BOLD, 13)
-            g.drawString(listOf("Yeni iş qrafiki", "Korporativ tədbir", "Məzuniyyət qaydaları", "Ofis köçü")[(i + random.nextInt(4)) % 4], 60, y + 26)
+            g.drawString(
+                listOf("Yeni iş qrafiki", "Korporativ tədbir", "Məzuniyyət qaydaları", "Ofis köçü")[(i + random.nextInt(4)) % 4],
+                60,
+                y + 26,
+            )
             bar(g, 60, y + 38, 180 + random.nextInt(220))
             g.color = MUTED
             g.font = Font(Font.SANS_SERIF, Font.PLAIN, 11)

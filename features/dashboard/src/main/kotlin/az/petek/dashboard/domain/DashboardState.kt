@@ -107,8 +107,7 @@ class DashboardState private constructor(
     }
 
     /** The agent's card and its own newest timeline entries; null for an agent the board has never seen. */
-    fun agentDetail(agentId: AgentId): AgentDetail? =
-        agents[agentId]?.let { AgentDetail(it.card, agentTimelines[agentId].orEmpty()) }
+    fun agentDetail(agentId: AgentId): AgentDetail? = agents[agentId]?.let { AgentDetail(it.card, agentTimelines[agentId].orEmpty()) }
 
     /** Same state with [version] moved to [atLeast] if it is behind, e.g. when a replayed state replaces a live one. */
     fun withVersionAtLeast(atLeast: Long): DashboardState = if (version >= atLeast) this else copy(version = atLeast)
@@ -253,7 +252,14 @@ class DashboardState private constructor(
             if (reason == null) {
                 withAgent
             } else {
-                withAgent.log(record.startedAt, agentId, TimelineKind.DIALOG, TimelineStatus.INFO, TimelineTexts.line(reason), record.scenarioStep)
+                withAgent.log(
+                    record.startedAt,
+                    agentId,
+                    TimelineKind.DIALOG,
+                    TimelineStatus.INFO,
+                    TimelineTexts.line(reason),
+                    record.scenarioStep,
+                )
             }
         return withDialog.log(
             at = record.endedAt,
@@ -537,8 +543,7 @@ class DashboardState private constructor(
         private val AGENT_TOKEN = Regex("^a\\d+\\b")
 
         /** The agent an artifact belongs to: the first path segment that is an agent id (`<run>/<agent>/<file>`). */
-        private fun ownerOf(record: ArtifactRecord): AgentId? =
-            record.relativePath.split('/', '\\').firstNotNullOfOrNull(::agentIdOrNull)
+        private fun ownerOf(record: ArtifactRecord): AgentId? = record.relativePath.split('/', '\\').firstNotNullOfOrNull(::agentIdOrNull)
 
         /** Harness messages start with the agent they are about (`a07 failed setup step ...`). */
         private fun agentMentionedIn(text: String): AgentId? = AGENT_TOKEN.find(text.trim())?.value?.let(::agentIdOrNull)
