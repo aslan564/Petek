@@ -13,12 +13,11 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.restrictTo
 import kotlinx.coroutines.awaitCancellation
-import java.nio.file.Files
 
 /**
  * `petek panel` (also what `petek` does without a command): serves the web panel on 127.0.0.1 and opens it in the
- * browser; everything is chosen in the page. Without a `.env` it starts the local fake KadroHR and uses it as the
- * target, so the panel always opens. Runs until the process is stopped (IntelliJ's stop button, Ctrl+C).
+ * browser; everything is chosen in the page. Without a configuration (no `--env-file`, no `.env`) it starts the local
+ * fake KadroHR and uses it as the target, so the panel always opens. Runs until the process is stopped (IntelliJ's stop button, Ctrl+C).
  */
 class PanelCommand : PetekSubcommand(NAME) {
     private val port by option("--port", help = "panel port (default 7070; the next free one when taken)")
@@ -33,7 +32,7 @@ class PanelCommand : PetekSubcommand(NAME) {
 
     override suspend fun execute(): Int {
         val runtime = session.runtime
-        val useDemo = demo || !Files.isRegularFile(runtime.workingDirectory.resolve(CliSession.DEFAULT_ENV_FILE))
+        val useDemo = demo || !session.hasConfigurationFile
         val demoTarget = if (useDemo) DemoTarget(runtime.workingDirectory) else null
         try {
             val config = demoTarget?.let { demoConfig(it) } ?: session.loadConfig()
