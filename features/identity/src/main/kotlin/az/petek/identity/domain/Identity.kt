@@ -38,7 +38,9 @@ data class IdentitySpec(
     val managers: Int,
     val employees: Int,
     val departments: List<String>,
+    /** Testers who join by invitation: every manager plus some employees, so never fewer than [managers]. */
     val inviteCount: Int,
+    /** Testers who join with the company code; always employees. */
     val companyCodeCount: Int,
     /** Catch-all test domain, e.g. `test.kadrohr.com`. */
     val mailDomain: String,
@@ -58,7 +60,9 @@ class IdentityConflictException(
  * Builds the registry deterministically: the same spec + run tag + secret always yields the same identities.
  * Rules (docs/PLAN.md "Kimlik reyestri"): admin is a01; one manager per department (round-robin if counts differ);
  * employees spread round-robin over departments; given names first, then the catalog; display names and e-mails
- * unique; registration modes assigned with a seeded shuffle so each department gets a mix of invite and company code.
+ * unique. Managers always join by invitation (a company-code sign-up becomes an employee on the target), the other
+ * invitations go to employees with a seeded, department-stratified shuffle, so each department gets a mix of invite
+ * and company code, and company-code identities are employees only.
  */
 interface IdentityRegistryGenerator {
     fun generate(

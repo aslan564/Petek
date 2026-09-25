@@ -37,7 +37,7 @@ class ConsecutiveLoopDetectorTest {
     }
 
     @Test
-    fun `waiting, reading and fetching the e-mail code repeatedly count as loops too`() {
+    fun `waiting, reading and fetching a code repeatedly count as loops too`() {
         val wait = AgentAction.WaitText("Sabah 10:00", 10.seconds)
         registerAll(wait, wait, wait).last() shouldBe true
         detector.reset()
@@ -45,6 +45,10 @@ class ConsecutiveLoopDetectorTest {
         registerAll(read, read, read).last() shouldBe true
         detector.reset()
         registerAll(AgentAction.GetEmailCode, AgentAction.GetEmailCode, AgentAction.GetEmailCode).last() shouldBe true
+        detector.reset()
+        registerAll(AgentAction.GetPhoneCode, AgentAction.GetPhoneCode, AgentAction.GetPhoneCode).last() shouldBe true
+        detector.reset()
+        registerAll(AgentAction.GetEmailCode, AgentAction.GetPhoneCode, AgentAction.GetEmailCode).last() shouldBe false
     }
 
     @Test

@@ -110,6 +110,42 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `every manager must be invited, because managers always join by invitation`() {
+            val registrationLines = SourceLines(lines.byPath + mapOf("campaign.registration" to 12, "campaign.registration.invite" to 13))
+            val campaign =
+                campaign(
+                    announce,
+                    settings = settings(registration = RegistrationQuota(invite = 2, companyCode = 7)),
+                    sourceLines = registrationLines,
+                )
+
+            val issue = issue(campaign, "at least roles.manager")
+
+            issue.line shouldBe 13
+            issue.message shouldBe
+                "campaign.registration.invite is 2 but must be at least roles.manager (3): managers always join by invitation, " +
+                "because a company-code sign-up becomes an employee on the target"
+            issues(campaign) shouldHaveSize 1
+        }
+
+        @Test
+        fun `an invite quota equal to the managers is enough`() {
+            issues(with(settings(registration = RegistrationQuota(invite = 3, companyCode = 6)))).shouldBeEmpty()
+            issues(
+                with(settings(roles = RoleQuota(1, 0, 9), registration = RegistrationQuota(invite = 0, companyCode = 9))),
+            ).shouldBeEmpty()
+        }
+
+        @Test
+        fun `the manager rule stays quiet while the counts themselves are negative`() {
+            val negativeInvite = with(settings(registration = RegistrationQuota(invite = -1, companyCode = 10)))
+            issues(negativeInvite).map { it.message }.forEach { it shouldNotContain "at least roles.manager" }
+            val negativeManagers =
+                with(settings(roles = RoleQuota(1, -3, 12), registration = RegistrationQuota(invite = 0, companyCode = 9)))
+            issues(negativeManagers).map { it.message }.forEach { it shouldNotContain "at least roles.manager" }
+        }
+
+        @Test
         fun `registration counts must not be negative`() {
             issue(with(settings(registration = RegistrationQuota(invite = 10, companyCode = -1))), "company_code must not be negative")
             issue(with(settings(registration = RegistrationQuota(invite = -1, companyCode = 10))), "invite must not be negative")
@@ -314,6 +350,23 @@ class DefaultCampaignValidatorTest {
             issue(campaign(step("s", actor = "employee[reg=company_code]"), settings = noCodes), "can never match a tester")
             issues(campaign(step("s", actor = "employee[reg=invite, n=6]"), settings = noCodes)).shouldBeEmpty()
             issue(campaign(step("s", actor = "employee[reg=invite, n=7]"), settings = noCodes), "can never match a tester")
+        }
+
+        @Test
+        fun `a manager never joins with the company code`() {
+            issue(campaign(step("s", actor = "manager[reg=company_code]")), "can never match a tester")
+            issues(campaign(step("s", actor = "manager[reg=invite, n=3]"))).shouldBeEmpty()
+            issue(campaign(step("s", actor = "manager[reg=invite, n=4]")), "can never match a tester")
+        }
+
+        @Test
+        fun `employees are invited only with the invitations left after the managers`() {
+            val onlyManagersInvited = settings(registration = RegistrationQuota(invite = 3, companyCode = 6))
+            issue(campaign(step("s", actor = "employee[reg=invite]"), settings = onlyManagersInvited), "can never match a tester")
+            issues(campaign(step("s", actor = "employee[reg=company_code, n=6]"), settings = onlyManagersInvited)).shouldBeEmpty()
+
+            issues(campaign(step("s", actor = "employee[reg=invite, n=2]"))).shouldBeEmpty()
+            issue(campaign(step("s", actor = "employee[reg=invite, n=3]")), "can never match a tester")
         }
 
         @Test

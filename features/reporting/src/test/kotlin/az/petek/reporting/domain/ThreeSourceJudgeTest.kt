@@ -380,6 +380,30 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `an unreachable test inbox is an agent failure explained as an environment problem`() {
+            val steps =
+                listOf(
+                    step(
+                        "join",
+                        "a07",
+                        StepStatus.ERROR,
+                        StepKind.RUN,
+                        detail = "mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed",
+                        action = "run register_and_login",
+                    ),
+                )
+
+            val finding = judge.findings(run, emptyList(), steps).single()
+
+            finding.findingClass shouldBe FindingClass.AGENT_FAILURE
+            finding.note shouldBe
+                "Agent failure: mail_unavailable (test inbox unreachable: an environment problem, not an error of the target)."
+            finding.c.shouldBeNull()
+            finding.a shouldBe "run register_and_login"
+            finding.b shouldBe "mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed"
+        }
+
+        @Test
         fun `a blocked step without a key is an agent failure named blocked`() {
             val steps = listOf(step("read_announce", "a09", StepStatus.BLOCKED, detail = "no progress for 120s"))
 

@@ -150,18 +150,62 @@ class DefaultIdentityRegistryGeneratorTest {
     }
 
     @Test
-    fun `registration modes are shuffled rather than handed out by agent id`() {
-        val modes = identities.drop(1).map { it.registration }
-        modes shouldNotBe List(15) { RegistrationMode.INVITE } + List(14) { RegistrationMode.COMPANY_CODE }
-        val managerModes = (1L..20L).map { seed -> generator().generate(spec(seed = seed), RUN_TAG).identities[1].registration }
-        managerModes.toSet() shouldHaveSize 2
+    fun `every manager joins by invitation and company codes go to employees only`() {
+        val specs =
+            listOf(
+                spec(),
+                spec(seed = 7),
+                spec(testers = 10, managers = 7, departments = listOf("IT", "HR", "Satış")),
+                spec(testers = 12, managers = 3, inviteCount = 3, companyCodeCount = 8),
+                spec(testers = 999, managers = 20),
+            )
+        specs.forEach { spec ->
+            val result = generator().generate(spec, RUN_TAG).identities
+            withClue("$spec") {
+                result.filter { it.role == Role.MANAGER }.map { it.registration }.toSet() shouldBe setOf(RegistrationMode.INVITE)
+                result.filter { it.registration == RegistrationMode.COMPANY_CODE }.map { it.role }.toSet() shouldBe
+                    setOf(Role.EMPLOYEE)
+                result.count { it.registration == RegistrationMode.INVITE } shouldBe spec.inviteCount
+                result.count { it.registration == RegistrationMode.COMPANY_CODE } shouldBe spec.companyCodeCount
+            }
+        }
+    }
+
+    @Test
+    fun `the invitations left after the managers are spread over the employees of every department`() {
+        (1L..20L).forEach { seed ->
+            val employees = generator().generate(spec(seed = seed), RUN_TAG).identities.filter { it.role == Role.EMPLOYEE }
+            val invitedPerDepartment =
+                DEPARTMENTS.map { dept -> employees.count { it.department == dept && it.registration == RegistrationMode.INVITE } }
+            withClue("seed $seed") {
+                invitedPerDepartment.sum() shouldBe 10
+                spread(invitedPerDepartment) shouldBeLessThanOrEqual 1
+            }
+        }
+    }
+
+    @Test
+    fun `invitations just for the managers leave every employee on the company code`() {
+        val result = generator().generate(spec(inviteCount = 5, companyCodeCount = 24), RUN_TAG).identities
+        result.filter { it.role == Role.MANAGER }.map { it.registration }.toSet() shouldBe setOf(RegistrationMode.INVITE)
+        result.filter { it.role == Role.EMPLOYEE }.map { it.registration }.toSet() shouldBe setOf(RegistrationMode.COMPANY_CODE)
+    }
+
+    @Test
+    fun `registration modes of employees are shuffled rather than handed out by agent id`() {
+        val employeeModes = identities.filter { it.role == Role.EMPLOYEE }.map { it.registration }
+        employeeModes shouldNotBe List(10) { RegistrationMode.INVITE } + List(14) { RegistrationMode.COMPANY_CODE }
+        val firstEmployeeModes =
+            (1L..20L).map { seed -> generator().generate(spec(seed = seed), RUN_TAG).identities[6].registration }
+        firstEmployeeModes.toSet() shouldHaveSize 2
     }
 
     @Test
     fun `quotas of zero give everyone the other registration mode`() {
         val allInvite = generator().generate(spec(inviteCount = 29, companyCodeCount = 0), RUN_TAG).identities.drop(1)
         allInvite.map { it.registration }.toSet() shouldBe setOf(RegistrationMode.INVITE)
-        val allCode = generator().generate(spec(inviteCount = 0, companyCodeCount = 29), RUN_TAG).identities.drop(1)
+        val allCode =
+            generator().generate(spec(managers = 0, inviteCount = 0, companyCodeCount = 29), RUN_TAG).identities.drop(1)
         allCode.map { it.registration }.toSet() shouldBe setOf(RegistrationMode.COMPANY_CODE)
     }
 

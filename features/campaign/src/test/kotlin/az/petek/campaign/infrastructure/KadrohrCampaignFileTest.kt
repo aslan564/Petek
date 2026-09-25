@@ -14,10 +14,12 @@ import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.kadrohrScenario
+import az.petek.campaign.testing.repoFile
 import az.petek.core.model.Role
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import java.net.URI
 import java.nio.file.Files
@@ -39,6 +41,27 @@ class KadrohrCampaignFileTest {
     @Test
     fun `the real campaign validates without issues`() {
         DefaultCampaignValidator().validate(campaign, KNOWN_RUN_FUNCTIONS).shouldBeEmpty()
+    }
+
+    @Test
+    fun `the file is plain YAML that needs no repair of its actor lists`() {
+        val text = Files.readString(file)
+        quoteActorFlowLists(text) shouldBe text
+    }
+
+    @Test
+    fun `the scenario example of docs PLAN is exactly this file`() {
+        val section = Files.readString(repoFile("docs/PLAN.md")).substringAfter("## Ssenari formatı")
+        val example = section.substringAfter("```yaml\n").substringBefore("```")
+        example shouldBe Files.readString(file)
+        section.substringBefore("```yaml") shouldContain "`scenarios/kadrohr.yaml`"
+    }
+
+    @Test
+    fun `every manager can be invited, so no manager has to join with the company code`() {
+        val settings = campaign.settings
+        (settings.registration.invite >= settings.roles.manager) shouldBe true
+        settings.registration.invite + settings.registration.companyCode shouldBe settings.roles.manager + settings.roles.employee
     }
 
     @Test
@@ -66,7 +89,8 @@ class KadrohrCampaignFileTest {
 
     @Test
     fun `setup actions mix natural language and run functions`() {
-        step("owner_signup").action shouldBe StepAction.Do("Qeydiyyatdan keç, email kodunu təsdiqlə və 'Pətək Test MMC' adlı şirkət yarat")
+        step("owner_signup").action shouldBe
+            StepAction.Do("Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat")
         step("seed").action shouldBe StepAction.Run("seed_company")
         step("join").action shouldBe StepAction.Run("register_and_login")
         step("join").actors.selectors shouldContainExactly listOf(ActorSelector(Role.EMPLOYEE), ActorSelector(Role.MANAGER))

@@ -1,5 +1,6 @@
 package az.petek.agent.application
 
+import az.petek.agent.domain.AgentAction
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariableKeys
 import az.petek.agent.domain.SharedRunState
@@ -89,7 +90,7 @@ class PlaceholderResolver {
         runtime: AgentRuntime,
     ): Lookup {
         runtime.variables[key]?.let { return Lookup.Found(it) }
-        val hint = if (key == AgentVariableKeys.EMAIL_CODE) " Call get_email_code first." else ""
+        val hint = FETCHED_BY[key]?.let { " Call $it first." }.orEmpty()
         return Lookup.Missing("{vars.$key} is not set.$hint")
     }
 
@@ -116,6 +117,13 @@ class PlaceholderResolver {
         val PLACEHOLDER = Regex("""\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_\-]+)*)\}""")
 
         const val DEPARTMENT = "department"
+
+        /** Variables the model fills itself with a tool, named in the hint when it types one too early. */
+        val FETCHED_BY: Map<String, String> =
+            mapOf(
+                AgentVariableKeys.EMAIL_CODE to AgentAction.GetEmailCode.toolName,
+                AgentVariableKeys.PHONE_CODE to AgentAction.GetPhoneCode.toolName,
+            )
 
         val SELF_KEYS: Map<String, (AgentRuntime) -> String?> =
             linkedMapOf(

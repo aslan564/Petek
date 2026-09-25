@@ -35,9 +35,11 @@ class PlaceholderResolverTest {
     @Test
     fun `variables and shared values resolve once they are set`() {
         runtime.variables[AgentVariableKeys.EMAIL_CODE] = "123456"
+        runtime.variables[AgentVariableKeys.PHONE_CODE] = "482913"
         runtime.shared.put(SharedRunState.COMPANY_CODE, "PTK-4821")
         runtime.shared.put(SharedRunState.COMPANY_ID, "c1")
         resolved("{vars.email_code}") shouldBe "123456"
+        resolved("{vars.phone_code}") shouldBe "482913"
         resolved("{shared.company_code}") shouldBe "PTK-4821"
         resolved("{shared.company_id}") shouldBe "c1"
     }
@@ -68,6 +70,7 @@ class PlaceholderResolverTest {
     @Test
     fun `a variable that is not set yet explains how to get it`() {
         unresolved("{vars.email_code}") shouldContain "{vars.email_code} is not set. Call get_email_code first."
+        unresolved("{vars.phone_code}") shouldContain "{vars.phone_code} is not set. Call get_phone_code first."
         unresolved("{vars.other}") shouldContain "{vars.other} is not set."
         unresolved("{shared.company_code}") shouldContain "{shared.company_code} is not known yet."
     }

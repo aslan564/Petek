@@ -10,7 +10,9 @@ dependencies {
 }
 
 tasks.named<Test>("test") {
-    // Tests load the real campaign file, so it is a test input and its location is passed to the JVM.
+    // Tests load the real campaign file and compare the copy in docs/PLAN.md with it, so both are test inputs and
+    // the repository location is passed to the JVM.
     inputs.file(rootDir.resolve("scenarios/kadrohr.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(rootDir.resolve("docs/PLAN.md")).withPathSensitivity(PathSensitivity.RELATIVE)
     systemProperty("petek.repoRoot", rootDir.absolutePath)
 }

@@ -3,10 +3,11 @@ package az.petek.campaign.infrastructure
 import az.petek.campaign.domain.SourceLines
 
 /**
- * `actor: [manager[IT], manager[HR]]` is the list form documented in docs/PLAN.md and used by `scenarios/kadrohr.yaml`,
- * but it is not valid YAML: inside a flow sequence `[` and `]` are indicators, so `manager[IT]` cannot be a plain item.
- * This rewrites such single-line actor lists to quoted items (`actor: ["manager[IT]", "manager[HR]"]`) without moving
- * any line, so the documented form loads and every reported line still matches the file.
+ * `actor: [manager[IT], manager[HR]]` is the list form campaign authors naturally write (early drafts of docs/PLAN.md
+ * did), but it is not valid YAML: inside a flow sequence `[` and `]` are indicators, so `manager[IT]` cannot be a plain
+ * item. `scenarios/kadrohr.yaml` quotes its items; for files that do not, this rewrites such single-line actor lists to
+ * quoted items (`actor: ["manager[IT]", "manager[HR]"]`) without moving any line, so the form still loads and every
+ * reported line still matches the file.
  *
  * Only lines whose value is a one-line flow list containing brackets are touched; lists that already quote their items,
  * span several lines or are followed by anything but a comment are left for the YAML parser to judge.

@@ -120,8 +120,9 @@ class PromptBuilder(
             listOf(
                 "Answer every turn with exactly one JSON object that calls exactly one tool.",
                 "Use only the tools listed below. Nothing else is possible.",
-                "Never type credentials or codes yourself: use placeholders. Type {self.password} for your password and, " +
-                    "after get_email_code, {vars.email_code} for the e-mailed code. The harness substitutes them.",
+                "Never type credentials or codes yourself: use placeholders. Type {self.password} for your password, " +
+                    "{vars.email_code} for the e-mailed code (after get_email_code) and {vars.phone_code} for the code " +
+                    "sent to your phone (after get_phone_code). The harness substitutes them.",
                 "Stay strictly within the task. Do not explore, change settings or create anything the task does not ask for.",
                 "Never try to bypass permissions. If the UI does not offer an action, a control is disabled, or the server " +
                     "refuses (403, 'forbidden', 'not allowed', an error message), do not look for workarounds: call " +

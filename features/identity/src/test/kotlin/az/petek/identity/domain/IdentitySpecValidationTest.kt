@@ -5,6 +5,7 @@ import az.petek.identity.IdentityTestData.SmallCatalog
 import az.petek.identity.IdentityTestData.generator
 import az.petek.identity.IdentityTestData.spec
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
@@ -65,6 +66,20 @@ class IdentitySpecValidationTest {
     fun `the registration quota must cover every manager and employee`() {
         conflict(spec(inviteCount = 15, companyCodeCount = 13)) shouldContain
             "registration quota adds up to 28 (15 invite + 13 company code) but there are 29 managers and employees"
+    }
+
+    @Test
+    fun `the invite count must cover every manager, because managers always join by invitation`() {
+        val message = conflict(spec(inviteCount = 4, companyCodeCount = 25))
+        message shouldContain "invite count 4 is less than the 5 managers; managers always join by invitation"
+        message shouldNotContain "registration quota adds up"
+        conflict(spec(managers = 3, inviteCount = 0, companyCodeCount = 29)) shouldContain "invite count 0 is less than the 3 managers"
+    }
+
+    @Test
+    fun `an invite count equal to the managers is enough`() {
+        generator().generate(spec(inviteCount = 5, companyCodeCount = 24), RUN_TAG).identities shouldHaveSize 30
+        generator().generate(spec(managers = 0, inviteCount = 0, companyCodeCount = 29), RUN_TAG).identities shouldHaveSize 30
     }
 
     @Test

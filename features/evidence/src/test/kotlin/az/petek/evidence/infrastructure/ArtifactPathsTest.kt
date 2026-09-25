@@ -43,6 +43,12 @@ class ArtifactPathsTest {
     }
 
     @Test
+    fun `an http_status call is stored as plain text and an oracle answer as JSON`() {
+        ArtifactPaths.fileName(4, ArtifactType.HTTP) shouldBe "0004-http.txt"
+        ArtifactPaths.fileName(6, ArtifactType.ORACLE) shouldBe "0006-oracle.json"
+    }
+
+    @Test
     fun `the sequence is read back only from names that start with it`() {
         ArtifactPaths.seqOf("0003-screenshot.png") shouldBe 3
         ArtifactPaths.seqOf("12345-log.txt") shouldBe 12345

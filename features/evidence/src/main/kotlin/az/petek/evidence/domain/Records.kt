@@ -86,14 +86,19 @@ data class EventReceipt(
     val latencyMs: Long?,
 )
 
+/** Kind of a stored artifact; [extension] is the file extension it is written with, so viewers open it right. */
 enum class ArtifactType(
     val extension: String,
 ) {
     SCREENSHOT("png"),
     A11Y("yaml"),
     DOM("html"),
-    HTTP("json"),
+
+    /** An `http_status` call as plain text, `<status> <body>`; the body need not be JSON, so the file is not either. */
+    HTTP("txt"),
     MAIL("json"),
+
+    /** The oracle's JSON answer. */
     ORACLE("json"),
     PROMPT("txt"),
     LOG("txt"),

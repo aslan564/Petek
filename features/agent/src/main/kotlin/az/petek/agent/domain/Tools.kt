@@ -56,6 +56,15 @@ sealed interface AgentAction {
         override val toolName = "get_email_code"
     }
 
+    /**
+     * Harness reads the newest phone code (OTP) sent to this agent's phone from the target's test API
+     * (`GET /test/otp/{phone}`, docs/TARGET_CONTRACT.md) and stores it as `{vars.phone_code}`. The test mode sends no
+     * SMS, so this is the only way a `do` step can pass the site's phone-verification step.
+     */
+    data object GetPhoneCode : AgentAction {
+        override val toolName = "get_phone_code"
+    }
+
     data class Done(
         val summary: String,
         val success: Boolean,
