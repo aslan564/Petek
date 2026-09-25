@@ -1,6 +1,7 @@
 package az.petek.verification.domain
 
 import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.OracleCondition
 import kotlin.time.Duration
 
 /**
@@ -24,7 +25,7 @@ internal object AssertionText {
             is AssertionSpec.HttpStatus -> "${spec.method} ${spec.path} -> ${spec.equals}"
             is AssertionSpec.Count -> "count of `${spec.selector}` = ${spec.equals}"
             is AssertionSpec.LatencyMax -> "latency <= ${ms(spec.max)}"
-            AssertionSpec.OnlyOneSucceeds -> "exactly one actor succeeds"
+            is AssertionSpec.OnlyOneSucceeds -> describeRace(spec)
         }
 
     fun ms(duration: Duration): String = "${duration.inWholeMilliseconds} ms"
@@ -73,6 +74,18 @@ internal object AssertionText {
             )
         return if (parts.isEmpty()) "nothing not visible (no text or selector given)" else parts.joinToString(" and ") + " not visible"
     }
+
+    /** `exactly one actor succeeds`, plus the deciding requests and the oracle condition when the spec names them. */
+    private fun describeRace(spec: AssertionSpec.OnlyOneSucceeds): String =
+        buildString {
+            append("exactly one actor succeeds")
+            spec.request?.let { append(" by `").append(it.describe()).append('`') }
+            spec.oracle?.let { append(" and ").append(describeOracle(asOracle(it))) }
+        }
+
+    /** The oracle condition of a race as the `oracle` assertion it behaves like. */
+    fun asOracle(condition: OracleCondition): AssertionSpec.Oracle =
+        AssertionSpec.Oracle(condition.path, condition.field, condition.equals, contains = null)
 
     private fun describeOracle(spec: AssertionSpec.Oracle): String =
         buildString {

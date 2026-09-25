@@ -1,6 +1,8 @@
 package az.petek.verification.domain
 
 import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.OracleCondition
+import az.petek.campaign.domain.RequestPattern
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.seconds
@@ -41,6 +43,17 @@ class AssertionTextTest {
         AssertionText.describe(AssertionSpec.HttpStatus("/api/x", "POST", 409)) shouldBe "POST /api/x -> 409"
         AssertionText.describe(AssertionSpec.Count("#x", 2)) shouldBe "count of `#x` = 2"
         AssertionText.describe(AssertionSpec.LatencyMax(3.seconds)) shouldBe "latency <= 3000 ms"
-        AssertionText.describe(AssertionSpec.OnlyOneSucceeds) shouldBe "exactly one actor succeeds"
+        AssertionText.describe(AssertionSpec.OnlyOneSucceeds()) shouldBe "exactly one actor succeeds"
+    }
+
+    @Test
+    fun `a race names the requests that decide it and its oracle condition`() {
+        val approve = RequestPattern("POST", ".*/approve")
+
+        AssertionText.describe(AssertionSpec.OnlyOneSucceeds(approve)) shouldBe "exactly one actor succeeds by `POST .*/approve`"
+        AssertionText.describe(AssertionSpec.OnlyOneSucceeds(approve, OracleCondition("/test/tickets/7", "status", "approved"))) shouldBe
+            "exactly one actor succeeds by `POST .*/approve` and GET /test/tickets/7 field `status` = \"approved\""
+        AssertionText.describe(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/7"))) shouldBe
+            "exactly one actor succeeds and GET /test/tickets/7 answers 2xx"
     }
 }

@@ -21,10 +21,10 @@ ordered by number everywhere.
 | `features/evidence` | Runs, steps, events, receipts, artifacts, assertions, findings, usage | `EvidenceRecorder`, `EvidenceQuery`, `RunRepository`, `ArtifactStore` | SQLite + file system |
 | `features/mail` | Verification codes and invitation links from the test inbox | `Mailbox`, `VerificationExtractor`, `AwaitVerificationUseCase` | Mailpit REST client (Ktor) |
 | `features/oracle` | Target test API (source of truth "C") | `TargetOracle`, `JsonFieldSelector` | Ktor client with `X-Test-Token`, `is_test` guard |
-| `features/browser` | Isolated browser sessions, snapshots for the LLM, real-time transport detection, accepted-and-recorded JavaScript dialogs | `BrowserEngine`, `BrowserSessionFactory`, `BrowserSession` | Playwright (browser servers sharded by load, thread-confined sessions) |
+| `features/browser` | Isolated browser sessions, snapshots for the LLM, real-time transport detection, accepted-and-recorded JavaScript dialogs, the mutating requests each page sends to the target (race evidence) | `BrowserEngine`, `BrowserSessionFactory`, `BrowserSession` | Playwright (browser servers sharded by load, thread-confined sessions) |
 | `features/llm` | Structured-output LLM calls, retries, concurrency limit, usage metering | `LlmClient` | Claude Code CLI (`claude -p`, Claude plan) and Anthropic Java SDK |
 | `features/agent` | Tool whitelist, decision protocol, agent loop, deterministic `run` functions | `DecisionProtocol`, `LoopDetector`, `AgentLoop`, `RunFunction`, `TesterAgent` | — |
-| `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds) | `AssertionEvaluator`, `VerifyStepUseCase` | — |
+| `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds), race evidence from each actor's own requests | `AssertionEvaluator`, `VerifyStepUseCase`, `RaceEvidence` | — |
 | `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
@@ -90,7 +90,7 @@ sequenceDiagram
    - Each actor performs its `do` (LLM loop) or `run` (code). All actors of a step run concurrently. `parallel: true`
      additionally starts them at the same instant (a barrier), which race tests need.
    - With `emits`, the object id is read from the configured id source and the event is published with t0.
-   - Assertions are evaluated per actor. `only_one_succeeds` is evaluated per group.
+   - Assertions are evaluated per actor. `only_one_succeeds` is evaluated per group, from evidence (see "Races").
    - `on_fail: abort` stops the run; `continue` goes on.
 4. **Watchdog.** An agent with no progress for `inactivityTimeout` is marked `blocked`. Its current action is cancelled
    and it moves to the next step.
@@ -101,6 +101,30 @@ sequenceDiagram
 
 The live console board fits the terminal whatever the number of agents: a headline counts the agents per state, the
 rows show the agents that need attention first (working, blocked, failed, waiting) and one line counts the rest.
+
+## Races (`only_one_succeeds`)
+
+A race step (`parallel: true`) asks that exactly one actor wins, e.g. two managers approving the same ticket. Who won
+is decided by code from each actor's own requests (CLAUDE.md rule 2), never by what its agent says:
+
+1. **Browser.** Every session records the mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`) its page sends to the
+   target's origin, form posts and `fetch`/XHR alike, with the URL path (no query), the answer's status and the
+   harness time it saw the answer (`BrowserSession.mutations(since)`). Requests made by `BrowserSession.request`
+   (assertion probes) and requests to other origins are not included.
+2. **Orchestration.** Right before the action the runner reads the actor's requests once (so answers to earlier
+   requests are timestamped first) and takes the start time; after the action it reads the requests since then.
+   `only_one_succeeds: {request: "<METHOD> <path regex>"}` narrows them (default: every mutating request). An actor
+   won when one matching request was accepted (status < 400) and none was refused (403, 409, 422); a refusal of the
+   same request it had already won (a double submit) does not count. Only a winner emits the step's event.
+3. **Lost race.** An actor that was refused as already decided (409/422), or that gave its answer (success claimed,
+   a problem or a refusal reported) without an accepted request while another actor won, did what a race expects:
+   its action is recorded PASSED with detail `lost_race: <decisive request>; won by <agent>; agent: <summary>` and it
+   is no failed agent. Reporting treats it like the expected `permission_denied` refusal, including the agent's own
+   records of that action (same correlation id); the report shows "yarışı uduzdu".
+4. **Verdict.** `verification` passes when exactly one actor won and the requests of every actor could be read; the
+   observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve -> 303; a03 POST
+   /tickets/t2/approve -> 409`). With `oracle: {path, field, equals}` and a test API, the target's final state must
+   match too, and its answer is kept as an ORACLE artifact.
 
 ## Capacity advice (`petek capacity`)
 

@@ -1,0 +1,45 @@
+package az.petek.reporting.domain
+
+import az.petek.core.ids.CorrelationId
+import az.petek.evidence.domain.StepKind
+import az.petek.evidence.domain.StepRecord
+
+/**
+ * Judges step records in the context of the run they belong to, for the outcomes a test expects although a record on
+ * its own looks like a failure:
+ * - an expected refusal ([FailureKeys.isExpectedRefusal]): a forbidden action the target refused, BLOCKED with
+ *   `permission_denied`;
+ * - a lost race: in a `parallel` step with `only_one_succeeds`, every actor but the winner is refused or finds the
+ *   object already decided. The orchestrator records such an action PASSED with detail `lost_race: ...`
+ *   ([FailureKeys.isLostRace]), but the agent's own records of the same action (its turns, sharing the action's
+ *   correlation id) may say FAILED ("already decided"). Those action records ([StepKind.DO] and [StepKind.RUN]) are
+ *   expected too; the group assertion decides the race. Waits, emits and verification errors of the same actor are
+ *   judged on their own.
+ *
+ * Findings, failed agents, the summary and stability all ask this one place, so they always agree.
+ */
+class ExpectedOutcomes(
+    steps: List<StepRecord>,
+) {
+    private val lostRaces: Set<CorrelationId> = steps.filter(FailureKeys::isLostRace).mapTo(HashSet()) { it.correlationId }
+
+    /** [step] records (part of) an action that lost a race. */
+    fun isLostRace(step: StepRecord): Boolean = step.kind in ACTION_KINDS && step.correlationId in lostRaces
+
+    /** [step] is an outcome the test expected: an expected refusal or part of a lost race. */
+    fun isExpected(step: StepRecord): Boolean = FailureKeys.isExpectedRefusal(step) || isLostRace(step)
+
+    /** The action did not complete and that was not an expected outcome. */
+    fun isFailure(step: StepRecord): Boolean = FailureKeys.isFailure(step) && !isLostRace(step)
+
+    /** Like [FailureKeys.of], but null for every part of a lost race. */
+    fun failureKey(step: StepRecord): String? = if (isLostRace(step)) null else FailureKeys.of(step)
+
+    /** The records a report row should show as a lost race: the orchestrator's own and the agent's failing ones. */
+    fun showsLostRace(step: StepRecord): Boolean =
+        isLostRace(step) && (FailureKeys.isLostRace(step) || step.status in FailureKeys.FAILING_STATUSES)
+
+    private companion object {
+        val ACTION_KINDS = setOf(StepKind.DO, StepKind.RUN)
+    }
+}

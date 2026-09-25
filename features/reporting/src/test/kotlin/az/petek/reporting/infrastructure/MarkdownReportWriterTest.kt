@@ -150,6 +150,29 @@ class MarkdownReportWriterTest {
     }
 
     @Test
+    fun `an actor that lost a race is shown as such, not as passed or failed`() {
+        val model = SampleReport.model()
+        val lost =
+            StepRow(
+                "race",
+                "a03",
+                null,
+                "DO",
+                "PASSED",
+                2_000,
+                "lost_race: POST /tickets/t2/approve -> 409; won by a02",
+                null,
+                lostRace = true,
+            )
+        val report = StepRow("race", "a03", null, "DO", "FAILED", 1_000, "problem_reported: already decided", null, lostRace = true)
+
+        val md = writer.render(model.copy(steps = listOf(lost, report)))
+
+        md shouldContain "| race | a03 | do | yarışı uduzdu | 2,0 san | lost_race: POST /tickets/t2/approve -> 409; won by a02 | — |"
+        md shouldContain "| race | a03 | do | yarışı uduzdu | 1,0 san | problem_reported: already decided | — |"
+    }
+
+    @Test
     fun `untrusted text cannot break a table or inject markup`() {
         val md =
             writer.render(

@@ -17,7 +17,8 @@ production data (rule 8). The owner wants to test kadrohr.com, which is a produc
   - C fails: backend finding.
   - C passes, B fails: delivery/UI finding.
   - Otherwise: "investigate".
-  - An expected `permission_denied` refusal is a pass.
+  - An expected `permission_denied` refusal is a pass, and so is a lost race (`lost_race`): `only_one_succeeds`
+    decides who won from each actor's own requests and the target's answers, never from the agent's report.
 - **Target safety, in layers:**
   1. `TargetPolicy` refuses hosts listed in `PETEK_PRODUCTION_HOSTS` unless `PETEK_ALLOW_PRODUCTION=true`.
   2. The target's test API requires `X-Test-Token` and exists only in staging test mode.

@@ -9,8 +9,9 @@ import az.petek.evidence.domain.StepStatus
  * `FailureReason` vocabulary is mirrored in [KNOWN]; a key added there later is still recognised when it leads the
  * detail as `<snake_case_key>:`.
  *
- * It is also the single place that decides whether a step record is a failure at all, so findings, stability,
- * failed agents and the summary always agree (see [isFailure]).
+ * It also decides whether a single step record is a failure at all ([isFailure]); [ExpectedOutcomes] adds what needs
+ * the whole run (the agent's own records of a lost race), and findings, stability, failed agents and the summary all
+ * ask it, so they always agree.
  */
 object FailureKeys {
     const val MAIL_TIMEOUT = "mail_timeout"
@@ -27,6 +28,13 @@ object FailureKeys {
      * assertions (`not_visible`, `http_status` 403), so such a step is not a failure (see [isExpectedRefusal]).
      */
     const val PERMISSION_DENIED = "permission_denied"
+
+    /**
+     * The orchestrator records an actor that lost a race (`only_one_succeeds`) PASSED with this key: refused as
+     * already decided, or it found the object decided by the winner. Like [PERMISSION_DENIED] it is the outcome the
+     * step expected; the group assertion decides (see [ExpectedOutcomes], which also covers the agent's own records).
+     */
+    const val LOST_RACE = "lost_race"
 
     /** Implied by [StepStatus.BLOCKED] when the watchdog left no key of its own. */
     const val BLOCKED = "blocked"
@@ -49,6 +57,7 @@ object FailureKeys {
             "browser_error",
             "missing_prerequisite",
             BLOCKED,
+            LOST_RACE,
         )
 
     /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
@@ -84,7 +93,13 @@ object FailureKeys {
     fun isExpectedRefusal(step: StepRecord): Boolean =
         step.status == StepStatus.BLOCKED && (find(step.detail) ?: find(step.action)) == PERMISSION_DENIED
 
-    /** The action did not complete and that was not the expected outcome. */
+    /** The orchestrator's record of an action that lost a race: PASSED, detail `lost_race: ...`. */
+    fun isLostRace(step: StepRecord): Boolean = step.status == StepStatus.PASSED && find(step.detail) == LOST_RACE
+
+    /**
+     * The action did not complete and that was not the expected outcome. Judged from [step] alone: the agent's own
+     * records of a lost race need the rest of the run ([ExpectedOutcomes.isFailure]).
+     */
     fun isFailure(step: StepRecord): Boolean = step.status in FAILING_STATUSES && !isExpectedRefusal(step)
 
     /**

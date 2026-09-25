@@ -8,6 +8,7 @@ import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.RegistrationQuota
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
@@ -128,7 +129,7 @@ class KadrohrCampaignFileTest {
         race.parallel shouldBe true
         race.actors.selectors shouldContainExactly
             listOf(ActorSelector(Role.MANAGER, department = "IT"), ActorSelector(Role.MANAGER, department = "HR"))
-        race.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds)
+        race.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve")))
     }
 
     @Test

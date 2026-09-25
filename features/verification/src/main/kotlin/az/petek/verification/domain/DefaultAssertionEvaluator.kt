@@ -3,6 +3,7 @@ package az.petek.verification.domain
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.WaitOutcome
 import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.OracleCondition
 import az.petek.campaign.domain.TemplateException
 import az.petek.campaign.domain.TemplateRenderer
 import az.petek.core.time.HarnessClock
@@ -12,11 +13,6 @@ import az.petek.oracle.domain.JsonFieldSelector
 import az.petek.oracle.domain.TargetOracle
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -38,6 +34,9 @@ import kotlin.time.Duration.Companion.milliseconds
  *   reports the latency as an upper bound.
  * - Sources follow the three-source model: screen checks are RECEIVER, oracle and the target's own HTTP answers
  *   are ORACLE, `latency_max` is HARNESS and `only_one_succeeds` is SENDER.
+ * - `only_one_succeeds` trusts only [ActorResult.succeeded] (derived by the caller from each actor's own requests,
+ *   see [RaceEvidence]); its oracle condition is checked like an `oracle` assertion and its body kept as evidence
+ *   ([RaceVerdict]).
  */
 class DefaultAssertionEvaluator(
     private val oracle: TargetOracle,
@@ -78,40 +77,64 @@ class DefaultAssertionEvaluator(
                     guarded(spec, input) { httpStatus(spec, input) }
                 }
 
-                AssertionSpec.OnlyOneSucceeds -> {
+                is AssertionSpec.OnlyOneSucceeds -> {
                     result(spec, Verdict.SKIPPED, observed = null, note = "group-level: judged once per step over all actors")
                 }
             }
         }
     }
 
-    override fun evaluateOnlyOneSucceeds(results: List<ActorResult>): AssertionResult {
-        val ordered = results.sortedBy { it.agentId.index }
-        val winners = ordered.filter { it.succeeded }
-        val winnerIds = winners.joinToString { it.agentId.value }
-        val observed =
-            when (winners.size) {
-                0 -> "none of ${ordered.size} succeeded"
-                1 -> "$winnerIds succeeded"
-                else -> "${winners.size} succeeded: $winnerIds"
+    override fun evaluateOnlyOneSucceeds(results: List<ActorResult>): AssertionResult =
+        RaceVerdict.judge(AssertionSpec.OnlyOneSucceeds(), results)
+
+    override suspend fun evaluateOnlyOneSucceeds(
+        spec: AssertionSpec.OnlyOneSucceeds,
+        results: List<ActorResult>,
+        input: AssertionInput,
+    ): AssertionResult = RaceVerdict.judge(spec, results, spec.oracle?.let { raceOracle(it, input) })
+
+    /**
+     * The oracle condition of a race, with the rules of the `oracle` assertion: SKIPPED without a test API, FAILED for
+     * an unsafe path, a template error, an unexpected answer or a failing oracle call.
+     */
+    private suspend fun raceOracle(
+        condition: OracleCondition,
+        input: AssertionInput,
+    ): RaceVerdict.OracleCheck {
+        val unrendered = AssertionText.asOracle(condition)
+        if (!oracle.isAvailable) {
+            return RaceVerdict.OracleCheck(Verdict.SKIPPED, AssertionText.describe(unrendered), null, "not checked: no test API", null)
+        }
+        return try {
+            val rendered = unrendered.rendered(input)
+            val expected = AssertionText.describe(rendered)
+            TargetPath.problem(rendered.path)?.let { problem ->
+                val shown = AssertionText.clip(rendered.path, MAX_PATH_IN_NOTE)
+                return RaceVerdict.OracleCheck(Verdict.FAILED, expected, null, "refused to request `$shown`: the path $problem", null)
             }
-        val note =
-            when {
-                ordered.isEmpty() -> "no actor results to compare"
-                winners.isEmpty() -> "no actor succeeded; expected exactly one winner"
-                winners.size > 1 -> "more than one actor succeeded ($winnerIds); expected exactly one"
-                else -> null
-            }
-        return AssertionResult(
-            spec = AssertionSpec.OnlyOneSucceeds,
-            verdict = if (winners.size == 1) Verdict.PASSED else Verdict.FAILED,
-            source = EvidenceSource.SENDER,
-            expected = "exactly one of ${ordered.size} actors succeeds",
-            observed = observed,
-            latency = null,
-            note = note,
-            rawEvidence = actorResultsJson(ordered),
-        )
+            val response = oracle.get(rendered.path)
+            val match = matcher.match(rendered, response)
+            RaceVerdict.OracleCheck(match.verdict, expected, match.observed, match.note, response.rawBody)
+        } catch (e: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            RaceVerdict.OracleCheck(
+                Verdict.FAILED,
+                AssertionText.describe(unrendered),
+                null,
+                "check failed: ${AssertionText.error(e)}",
+                null,
+            )
+        } catch (e: TemplateException) {
+            RaceVerdict.OracleCheck(Verdict.FAILED, AssertionText.describe(unrendered), null, "template error: ${e.message}", null)
+        } catch (e: Exception) {
+            RaceVerdict.OracleCheck(
+                Verdict.FAILED,
+                AssertionText.describe(unrendered),
+                null,
+                "check failed: ${AssertionText.error(e)}",
+                null,
+            )
+        }
     }
 
     // --- visible_text / latency_max -------------------------------------------------------------------------------
@@ -352,7 +375,7 @@ class DefaultAssertionEvaluator(
                     is AssertionSpec.Count -> spec.rendered(input)
                     is AssertionSpec.Oracle -> spec.rendered(input)
                     is AssertionSpec.HttpStatus -> spec.rendered(input)
-                    is AssertionSpec.LatencyMax, AssertionSpec.OnlyOneSucceeds -> spec
+                    is AssertionSpec.LatencyMax, is AssertionSpec.OnlyOneSucceeds -> spec
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -449,24 +472,8 @@ class DefaultAssertionEvaluator(
             is AssertionSpec.VisibleText, is AssertionSpec.NotVisible, is AssertionSpec.Count -> EvidenceSource.RECEIVER
             is AssertionSpec.Oracle, is AssertionSpec.HttpStatus -> EvidenceSource.ORACLE
             is AssertionSpec.LatencyMax -> EvidenceSource.HARNESS
-            AssertionSpec.OnlyOneSucceeds -> EvidenceSource.SENDER
+            is AssertionSpec.OnlyOneSucceeds -> EvidenceSource.SENDER
         }
-
-    private fun actorResultsJson(results: List<ActorResult>): String =
-        buildJsonObject {
-            put("assertion", AssertionSpec.OnlyOneSucceeds.type)
-            put("winners", results.count { it.succeeded })
-            putJsonArray("winner_ids") { results.filter { it.succeeded }.forEach { add(it.agentId.value) } }
-            putJsonArray("actors") {
-                results.forEach { actor ->
-                    addJsonObject {
-                        put("agent_id", actor.agentId.value)
-                        put("succeeded", actor.succeeded)
-                        put("summary", actor.summary)
-                    }
-                }
-            }
-        }.toString()
 
     private companion object {
         /**

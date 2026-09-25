@@ -209,7 +209,8 @@ steps:
     parallel: true
     do: "Eyni ticketi approve et"
     assert:
-      - only_one_succeeds: true
+      # Decided by code from each manager's own approve request (accepted < 400, refused 409), never by the agent.
+      - only_one_succeeds: {request: "POST .*/approve"}
 
   - id: forbidden
     actor: employee[dept=IT, n=2]
@@ -242,7 +243,7 @@ steps:
 | `http_status` | `path`, `method` (default `GET`), `equals` | agentin sessiyası ilə birbaşa HTTP çağırışı |
 | `count` | `selector`, `equals` | elementlərin sayı |
 | `latency_max` | `ms` | `wait_for` sonrası ölçülən gecikmə həddi |
-| `only_one_succeeds` | — | paralel aktorlardan yalnız birinin `do` nəticəsi uğurludur, oracle statusu bir dəfə dəyişib |
+| `only_one_succeeds` | `true` və ya `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}` | paralel aktorlardan yalnız birinin sorğusunu hədəf qəbul edib: brauzerin gördüyü uyğun sorğulardan biri `< 400`, heç biri 403/409/422 deyil (agentin `done(success)` sözü nəzərə alınmır); `oracle` verilibsə, test API-nin son vəziyyəti də yoxlanır. Yarışı uduzan aktor (409/422 və ya obyekt artıq qərarlaşdırılıb) gözlənilən nəticədir: addımı `lost_race` ilə keçir |
 
 `{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = həmin aktorun son `emits` payload-undakı obyekt id-si.
 

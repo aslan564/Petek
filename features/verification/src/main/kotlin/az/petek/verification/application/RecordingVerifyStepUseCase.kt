@@ -24,7 +24,9 @@ import kotlin.coroutines.cancellation.CancellationException
  * Evaluates assertions with an [AssertionEvaluator] and records every result linked to evidence (CLAUDE.md rule 5):
  * - RECEIVER and HARNESS results share one SCREENSHOT of the actor's session per call, taken after the checks ran
  *   (`latency_max` is backed by the same screen as the `visible_text` it measures).
- * - A result carrying the target's raw answer stores it: `oracle` as ORACLE, `http_status` as HTTP, others as LOG.
+ * - A result carrying the target's raw answer stores it: `oracle` as ORACLE, `http_status` as HTTP, others as LOG;
+ *   a result that also carries an oracle answer ([AssertionResult.oracleEvidence], the oracle condition of
+ *   `only_one_succeeds`) stores that as a second, ORACLE artifact.
  * - Results still without evidence (no session, screenshot failed, empty answer, skipped check) link to one LOG
  *   artifact per call in which the harness states what was expected, what was observed and why nothing else exists.
  *   So every recorded assertion, whatever its verdict, has at least one artifact.
@@ -56,15 +58,16 @@ class RecordingVerifyStepUseCase(
     ): List<AssertionRecord> {
         val groupLevel = specs.filter { it.isGroupLevel }
         if (groupLevel.isEmpty()) return emptyList()
-        return record(groupLevel.map { evaluateGroupLevel(it, results) }, input)
+        return record(groupLevel.map { evaluateGroupLevel(it, results, input) }, input)
     }
 
-    private fun evaluateGroupLevel(
+    private suspend fun evaluateGroupLevel(
         spec: AssertionSpec,
         results: List<ActorResult>,
+        input: AssertionInput,
     ): AssertionResult =
         when (spec) {
-            AssertionSpec.OnlyOneSucceeds -> evaluator.evaluateOnlyOneSucceeds(results)
+            is AssertionSpec.OnlyOneSucceeds -> evaluator.evaluateOnlyOneSucceeds(spec, results, input)
             else -> throw IllegalArgumentException("${spec.type} is not a group-level assertion")
         }
 
@@ -119,6 +122,9 @@ class RecordingVerifyStepUseCase(
             result.rawEvidence
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add(store(input, owner, rawEvidenceType(result.spec), it.toByteArray())) }
+            result.oracleEvidence
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(store(input, owner, ArtifactType.ORACLE, it.toByteArray())) }
         }
 
     /** Result of trying to capture the actor's screen once for this call. */

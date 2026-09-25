@@ -15,6 +15,7 @@ import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.UsageRecord
 import az.petek.evidence.domain.Verdict
 import az.petek.reporting.domain.AgentDirectory
+import az.petek.reporting.domain.ExpectedOutcomes
 import az.petek.reporting.domain.FailedAgentRow
 import az.petek.reporting.domain.FailureKeys
 import az.petek.reporting.domain.LatencyStatistics
@@ -53,14 +54,15 @@ class BuildReportUseCase(
         val usage = query.usage(runId)
         val names = agents.names(runId)
         val tableSteps = steps.filter { it.kind in TABLE_KINDS }
+        val expected = ExpectedOutcomes(steps)
         return ReportModel(
             run = run,
-            summary = summary(run, steps, tableSteps, assertions, usage),
-            steps = stepRows(tableSteps, steps, artifactRecords, names),
+            summary = summary(run, steps, tableSteps, assertions, usage, expected),
+            steps = stepRows(tableSteps, steps, artifactRecords, names, expected),
             assertions = assertions,
             latency = LatencyStatistics.compute(query.events(runId), query.receipts(runId)),
             findings = query.findings(runId),
-            failedAgents = failedAgents(steps, names),
+            failedAgents = failedAgents(steps, names, expected),
             stability = stability(run),
             artifactLinks = artifactLinks(runId, artifactRecords),
             usage = usage,
@@ -72,6 +74,7 @@ class BuildReportUseCase(
         allSteps: List<StepRecord>,
         artifactRecords: List<ArtifactRecord>,
         names: Map<AgentId, String>,
+        expected: ExpectedOutcomes,
     ): List<StepRow> {
         val screenshots = Screenshots(allSteps, artifactRecords)
         return tableSteps.map { step ->
@@ -84,6 +87,7 @@ class BuildReportUseCase(
                 durationMs = step.durationMs,
                 detail = step.detail,
                 screenshot = screenshots.lastFor(step)?.artifactId?.value,
+                lostRace = expected.showsLostRace(step),
             )
         }
     }
@@ -94,12 +98,13 @@ class BuildReportUseCase(
         tableSteps: List<StepRecord>,
         assertions: List<AssertionRecord>,
         usage: List<UsageRecord>,
+        expected: ExpectedOutcomes,
     ): ReportSummary {
         val agents = steps.mapNotNull { it.agentId } + assertions.mapNotNull { it.agentId } + usage.map { it.agentId }
         return ReportSummary(
-            // An expected refusal is the outcome the forbidden-action step asked for.
-            stepsPassed = tableSteps.count { it.status == StepStatus.PASSED || FailureKeys.isExpectedRefusal(it) },
-            stepsFailed = tableSteps.count(FailureKeys::isFailure),
+            // An expected refusal or a lost race is the outcome the step asked for.
+            stepsPassed = tableSteps.count { it.status == StepStatus.PASSED || expected.isExpected(it) },
+            stepsFailed = tableSteps.count(expected::isFailure),
             assertionsPassed = assertions.count { it.verdict == Verdict.PASSED },
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             assertionsSkipped = assertions.count { it.verdict == Verdict.SKIPPED },
@@ -132,9 +137,10 @@ class BuildReportUseCase(
     private fun failedAgents(
         steps: List<StepRecord>,
         names: Map<AgentId, String>,
+        expected: ExpectedOutcomes,
     ): List<FailedAgentRow> =
         steps
-            .filter { it.agentId != null && it.kind != StepKind.ASSERT && FailureKeys.isFailure(it) }
+            .filter { it.agentId != null && it.kind != StepKind.ASSERT && expected.isFailure(it) }
             .groupBy { requireNotNull(it.agentId) to it.scenarioStep }
             .map { (key, failures) ->
                 val (agentId, scenarioStep) = key

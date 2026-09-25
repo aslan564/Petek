@@ -7,7 +7,9 @@ import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.OnFail
+import az.petek.campaign.domain.OracleCondition
 import az.petek.campaign.domain.RegistrationQuota
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.ValidationIssue
@@ -271,7 +273,41 @@ class YamlCampaignSourceTest {
             see.parallel shouldBe true
             see.onFail shouldBe OnFail.ABORT
             see.actors.raw shouldBe "employee[n=1] | employee[n=2]"
-            see.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds)
+            see.assertions shouldContainExactly listOf(AssertionSpec.OnlyOneSucceeds())
+        }
+
+        @Test
+        fun `only_one_succeeds takes a request pattern and an oracle condition`() {
+            val campaign =
+                load(
+                    withSteps(
+                        """
+                        steps:
+                          - id: race
+                            actor: [manager[IT], manager[HR]]
+                            parallel: true
+                            do: approve
+                            assert:
+                              - only_one_succeeds: {request: "post   .+/tickets/.+/approve"}
+                              - only_one_succeeds:
+                                  request: "* /api/.*"
+                                  oracle: {path: "/test/tickets/{last_id}", field: status, equals: approved}
+                              - only_one_succeeds: {oracle: {path: /test/tickets/7}}
+                              - only_one_succeeds: {}
+                        """,
+                    ),
+                )
+
+            campaign.steps.single().assertions shouldContainExactly
+                listOf(
+                    AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".+/tickets/.+/approve")),
+                    AssertionSpec.OnlyOneSucceeds(
+                        RequestPattern(null, "/api/.*"),
+                        OracleCondition("/test/tickets/{last_id}", "status", "approved"),
+                    ),
+                    AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/7")),
+                    AssertionSpec.OnlyOneSucceeds(),
+                )
         }
 
         @Test
@@ -478,7 +514,15 @@ class YamlCampaignSourceTest {
 
             issue(assertion("only_one_succeeds: false"), "can only be true")
             issue(assertion("only_one_succeeds:"), "needs the value true")
-            issue(assertion("only_one_succeeds: {a: 1}"), "must be a single value")
+            issue(assertion("only_one_succeeds: {a: 1}"), "unknown key 'a'").message shouldContain "allowed: request, oracle"
+            issue(assertion("only_one_succeeds: [a]"), "must be a single value")
+            issue(assertion("only_one_succeeds: {request: approve}"), "must be \"<METHOD> <path regex>\"")
+                .message shouldContain "was 'approve'"
+            issue(assertion("only_one_succeeds: {request: }"), "'steps[0].assert[0].only_one_succeeds.request' has no value")
+            issue(assertion("only_one_succeeds: {request: [POST, /x]}"), "must be a single value")
+            issue(assertion("only_one_succeeds: {oracle: {field: status}}"), "missing required key 'path'")
+            issue(assertion("only_one_succeeds: {oracle: {path: /x, contains: a}}"), "unknown key 'contains'")
+            issue(assertion("only_one_succeeds: {oracle: /test/x}"), "must be a map with keys path, field, equals")
             issue(assertion("not_visible: {text: a, selector: b}"), "needs exactly one of text or selector")
             issue(assertion("not_visible: {}"), "needs exactly one of text or selector")
             issue(assertion("http_status: {path: /x, equals: forbidden}"), "must be an integer, was 'forbidden'")

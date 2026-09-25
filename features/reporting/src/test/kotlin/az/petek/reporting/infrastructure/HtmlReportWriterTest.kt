@@ -149,6 +149,16 @@ class HtmlReportWriterTest {
     }
 
     @Test
+    fun `an actor that lost a race gets a muted pill of its own`() {
+        val model = SampleReport.model()
+        val lost = StepRow("race", "a03", null, "DO", "FAILED", 1_000, "problem_reported: already decided", null, lostRace = true)
+
+        val html = writer.render(model.copy(steps = listOf(lost)))
+
+        html shouldContain "<td><span class=\"pill muted\">yarışı uduzdu</span></td>"
+    }
+
+    @Test
     fun `rewriting the page replaces it and leaves no temporary file behind`() {
         val directory = root.resolve("report")
         writer.write(SampleReport.model(campaignName = "first"), directory)

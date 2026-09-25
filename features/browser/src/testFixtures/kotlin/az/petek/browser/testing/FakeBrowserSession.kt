@@ -159,8 +159,14 @@ class FakeBrowserSession(
         return ObservedMutation(method.uppercase(), path, status, at).also { observedMutations += it }
     }
 
-    override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> =
-        observedMutations.filter { it.at.monotonicNanos >= since.monotonicNanos }
+    /** When set, [mutations] throws it, as a broken session would. */
+    @Volatile
+    var mutationsFailure: Exception? = null
+
+    override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> {
+        mutationsFailure?.let { throw it }
+        return observedMutations.filter { it.at.monotonicNanos >= since.monotonicNanos }
+    }
 
     override suspend fun close() {
         closed = true

@@ -18,9 +18,11 @@ import kotlin.time.Duration
  *   is never a company-code joiner, and employees get the invitations left after the managers);
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
- *   step that waits for an event (t0), `only_one_succeeds` needs a `do`/`run`, `parallel: true` and actors that can
- *   match two or more testers;
- * - paths: oracle, `http_status` and `target_profile.paths` values are `/...` paths on the target, never other hosts;
+ *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
+ *   actors that can match two or more testers; its `request` names a mutating method (or `*`) and a regex that
+ *   compiles;
+ * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
+ *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
  * - templates use only [Placeholder.SUPPORTED_FORMS]. In `do`/`run` text and a step's own id source, `{last_id}` and
  *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts.
@@ -446,16 +448,44 @@ class DefaultCampaignValidator(
                         )
                     }
 
-                    AssertionSpec.OnlyOneSucceeds -> {
+                    is AssertionSpec.OnlyOneSucceeds -> {
                         listOfNotNull(
                             "needs parallel: true so the actors start at the same instant".takeUnless { step.parallel },
                             "needs a do or run whose outcomes are compared".takeIf { step.action == StepAction.None },
                             maxMatches(step.actors).takeIf { it < 2 }?.let {
                                 "needs actors that can match at least 2 testers, but '${step.actors.raw}' matches at most $it"
                             },
-                        )
+                            "may appear only once per step".takeIf {
+                                step.assertions.take(index).any { it is AssertionSpec.OnlyOneSucceeds }
+                            },
+                        ) + requestProblems(assertion.request) + raceOracleProblems(assertion.oracle)
                     }
                 }
+
+            private fun requestProblems(request: RequestPattern?): List<String> {
+                request ?: return emptyList()
+                val method =
+                    request.method?.takeIf { it !in RequestPattern.MUTATING_METHODS }?.let {
+                        "request method '$it' is not one of ${RequestPattern.MUTATING_METHODS.joinToString(", ")} " +
+                            "(or ${RequestPattern.ANY_METHOD} for any of them): only requests that change something decide a race"
+                    }
+                val regex =
+                    try {
+                        Pattern.compile(request.pathRegex)
+                        null
+                    } catch (e: PatternSyntaxException) {
+                        "request path '${request.pathRegex}' is not a valid regular expression (${e.description})"
+                    }
+                return listOfNotNull(method, regex)
+            }
+
+            private fun raceOracleProblems(oracle: OracleCondition?): List<String> {
+                oracle ?: return emptyList()
+                return listOfNotNull(
+                    relativePathProblem(oracle.path)?.let { "oracle path $it" },
+                    "oracle field must not be blank".takeIf { oracle.field?.isBlank() == true },
+                )
+            }
 
             private fun assertionTemplates(assertion: AssertionSpec): List<String> =
                 when (assertion) {
@@ -464,7 +494,8 @@ class DefaultCampaignValidator(
                     is AssertionSpec.Oracle -> listOfNotNull(assertion.path, assertion.equals, assertion.contains)
                     is AssertionSpec.HttpStatus -> listOf(assertion.path)
                     is AssertionSpec.Count -> listOf(assertion.selector)
-                    is AssertionSpec.LatencyMax, AssertionSpec.OnlyOneSucceeds -> emptyList()
+                    is AssertionSpec.LatencyMax -> emptyList()
+                    is AssertionSpec.OnlyOneSucceeds -> listOfNotNull(assertion.oracle?.path, assertion.oracle?.equals)
                 }
         }
 

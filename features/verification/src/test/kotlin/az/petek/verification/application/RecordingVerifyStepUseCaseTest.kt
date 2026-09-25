@@ -11,6 +11,8 @@ import az.petek.campaign.domain.AssertionSpec.NotVisible
 import az.petek.campaign.domain.AssertionSpec.OnlyOneSucceeds
 import az.petek.campaign.domain.AssertionSpec.Oracle
 import az.petek.campaign.domain.AssertionSpec.VisibleText
+import az.petek.campaign.domain.OracleCondition
+import az.petek.campaign.domain.RequestPattern
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
@@ -33,6 +35,7 @@ import az.petek.verification.domain.AssertionEvaluator
 import az.petek.verification.domain.AssertionInput
 import az.petek.verification.domain.AssertionResult
 import az.petek.verification.domain.DefaultAssertionEvaluator
+import az.petek.verification.domain.RaceEvidence
 import az.petek.verification.testing.FakeTemplateRenderer
 import az.petek.verification.testing.ScriptedSession
 import az.petek.verification.testing.SimpleJsonFieldSelector
@@ -389,7 +392,7 @@ class RecordingVerifyStepUseCaseTest {
     @Test
     fun `verifyActor leaves group-level assertions to verifyGroup`() =
         runTest {
-            val records = useCase().verifyActor(listOf(OnlyOneSucceeds, Count("#x", 0)), assertionInput(session))
+            val records = useCase().verifyActor(listOf(OnlyOneSucceeds(), Count("#x", 0)), assertionInput(session))
 
             records.map { it.type } shouldContainExactly listOf("count")
         }
@@ -397,7 +400,7 @@ class RecordingVerifyStepUseCaseTest {
     @Test
     fun `verifyActor with nothing to check records nothing and takes no screenshot`() =
         runTest {
-            useCase().verifyActor(listOf(OnlyOneSucceeds), assertionInput(session)).shouldBeEmpty()
+            useCase().verifyActor(listOf(OnlyOneSucceeds()), assertionInput(session)).shouldBeEmpty()
             useCase().verifyActor(emptyList(), assertionInput(session)).shouldBeEmpty()
 
             session.screenshots.get() shouldBe 0
@@ -416,7 +419,7 @@ class RecordingVerifyStepUseCaseTest {
 
             val records =
                 useCase().verifyGroup(
-                    listOf(VisibleText("Salam", 1.seconds), OnlyOneSucceeds),
+                    listOf(VisibleText("Salam", 1.seconds), OnlyOneSucceeds()),
                     assertionInput(session = null, agentId = null, scenarioStep = "race_approve"),
                     results,
                 )
@@ -425,7 +428,7 @@ class RecordingVerifyStepUseCaseTest {
             record.type shouldBe "only_one_succeeds"
             record.source shouldBe EvidenceSource.SENDER
             record.verdict shouldBe Verdict.FAILED
-            record.observed shouldBe "2 succeeded: a02, a03"
+            record.observed shouldBe "a02 succeeded; a03 succeeded"
             record.agentId.shouldBeNull()
             record.scenarioStep shouldBe "race_approve"
             val stored = artifact(record.artifactIds.single())
@@ -443,13 +446,42 @@ class RecordingVerifyStepUseCaseTest {
         runTest {
             val records =
                 useCase().verifyGroup(
-                    listOf(OnlyOneSucceeds),
+                    listOf(OnlyOneSucceeds()),
                     assertionInput(session = null, agentId = null),
                     listOf(ActorResult(AgentId("a02"), true, "approved"), ActorResult(AgentId("a03"), false, "409")),
                 )
 
             records.single().verdict shouldBe Verdict.PASSED
             assertEveryVerdictIsBacked(records)
+        }
+
+    @Test
+    fun `verifyGroup judges the race with its request pattern and keeps the oracle answer as its own artifact`() =
+        runTest {
+            val ticket = """{"id": "42", "status": "approved"}"""
+            oracle.respond("/test/tickets/42", ticket)
+            val approve = RequestPattern("POST", ".*/approve")
+            val won = RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 303)))
+            val lost = RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 409)))
+            val spec = OnlyOneSucceeds(approve, OracleCondition("/test/tickets/{last_id}", "status", "approved"))
+
+            val record =
+                useCase()
+                    .verifyGroup(
+                        listOf(spec),
+                        assertionInput(session = null, agentId = null, scenarioStep = "race"),
+                        listOf(
+                            ActorResult(AgentId("a02"), won.succeeded, "approved", won),
+                            ActorResult(AgentId("a03"), lost.succeeded, "approved too", lost, lostRace = true),
+                        ),
+                    ).single()
+
+            record.verdict shouldBe Verdict.PASSED
+            record.expected shouldContain "by `POST .*/approve` and GET /test/tickets/42 field `status`"
+            record.observed shouldBe "a02 POST /tickets/42/approve -> 303; a03 POST /tickets/42/approve -> 409; oracle: status = approved"
+            record.artifactIds.map { artifact(it).type } shouldContainExactly listOf(ArtifactType.LOG, ArtifactType.ORACLE)
+            content(record.artifactIds[1]) shouldBe ticket
+            assertEveryVerdictIsBacked(listOf(record))
         }
 
     @Test

@@ -48,9 +48,14 @@ internal object ReportFormat {
             RunResult.ABORTED -> "dayandırıldı"
         }
 
-    /** The row's result; a refusal the forbidden-action step expected ([FailureKeys.PERMISSION_DENIED]) is not "stuck". */
+    /**
+     * The row's result; a refusal the forbidden-action step expected ([FailureKeys.PERMISSION_DENIED]) is not "stuck",
+     * and a lost race ([StepRow.lostRace]) is not a failure.
+     */
     fun stepStatus(row: StepRow): String =
-        if (isExpectedRefusal(row)) {
+        if (row.lostRace) {
+            "yarışı uduzdu"
+        } else if (isExpectedRefusal(row)) {
             "icazə verilmədi"
         } else {
             when (StepStatus.entries.firstOrNull { it.name == row.status }) {
@@ -66,6 +71,7 @@ internal object ReportFormat {
     /** Tone for colouring: `ok`, `bad` or `muted`. */
     fun stepTone(row: StepRow): String =
         when {
+            row.lostRace -> "muted"
             row.status == StepStatus.PASSED.name -> "ok"
             row.status == StepStatus.SKIPPED.name || isExpectedRefusal(row) -> "muted"
             else -> "bad"
