@@ -124,12 +124,14 @@ Alternativ (Faza 8, KadroHR-dan başqa hədəflər üçün): real catch-all dome
 **Telefon və SMS OTP**
 
 - Test rejimində KadroHR SMS göndərmir; kodu `GET /test/otp/{phone}` oracle endpointi qaytarır (yalnız test tenantı üçün).
+- `run` funksiyaları telefon addımını özləri keçir; `do` addımında agent `get_phone_code` alətini çağırır, harness kodu `/test/otp/{phone}`-dan bir neçə saniyə təkrar soruşaraq oxuyur və `{vars.phone_code}` kimi saxlayır (kod LLM-ə getmir).
 - Sadə alternativ: test rejimində sabit kod `000000`. Oracle variantı üstündür — real kod generasiyası da test olunur.
 - Real SMS provayderi ilə iş MVP-dən kənardır.
 
 **Uğursuzluq halları**
 
 - 60 saniyədə məktub gəlmirsə addım `failed(mail_timeout)`, agent dayanır, orkestrator bunu tapıntı kimi qeyd edir (poçt göndərilmir = xəta).
+- Test poçt qutusunun özü (Mailpit) bütün gözləmə müddətində oxunmursa addım `error(mail_unavailable)` olur: bu mühit problemidir, hədəfin xətası sayılmır və hesabatda "test inbox unreachable" kimi görünür.
 - Kod səhv qəbul edilirsə bir dəfə təzə kod istənir, ikinci dəfə `failed(otp_rejected)`.
 - Qeydiyyat 3 cəhddən sonra alınmırsa agent `failed`, qalan 29 davam edir; hesabatda ayrıca görünür.
 
@@ -137,61 +139,84 @@ Alternativ (Faza 8, KadroHR-dan başqa hədəflər üçün): real catch-all dome
 
 Ssenari YAML-dır: `do` sətirləri təbii dildir (LLM şərh edir), `run`, `emits`, `wait_for` və `assert` isə kod tərəfindən icra və yoxlanır.
 
+Real fayl `scenarios/kadrohr.yaml`-dır; aşağıdakı blok onun tam surətidir (fayl dəyişəndə bu da yenilənir).
+
 ```yaml
+# KadroHR core campaign (docs/PLAN.md "Ssenari formatı"). `do` = natural language for the LLM agent;
+# `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
 campaign:
-  target: https://staging.kadrohr.com
+  name: kadrohr-core
+  target: https://staging.kadrohr.com     # PETEK_TARGET in .env wins
   testers: 30
   seed: 42
-  names: [Əli, Vəli, Sahil, Cəmil, Amil]   # qalanı daxili siyahıdan
+  names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog
   roles: {admin: 1, manager: 5, employee: 24}
   departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
+  registration: {invite: 15, company_code: 14}   # how the 29 non-admins join; all 5 managers are among the invited
   budget: {max_steps_per_agent: 60, max_minutes: 40}
   on_fail: continue
 
+# Where the harness reads ids of created objects (never from the LLM when a better source exists).
+target_profile:
+  id_sources:
+    announcement_created:
+      oracle: {path: "/test/announcements/latest?by={self.email}", field: id}
+    ticket_created:
+      oracle: {path: "/test/tickets/latest?by={self.email}", field: id}
+
 setup:
-  - actor: admin
-    do: "qeydiyyatdan keç, email kodunu təsdiqlə, şirkət yarat: 'Pətək Test MMC'"
-  - actor: admin
-    run: seed_company            # API ilə 5 departament + 29 işçi dəvəti
-  - actor: employee[*] | manager[*]
-    run: register_and_login      # dəvət linki + OTP, storage_state saxla
+  - id: owner_signup
+    actor: admin
+    do: "Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat"
+  - id: seed
+    actor: admin
+    run: seed_company              # departments + invitations for invite-mode testers (test API)
+  - id: join
+    actor: employee[*] | manager[*]
+    run: register_and_login        # invite link or company code + e-mail code + phone OTP; saves storage_state
 
 steps:
   - id: announce
     actor: admin
-    do: "elan yarat: 'Sabah 10:00 ümumi iclas'"
+    do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
     emits: announcement_created
     assert:
-      - oracle: {path: /test/announcements/{last_id}, field: status, equals: published}
+      - oracle: {path: "/test/announcements/{last_id}", field: status, equals: published}
+
   - id: read_announce
     actor: employee[*]
     wait_for: announcement_created
-    do: "bildirişləri aç, yeni elanı oxu"
+    do: "Bildirişləri aç və yeni elanı oxu"
     assert:
       - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 5}
-      - oracle: {path: /test/announcements/{last_id}/receipts, contains: "{self.email}"}
+      - latency_max: {ms: 5000}
+      - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
+
   - id: ticket
     actor: employee[dept=IT, n=1]
     do: "IT departamentinə ticket yaz: 'Noutbuk işləmir'"
     emits: ticket_created
+
   - id: ticket_flow
     actor: manager[IT]
     wait_for: ticket_created
-    do: "ticketi in-progress et, sonra HR menecerinə assign et"
+    do: "Ticketi in-progress et, sonra HR menecerinə assign et"
     assert:
-      - oracle: {path: /test/tickets/{last_id}, field: status, equals: in_progress}
+      - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
+
   - id: race
-    actor: [manager[IT], manager[HR]]
+    actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
     parallel: true
-    do: "eyni ticketi approve et"
+    do: "Eyni ticketi approve et"
     assert:
       - only_one_succeeds: true
+
   - id: forbidden
     actor: employee[dept=IT, n=2]
-    do: "ticketi approve etməyə çalış"
+    do: "Ticketi approve etməyə çalış"
     assert:
-      - not_visible: {text: "Approve"}
-      - http_status: {path: /api/tickets/{last_id}/approve, equals: 403}
+      - not_visible: {selector: "[data-testid=\"ticket-approve\"]"}
+      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}
 ```
 
 **Addım açarları**
@@ -214,7 +239,7 @@ steps:
 | `visible_text` | `text`, `within_s` | Playwright `wait_for_selector(text=)`; gecikmə = t1 − t0 |
 | `not_visible` | `text` və ya `selector` | element DOM-da yoxdur və ya gizlidir |
 | `oracle` | `path`, `field`, `equals` / `contains` | oracle API cavabı ilə müqayisə |
-| `http_status` | `path`, `equals` | agentin sessiyası ilə birbaşa HTTP çağırışı |
+| `http_status` | `path`, `method` (default `GET`), `equals` | agentin sessiyası ilə birbaşa HTTP çağırışı |
 | `count` | `selector`, `equals` | elementlərin sayı |
 | `latency_max` | `ms` | `wait_for` sonrası ölçülən gecikmə həddi |
 | `only_one_succeeds` | — | paralel aktorlardan yalnız birinin `do` nəticəsi uğurludur, oracle statusu bir dəfə dəyişib |

@@ -25,11 +25,14 @@ import kotlin.time.Duration.Companion.seconds
 val KNOWN_RUN_FUNCTIONS: Set<String> =
     setOf("seed_company", "register_and_login", "register_owner", "login", "read_email_code", "verify_identity")
 
-/** `scenarios/kadrohr.yaml` in the repository (the module's test task passes the repository root). */
-fun kadrohrScenario(): Path =
+/** A file of the repository (the module's test task passes the repository root and declares the files it reads). */
+fun repoFile(relativePath: String): Path =
     Path
         .of(requireNotNull(System.getProperty("petek.repoRoot")) { "system property petek.repoRoot is not set" })
-        .resolve("scenarios/kadrohr.yaml")
+        .resolve(relativePath)
+
+/** `scenarios/kadrohr.yaml` in the repository. */
+fun kadrohrScenario(): Path = repoFile("scenarios/kadrohr.yaml")
 
 private val parser = DefaultActorExpressionParser()
 

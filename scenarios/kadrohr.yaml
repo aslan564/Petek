@@ -61,7 +61,7 @@ steps:
       - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
 
   - id: race
-    actor: [manager[IT], manager[HR]]
+    actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
     parallel: true
     do: "Eyni ticketi approve et"
     assert:
