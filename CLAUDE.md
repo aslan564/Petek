@@ -51,6 +51,8 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     ./gradlew :e2e:liveTest                                # real LLM ilə (Claude planından istifadə edir)
     ./gradlew :testing:fake-target:run                     # lokal fake KadroHR (demo üçün)
     ./gradlew :app:run --args="doctor"
+    ./gradlew :app:run --args="capacity"                   # bu maşın üçün tövsiyə olunan maksimum tester (limit deyil)
+    ./gradlew :app:run --args="capacity --measure 5"       # real sessiyalarla ölçərək
     ./gradlew :app:run --args="plan scenarios/kadrohr.yaml"
     ./gradlew :app:run --args="run scenarios/kadrohr.yaml --repeat 3"
     ./gradlew :app:run --args="report <run_id>"

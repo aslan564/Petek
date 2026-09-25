@@ -31,7 +31,7 @@ MVP tək maşında, web-də, ssenarili rejimdə 30 agentlə tam dövrəni (qeydi
 |---|---|---|
 | Adapter | Web, Playwright | API adapteri, mobil (Maestro/Appium) |
 | Rejim | Ssenarili (YAML) | Sərbəst kəşf (exploratory) |
-| Agent sayı | 30-a qədər, tək proses, tək Chromium | 100+, Redis/NATS ilə çoxmaşınlı |
+| Agent sayı | Limitsiz (ilk kampaniya 30), tək proses, yükə görə bölünmüş Chromium-lar; `petek capacity` maşın üçün maksimumu tövsiyə edir | Redis/NATS ilə çoxmaşınlı |
 | Kimlik | Reyestr, catch-all email, email OTP, telefon test kodu | Real SMS provayderi ilə OTP |
 | Doğrulama | Typed assert + oracle API + üç mənbəli müqayisə | LLM hakim (screenshot əsaslı yumşaq yoxlama) |
 | Hesabat | Markdown/HTML fayl, konsol lövhəsi | Web paneli, tarixçə, trend |
@@ -430,6 +430,7 @@ Hazır sayılır: tək əmr → tam run → hesabat; 3 ardıcıl run eyni nətic
 - [ ] API adapteri, mobil adapter, IMAP `MailReader`
 - [ ] Sərbəst rejim, LLM hakim
 - [ ] Redis/NATS ilə çoxmaşınlı orkestrasiya
+- [ ] Real hesablar rejimi: öz hesablarını gətir (bring-your-own accounts) + real poçt qutusu (IMAP)
 
 ## Sübut bazası və hesabat
 
@@ -481,12 +482,18 @@ Hesabat (Markdown + HTML, run başına bir qovluq):
 
 Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` addımı 0 token. 30 agent × ~40 `do` addımı × ~4 min token ≈ 5 milyon token bir run üçün — ucuz modellə bir neçə dollar səviyyəsində. Setup-ın `run` və API ilə edilməsi bu rəqəmi yarıya endirir. Dəqiq rəqəm Faza 2-də token sayğacı ilə ölçüləcək.
 
-**Qərar gözləyən suallar**
+**Qərar gözləyən suallar** (hamısı cavablandı, 2026-09-25)
 
-- [ ] Qeydiyyat dəvətlə, yoxsa sərbəst şirkət kodu ilə?
-- [ ] KadroHR web-də real-time mexanizmi hansıdır?
-- [ ] Elanın "oxundu" statusu backend-də var, yoxsa yalnız bildiriş göndərilir? (receipts oracle-ı buna bağlıdır)
-- [ ] Hansı LLM provayderi və model agentlər üçün?
+- [x] Qeydiyyat dəvətlə, yoxsa sərbəst şirkət kodu ilə? — **Hər ikisi, tester başına.** `campaign.registration` bölgüsü hər kimliyə öz rejimini verir; rəhbərlər həmişə dəvətlə qoşulur (şirkət kodu ilə qeydiyyat işçi yaradır), qalan dəvətlər işçilərə düşür.
+- [x] KadroHR web-də real-time mexanizmi hansıdır? — **Avtomatik aşkarlanır.** Pətək ondan asılı deyil: gecikmə DOM-da ölçülür, nəqliyyat (WebSocket, SSE, polling) şəbəkə trafikindən tapılıb hesabatda göstərilir.
+- [x] Elanın "oxundu" statusu backend-də var, yoxsa yalnız bildiriş göndərilir? (receipts oracle-ı buna bağlıdır) — **Var** (təsdiqləndi); `receipts` oracle assert-i default kampaniyadadır.
+- [x] Hansı LLM provayderi və model agentlər üçün? — **Claude, Claude planı ilə** (`claude -p`), default model **Sonnet** (`claude-sonnet-5`); Anthropic API alternativ olaraq qalır.
+
+**Sahibin əlavə qərarları (2026-09-25)**
+
+- Tester sayı məcburi deyil və limit yoxdur: maşın güclüdürsə 100 və ya 500 tester də ola bilər. `petek capacity` maşının götürə biləcəyi maksimumu **tövsiyə edir**, heç vaxt qadağan etmir; `run` tövsiyədən çox tester istənəndə yalnız xəbərdarlıq verir.
+- Brauzer dialoqları (`alert`/`confirm`/`prompt`/`beforeunload`) qəbul edilir və sübut kimi yazılır (növ, mətn, vaxt); agent onları növbəti addımda görür.
+- kadrohr.com hələ müştərisi olmayan, buraxılışdan əvvəlki hədəfdir: TargetPolicy qalır, `.env.example`-da `PETEK_ALLOW_PRODUCTION=true` (sayt canlıya çıxanda `false` edilməlidir).
 
 ## MVP-nin uğur meyarları
 
