@@ -10,8 +10,9 @@ class PetekCli(
     private val runtime: CliRuntime = CliRuntime(),
 ) {
     suspend fun execute(argv: List<String>): Int {
-        // Started without a command (e.g. IntelliJ's run icon next to main): show how to start instead of failing.
-        if (argv.isEmpty()) return gettingStarted()
+        // Started without a command (e.g. IntelliJ's run icon next to main): offer the start menu; without any
+        // input (a script, CI) fall back to the help and the getting-started guide instead of failing.
+        if (argv.isEmpty()) return StartMenu(runtime, execute = { execute(it) }, noInput = { gettingStarted() }).run()
         val command = PetekCommand(runtime)
         return try {
             command.parse(argv)
@@ -22,7 +23,7 @@ class PetekCli(
         }
     }
 
-    private suspend fun gettingStarted(): Int {
+    private suspend fun gettingStarted() {
         val command = PetekCommand(runtime)
         try {
             command.parse(listOf("--help"))
@@ -30,7 +31,6 @@ class PetekCli(
             command.echoFormattedHelp(e)
         }
         command.echo(GETTING_STARTED)
-        return ExitCodes.OK
     }
 
     /**

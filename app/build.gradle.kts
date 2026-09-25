@@ -16,6 +16,8 @@ dependencies {
     implementation(project(":features:verification"))
     implementation(project(":features:orchestration"))
     implementation(project(":features:reporting"))
+    // The start menu's demo runs the local fake KadroHR in-process; it is a test stand-in, never a production target.
+    implementation(project(":testing:fake-target"))
     implementation(libs.clikt)
     implementation(libs.mordant)
     implementation(libs.kotlin.logging)
@@ -39,6 +41,8 @@ application {
 // option that sqlite-jdbc, Playwright and JNA need on JDK 25; IntelliJ's icon creates its own JavaExec task.
 tasks.withType<JavaExec>().configureEach {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // The start menu reads the user's choice from the console (also in IntelliJ's run window).
+    standardInput = System.`in`
 }
 
 tasks.named<JavaExec>("run") {
