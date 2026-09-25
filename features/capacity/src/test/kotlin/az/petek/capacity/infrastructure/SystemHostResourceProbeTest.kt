@@ -2,6 +2,7 @@ package az.petek.capacity.infrastructure
 
 import az.petek.capacity.domain.Bytes.GIB
 import az.petek.capacity.domain.Bytes.KIB
+import az.petek.capacity.domain.Bytes.MIB
 import az.petek.capacity.domain.HostResources
 import az.petek.capacity.infrastructure.SystemHostResourceProbe.MemoryFigures
 import io.kotest.assertions.throwables.shouldThrow
@@ -39,10 +40,14 @@ class SystemHostResourceProbeTest {
         proc.resolve("meminfo").writeText(lines.joinToString("\n") + "\n")
     }
 
-    /** This process lives in cgroup [path]; [limits] maps cgroup directories (relative to the root) to max and current. */
+    /**
+     * This process lives in cgroup [path]; [limits] maps cgroup directories (relative to the root) to max and current,
+     * [inactiveFile] to the inactive page cache their `memory.stat` reports.
+     */
     private fun cgroups(
         path: String,
         limits: Map<String, Pair<String, Long>>,
+        inactiveFile: Map<String, Long> = emptyMap(),
     ) {
         proc.resolve("self").createDirectories()
         proc.resolve("self/cgroup").writeText("0::/$path\n")
@@ -51,6 +56,13 @@ class SystemHostResourceProbeTest {
             val dir = cgroup.resolve(directory).createDirectories()
             dir.resolve("memory.max").writeText(limit.first + "\n")
             dir.resolve("memory.current").writeText("${limit.second}\n")
+        }
+        inactiveFile.forEach { (directory, bytes) ->
+            cgroup
+                .resolve(
+                    directory,
+                ).resolve("memory.stat")
+                .writeText("anon 1000\nfile 5000\ninactive_anon 0\ninactive_file $bytes\nactive_file 7\n")
         }
     }
 
@@ -80,6 +92,32 @@ class SystemHostResourceProbeTest {
             )
 
             probe().probe() shouldBe HostResources(8 * GIB, 3 * GIB, 8)
+        }
+
+    @Test
+    fun `a parent that others have nearly filled leaves less headroom than a deeper, smaller limit`() =
+        runTest {
+            meminfo(totalKib = 64 * 1024 * 1024, availableKib = 60 * 1024 * 1024)
+            cgroups(
+                "user.slice/app.scope",
+                mapOf(
+                    "user.slice/app.scope" to ("${8 * GIB}" to 1 * GIB),
+                    "user.slice" to ("${16 * GIB}" to 15 * GIB),
+                ),
+            )
+
+            // Total follows the smaller limit (8 GiB), available the smaller headroom (16 - 15 = 1 GiB, not 8 - 1).
+            probe().probe() shouldBe HostResources(8 * GIB, 1 * GIB, 8)
+        }
+
+    @Test
+    fun `inactive page cache charged to a cgroup counts as available`() =
+        runTest {
+            meminfo(totalKib = 64 * 1024 * 1024, availableKib = 60 * 1024 * 1024)
+            cgroups("box", mapOf("box" to ("${4 * GIB}" to 3 * GIB + 512 * MIB)), inactiveFile = mapOf("box" to 2 * GIB))
+
+            // 3.5 GiB charged, of which 2 GiB is reclaimable cache: 4 - 1.5 = 2.5 GiB can still be used.
+            probe().probe() shouldBe HostResources(4 * GIB, 2 * GIB + 512 * MIB, 8)
         }
 
     @Test

@@ -21,9 +21,9 @@ private val logger = KotlinLogging.logger {}
  * `SystemHostResourceProbe()`; probing reads a few small files and takes milliseconds.
  *
  * Memory comes from Linux `/proc/meminfo`: `MemTotal`, and `MemAvailable` (what can be used without swapping, page
- * cache included, unlike "free"). Inside a cgroup v2 memory limit (a container, a systemd slice) both are lowered to
- * the tightest limit on the way from this process's cgroup to the root, available to its headroom
- * (`memory.max − memory.current`), because the kernel stops the processes at that limit, not at the machine's. Where
+ * cache included, unlike "free"). Inside cgroup v2 memory limits (a container, a systemd slice) total is lowered to
+ * the smallest limit on the way from this process's cgroup to the root and available to the smallest headroom under
+ * any of them (see [cgroupLimit]), because the kernel stops the processes at those limits, not at the machine's. Where
  * `/proc/meminfo` is missing (macOS, Windows) the JVM's `OperatingSystemMXBean` is used: its free memory leaves out
  * the page cache, so the advice there is on the safe side. Cores are [Runtime.availableProcessors], which already
  * respects container CPU limits.
@@ -62,8 +62,12 @@ class SystemHostResourceProbe internal constructor(
     }
 
     /**
-     * The tightest cgroup v2 memory limit from this process's cgroup up to the root: `memory.max` as total, and
-     * `memory.max − memory.current` of that same level as available. Null without cgroup v2 or without any limit.
+     * The cgroup v2 memory limits from this process's cgroup up to the root. Total is the smallest `memory.max` on the
+     * way. Available is the smallest headroom of any limited level, `memory.max − (memory.current − inactive_file)`:
+     * `memory.current` includes page cache, and its inactive part (`inactive_file` of `memory.stat`) is reclaimed before
+     * the limit is enforced, as `docker stats` and the kubelet count it too. The two minima are taken separately,
+     * because a deeper, smaller limit can have more headroom than a parent that other cgroups have nearly filled.
+     * Null without cgroup v2 or without any limit.
      */
     private fun cgroupLimit(): MemoryFigures? {
         val relative =
@@ -74,18 +78,32 @@ class SystemHostResourceProbe internal constructor(
                 ?.trim('/')
                 ?: return null
         var directory = if (relative.isEmpty()) cgroupRoot else cgroupRoot.resolve(relative)
-        var tightest: MemoryFigures? = null
+        var total: Long? = null
+        var available: Long? = null
         while (directory.startsWith(cgroupRoot) && directory.isDirectory()) {
             val limit = readOrNull(directory.resolve("memory.max"))?.trim()?.toLongOrNull()
-            if (limit != null && (tightest == null || limit < tightest.total)) {
+            if (limit != null) {
                 val used = readOrNull(directory.resolve("memory.current"))?.trim()?.toLongOrNull() ?: 0
-                tightest = MemoryFigures(limit, limit - used)
+                val headroom = limit - (used - inactiveFile(directory)).coerceAtLeast(0)
+                total = minOf(total ?: limit, limit)
+                available = minOf(available ?: headroom, headroom)
             }
             if (directory == cgroupRoot) break
             directory = directory.parent ?: break
         }
-        return tightest
+        return if (total != null && available != null) MemoryFigures(total, available) else null
     }
+
+    /** Bytes of inactive page cache charged to the cgroup in [directory] (`inactive_file` of `memory.stat`), else 0. */
+    private fun inactiveFile(directory: Path): Long =
+        readOrNull(directory.resolve("memory.stat"))
+            ?.lineSequence()
+            ?.firstOrNull { it.startsWith(INACTIVE_FILE) }
+            ?.removePrefix(INACTIVE_FILE)
+            ?.trim()
+            ?.toLongOrNull()
+            ?.coerceAtLeast(0)
+            ?: 0
 
     private fun readOrNull(file: Path): String? =
         try {
@@ -107,6 +125,7 @@ class SystemHostResourceProbe internal constructor(
     private companion object {
         val MEMINFO_LINE = Regex("""(\w+):\s+(\d+)\s+kB""")
         const val CGROUP_V2_PREFIX = "0::"
+        const val INACTIVE_FILE = "inactive_file "
 
         /** The JVM's view of physical memory (container-aware on current JDKs); free memory stands in for available. */
         fun osBeanMemory(): MemoryFigures? {

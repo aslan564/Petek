@@ -22,6 +22,7 @@ import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -163,6 +164,41 @@ class MonitorViewsTest {
             frame shouldNotContain "Ə".repeat(32)
             frame shouldContain "x".repeat(59) + "…"
             frame shouldNotContain "x".repeat(60)
+            view.close()
+        }
+
+    @Test
+    fun `on a narrow terminal no line is wider than the terminal, so the frame is exactly as tall as it looks`() =
+        runTest {
+            val recorder = TerminalRecorder(ansiLevel = AnsiLevel.NONE, width = 80, height = 24, outputInteractive = true)
+            val view = board(recorder)
+            val longRun = RunId("0199aa11-2b3c-7d4e-8f50-6172839405ab")
+            val name = "Günel Vüqar qızı Məmmədova"
+            val action = "do: Elan yarat və bütün işçilərə göndər, sonra oxunmanı yoxla"
+
+            view.runStarted(longRun, (1..200).map { AgentStatus(AgentId.of(it), name, "employee", AgentState.WORKING, "s", action, at) })
+            view.stepStarted("announce_and_read_receipts")
+            view.message("a07 failed setup step 'join' (mail_timeout): no verification e-mail arrived within 90 s\nfor the address")
+            runCurrent()
+
+            val frame = recorder.output().trimEnd().lines()
+            frame.forEach { line -> line.length shouldBeLessThanOrEqual 80 }
+            frame.size shouldBeLessThanOrEqual 24
+            frame.first() shouldBe "Pətək run 0199aa11-2b3c-7d4e-8f50-6172839405ab · step announce_and_read_receipt…"
+            frame.last() shouldStartWith "• a07 failed setup step 'join' (mail_timeout)"
+
+            recorder.clearOutput()
+            view.runFinished(summary.copy(runId = longRun))
+            advanceTimeBy(300.milliseconds)
+            runCurrent()
+
+            val final = recorder.output().trimEnd().lines()
+            final.forEach { line -> line.length shouldBeLessThanOrEqual 80 }
+            final.size shouldBeLessThanOrEqual 24
+            // The summary is wrapped, not cut: every number is still there.
+            final.takeLast(2).joinToString(" ") shouldBe
+                "Run 0199aa11-2b3c-7d4e-8f50-6172839405ab: PASSED · steps passed 12, failed 0 · assertions failed 0 · " +
+                "failed agents 0 · 65 s"
             view.close()
         }
 

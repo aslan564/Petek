@@ -670,6 +670,7 @@ class PlaywrightBrowserSessionTest {
             session.navigate("/dialogs")
 
             session.clickSelector("#prompt")
+            session.readText("#answer") shouldBe "ad=Əli"
             session.clickSelector("#alert")
 
             session.readText("#answer") shouldBe "bağlandı"

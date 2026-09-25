@@ -105,8 +105,9 @@ rows show the agents that need attention first (working, blocked, failed, waitin
 ## Capacity advice (`petek capacity`)
 
 `features/capacity` answers "how many testers can this machine run?" and nothing ever enforces the answer.
-`SystemHostResourceProbe` reads total and available memory (`/proc/meminfo` `MemAvailable`, lowered to the tightest
-cgroup v2 memory limit; the JVM's `OperatingSystemMXBean` elsewhere) and the usable cores. `CapacityAdvisor` keeps a
+`SystemHostResourceProbe` reads total and available memory (`/proc/meminfo` `MemAvailable`; under cgroup v2 memory
+limits the smallest `memory.max` and the smallest headroom `memory.max − (memory.current − inactive_file)` on the way
+to the root; the JVM's `OperatingSystemMXBean` elsewhere) and the usable cores. `CapacityAdvisor` keeps a
 reserve of `max(2 GiB, 15 % of total)` free, fits testers into the rest at `bytesPerSession` each plus one
 `bytesPerBrowser` per `contextsPerBrowser` sessions (browsers counted whole), bounds the CPU at 6 sessions per core
 (agents mostly wait for the LLM and the network), and recommends the smaller bound, at least 1. Without a

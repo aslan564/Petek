@@ -4,15 +4,12 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContainDuplicates
-import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldMatch
 import org.junit.jupiter.api.Test
 import java.util.BitSet
 import kotlin.random.Random
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.measureTimedValue
 
 class FakePhoneNumbersTest {
     @Test
@@ -31,10 +28,12 @@ class FakePhoneNumbersTest {
     }
 
     @Test
-    fun `even the whole range is drawn in linear time without retries`() {
-        val (phones, took) = measureTimedValue { FakePhoneNumbers.sample(FakePhoneNumbers.CAPACITY, Random(3)) }
+    fun `even the whole range is drawn with exactly one random draw per number`() {
+        val random = CountingRandom(Random(3))
 
-        took shouldBeLessThan 10.seconds
+        val phones = FakePhoneNumbers.sample(FakePhoneNumbers.CAPACITY, random)
+
+        random.draws shouldBe FakePhoneNumbers.CAPACITY.toLong()
         phones shouldHaveSize FakePhoneNumbers.CAPACITY
         val subscribers = BitSet(FakePhoneNumbers.CAPACITY)
         phones.forEach { subscribers.set(it.removePrefix("+99450").toInt()) }
@@ -46,5 +45,19 @@ class FakePhoneNumbersTest {
         FakePhoneNumbers.sample(0, Random(1)).shouldBeEmpty()
         shouldThrow<IllegalArgumentException> { FakePhoneNumbers.sample(FakePhoneNumbers.CAPACITY + 1, Random(1)) }
         shouldThrow<IllegalArgumentException> { FakePhoneNumbers.sample(-1, Random(1)) }
+    }
+
+    /** Counts the bounded draws, so "no retries" is checked by counting instead of by timing. */
+    private class CountingRandom(
+        private val delegate: Random,
+    ) : Random() {
+        var draws = 0L
+
+        override fun nextBits(bitCount: Int): Int = delegate.nextBits(bitCount)
+
+        override fun nextInt(until: Int): Int {
+            draws++
+            return delegate.nextInt(until)
+        }
     }
 }

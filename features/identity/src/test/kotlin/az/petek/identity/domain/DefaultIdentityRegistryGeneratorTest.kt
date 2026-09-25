@@ -303,13 +303,14 @@ class DefaultIdentityRegistryGeneratorTest {
     }
 
     @Test
-    fun `five thousand testers get unique names, e-mails and phones in well under two seconds`() {
+    fun `five thousand testers get unique names, e-mails and phones without retries piling up`() {
         val generator = generator()
         generator.generate(spec(testers = 200), RUN_TAG) // warm-up, so the measurement is the algorithm, not class loading
 
         val (many, took) = measureTimedValue { generator.generate(spec(testers = 5_000, managers = 100), RUN_TAG).identities }
 
-        took shouldBeLessThan 2.seconds
+        // About 0.1 s on a laptop; the bound only catches a runaway algorithm, never a busy build machine.
+        took shouldBeLessThan 20.seconds
         many shouldHaveSize 5_000
         many.map { it.agentId } shouldBe (1..5_000).map(AgentId::of)
         many.last().agentId shouldBe AgentId("a5000")

@@ -157,6 +157,39 @@ class BrowserServerPoolTest {
         }
 
     @Test
+    fun `a server that fails to start takes no slot, and the next session tries again`() =
+        runBlocking<Unit> {
+            val attempts = AtomicInteger()
+            val pool =
+                BrowserServerPool(contextsPerBrowser = 1) {
+                    if (attempts.incrementAndGet() == 2) throw BrowserActionException("could not start the shared Chromium")
+                    fakeHost()
+                }
+            pool.startFirst()
+            pool.reserve()
+
+            shouldThrow<BrowserActionException> { pool.reserve() }.message shouldBe "could not start the shared Chromium"
+            pool.sessionsPerServer() shouldContainExactly listOf(1)
+
+            pool.reserve()
+            pool.sessionsPerServer() shouldContainExactly listOf(1, 1)
+            attempts.get() shouldBe 3
+        }
+
+    @Test
+    fun `a slot on a server that died is still freed when its session closes`() =
+        runBlocking<Unit> {
+            val pool = pool(contextsPerBrowser = 2)
+            pool.startFirst()
+            val lease = pool.reserve()
+            pool.processes().single().stop()
+
+            lease.release()
+
+            pool.sessionsPerServer() shouldContainExactly listOf(0)
+        }
+
+    @Test
     fun `the limit must be at least one context per browser`() {
         shouldThrow<IllegalArgumentException> { pool(contextsPerBrowser = 0) }
     }

@@ -5,6 +5,7 @@ import az.petek.core.time.HarnessTimestamp
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
 import java.time.Instant
 
@@ -52,6 +53,31 @@ class DialogRecorderTest {
         recorder.record("alert", "a".repeat(50), at(0))
 
         recorder.drain().single().message shouldBe "a".repeat(9) + "…"
+    }
+
+    @Test
+    fun `a secret crossing the cut is masked before the message is cut, so none of it shows`() {
+        val recorder = DialogRecorder(maxMessageChars = 20)
+        val secret = "Gizli-Parol-77"
+        // The secret starts at index 16: cutting to 19 characters before masking would keep "Giz".
+        recorder.record("alert", "Şifrəniz budur: $secret, yadda saxlayın", at(0))
+
+        val message = recorder.drain { it.replace(secret, SecretRedactor.MASK) }.single().message
+
+        message shouldBe "Şifrəniz budur: ***…"
+        message shouldNotContain "Giz"
+    }
+
+    @Test
+    fun `a secret beyond the stored part of a very long message never reaches the report`() {
+        val recorder = DialogRecorder(maxMessageChars = 10)
+        val secret = "Gizli-Parol"
+        // Stored up to 20 characters: the secret crosses that border and is cut in half before redaction can see it.
+        recorder.record("alert", "x".repeat(15) + secret, at(0))
+
+        val message = recorder.drain { it.replace(secret, SecretRedactor.MASK) }.single().message
+
+        message shouldBe "x".repeat(9) + "…"
     }
 
     @Test

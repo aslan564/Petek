@@ -234,7 +234,7 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read dialogs") {
             // As above: the round trip dispatches a dialog event already received, so the handler answers it first.
             runCatching { page.title() }
-            dialogs.drain().map { it.copy(message = SecretRedactor.redactText(it.message, typedSecrets)) }
+            dialogs.drain { message -> SecretRedactor.redactText(message, typedSecrets) }
         }
 
     /**
