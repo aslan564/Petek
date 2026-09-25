@@ -22,6 +22,7 @@ class PetekCliTest {
     @Test
     fun `a wrong command line exits with 2, never with the 1 of a failed run`() =
         runBlocking<Unit> {
+            cli.execute(listOf("--verbose")) shouldBe ExitCodes.CONFIG_OR_ABORTED
             cli.execute(listOf("no-such-command")) shouldBe ExitCodes.CONFIG_OR_ABORTED
             cli.execute(listOf("run")) shouldBe ExitCodes.CONFIG_OR_ABORTED
             cli.execute(listOf("run", "tiny.yaml", "--agents", "0")) shouldBe ExitCodes.CONFIG_OR_ABORTED
@@ -29,9 +30,9 @@ class PetekCliTest {
         }
 
     @Test
-    fun `no command at all prints the help and exits with 2`() =
+    fun `no command at all prints the help with a getting-started guide and exits with 0`() =
         runBlocking<Unit> {
-            cli.execute(emptyList()) shouldBe ExitCodes.CONFIG_OR_ABORTED
+            cli.execute(emptyList()) shouldBe ExitCodes.OK
         }
 
     @Test

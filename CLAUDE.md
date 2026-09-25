@@ -49,7 +49,8 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     ./gradlew spotlessApply                                # formatlama
     ./gradlew :e2e:e2eTest                                 # fake target + real Chromium ilə e2e
     ./gradlew :e2e:liveTest                                # real LLM ilə (Claude planından istifadə edir)
-    ./gradlew :testing:fake-target:run                     # lokal fake KadroHR (demo üçün)
+    ./gradlew :testing:fake-target:run                     # lokal fake KadroHR: http://127.0.0.1:18080, poçt 18025
+    ./gradlew :app:run --args="--env-file .env.fake-target doctor"   # fake saytla yoxlama (IntelliJ: hazır run konfiqurasiyaları)
     ./gradlew :app:run --args="doctor"
     ./gradlew :app:run --args="plan scenarios/kadrohr.yaml"
     ./gradlew :app:run --args="run scenarios/kadrohr.yaml --repeat 3"

@@ -63,8 +63,8 @@ class FakeTargetConfigTest {
     @Test
     fun `main falls back to the documented defaults and rejects nonsense`() {
         val defaults = FakeTargetOptions.fromEnvironment(mapOf("PETEK_TEST_TOKEN" to " "))
-        defaults.port shouldBe 8080
-        defaults.mailPort shouldBe 8025
+        defaults.port shouldBe 18080
+        defaults.mailPort shouldBe 18025
         defaults.config shouldBe FakeTargetConfig()
 
         shouldThrow<IllegalArgumentException> { FakeTargetOptions.fromEnvironment(mapOf("FAKE_TARGET_BUGS" to "NO_SUCH_BUG")) }

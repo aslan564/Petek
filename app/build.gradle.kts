@@ -35,6 +35,12 @@ application {
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
+// Every way of launching main (the run task, IntelliJ's run icon next to main(), run configurations) gets the JVM
+// option that sqlite-jdbc, Playwright and JNA need on JDK 25; IntelliJ's icon creates its own JavaExec task.
+tasks.withType<JavaExec>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
 tasks.named<JavaExec>("run") {
     workingDir = rootProject.projectDir
     standardInput = System.`in`

@@ -10,6 +10,8 @@ class PetekCli(
     private val runtime: CliRuntime = CliRuntime(),
 ) {
     suspend fun execute(argv: List<String>): Int {
+        // Started without a command (e.g. IntelliJ's run icon next to main): show how to start instead of failing.
+        if (argv.isEmpty()) return gettingStarted()
         val command = PetekCommand(runtime)
         return try {
             command.parse(argv)
@@ -18,6 +20,17 @@ class PetekCli(
             command.echoFormattedHelp(e)
             exitCodeOf(e)
         }
+    }
+
+    private suspend fun gettingStarted(): Int {
+        val command = PetekCommand(runtime)
+        try {
+            command.parse(listOf("--help"))
+        } catch (e: CliktError) {
+            command.echoFormattedHelp(e)
+        }
+        command.echo(GETTING_STARTED)
+        return ExitCodes.OK
     }
 
     /**
@@ -32,3 +45,15 @@ class PetekCli(
             else -> error.statusCode
         }
 }
+
+private val GETTING_STARTED =
+    """
+
+    Getting started (local demo against the fake KadroHR):
+      1. Start the fake target:   ./gradlew :testing:fake-target:run          (IntelliJ: "1. Fake KadroHR")
+      2. Check the setup:         petek --env-file .env.fake-target doctor     (IntelliJ: "2. Pətək doctor")
+      3. Run a live campaign:     petek --env-file .env.fake-target run scenarios/kadrohr.yaml --agents 12 --headful
+                                                                               (IntelliJ: "3. Pətək run")
+    In IntelliJ, start Pətək with one of the shared run configurations rather than the run icon next to main():
+    they pass the command and the JVM options (--enable-native-access).
+    """.trimIndent()

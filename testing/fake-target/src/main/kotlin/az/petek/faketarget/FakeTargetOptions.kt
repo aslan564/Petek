@@ -33,8 +33,8 @@ internal data class FakeTargetOptions(
             )
         }
 
-        private const val DEFAULT_PORT = 8080
-        private const val DEFAULT_MAIL_PORT = 8025
+        private const val DEFAULT_PORT = 18080
+        private const val DEFAULT_MAIL_PORT = 18025
 
         private fun parseBoolean(raw: String): Boolean =
             requireNotNull(raw.lowercase().toBooleanStrictOrNull()) { "FAKE_TARGET_PHONE_OTP must be true or false, was '$raw'" }
