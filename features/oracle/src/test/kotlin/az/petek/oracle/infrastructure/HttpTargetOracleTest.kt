@@ -18,6 +18,7 @@ import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.request.get
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -550,6 +551,88 @@ class HttpTargetOracleTest {
     @Test
     fun `the token is never part of the oracle's string form`() {
         oracle(testApi()).toString() shouldNotContain TOKEN
+    }
+
+    @Test
+    fun `whitespace around the token, such as a CRLF line end from a dot-env file, is not sent`() {
+        val server = testApi()
+
+        runBlocking { oracle(server, token = Secret(" $TOKEN\r\n")).get("/test/tickets/42") }.status shouldBe 200
+
+        server.requests.single().headers["x-test-token"] shouldBe TOKEN
+    }
+
+    @Test
+    fun `a token with a control character inside is refused up front without quoting it`() {
+        val error = shouldThrow<IllegalArgumentException> { HttpTargetOracle(URI("http://127.0.0.1:1"), Secret("$TOKEN\nX-Evil: 1")) }
+
+        error.message.shouldNotBeNull() shouldContain "PETEK_TEST_TOKEN"
+        error.shouldNotLeakToken()
+    }
+
+    @Test
+    fun `a failure whose cause quotes the token is reported without that cause`() {
+        val server = testApi()
+        val quotingClient =
+            HttpClient(CIO) {
+                install(
+                    createClientPlugin("QuoteToken") {
+                        onRequest { request, _ -> throw IllegalStateException("rejected header ${request.headers["X-Test-Token"]}") }
+                    },
+                )
+            }.closing()
+
+        val error =
+            shouldThrow<OracleException> { runBlocking { HttpTargetOracle(server.baseUrl, Secret(TOKEN), quotingClient).get("/test/x") } }
+
+        error.message.shouldNotBeNull() shouldContain "rejected header ***"
+        error.shouldNotLeakToken()
+        server.requests shouldBe emptyList()
+    }
+
+    @Test
+    fun `credentials in the target URL are neither sent nor shown`() {
+        val server = testApi()
+        val oracle = HttpTargetOracle(URI("http://admin:site-pass-77@${server.baseUrl.authority}/"), Secret(TOKEN)).closing()
+
+        runBlocking { oracle.get("/test/tickets/42") }.status shouldBe 200
+        val broken = server { StubResponse(500, "boom", "text/plain") }
+        val failing = HttpTargetOracle(URI("http://admin:site-pass-77@${broken.baseUrl.authority}"), Secret(TOKEN)).closing()
+        val error = shouldThrow<OracleException> { runBlocking { failing.company("c1") } }
+
+        oracle.toString() shouldNotContain "site-pass-77"
+        error.message.shouldNotBeNull() shouldNotContain "site-pass-77"
+        server.requests.none { it.headers.containsKey("authorization") } shouldBe true
+        shouldThrow<IllegalArgumentException> { HttpTargetOracle(URI("ftp://admin:site-pass-77@host"), Secret(TOKEN)) }
+            .message
+            .shouldNotBeNull() shouldNotContain "site-pass-77"
+    }
+
+    @Test
+    fun `dot segments that could leave the target base path are refused`() {
+        val server = testApi()
+        val oracle = oracle(server, path = "/staging")
+
+        runBlocking {
+            listOf("/test/../../admin", "../admin", "/test/./x", "/test/%2e%2E/admin", "/a/..", ".").forEach { path ->
+                shouldThrow<IllegalArgumentException> { oracle.get(path) }
+            }
+            oracle.get("/test/tickets/latest?by=a..b@x.az")
+        }
+        server.requests.map { it.path } shouldContainExactly listOf("/staging/test/tickets/latest")
+    }
+
+    @Test
+    fun `a plus in a rendered query is a literal plus while a plus in the path is kept`() {
+        val server = server { StubResponse(body = "{}") }
+
+        runBlocking { oracle(server).get("/test/otp/+994501234567?by=eli+qa@test.kadrohr.com&phone=+99450#a+b") }
+
+        val request = server.requests.single()
+        request.path shouldBe "/test/otp/+994501234567"
+        request.uri shouldContain "by=eli%2Bqa"
+        request.query["by"] shouldBe listOf("eli+qa@test.kadrohr.com")
+        request.query["phone"] shouldBe listOf("+99450")
     }
 
     private fun Throwable.shouldNotLeakToken() {

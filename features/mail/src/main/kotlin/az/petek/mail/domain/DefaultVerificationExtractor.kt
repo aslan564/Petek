@@ -226,7 +226,9 @@ class DefaultVerificationExtractor : VerificationExtractor {
         val PHONE_RUN = Regex("""(?<![\p{L}\p{N}_])(\+\s?)?\(?\d+\)?(?:[ .\-]\(?\d+\)?)*""")
         val ANY_URL = Regex("""(?:https?://|www\.)[^\s<>"]+""", RegexOption.IGNORE_CASE)
         val HTTP_URL = Regex("""https?://[^\s<>"'`]+""", RegexOption.IGNORE_CASE)
-        val EMAIL = Regex("""[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}\-]+(?:\.[\p{L}\p{N}\-]+)+""")
+
+        /** Starts only where a run of address characters starts and never backtracks, so long runs stay linear. */
+        val EMAIL = Regex("""(?<![\p{L}\p{N}._%+\-])[\p{L}\p{N}._%+\-]++@[\p{L}\p{N}\-]++(?:\.[\p{L}\p{N}\-]++)+""")
         val LINK_HINT = Regex("/invite/|verify|confirm|activate|dəvət", RegexOption.IGNORE_CASE)
 
         val JOINERS = setOf('-', '_', '/', '#')

@@ -8,6 +8,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -373,6 +374,26 @@ class MailpitMailboxTest {
         shouldThrow<IllegalArgumentException> { MailpitMailbox(URI("ftp://localhost:8025")) }
         shouldThrow<IllegalArgumentException> { MailpitMailbox(URI("/api")) }
         server.requests shouldBe emptyList()
+    }
+
+    @Test
+    fun `credentials in the Mailpit URL are dropped and never shown`() {
+        val mailpit = FakeMailpit()
+        mailpit.add(stored("m1"))
+        val server = serve(mailpit)
+        val url = URI("http://mp-user:mp-pass-4f9a@${server.baseUrl.authority}")
+        val mailbox = MailpitMailbox(url).closing()
+
+        runBlocking { mailbox.findLatest(ELI, SINCE) }?.id shouldBe "m1"
+        mailbox.toString() shouldNotContain "mp-pass-4f9a"
+        server.requests.none { it.headers.containsKey("authorization") } shouldBe true
+
+        val failing = MailpitMailbox(URI("http://mp-user:mp-pass-4f9a@${server.baseUrl.authority}/down")).closing()
+        val error = shouldThrow<MailboxException> { runBlocking { failing.markRead("m1") } }
+        error.message.shouldNotBeNull() shouldNotContain "mp-pass-4f9a"
+        shouldThrow<IllegalArgumentException> { MailpitMailbox(URI("ftp://mp-user:mp-pass-4f9a@localhost")) }
+            .message
+            .shouldNotBeNull() shouldNotContain "mp-pass-4f9a"
     }
 
     @Test

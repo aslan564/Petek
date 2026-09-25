@@ -39,7 +39,8 @@ private val logger = KotlinLogging.logger {}
 /**
  * [Mailbox] over Mailpit's REST API v1 (https://mailpit.axllent.org/docs/api-v1/), the catch-all inbox that the
  * target's test mode sends to. Construct it with Mailpit's web address (`PETEK_MAILPIT_URL`, e.g.
- * `http://localhost:8025`); a path in it (Mailpit's `MP_WEBROOT`) is kept.
+ * `http://localhost:8025`); a path in it (Mailpit's `MP_WEBROOT`) is kept. Basic auth (`MP_UI_AUTH`) is not
+ * supported: credentials in the URL are ignored and never appear in messages.
  *
  * - Search: `GET api/v1/search?query=to:"<address>"`. Mailpit's `to:` is a substring match, so the recipient is
  *   compared exactly (case-insensitive) here, as are `since` (against `Created`, the receive time) and the read flag.
@@ -67,6 +68,10 @@ class MailpitMailbox(
             ignoreUnknownKeys = true
             coerceInputValues = true
         }
+
+    init {
+        if (baseUrl.rawUserInfo != null) logger.warn { "Credentials in the Mailpit URL are ignored (basic auth is not supported)" }
+    }
 
     override suspend fun findLatest(
         to: String,
@@ -251,12 +256,16 @@ class MailpitMailbox(
         val READ_STATUS_PATHS = listOf("messages", "read")
         val ENDPOINT_MISSING = setOf(HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed)
 
+        /** Scheme, host, port and web root of [baseUrl] plus `/api/v1`; user info is dropped so it never reaches a message. */
         fun apiRootOf(baseUrl: URI): String {
             require(baseUrl.scheme?.lowercase() in setOf("http", "https") && !baseUrl.host.isNullOrEmpty()) {
-                "Mailpit URL must be an absolute http(s) URL, was $baseUrl"
+                "Mailpit URL must be an absolute http(s) URL, was ${withoutUserInfo(baseUrl)}"
             }
-            return "${baseUrl.scheme}://${baseUrl.rawAuthority}${baseUrl.rawPath.orEmpty().trimEnd('/')}/api/v1"
+            val hostAndPort = baseUrl.rawAuthority.substringAfterLast('@')
+            return "${baseUrl.scheme}://$hostAndPort${baseUrl.rawPath.orEmpty().trimEnd('/')}/api/v1"
         }
+
+        fun withoutUserInfo(url: URI): String = url.rawUserInfo?.let { url.toString().replace("$it@", "***@") } ?: url.toString()
 
         fun defaultClient(requestTimeout: Duration): HttpClient {
             require(requestTimeout.isPositive()) { "requestTimeout must be positive, was $requestTimeout" }

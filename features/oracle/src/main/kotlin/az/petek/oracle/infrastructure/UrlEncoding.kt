@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets
 internal object UrlEncoding {
     private const val HEX = "0123456789ABCDEF"
     private val illegalInUri = setOf('"', '<', '>', '\\', '^', '`', '{', '|', '}')
+    private val encodedDot = Regex("%2[eE]")
+    private val dotSegments = setOf(".", "..")
 
     /** Encodes everything but RFC 3986 unreserved characters: safe as a path segment or a query value (`+` → `%2B`). */
     fun component(value: String): String =
@@ -19,20 +21,34 @@ internal object UrlEncoding {
     /**
      * Makes an already rendered path/query addressable without changing its meaning: non-ASCII, spaces and characters
      * illegal in URIs are encoded, a `%` that does not start a valid escape becomes `%25`, everything else is kept.
+     * Templates insert raw values, so a `+` in the query is a literal plus (`?by=eli+qa@…`, `?phone=+994…`) and is sent
+     * as `%2B`; servers would otherwise read it as a space.
      */
     fun repair(pathAndQuery: String): String =
         buildString {
+            var inQuery = false
             var i = 0
             while (i < pathAndQuery.length) {
                 val codePoint = pathAndQuery.codePointAt(i)
                 when {
                     codePoint == '%'.code && !isEscapeAt(pathAndQuery, i) -> append("%25")
+                    codePoint == '+'.code && inQuery -> append("%2B")
                     codePoint in 0x21..0x7E && codePoint.toChar() !in illegalInUri -> appendCodePoint(codePoint)
                     else -> Character.toString(codePoint).toByteArray(StandardCharsets.UTF_8).forEach { appendEscaped(it) }
                 }
+                if (codePoint == '?'.code) inQuery = true
+                if (codePoint == '#'.code) inQuery = false
                 i += Character.charCount(codePoint)
             }
         }
+
+    /** True when the path part (before `?`/`#`) has a `.` or `..` segment, also percent-encoded (`%2e%2E`). */
+    fun hasDotSegment(pathAndQuery: String): Boolean =
+        pathAndQuery
+            .substringBefore('?')
+            .substringBefore('#')
+            .split('/', '\\')
+            .any { segment -> segment.replace(encodedDot, ".") in dotSegments }
 
     private fun Char.isUnreserved(): Boolean = this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this in "-._~"
 

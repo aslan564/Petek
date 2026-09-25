@@ -41,10 +41,14 @@ private val logger = KotlinLogging.logger {}
  * composition root from `PETEK_TARGET` and `PETEK_TEST_TOKEN`.
  *
  * - Every call carries `X-Test-Token`. Without a (non-blank) token [isAvailable] is false and every call fails fast
- *   with [OracleException] without contacting the target.
+ *   with [OracleException] without contacting the target. Surrounding whitespace of the token (a CRLF `.env`) is
+ *   dropped; a token with a control character inside is refused at construction, because HTTP clients echo invalid
+ *   header values in their exception messages.
  * - Paths are joined to [baseUrl] (its own path prefix kept, no double slashes, query strings kept). Values the oracle
- *   puts into URLs itself are percent-encoded (`/test/otp/%2B99450…`, `?owner=eli%2Bqa%40…`). Absolute URLs are
- *   refused and redirects are not followed, so the token is only ever sent to the target host.
+ *   puts into URLs itself are percent-encoded (`/test/otp/%2B99450…`, `?owner=eli%2Bqa%40…`); in rendered paths a `+`
+ *   of the query is sent as `%2B`, because templates insert raw values (`?by=eli+qa@…`) and servers read `+` as a
+ *   space there. Absolute URLs and `.`/`..` segments are refused and redirects are not followed, so the token is only
+ *   ever sent to the target host, under the target's base path. Credentials in [baseUrl] are ignored and never shown.
  * - Lookups map 404 to null. [deleteCompany] first reads the company and refuses ([OracleSafetyException]) unless the
  *   target knows it under that id with `is_test` set (CLAUDE.md rule 8); a 403 on the delete itself is a refusal too.
  * - Failures become [OracleException] with the request and status; the token is redacted from every message.
@@ -54,12 +58,15 @@ private val logger = KotlinLogging.logger {}
  */
 class HttpTargetOracle(
     baseUrl: URI,
-    private val testToken: Secret?,
+    testToken: Secret?,
     client: HttpClient? = null,
     requestTimeout: Duration = 15.seconds,
 ) : TargetOracle,
     AutoCloseable {
-    override val isAvailable: Boolean = testToken != null && !testToken.isBlank
+    /** The token as sent; null when none is configured. Validated before the HTTP client exists, so nothing leaks. */
+    private val token: String? = usableToken(testToken)
+
+    override val isAvailable: Boolean = token != null
 
     private val base: String = baseOf(baseUrl)
     private val ownsClient = client == null
@@ -72,6 +79,9 @@ class HttpTargetOracle(
 
     init {
         val host = baseUrl.host.lowercase()
+        if (baseUrl.rawUserInfo != null) {
+            logger.warn { "Credentials in the target URL are ignored by the oracle (only X-Test-Token is sent to $host)" }
+        }
         if (isAvailable && baseUrl.scheme.equals("http", ignoreCase = true) && host !in LOCAL_HOSTS) {
             logger.warn { "The test token is sent to $host over plain HTTP; use https for remote targets" }
         }
@@ -166,7 +176,7 @@ class HttpTargetOracle(
         path: String,
         body: String? = null,
     ): Reply {
-        val token = testToken?.takeIf { isAvailable }?.reveal() ?: throw OracleException(UNAVAILABLE)
+        val token = token ?: throw OracleException(UNAVAILABLE)
         val url = urlFor(path)
         val request = "${method.value} $url"
         return try {
@@ -182,13 +192,16 @@ class HttpTargetOracle(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            throw OracleException(redact("Oracle request $request failed (${e::class.simpleName}: ${e.message})"), e)
+            // The cause is kept for its stack trace unless something in its chain quotes the token.
+            val cause = e.takeUnless { mentionsToken(it) }
+            throw OracleException(redact("Oracle request $request failed (${e::class.simpleName}: ${e.message})"), cause)
         }
     }
 
     private fun urlFor(path: String): String {
         val trimmed = path.trim()
         require(!NOT_RELATIVE.containsMatchIn(trimmed)) { "Oracle paths must be relative to the target, was '$path'" }
+        require(!UrlEncoding.hasDotSegment(trimmed)) { "Oracle paths must not contain '.' or '..' segments, was '$path'" }
         return "$base/${UrlEncoding.repair(trimmed).trimStart('/')}"
     }
 
@@ -243,9 +256,14 @@ class HttpTargetOracle(
         problem: String,
     ) = OracleException(redact("Oracle $action: $problem"))
 
-    private fun redact(message: String): String {
-        val secret = testToken?.reveal()?.takeIf { it.isNotBlank() } ?: return message
-        return message.replace(secret, "***")
+    private fun redact(message: String): String = token?.let { message.replace(it, "***") } ?: message
+
+    private fun mentionsToken(error: Throwable): Boolean {
+        val secret = token ?: return false
+        return generateSequence(error) { it.cause }
+            .take(MAX_CAUSE_DEPTH)
+            .flatMap { sequenceOf(it) + it.suppressed.asSequence() }
+            .any { secret in it.toString() }
     }
 
     private class Reply(
@@ -260,6 +278,7 @@ class HttpTargetOracle(
         const val FORBIDDEN = 403
         const val NOT_FOUND = 404
         const val SNIPPET_LENGTH = 200
+        const val MAX_CAUSE_DEPTH = 16
         const val UNAVAILABLE = "The target test API is not configured (PETEK_TEST_TOKEN is empty); oracle calls are unavailable"
         val SUCCESS = 200..299
         val JSON_NUMBER = Regex("""-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?""")
@@ -268,11 +287,24 @@ class HttpTargetOracle(
         /** `https://…`, `mailto:…` or `//host/…`: anything that could point the token at another host. */
         val NOT_RELATIVE = Regex("""^([a-zA-Z][a-zA-Z0-9+.\-]*:|//|\\\\)""")
 
+        /** Scheme, host, port and path prefix of [baseUrl]; user info is dropped so it never reaches a message. */
         fun baseOf(baseUrl: URI): String {
             require(baseUrl.scheme?.lowercase() in setOf("http", "https") && !baseUrl.host.isNullOrEmpty()) {
-                "Target URL must be an absolute http(s) URL, was $baseUrl"
+                "Target URL must be an absolute http(s) URL, was ${withoutUserInfo(baseUrl)}"
             }
-            return "${baseUrl.scheme}://${baseUrl.rawAuthority}${baseUrl.rawPath.orEmpty().trimEnd('/')}"
+            val hostAndPort = baseUrl.rawAuthority.substringAfterLast('@')
+            return "${baseUrl.scheme}://$hostAndPort${baseUrl.rawPath.orEmpty().trimEnd('/')}"
+        }
+
+        fun withoutUserInfo(url: URI): String = url.rawUserInfo?.let { url.toString().replace("$it@", "***@") } ?: url.toString()
+
+        /** Surrounding whitespace is dropped (a CRLF `.env`); a control character inside cannot be a header value. */
+        fun usableToken(testToken: Secret?): String? {
+            val token = testToken?.reveal()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            require(token.none(Char::isISOControl)) {
+                "PETEK_TEST_TOKEN contains a line break or another control character; it cannot be sent as an HTTP header"
+            }
+            return token
         }
 
         fun defaultClient(requestTimeout: Duration): HttpClient {

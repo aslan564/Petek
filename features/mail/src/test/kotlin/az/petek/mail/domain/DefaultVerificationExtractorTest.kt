@@ -2,9 +2,12 @@ package az.petek.mail.domain
 
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.function.ThrowingSupplier
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
+import java.time.Duration
 import java.time.Instant
 
 class DefaultVerificationExtractorTest {
@@ -52,6 +55,25 @@ class DefaultVerificationExtractorTest {
     @Test
     fun `an empty mail satisfies no purpose`() {
         MailPurpose.entries.forEach { purpose -> extractor.extract(mail(subject = "", text = ""), purpose).shouldBeNull() }
+    }
+
+    @Test
+    fun `empty hrefs are skipped instead of failing the whole extraction`() {
+        val html = "<a href=\"\">Bax</a><a href=''>Ləğv et</a><a href=\"https://x.az/invite/t1\">Qəbul et</a>"
+
+        extractor.extract(mail(text = "Kod: 482913", html = html), MailPurpose.CODE)?.code shouldBe "482913"
+        extractor.extract(mail(html = html), MailPurpose.LINK)?.link?.toString() shouldBe "https://x.az/invite/t1"
+        extractor.extract(mail(html = "<a href=\"\">x</a>"), MailPurpose.ANY).shouldBeNull()
+    }
+
+    @Test
+    fun `a very long run without spaces is scanned in linear time`() {
+        val blob = "a".repeat(200_000)
+        val message = mail(text = "Təsdiq kodu: 482913\n$blob\n$blob@", html = "<p>$blob</p>")
+
+        val result = assertTimeoutPreemptively(Duration.ofSeconds(10), ThrowingSupplier { extractor.extract(message, MailPurpose.ANY) })
+
+        result?.code shouldBe "482913"
     }
 
     /** A named example; the name is what the test report shows. */

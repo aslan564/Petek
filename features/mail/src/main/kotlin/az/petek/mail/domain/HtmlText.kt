@@ -38,12 +38,13 @@ internal object HtmlText {
         return decodeEntities(visible.replace(lineBreak, "\n").replace(tag, " "))
     }
 
-    /** `href` values of `<a>` elements in document order, entities decoded. */
+    /** Non-empty `href` values of `<a>` elements in document order, entities decoded (`href=""` is skipped). */
     fun anchorHrefs(html: String): List<String> =
         anchorHref
             .findAll(html.replace(comment, " "))
-            .map { match -> match.groupValues.drop(1).first { it.isNotEmpty() } }
+            .mapNotNull { match -> match.groupValues.drop(1).firstOrNull { it.isNotEmpty() } }
             .map { decodeEntities(it).trim() }
+            .filter { it.isNotEmpty() }
             .toList()
 
     fun decodeEntities(text: String): String =
