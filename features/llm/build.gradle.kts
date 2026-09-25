@@ -10,4 +10,7 @@ dependencies {
     implementation(libs.anthropic.java)
     implementation(libs.kotlin.logging)
     testImplementation(testFixtures(project(":core:domain")))
+    // Embedded HTTP server standing in for the Messages API in AnthropicApiLlmClient tests.
+    testImplementation(libs.ktor.server.core)
+    testImplementation(libs.ktor.server.cio)
 }
