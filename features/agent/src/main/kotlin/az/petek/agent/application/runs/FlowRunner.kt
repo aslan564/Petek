@@ -140,16 +140,12 @@ internal class FlowRunner(
         private suspend fun goto(step: FlowStep.Goto) {
             val rendered = templates.render(step.path).trim()
             val path = runtime.target.resolvePath(rendered)
-            when {
-                path.startsWith("/") && !path.startsWith("//") -> trace.open(path)
-
-                WEB_ADDRESS.containsMatchIn(path) -> trace.openUrl(path)
-
-                else -> throw RunFailure(
-                    defaultReason,
-                    "Flow '$flowName' cannot open '$rendered': it is neither a path on the target nor a web address.",
-                )
-            }
+            if (path.startsWith("/") && !path.startsWith("//")) return trace.open(path)
+            if (WEB_ADDRESS.containsMatchIn(path)) return trace.openUrl(path)
+            throw RunFailure(
+                defaultReason,
+                "Flow '$flowName' cannot open '$rendered': it is neither a path on the target nor a web address.",
+            )
         }
 
         private suspend fun fill(step: FlowStep.Fill) {
@@ -278,12 +274,8 @@ internal class FlowRunner(
                 }
             trace.fill(selector, newer)
             trace.click(submit)
-            if (!leaves(
-                    selector,
-                )
-            ) {
-                throw RunFailure(FailureReason.OTP_REJECTED, "The e-mail code was rejected twice (${trace.currentUrl()}).")
-            }
+            val accepted = leaves(selector)
+            if (!accepted) throw RunFailure(FailureReason.OTP_REJECTED, "The e-mail code was rejected twice (${trace.currentUrl()}).")
         }
 
         private suspend fun phoneCode(
@@ -304,7 +296,8 @@ internal class FlowRunner(
             trace.fill(selector, code)
             if (submit == null) return
             trace.click(submit)
-            if (!leaves(selector)) throw RunFailure(FailureReason.OTP_REJECTED, "The phone code for $phone was rejected.")
+            val accepted = leaves(selector)
+            if (!accepted) throw RunFailure(FailureReason.OTP_REJECTED, "The phone code for $phone was rejected.")
         }
 
         /** Whether [selector] disappears within the transition timeout (the site accepted what was submitted). */
@@ -427,17 +420,14 @@ internal class FlowRunner(
 
             suspend fun run() {
                 val visits = mutableMapOf<String, Int>()
-                var state: State = journey.start?.let { start -> State.On(journey.pages.first { it.label == start.trim() }) } ?: firstPage()
+                var state = startState()
                 while (state != State.Done) {
                     val page =
-                        when (val current = state) {
-                            is State.On -> current.page
-
-                            else -> throw RunFailure(
+                        (state as? State.On)?.page
+                            ?: throw RunFailure(
                                 FailureReason.REGISTRATION_FAILED,
                                 "Unexpected page while ${journey.label}: ${trace.currentUrl()}.",
                             )
-                        }
                     val visit = visits.merge(page.label, 1, Int::plus) ?: 1
                     if (visit > journey.maxVisits) {
                         throw RunFailure(reasonOf(page.reason), "The site asked for ${page.label} $visit times (${trace.currentUrl()}).")
@@ -447,6 +437,12 @@ internal class FlowRunner(
                     if (next == State.On(page)) page.stuck?.let { fail(it, journey.key, "still on ${page.label}") }
                     state = next
                 }
+            }
+
+            /** The page named `start`, acted on without looking; otherwise whatever known page the site shows first. */
+            private suspend fun startState(): State {
+                val start = journey.start?.trim() ?: return firstPage()
+                return State.On(journey.pages.first { it.label.trim() == start })
             }
 
             private suspend fun firstPage(): State =
@@ -459,16 +455,14 @@ internal class FlowRunner(
             private suspend fun leave(page: JourneyPage): State =
                 trace.probeDescribed(
                     { withTimeoutOrNull(settings.transitionTimeout) { awaitRecognised(except = page) } ?: detect() },
-                    { found ->
-                        if (found ==
-                            State.Done
-                        ) {
-                            "wait for ${trace.describe(until)}"
-                        } else {
-                            "wait for the page to leave ${page.label}"
-                        }
-                    },
+                    { found -> leaving(page, found) },
                 ) { it != State.On(page) && it != State.Unknown }
+
+            /** `wait for session.user_name` when the journey ended, else what was waited for. */
+            private fun leaving(
+                page: JourneyPage,
+                found: State?,
+            ): String = if (found == State.Done) "wait for ${trace.describe(until)}" else "wait for the page to leave ${page.label}"
 
             private suspend fun awaitRecognised(except: JourneyPage?): State {
                 while (true) {
