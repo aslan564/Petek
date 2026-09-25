@@ -45,6 +45,11 @@ class ConfigLoader(
             val productionHosts = hosts(Keys.PRODUCTION_HOSTS)
             val allowProduction = flag(Keys.ALLOW_PRODUCTION, default = false)
             val testToken = token(Keys.TEST_TOKEN)
+            val testApiUrl = url(Keys.TEST_API_URL, default = null)
+            val mailSource = mailSource()
+            if (mailSource == MailSource.TEST_API && testToken == null) {
+                problems += "${Keys.TEST_TOKEN} is required when ${Keys.MAIL_SOURCE} is ${MailSource.TEST_API.key}"
+            }
             val mailpitUrl = url(Keys.MAILPIT_URL, default = PetekConfig.DEFAULT_MAILPIT_URL)
             val mailDomain = mailDomain()
             val provider = provider()
@@ -66,6 +71,8 @@ class ConfigLoader(
                 productionHosts = productionHosts,
                 allowProduction = allowProduction,
                 testToken = testToken,
+                testApiUrl = testApiUrl,
+                mailSource = checkNotNull(mailSource),
                 mailpitUrl = checkNotNull(mailpitUrl),
                 mailDomain = checkNotNull(mailDomain),
                 identitySecret = checkNotNull(identitySecret),
@@ -152,6 +159,13 @@ class ConfigLoader(
             return domain
         }
 
+        private fun mailSource(): MailSource? {
+            val raw = text(Keys.MAIL_SOURCE) ?: return MailSource.MAILPIT
+            val source = MailSource.fromKey(raw)
+            if (source == null) problems += "${Keys.MAIL_SOURCE} must be one of ${MailSource.entries.joinToString { it.key }}, was '$raw'"
+            return source
+        }
+
         private fun provider(): LlmProviderId? {
             val raw = text(Keys.LLM_PROVIDER) ?: return LlmProviderId.CLAUDE_CLI
             val provider = LlmProviderId.fromKey(raw)
@@ -216,6 +230,8 @@ class ConfigLoader(
         const val PRODUCTION_HOSTS = "PETEK_PRODUCTION_HOSTS"
         const val ALLOW_PRODUCTION = "PETEK_ALLOW_PRODUCTION"
         const val TEST_TOKEN = "PETEK_TEST_TOKEN"
+        const val TEST_API_URL = "PETEK_TEST_API_URL"
+        const val MAIL_SOURCE = "PETEK_MAIL_SOURCE"
         const val MAILPIT_URL = "PETEK_MAILPIT_URL"
         const val MAIL_DOMAIN = "PETEK_MAIL_DOMAIN"
         const val IDENTITY_SECRET = "PETEK_IDENTITY_SECRET"

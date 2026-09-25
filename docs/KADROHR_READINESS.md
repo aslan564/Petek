@@ -51,8 +51,8 @@ Test API endpointləri (JSON, snake_case):
   razılıq pəncərəsi `dismiss` ilə bağlanır.
 - [x] Qeydiyyat və login tempi tənzimlənir (`campaign.pacing.start_stagger_ms: 1500`), IP limitinə düşməmək üçün.
 - [x] Test poçtu hədəfin test API-sindən oxuna bilər (`TestApiMailbox`, `GET /test/emails?to=`).
-- [ ] App konfiqurasiyası: `PETEK_MAIL_SOURCE=mailpit|test-api` və test API-nin baza ünvanı (API `api.kadrohr.com`-dadır,
-  sayt `kadrohr.com`) — composition root-da qoşulmalıdır.
+- [x] App konfiqurasiyası: `PETEK_MAIL_SOURCE=mailpit|test-api` və test API-nin baza ünvanı `PETEK_TEST_API_URL` (API
+  `api.kadrohr.com`-dadır, sayt `kadrohr.com`) — composition root-da qoşulub; `petek doctor` seçilmiş poçt mənbəyini yoxlayır.
 - [ ] `petek probe https://kadrohr.com` hazırlığı yoxlayır: səhifələr, selektorlar, `/test` API, real-time transportu.
 
 **Pətək-in KadroHR-dan gözlədiyi əlavə cavablar** (docs/PLAN.md "Real KadroHR üçün açıq suallar"):

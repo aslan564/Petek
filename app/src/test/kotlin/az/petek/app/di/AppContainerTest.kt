@@ -1,5 +1,6 @@
 package az.petek.app.di
 
+import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.core.security.Secret
@@ -14,6 +15,8 @@ import az.petek.llm.domain.LlmRole
 import az.petek.llm.domain.TokenUsage
 import az.petek.llm.infrastructure.api.AnthropicApiLlmClient
 import az.petek.llm.infrastructure.cli.ClaudeCliLlmClient
+import az.petek.mail.infrastructure.MailpitMailbox
+import az.petek.mail.infrastructure.TestApiMailbox
 import az.petek.orchestration.infrastructure.LoggingMonitorView
 import az.petek.orchestration.infrastructure.NoOpMonitorView
 import io.kotest.assertions.throwables.shouldThrow
@@ -144,6 +147,21 @@ class AppContainerTest {
             (doctorLlm is AutoCloseable) shouldBe false
             container.usageMeter.snapshot() shouldBe emptyMap()
         }
+
+    @Test
+    fun `the mailbox and the oracle follow the mail source and the test API address`() {
+        AppContainer(config()).use { it.mailbox.shouldBeInstanceOf<MailpitMailbox>() }
+        val testApi =
+            config().copy(
+                testToken = Secret("tok"),
+                testApiUrl = URI("http://127.0.0.1:9/api"),
+                mailSource = MailSource.TEST_API,
+            )
+        AppContainer(testApi).use { container ->
+            container.mailbox.shouldBeInstanceOf<TestApiMailbox>().toString() shouldBe "TestApiMailbox(http://127.0.0.1:9/api)"
+            container.oracle.isAvailable shouldBe true
+        }
+    }
 
     @Test
     fun `the configured provider is built when no override is given`() {

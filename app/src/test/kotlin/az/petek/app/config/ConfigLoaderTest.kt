@@ -46,6 +46,9 @@ class ConfigLoaderTest {
         config.productionHosts shouldBe setOf("kadrohr.com", "www.kadrohr.com")
         config.allowProduction shouldBe false
         config.testToken.shouldBeNull()
+        config.testApiUrl.shouldBeNull()
+        config.testApiBase shouldBe config.target
+        config.mailSource shouldBe MailSource.MAILPIT
         config.mailpitUrl shouldBe URI("http://localhost:8025")
         config.mailDomain shouldBe "test.kadrohr.com"
         config.llmProvider shouldBe LlmProviderId.CLAUDE_CLI
@@ -68,6 +71,8 @@ class ConfigLoaderTest {
                 "PETEK_PRODUCTION_HOSTS" to " KadroHR.com , app.kadrohr.com ,",
                 "PETEK_ALLOW_PRODUCTION" to "yes",
                 "PETEK_TEST_TOKEN" to "tok-123",
+                "PETEK_TEST_API_URL" to "https://api.staging.kadrohr.com/",
+                "PETEK_MAIL_SOURCE" to "Test-API",
                 "PETEK_MAILPIT_URL" to "http://127.0.0.1:18025",
                 "PETEK_MAIL_DOMAIN" to "@QA.Example.com",
                 "PETEK_IDENTITY_SECRET" to "a-long-enough-identity-secret",
@@ -85,6 +90,9 @@ class ConfigLoaderTest {
         config.productionHosts shouldBe setOf("kadrohr.com", "app.kadrohr.com")
         config.allowProduction shouldBe true
         config.testToken shouldBe Secret("tok-123")
+        config.testApiUrl shouldBe URI("https://api.staging.kadrohr.com/")
+        config.testApiBase shouldBe URI("https://api.staging.kadrohr.com/")
+        config.mailSource shouldBe MailSource.TEST_API
         config.mailpitUrl shouldBe URI("http://127.0.0.1:18025")
         config.mailDomain shouldBe "qa.example.com"
         config.identitySecret shouldBe Secret("a-long-enough-identity-secret")
@@ -128,6 +136,8 @@ class ConfigLoaderTest {
         problems(
             "PETEK_ALLOW_PRODUCTION" to "maybe",
             "PETEK_MAILPIT_URL" to "localhost:8025",
+            "PETEK_TEST_API_URL" to "api.kadrohr.com",
+            "PETEK_MAIL_SOURCE" to "imap",
             "PETEK_MAIL_DOMAIN" to "not a domain",
             "PETEK_LLM_PROVIDER" to "gpt",
             "PETEK_LLM_CONCURRENCY" to "0",
@@ -141,6 +151,8 @@ class ConfigLoaderTest {
                 "PETEK_PRODUCTION_HOSTS contains 'bad host', which is not a host name",
                 "PETEK_ALLOW_PRODUCTION must be true or false",
                 "PETEK_MAILPIT_URL must be an absolute http(s) URL",
+                "PETEK_TEST_API_URL must be an absolute http(s) URL",
+                "PETEK_MAIL_SOURCE must be one of mailpit, test-api, was 'imap'",
                 "PETEK_MAIL_DOMAIN must be a bare domain such as test.kadrohr.com",
                 "PETEK_LLM_PROVIDER must be one of claude-cli, anthropic-api, was 'gpt'",
                 "PETEK_LLM_CONCURRENCY must be a whole number between 1 and 64, was '0'",
@@ -163,6 +175,13 @@ class ConfigLoaderTest {
     fun `the API provider needs its key`() {
         problems(target, "PETEK_LLM_PROVIDER" to "anthropic-api") shouldContainExactlyInAnyOrder
             listOf("ANTHROPIC_API_KEY is required when PETEK_LLM_PROVIDER is anthropic-api")
+    }
+
+    @Test
+    fun `the test API mail source needs the test token`() {
+        problems(target, "PETEK_MAIL_SOURCE" to "test-api") shouldContainExactlyInAnyOrder
+            listOf("PETEK_TEST_TOKEN is required when PETEK_MAIL_SOURCE is test-api")
+        load(target, "PETEK_MAIL_SOURCE" to "test-api", "PETEK_TEST_TOKEN" to "tok").mailSource shouldBe MailSource.TEST_API
     }
 
     @Test

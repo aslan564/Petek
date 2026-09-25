@@ -10,6 +10,7 @@ import az.petek.agent.application.TesterAgentFactory
 import az.petek.agent.application.runs.RunFunctions
 import az.petek.agent.domain.ConsecutiveLoopDetector
 import az.petek.agent.domain.JsonDecisionProtocol
+import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.logging.MdcDiagnosticContext
 import az.petek.browser.domain.BrowserEngine
@@ -55,6 +56,7 @@ import az.petek.mail.application.DefaultAwaitVerificationUseCase
 import az.petek.mail.domain.DefaultVerificationExtractor
 import az.petek.mail.domain.Mailbox
 import az.petek.mail.infrastructure.MailpitMailbox
+import az.petek.mail.infrastructure.TestApiMailbox
 import az.petek.oracle.domain.DefaultJsonFieldSelector
 import az.petek.oracle.domain.JsonFieldSelector
 import az.petek.oracle.domain.TargetOracle
@@ -173,9 +175,16 @@ class AppContainer(
 
     // --- target, mail, LLM, browser -----------------------------------------------------------------------------
 
-    val oracle: TargetOracle by lazy { resources.track(HttpTargetOracle(config.target, config.testToken)) }
+    /** The `/test/...` API client; on `PETEK_TEST_API_URL` when the API is not on the target's origin. */
+    val oracle: TargetOracle by lazy { resources.track(HttpTargetOracle(config.testApiBase, config.testToken)) }
 
-    val mailbox: Mailbox by lazy { resources.track(MailpitMailbox(config.mailpitUrl)) }
+    /** Verification mail from Mailpit or from the target's test API, as `PETEK_MAIL_SOURCE` says. */
+    val mailbox: Mailbox by lazy {
+        when (config.mailSource) {
+            MailSource.MAILPIT -> resources.track(MailpitMailbox(config.mailpitUrl))
+            MailSource.TEST_API -> resources.track(TestApiMailbox(config.testApiBase, config.testToken))
+        }
+    }
 
     val verification: AwaitVerificationUseCase by lazy { DefaultAwaitVerificationUseCase(mailbox, DefaultVerificationExtractor()) }
 

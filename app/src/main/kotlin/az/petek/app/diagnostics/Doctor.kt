@@ -1,5 +1,6 @@
 package az.petek.app.diagnostics
 
+import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.config.WebUrls
 import az.petek.app.di.AppContainer
@@ -34,7 +35,8 @@ data class CheckResult(
 /**
  * `petek doctor`: checks that everything a run needs is in place, independently of each other (and concurrently,
  * since the browser and the LLM take seconds): the target policy, the target answering HTTP, Chromium starting,
- * Mailpit answering, the target's test API accepting the token, and the LLM provider answering one tiny structured
+ * the test inbox answering (Mailpit, or the target's `GET /test/emails` when `PETEK_MAIL_SOURCE=test-api`), the
+ * target's test API accepting the token, and the LLM provider answering one tiny structured
  * request (its own [LlmProviders][az.petek.app.di.LlmProviders] timeout, no retries, the provider's exact error).
  *
  * A target the policy refuses is not contacted at all; its checks are SKIPPED. Nothing is written to the target.
@@ -53,7 +55,7 @@ class Doctor(
                 async { policy },
                 async { if (allowed) targetReachable() else skipped(TARGET) },
                 async { chromium() },
-                async { mailpit() },
+                async { mail(allowed) },
                 async { if (allowed) testApi() else skipped(TEST_API) },
                 async { llm() },
             ).awaitAll()
@@ -94,20 +96,46 @@ class Doctor(
         }
     }
 
+    /** The test inbox of `PETEK_MAIL_SOURCE`; the target's one is not contacted when the policy refuses the target. */
+    private suspend fun mail(allowed: Boolean): CheckResult =
+        when (config.mailSource) {
+            MailSource.MAILPIT -> mailpit()
+            MailSource.TEST_API -> if (allowed) testApiMail() else skipped(MAIL)
+        }
+
     private suspend fun mailpit(): CheckResult {
         val url = URI(config.mailpitUrl.toString().trimEnd('/') + MAILPIT_INFO)
         return when (val answer = http.get(url)) {
             is HttpCheck.Answered -> {
                 if (answer.status == OK_STATUS) {
-                    CheckResult(MAILPIT, CheckStatus.OK, "$answer from ${PetekConfig.masked(url)}")
+                    CheckResult(MAIL, CheckStatus.OK, "Mailpit: $answer from ${PetekConfig.masked(url)}")
                 } else {
-                    CheckResult(MAILPIT, CheckStatus.FAILED, "$answer from ${PetekConfig.masked(url)}; is this Mailpit?")
+                    CheckResult(MAIL, CheckStatus.FAILED, "Mailpit: $answer from ${PetekConfig.masked(url)}; is this Mailpit?")
                 }
             }
 
             is HttpCheck.Unreachable -> {
-                CheckResult(MAILPIT, CheckStatus.FAILED, "${answer.error}; start it with `docker compose up -d`")
+                CheckResult(MAIL, CheckStatus.FAILED, "Mailpit: ${answer.error}; start it with `docker compose up -d`")
             }
+        }
+    }
+
+    /** `PETEK_MAIL_SOURCE=test-api`: the target's `GET /test/emails` must answer for a fake address (nothing is written). */
+    private suspend fun testApiMail(): CheckResult {
+        val oracle = container.oracle
+        if (!oracle.isAvailable) return CheckResult(MAIL, CheckStatus.FAILED, "test API mail needs PETEK_TEST_TOKEN")
+        val path = "$MAIL_PROBE_PATH@${config.mailDomain}"
+        return try {
+            when (val status = oracle.get(path).status) {
+                OK_STATUS -> CheckResult(MAIL, CheckStatus.OK, "test API mail: HTTP 200 for GET $path")
+                UNAUTHORIZED -> CheckResult(MAIL, CheckStatus.FAILED, "test API mail: HTTP 401, the target rejects PETEK_TEST_TOKEN")
+                NOT_FOUND -> CheckResult(MAIL, CheckStatus.FAILED, "test API mail: HTTP 404, the target has no GET /test/emails")
+                else -> CheckResult(MAIL, CheckStatus.FAILED, "test API mail: HTTP $status for GET $path (expected 200)")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CheckResult(MAIL, CheckStatus.FAILED, "test API mail: connection error: ${e.message ?: e::class.simpleName}")
         }
     }
 
@@ -163,12 +191,15 @@ class Doctor(
         const val POLICY = "Target policy"
         const val TARGET = "Target reachable"
         const val CHROMIUM = "Chromium"
-        const val MAILPIT = "Mailpit"
+        const val MAIL = "Test inbox"
         const val TEST_API = "Test API"
         const val LLM = "LLM provider"
 
         /** A fake number: a 404 (no OTP) or 200 proves the token is accepted without touching real data. */
         const val PROBE_PATH = "/test/otp/%2B994500000000"
+
+        /** A fake recipient on the test domain: an empty list (200) proves the mail endpoint answers. */
+        private const val MAIL_PROBE_PATH = "/test/emails?to=petek-doctor"
         private const val MAILPIT_INFO = "/api/v1/info"
         private const val OK_STATUS = 200
         private const val UNAUTHORIZED = 401
@@ -178,7 +209,7 @@ class Doctor(
         /** The rows shown when the configuration itself cannot be loaded. */
         fun configurationFailed(problems: List<String>): List<CheckResult> =
             listOf(CheckResult(CONFIGURATION, CheckStatus.FAILED, problems.joinToString("; "))) +
-                listOf(POLICY, TARGET, CHROMIUM, MAILPIT, TEST_API, LLM).map {
+                listOf(POLICY, TARGET, CHROMIUM, MAIL, TEST_API, LLM).map {
                     CheckResult(it, CheckStatus.SKIPPED, "not checked: the configuration is invalid")
                 }
 

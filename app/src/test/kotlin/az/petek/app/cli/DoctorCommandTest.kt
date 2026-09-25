@@ -49,7 +49,7 @@ class DoctorCommandTest {
         browser = browser,
     )
 
-    /** The table row of [check], e.g. `│ ✓ │ Mailpit │ HTTP 200 from … │`. */
+    /** The table row of [check], e.g. `│ ✓ │ Test inbox │ Mailpit: HTTP 200 from … │`. */
     private fun row(
         output: String,
         check: String,
@@ -62,10 +62,11 @@ class DoctorCommandTest {
             val result = cli(browser = browser).run("doctor")
 
             result.statusCode shouldBe 0
-            listOf("Configuration", "Target policy", "Target reachable", "Chromium", "Mailpit", "Test API", "LLM provider").forEach {
+            listOf("Configuration", "Target policy", "Target reachable", "Chromium", "Test inbox", "Test API", "LLM provider").forEach {
                 row(result.stdout, it) shouldContain "✓"
             }
             row(result.stdout, "Target reachable") shouldContain "HTTP 3"
+            row(result.stdout, "Test inbox") shouldContain "Mailpit: HTTP 200"
             row(result.stdout, "Test API") shouldContain "token accepted (HTTP 404"
             row(result.stdout, "LLM provider") shouldContain "claude-cli (claude-sonnet-5) answered a structured request"
             browser.sessions.single().closed shouldBe true
@@ -102,10 +103,22 @@ class DoctorCommandTest {
             val result = cli("PETEK_MAILPIT_URL" to "http://127.0.0.1:9", "PETEK_TARGET" to "http://127.0.0.1:9").run("doctor")
 
             result.statusCode shouldBe 1
-            row(result.stdout, "Mailpit") shouldContain "ConnectException"
-            row(result.stdout, "Mailpit") shouldContain "docker compose up -d"
+            row(result.stdout, "Test inbox") shouldContain "ConnectException"
+            row(result.stdout, "Test inbox") shouldContain "docker compose up -d"
             row(result.stdout, "Target reachable") shouldContain "ConnectException"
             row(result.stdout, "Test API") shouldContain "connection error"
+        }
+
+    @Test
+    fun `with the test API as mail source the inbox check asks the target for mail`() =
+        runBlocking<Unit> {
+            // The fake target has no /test/emails endpoint: the row shows exactly that, and Mailpit is not contacted.
+            val result = cli("PETEK_MAIL_SOURCE" to "test-api", "PETEK_MAILPIT_URL" to "http://127.0.0.1:9").run("doctor")
+
+            result.statusCode shouldBe 1
+            row(result.stdout, "Test inbox") shouldContain "✗"
+            row(result.stdout, "Test inbox") shouldContain "HTTP 404, the target has no GET /test/emails"
+            row(result.stdout, "Test API") shouldContain "✓"
         }
 
     @Test

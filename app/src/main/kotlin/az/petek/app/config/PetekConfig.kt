@@ -17,6 +17,9 @@ import java.nio.file.Path
  * @property target the system under test (`PETEK_TARGET`); it replaces `campaign.target` of every campaign.
  * @property productionHosts hosts refused as a target unless [allowProduction] (CLAUDE.md rule 8).
  * @property testToken `X-Test-Token` for the target's `/test/...` API; null disables oracle assertions.
+ * @property testApiUrl where the `/test/...` API lives when it is not on the target's own origin (`PETEK_TEST_API_URL`,
+ *   e.g. KadroHR's `api.` host); null means the target itself, see [testApiBase].
+ * @property mailSource where verification mail is read from (`PETEK_MAIL_SOURCE`); the test API needs [testToken].
  * @property identitySecret key of the password derivation; from `PETEK_IDENTITY_SECRET` or `~/.petek/identity.secret`.
  * @property llmConcurrency LLM calls allowed in flight at once across all agents.
  * @property dbPath the evidence database (`PETEK_DB`, default `<evidenceDir>/petek.db`).
@@ -26,6 +29,8 @@ data class PetekConfig(
     val productionHosts: Set<String> = DEFAULT_PRODUCTION_HOSTS,
     val allowProduction: Boolean = false,
     val testToken: Secret? = null,
+    val testApiUrl: URI? = null,
+    val mailSource: MailSource = MailSource.MAILPIT,
     val mailpitUrl: URI = URI(DEFAULT_MAILPIT_URL),
     val mailDomain: String = DEFAULT_MAIL_DOMAIN,
     val identitySecret: Secret,
@@ -45,17 +50,24 @@ data class PetekConfig(
         require(llmProvider != LlmProviderId.ANTHROPIC_API || anthropicApiKey?.isBlank == false) {
             "the anthropic-api provider needs an API key"
         }
+        require(mailSource != MailSource.TEST_API || testToken?.isBlank == false) {
+            "the test-api mail source needs the test token"
+        }
     }
 
     /** The production guard for [target] and for URLs given on the command line. */
     val targetPolicy: TargetPolicy get() = TargetPolicy(productionHosts, allowProduction)
+
+    /** Base address of the `/test/...` API (the oracle and the test-API mailbox): [testApiUrl], else [target]. */
+    val testApiBase: URI get() = testApiUrl ?: target
 
     /** Where the log file lives: `<evidenceDir>/logs`. */
     val logDirectory: Path get() = evidenceDir.resolve("logs")
 
     override fun toString(): String =
         "PetekConfig(target=${masked(target)}, productionHosts=$productionHosts, allowProduction=$allowProduction, " +
-            "testToken=${setOrUnset(testToken)}, mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, " +
+            "testToken=${setOrUnset(testToken)}, testApiUrl=${testApiUrl?.let(::masked)}, mailSource=${mailSource.key}, " +
+            "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, " +
             "identitySecret=***, llmProvider=${llmProvider.key}, llmModel=$llmModel, claudeBin=$claudeBin, " +
             "llmConcurrency=$llmConcurrency, anthropicApiKey=${setOrUnset(anthropicApiKey)}, " +
             "browserHeadless=$browserHeadless, browserTopology=$browserTopology, evidenceDir=$evidenceDir, dbPath=$dbPath)"
