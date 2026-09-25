@@ -4,20 +4,24 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /**
- * The single self-contained page (inline CSS and vanilla JavaScript, no CDN), read once from the classpath. Its inline
- * `<style>` and `<script>` carry a fresh nonce per response, and the Content-Security-Policy allows nothing else: no
- * other script, no inline handlers, no foreign origin. The page itself escapes every value it renders (it only ever
- * writes data with `textContent`).
+ * The panel's single self-contained page: `index.html` with the stylesheet and the scripts of every screen inlined at
+ * start-up (no CDN, no second request). Its inline `<style>` and `<script>` carry a fresh nonce per response and the
+ * Content-Security-Policy allows nothing else: no other script, no inline handlers, no foreign origin. The per-process
+ * [token] for mutating requests is written into a `<meta>` tag only other pages of this origin can read. The page
+ * escapes every value it renders (it only ever writes data with `textContent`).
  */
-internal class DashboardPage {
+internal class DashboardPage(
+    private val token: String,
+) {
     private val template: String =
-        checkNotNull(DashboardPage::class.java.getResourceAsStream(RESOURCE)) { "dashboard page $RESOURCE is missing" }
-            .use { it.readBytes().toString(Charsets.UTF_8) }
+        read("index.html")
+            .replace(STYLE_MARK, read("panel.css"))
+            .replace(SCRIPT_MARK, SCRIPTS.joinToString("\n") { read(it) })
 
     private val random = SecureRandom()
 
     init {
-        check(NONCE_MARK in template) { "dashboard page $RESOURCE has no $NONCE_MARK placeholder" }
+        check(NONCE_MARK in template && TOKEN_MARK in template) { "the panel page misses its $NONCE_MARK or $TOKEN_MARK placeholder" }
     }
 
     /** A page and the policy that goes with it. */
@@ -29,7 +33,7 @@ internal class DashboardPage {
     fun render(): Rendered {
         val nonce = nonce()
         return Rendered(
-            html = template.replace(NONCE_MARK, nonce),
+            html = template.replace(NONCE_MARK, nonce).replace(TOKEN_MARK, token),
             contentSecurityPolicy =
                 "default-src 'none'; script-src 'nonce-$nonce'; style-src 'nonce-$nonce'; img-src 'self' data:; " +
                     "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
@@ -42,8 +46,28 @@ internal class DashboardPage {
     }
 
     private companion object {
-        const val RESOURCE = "/az/petek/dashboard/infrastructure/dashboard.html"
+        const val FOLDER = "/az/petek/dashboard/infrastructure/panel/"
         const val NONCE_MARK = "{{NONCE}}"
+        const val TOKEN_MARK = "{{TOKEN}}"
+        const val STYLE_MARK = "/*{{STYLE}}*/"
+        const val SCRIPT_MARK = "/*{{SCRIPT}}*/"
         const val NONCE_BYTES = 18
+
+        /** In load order: the shared core first, one file per screen, the start-up last. */
+        val SCRIPTS =
+            listOf(
+                "core.js",
+                "screen-instructions.js",
+                "screen-explorer.js",
+                "screen-scenarios.js",
+                "screen-orchestrator.js",
+                "screen-agents.js",
+                "screen-reports.js",
+                "app.js",
+            )
+
+        fun read(name: String): String =
+            checkNotNull(DashboardPage::class.java.getResourceAsStream(FOLDER + name)) { "panel resource $name is missing" }
+                .use { it.readBytes().toString(Charsets.UTF_8) }
     }
 }

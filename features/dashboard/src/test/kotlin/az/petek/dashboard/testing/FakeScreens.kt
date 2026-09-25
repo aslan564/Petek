@@ -120,7 +120,7 @@ object FakeScreens {
             g.color = INK
             g.font = Font(Font.SANS_SERIF, Font.BOLD, 13)
             g.drawString(
-                listOf("Yeni iş qrafiki", "Korporativ tədbir", "Məzuniyyət qaydaları", "Ofis köçü")[(i + random.nextInt(4)) % 4],
+                listOf("Sabah 10:00 ümumi iclas", "Korporativ tədbir", "Məzuniyyət qaydaları", "Ofis köçü")[(i + random.nextInt(4)) % 4],
                 60,
                 y + 26,
             )
@@ -137,7 +137,7 @@ object FakeScreens {
     ) {
         card(g, 24, 96, WIDTH - 48, 280)
         label(g, "Başlıq", 44, 124)
-        input(g, 44, 132, WIDTH - 88, 30, "Yeni iş qrafiki")
+        input(g, 44, 132, WIDTH - 88, 30, "Sabah 10:00 ümumi iclas")
         label(g, "Mətn", 44, 186)
         input(g, 44, 194, WIDTH - 88, 86, null)
         repeat(3) { bar(g, 56, 214 + it * 18, 200 + random.nextInt(260)) }
@@ -176,7 +176,7 @@ object FakeScreens {
             g.fillOval(40, y + 17, 12, 12)
             g.color = INK
             g.font = Font(Font.SANS_SERIF, if (i == 0) Font.BOLD else Font.PLAIN, 12)
-            g.drawString(if (i == 0) "Yeni elan: Yeni iş qrafiki" else "Tapşırıq yeniləndi", 64, y + 22)
+            g.drawString(if (i == 0) "Yeni elan: Sabah 10:00 ümumi iclas" else "Tapşırıq yeniləndi", 64, y + 22)
             bar(g, 64, y + 30, 120 + random.nextInt(200))
         }
     }

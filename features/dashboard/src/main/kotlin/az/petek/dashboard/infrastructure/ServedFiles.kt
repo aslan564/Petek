@@ -23,6 +23,14 @@ internal object ArtifactContent {
             ArtifactType.A11Y, ArtifactType.DOM, ArtifactType.HTTP, ArtifactType.PROMPT, ArtifactType.LOG -> TEXT
         }
 
+    /** For a file of a run's evidence directory: pictures and JSON as such, everything else (HTML too) as plain text. */
+    fun forFile(file: Path): ContentType =
+        when (file.extension.lowercase()) {
+            "png" -> ContentType.Image.PNG
+            "json" -> ContentType.Application.Json.withCharset(Charsets.UTF_8)
+            else -> TEXT
+        }
+
     private val TEXT = ContentType.Text.Plain.withCharset(Charsets.UTF_8)
 }
 

@@ -60,8 +60,9 @@ private val logger = KotlinLogging.logger {}
  *    count once).
  * 4. Give the runner `DashboardRunRepository(runs, dashboard)` and `DashboardIdentityRepository(identities, dashboard)`
  *    (optional: without them the header lacks campaign and target, and cards lack department and registration).
- * 5. Start `DashboardServer(dashboard, artifacts, reportDirectory)` before the run, print its URL and open it in the
- *    browser; after the run keep serving until the user presses Enter, then close the server.
+ * 5. Start `DashboardServer(dashboard, artifacts, backend = panel)` before the run (`panel` is the app's
+ *    `PanelBackend`, or `UnavailablePanelBackend` to serve the board alone), print its URL and open it in the browser;
+ *    after the run keep serving until the user presses Enter, then close the server.
  * 6. `petek dashboard <run_id>`: load the run, its identities and evidence with [replay] and serve it the same way.
  */
 class LiveDashboard(

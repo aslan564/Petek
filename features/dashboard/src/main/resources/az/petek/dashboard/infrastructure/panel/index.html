@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="petek-token" content="{{TOKEN}}">
+<title>Pətək</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2.5 27.7 9.25v13.5L16 29.5 4.3 22.75V9.25z' fill='%23f59e0b'/%3E%3Cpath d='M16 9.5 21.6 12.75v6.5L16 22.5l-5.6-3.25v-6.5z' fill='%23fff' opacity='.9'/%3E%3C/svg%3E">
+<script nonce="{{NONCE}}">
+(function () {
+  var pref = 'auto';
+  try { pref = localStorage.getItem('petek.theme') || 'auto'; } catch (e) { /* storage blocked */ }
+  var dark = pref === 'dark' || (pref === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.documentElement.dataset.themePref = pref;
+})();
+</script>
+<style nonce="{{NONCE}}">
+/*{{STYLE}}*/
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar" aria-label="Bölmələr">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 27.7 9.25v13.5L16 29.5 4.3 22.75V9.25z" fill="#f59e0b"/><path d="M16 9.5 21.6 12.75v6.5L16 22.5l-5.6-3.25v-6.5z" fill="#fff" opacity=".92"/></svg>
+      <div class="brand-text"><div class="brand-name">Pətək</div><div class="brand-sub">AI test platforması</div></div>
+      <button class="icon-btn sidebar-close" id="sidebarClose" type="button" aria-label="Menyunu bağla"></button>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-status" id="sideStatus"></div>
+    <div class="side-foot">
+      <div class="theme-switch" id="themeSwitch" role="group" aria-label="Görünüş"></div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Menyunu aç"></button>
+      <div class="topbar-title"><h1 id="screenTitle">Pətək</h1><p id="screenSubtitle"></p></div>
+      <div class="topbar-right">
+        <button class="run-chip" id="runChip" type="button" hidden></button>
+        <span class="conn" id="conn" data-state="connecting"><i></i><span id="connText">Qoşulur…</span></span>
+      </div>
+    </header>
+    <main class="screens" id="screens"></main>
+  </div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script nonce="{{NONCE}}">
+/*{{SCRIPT}}*/
+</script>
+</body>
+</html>
