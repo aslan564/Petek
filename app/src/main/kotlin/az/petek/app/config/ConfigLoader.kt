@@ -15,7 +15,8 @@ import java.nio.file.Path
  *
  * Defaults (when a key is missing or blank) follow `.env.example`, except `PETEK_TARGET`, which is required: running
  * tests against an unintended system is the one mistake a default must not make. Relative paths are resolved
- * against [workingDirectory]. A blank `PETEK_IDENTITY_SECRET` falls back to [identitySecrets] (by default the file
+ * against [workingDirectory]; URLs are stored in their canonical spelling ([WebUrls.canonical]), so the production
+ * guard sees the host it compares. A blank `PETEK_IDENTITY_SECRET` falls back to [identitySecrets] (by default the file
  * `~/.petek/identity.secret`), which is only consulted when no explicit secret is configured.
  */
 class ConfigLoader(
@@ -106,7 +107,7 @@ class ConfigLoader(
                 problems += problem
                 return null
             }
-            return url
+            return WebUrls.canonical(url)
         }
 
         private fun hosts(key: String): Set<String> {

@@ -52,6 +52,35 @@ class EnvFileTest {
     }
 
     @Test
+    fun `a comment right after the equals sign leaves the value empty`() {
+        val values =
+            EnvFile.parse(
+                "PETEK_IDENTITY_SECRET=   # leave empty to use ~/.petek/identity.secret\n" +
+                    "PETEK_TEST_TOKEN=\t# tab before the comment\n",
+            )
+
+        values shouldBe mapOf("PETEK_IDENTITY_SECRET" to "", "PETEK_TEST_TOKEN" to "")
+    }
+
+    @Test
+    fun `a hash directly after the equals sign starts the value`() {
+        EnvFile.parse("PETEK_TEST_TOKEN=#abc # a token that starts with a hash") shouldBe mapOf("PETEK_TEST_TOKEN" to "#abc")
+    }
+
+    @Test
+    fun `a quoted value may follow whitespace after the equals sign`() {
+        EnvFile.parse("""NAME=   "Pətək # Test"   # comment""") shouldBe mapOf("NAME" to "Pətək # Test")
+    }
+
+    @Test
+    fun `text before the equals sign that may hold a value is not echoed`() {
+        val error = shouldThrow<EnvFileException> { EnvFile.parse("PETEK_TEST_TOKEN: s3cr3t=value") }
+
+        error.problems shouldContainExactly listOf("line 1: the text before '=' is not a valid variable name")
+        error.message shouldNotContain "s3cr3t"
+    }
+
+    @Test
     fun `double quotes keep spaces and hashes and understand escapes`() {
         val values = EnvFile.parse("""GREETING="a # b\n\t\"c\" \\ d"   # comment""")
 
@@ -66,6 +95,7 @@ class EnvFileTest {
     @Test
     fun `an export prefix is accepted`() {
         EnvFile.parse("export PETEK_TARGET=http://localhost:8080") shouldBe mapOf("PETEK_TARGET" to "http://localhost:8080")
+        EnvFile.parse("export\t PETEK_DB=a.db\nexported=1") shouldBe mapOf("PETEK_DB" to "a.db", "exported" to "1")
     }
 
     @Test

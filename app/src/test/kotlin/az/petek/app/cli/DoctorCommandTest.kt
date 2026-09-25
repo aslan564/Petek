@@ -147,6 +147,19 @@ class DoctorCommandTest {
         }
 
     @Test
+    fun `a production host spelled with a trailing dot is refused and not contacted`() =
+        runBlocking<Unit> {
+            val production = "http://localhost.:${target.baseUrl.port}"
+
+            val result = cli("PETEK_PRODUCTION_HOSTS" to "localhost", "PETEK_TARGET" to production).run("doctor")
+
+            result.statusCode shouldBe 2
+            row(result.stdout, "Target policy") shouldContain "production host"
+            row(result.stdout, "Target reachable") shouldContain "not contacted"
+            row(result.stdout, "Test API") shouldContain "not contacted"
+        }
+
+    @Test
     fun `an invalid configuration is a failed check listing every problem`() =
         runBlocking<Unit> {
             val cli = cli("PETEK_LLM_CONCURRENCY" to "many")

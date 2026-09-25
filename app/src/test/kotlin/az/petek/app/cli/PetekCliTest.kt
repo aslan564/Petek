@@ -20,9 +20,24 @@ class PetekCliTest {
         }
 
     @Test
-    fun `a usage error returns Clikt's status`() =
+    fun `a wrong command line exits with 2, never with the 1 of a failed run`() =
         runBlocking<Unit> {
-            cli.execute(listOf("no-such-command")) shouldBe 1
+            cli.execute(listOf("no-such-command")) shouldBe ExitCodes.CONFIG_OR_ABORTED
+            cli.execute(listOf("run")) shouldBe ExitCodes.CONFIG_OR_ABORTED
+            cli.execute(listOf("run", "tiny.yaml", "--agents", "0")) shouldBe ExitCodes.CONFIG_OR_ABORTED
+            cli.execute(listOf("plan", "tiny.yaml", "--no-such-option")) shouldBe ExitCodes.CONFIG_OR_ABORTED
+        }
+
+    @Test
+    fun `no command at all prints the help and exits with 2`() =
+        runBlocking<Unit> {
+            cli.execute(emptyList()) shouldBe ExitCodes.CONFIG_OR_ABORTED
+        }
+
+    @Test
+    fun `help of a command exits with 0`() =
+        runBlocking<Unit> {
+            cli.execute(listOf("run", "--help")) shouldBe ExitCodes.OK
         }
 
     @Test

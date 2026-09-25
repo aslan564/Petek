@@ -98,9 +98,10 @@ class PetekCommandTest {
     @Test
     fun `an unknown command is a usage error`() =
         runBlocking<Unit> {
-            val result = CliHarness(dir).run("deploy")
+            val harness = CliHarness(dir)
+            val result = harness.run("deploy")
 
-            result.statusCode shouldBe 1
             result.stderr.lowercase() shouldContain "no such subcommand"
+            PetekCli(harness.runtime).execute(listOf("deploy")) shouldBe ExitCodes.CONFIG_OR_ABORTED
         }
 }

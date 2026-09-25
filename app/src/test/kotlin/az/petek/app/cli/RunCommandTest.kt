@@ -13,13 +13,20 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.seconds
 
 class RunCommandTest {
     @TempDir
@@ -115,6 +122,35 @@ class RunCommandTest {
             result.statusCode shouldBe 2
             result.stdout shouldContain ": ABORTED in "
             cli.evidence { it.evidence.latest() }?.result shouldBe RunResult.ABORTED
+        }
+
+    @Test
+    fun `a cancelled run (Ctrl+C) still stops the browser and writes its report`() =
+        runBlocking<Unit> {
+            val agentsWorking = CompletableDeferred<Unit>()
+            val cli =
+                CliHarness(
+                    dir,
+                    llm =
+                        scriptedLlm { request ->
+                            if (request.label.endsWith("/look")) {
+                                agentsWorking.complete(Unit)
+                                awaitCancellation()
+                            }
+                            done()
+                        },
+                )
+            cli.write("tiny.yaml", tinyCampaign())
+
+            val command = launch(Dispatchers.Default) { cli.run("run", "tiny.yaml") }
+            withTimeout(30.seconds) { agentsWorking.await() }
+            command.cancelAndJoin()
+
+            val run = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
+            run.result shouldBe RunResult.ABORTED
+            Files.isRegularFile(cli.evidenceDir.resolve("${run.runId}/report/${RunCommand.HTML_REPORT}")) shouldBe true
+            cli.browser.sessions.all { it.closed } shouldBe true
+            cli.browser.stopCount shouldBe 1
         }
 
     @Test

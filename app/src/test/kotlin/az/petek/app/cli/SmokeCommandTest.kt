@@ -80,12 +80,28 @@ class SmokeCommandTest {
         }
 
     @Test
+    fun `a production host in another spelling is refused as well`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, browser = browser)
+
+            listOf("https://KadroHR.com./", "HTTPS://kadrohr.com", "https://kadrohr.com.:443/login").forEach { url ->
+                val result = cli.run("smoke", "--url", url)
+
+                result.statusCode shouldBe 2
+                result.stderr shouldContain "production host"
+            }
+            browser.configs.shouldBeEmpty()
+        }
+
+    @Test
     fun `an unusable URL is a usage error`() =
         runBlocking<Unit> {
-            val result = CliHarness(dir, browser = browser).run("smoke", "--url", "ftp://files.test")
+            val harness = CliHarness(dir, browser = browser)
+            val result = harness.run("smoke", "--url", "ftp://files.test")
 
-            result.statusCode shouldBe 1
             result.stderr shouldContain "not an absolute http(s) URL"
+            PetekCli(harness.runtime).execute(listOf("smoke", "--url", "ftp://files.test")) shouldBe ExitCodes.CONFIG_OR_ABORTED
+            browser.configs.shouldBeEmpty()
         }
 
     @Test

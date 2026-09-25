@@ -11,7 +11,8 @@ import java.nio.file.Path
  * Reads `.env` files (`KEY=VALUE` per line), the format documented in `.env.example`:
  * - blank lines and lines starting with `#` are ignored; an optional `export ` prefix is accepted;
  * - keys are `[A-Za-z_][A-Za-z0-9_]*`; surrounding whitespace of keys and unquoted values is dropped;
- * - an unquoted value ends at a ` #` comment (a `#` directly after a character is part of the value, e.g. a token);
+ * - an unquoted value ends at a ` #` comment, so `KEY=   # note` is empty (a `#` directly after `=` or another
+ *   character is part of the value, e.g. a token);
  * - `"double"` quotes keep `#` and spaces and understand `\n`, `\r`, `\t`, `\"` and `\\`; `'single'` quotes are literal;
  *   after the closing quote only whitespace or a comment may follow;
  * - a key given twice keeps its last value, like a shell sourcing the file.
@@ -69,16 +70,28 @@ object EnvFile {
     private fun parseLine(line: String): Line {
         val content = line.trim()
         if (content.isEmpty() || content.startsWith("#")) return Line.Empty
-        val assignment = content.removePrefix(EXPORT).trimStart().takeIf { content.startsWith(EXPORT) } ?: content
+        val assignment = content.replaceFirst(EXPORT, "")
         val equals = assignment.indexOf('=')
         if (equals < 0) return Line.Problem("expected KEY=VALUE")
         val key = assignment.substring(0, equals).trim()
-        if (!KEY.matches(key)) return Line.Problem("'$key' is not a valid variable name")
-        return when (val value = parseValue(assignment.substring(equals + 1).trim())) {
+        if (!KEY.matches(key)) return Line.Problem(invalidName(key))
+        // Untrimmed: whether whitespace separates `=` from a `#` decides between a comment and a value.
+        return when (val value = parseValue(assignment.substring(equals + 1))) {
             is ParsedValue.Ok -> Line.Entry(key, value.value)
             is ParsedValue.Bad -> Line.Problem("$key: ${value.message}")
         }
     }
+
+    /**
+     * Echoes the name only when it looks like a mistyped name (`PETEK-TARGET`, `1BAD`): text with spaces, quotes or
+     * colons before the `=` may be the start of a value (`TOKEN: abc=…`), which must not be printed.
+     */
+    private fun invalidName(key: String): String =
+        if (key.isNotEmpty() && key.length <= MAX_ECHOED_NAME && key.all { it.isLetterOrDigit() || it in "_-." }) {
+            "'$key' is not a valid variable name"
+        } else {
+            "the text before '=' is not a valid variable name"
+        }
 
     private sealed interface ParsedValue {
         data class Ok(
@@ -90,12 +103,15 @@ object EnvFile {
         ) : ParsedValue
     }
 
-    private fun parseValue(raw: String): ParsedValue =
-        when {
-            raw.startsWith('"') -> parseDoubleQuoted(raw)
-            raw.startsWith('\'') -> parseSingleQuoted(raw)
+    /** [raw] is everything after the `=`, leading whitespace included (the line itself is already trimmed). */
+    private fun parseValue(raw: String): ParsedValue {
+        val value = raw.trimStart()
+        return when {
+            value.startsWith('"') -> parseDoubleQuoted(value)
+            value.startsWith('\'') -> parseSingleQuoted(value)
             else -> ParsedValue.Ok(stripComment(raw))
         }
+    }
 
     private fun parseDoubleQuoted(raw: String): ParsedValue {
         val value = StringBuilder()
@@ -139,9 +155,12 @@ object EnvFile {
         }
     }
 
-    /** `value # comment` -> `value`; `abc#def` keeps its `#` (tokens may contain one). */
+    /**
+     * `value # comment` -> `value` and `KEY=   # comment` -> empty, like a shell; `abc#def` and `KEY=#abc` keep their
+     * `#` (tokens may contain one), because a comment starts only after whitespace.
+     */
     private fun stripComment(raw: String): String {
-        val comment = INLINE_COMMENT.find(raw) ?: return raw
+        val comment = INLINE_COMMENT.find(raw) ?: return raw.trim()
         return raw.substring(0, comment.range.first).trim()
     }
 
@@ -153,7 +172,8 @@ object EnvFile {
             .decode(java.nio.ByteBuffer.wrap(bytes))
             .toString()
 
-    private const val EXPORT = "export "
+    private val EXPORT = Regex("""^export\s+""")
+    private const val MAX_ECHOED_NAME = 64
     private const val BYTE_ORDER_MARK = "﻿"
     private val KEY = Regex("[A-Za-z_][A-Za-z0-9_]*")
     private val INLINE_COMMENT = Regex("""\s#""")

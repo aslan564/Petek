@@ -1,6 +1,7 @@
 package az.petek.app.cli
 
 import az.petek.app.config.PetekConfig
+import az.petek.app.config.WebUrls
 import az.petek.core.error.PetekException
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
@@ -13,12 +14,15 @@ class TargetRefusedException(
 
 /** The checks every command runs before it contacts a target (CLAUDE.md rule 8). */
 object TargetGuard {
-    /** Throws [TargetRefusedException] unless [policy] allows [target]. */
+    /**
+     * Throws [TargetRefusedException] unless [policy] allows [target]. The policy judges the canonical spelling
+     * ([WebUrls.canonical]): `https://KadroHR.com./` is the production host `kadrohr.com`.
+     */
     fun requireAllowed(
         policy: TargetPolicy,
         target: URI,
     ) {
-        val verdict = policy.verify(target)
+        val verdict = policy.verify(WebUrls.canonical(target))
         if (verdict is TargetVerdict.Refused) throw TargetRefusedException("Refusing to contact the target: ${verdict.reason}")
     }
 

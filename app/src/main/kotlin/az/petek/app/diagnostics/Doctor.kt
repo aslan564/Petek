@@ -1,9 +1,11 @@
 package az.petek.app.diagnostics
 
 import az.petek.app.config.PetekConfig
+import az.petek.app.config.WebUrls
 import az.petek.app.di.AppContainer
 import az.petek.browser.domain.SessionOptions
 import az.petek.core.security.TargetVerdict
+import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
 import az.petek.llm.domain.LlmRequest
@@ -59,7 +61,7 @@ class Doctor(
     }
 
     private fun policy(): CheckResult =
-        when (val verdict = config.targetPolicy.verify(config.target)) {
+        when (val verdict = config.targetPolicy.verify(WebUrls.canonical(config.target))) {
             TargetVerdict.Allowed -> CheckResult(POLICY, CheckStatus.OK, "${PetekConfig.masked(config.target)} is allowed")
             is TargetVerdict.Refused -> CheckResult(POLICY, CheckStatus.FAILED, verdict.reason)
         }
@@ -133,10 +135,11 @@ class Doctor(
     }
 
     private suspend fun llm(): CheckResult {
-        val client = container.diagnosticLlm()
         val who = "${config.llmProvider.key} (${config.llmModel})"
+        var client: LlmClient? = null
         return try {
-            val response = client.complete(PING)
+            // Built inside the try: a provider that cannot even be constructed is a failed row, not a crashed doctor.
+            val response = container.diagnosticLlm().also { client = it }.complete(PING)
             if (response.output["ok"] == JsonPrimitive(true)) {
                 CheckResult(LLM, CheckStatus.OK, "$who answered a structured request (model ${response.model})")
             } else {

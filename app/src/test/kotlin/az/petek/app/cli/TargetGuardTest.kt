@@ -25,6 +25,13 @@ class TargetGuardTest {
     }
 
     @Test
+    fun `a production host cannot pass in another spelling`() {
+        listOf("https://kadrohr.com./", "https://KADROHR.COM", "HTTPS://kadrohr.com/app", "https://kadrohr.com.:8443/x?y=1").forEach {
+            shouldThrow<TargetRefusedException> { TargetGuard.requireAllowed(policy, URI(it)) }.message shouldContain "production host"
+        }
+    }
+
+    @Test
     fun `the same deployment is recognised despite spelling differences`() {
         TargetGuard.origin(URI("https://Staging.KadroHR.com/")) shouldBe TargetGuard.origin(URI("https://staging.kadrohr.com:443"))
         TargetGuard.origin(URI("http://localhost:8080")) shouldBe TargetGuard.origin(URI("http://localhost:8080/"))

@@ -220,6 +220,32 @@ class ConfigLoaderTest {
     }
 
     @Test
+    fun `a production target spelled with capitals or a trailing dot is still refused`() {
+        val config = load("PETEK_TARGET" to "HTTPS://KadroHR.com./app")
+
+        config.target shouldBe URI("https://kadrohr.com/app")
+        config.targetPolicy.verify(config.target).shouldBeInstanceOf<TargetVerdict.Refused>()
+    }
+
+    @Test
+    fun `a comment after an empty value in the env file leaves the key empty`() {
+        val envFile =
+            dir.resolve(".env").also {
+                Files.writeString(
+                    it,
+                    "PETEK_TARGET=https://staging.kadrohr.com\n" +
+                        "PETEK_TEST_TOKEN=   # empty = oracle assertions are skipped\n" +
+                        "PETEK_IDENTITY_SECRET= # empty = ~/.petek/identity.secret\n",
+                )
+            }
+
+        val config = loader().load(envFile)
+
+        config.testToken.shouldBeNull()
+        config.identitySecret.reveal() shouldBe "secret-from-the-petek-home-file"
+    }
+
+    @Test
     fun `a malformed env file fails with its line numbers`() {
         val envFile = dir.resolve(".env").also { Files.writeString(it, "PETEK_TARGET=https://ok.test\nbroken line\n") }
 
