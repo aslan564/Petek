@@ -79,6 +79,16 @@ fun interface PasswordDeriver {
 interface NameCatalog {
     val firstNames: List<String>
     val surnames: List<String>
+
+    /**
+     * The form of [surname] that goes with [firstName]. Azerbaijani surnames agree with gender
+     * (Günel Məmmədova, Əli Məmmədov); catalogs without such a rule keep the default, which returns [surname] as is.
+     * Must be injective per first name, so distinct surnames stay distinct display names.
+     */
+    fun surnameFor(
+        firstName: String,
+        surname: String,
+    ): String = surname
 }
 
 /** Port: identities persisted per run (UNIQUE(email), UNIQUE(run_id, display_name)). */

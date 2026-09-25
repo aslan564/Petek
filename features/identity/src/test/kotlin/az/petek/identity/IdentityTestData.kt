@@ -1,0 +1,52 @@
+package az.petek.identity
+
+import az.petek.core.ids.RunTag
+import az.petek.identity.domain.AzerbaijaniNameCatalog
+import az.petek.identity.domain.DefaultIdentityRegistryGenerator
+import az.petek.identity.domain.HmacPasswordDeriver
+import az.petek.identity.domain.IdentitySpec
+import az.petek.identity.domain.NameCatalog
+
+/** The KadroHR campaign's identity settings (scenarios/kadrohr.yaml) and helpers to vary them. */
+object IdentityTestData {
+    val RUN_TAG = RunTag("k7x2")
+    val OTHER_RUN_TAG = RunTag("m3q9")
+    val DEPARTMENTS = listOf("IT", "HR", "Satış", "Maliyyə", "Əməliyyat")
+    val GIVEN_NAMES = listOf("Əli", "Vəli", "Sahil", "Cəmil", "Amil")
+    const val MAIL_DOMAIN = "test.kadrohr.com"
+
+    fun spec(
+        testers: Int = 30,
+        seed: Long = 42,
+        names: List<String> = GIVEN_NAMES,
+        admins: Int = 1,
+        managers: Int = 5,
+        employees: Int = testers - admins - managers,
+        departments: List<String> = DEPARTMENTS,
+        inviteCount: Int = (managers + employees + 1) / 2,
+        companyCodeCount: Int = managers + employees - inviteCount,
+        mailDomain: String = MAIL_DOMAIN,
+    ) = IdentitySpec(
+        testers = testers,
+        seed = seed,
+        names = names,
+        admins = admins,
+        managers = managers,
+        employees = employees,
+        departments = departments,
+        inviteCount = inviteCount,
+        companyCodeCount = companyCodeCount,
+        mailDomain = mailDomain,
+    )
+
+    fun generator(
+        catalog: NameCatalog = AzerbaijaniNameCatalog,
+        secret: String = "unit-test-secret",
+    ) = DefaultIdentityRegistryGenerator(catalog, HmacPasswordDeriver(secret.toByteArray()))
+
+    /** A catalog small enough to reason about in tests. */
+    class SmallCatalog(
+        override val firstNames: List<String>,
+        override val surnames: List<String>,
+    ) : NameCatalog
+}
