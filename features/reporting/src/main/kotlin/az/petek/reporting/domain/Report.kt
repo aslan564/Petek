@@ -4,6 +4,8 @@ import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
+import az.petek.evidence.domain.StepRecord
+import az.petek.evidence.domain.UsageRecord
 import java.nio.file.Path
 
 /**
@@ -37,16 +39,30 @@ interface Judge {
         run: RunRecord,
         assertions: List<AssertionRecord>,
     ): List<FindingRecord>
+
+    /**
+     * Like [findings], and additionally turns failed agent actions in [steps] into findings, so a run that broke
+     * before any assertion (e.g. `mail_timeout` during registration) still explains itself. The default ignores
+     * [steps], which keeps judges written against the two-argument contract valid.
+     */
+    fun findings(
+        run: RunRecord,
+        assertions: List<AssertionRecord>,
+        steps: List<StepRecord>,
+    ): List<FindingRecord> = findings(run, assertions)
 }
 
 data class StepRow(
     val scenarioStep: String,
     val agentId: String?,
     val agentName: String?,
+    /** [az.petek.evidence.domain.StepKind] name. */
     val kind: String,
+    /** [az.petek.evidence.domain.StepStatus] name. */
     val status: String,
     val durationMs: Long,
     val detail: String?,
+    /** Artifact id of the step's last screenshot; resolve it through [ReportModel.artifactLinks]. */
     val screenshot: String?,
 )
 
@@ -101,8 +117,10 @@ data class ReportModel(
     val failedAgents: List<FailedAgentRow>,
     /** Present when the run belongs to a `--repeat` group. */
     val stability: List<StabilityRow>?,
-    /** Paths relative to the report directory, keyed by artifact id. */
+    /** Paths relative to the report directory, keyed by artifact id; an artifact that cannot be linked safely has none. */
     val artifactLinks: Map<String, String>,
+    /** Token and cost accounting per agent, as recorded by the LLM metering (never estimated). */
+    val usage: List<UsageRecord> = emptyList(),
 )
 
 /** Writes one report format into [directory] and returns the written file. */
