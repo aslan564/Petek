@@ -79,11 +79,19 @@ data class StepContext(
 
 enum class ActionStatus { SUCCEEDED, FAILED, BLOCKED, ERROR }
 
-/** Why an action failed, as shown in the report (`mail_timeout`, `otp_rejected`, `blocked`, ...). */
+/**
+ * Why an action failed, as shown in the report (`mail_timeout`, `otp_rejected`, `blocked`, ...). Most reasons are
+ * findings about the target or the agent; [MAIL_UNAVAILABLE] and [LLM_UNAVAILABLE] are environment problems (the
+ * test inbox or the model could not be reached), reported with [ActionStatus.ERROR].
+ */
 enum class FailureReason(
     val key: String,
 ) {
+    /** The inbox was reachable, but no usable verification e-mail arrived in time: the target sent nothing. */
     MAIL_TIMEOUT("mail_timeout"),
+
+    /** The test inbox itself could not be read (unreachable, timing out, answering garbage) for the whole wait. */
+    MAIL_UNAVAILABLE("mail_unavailable"),
     OTP_REJECTED("otp_rejected"),
     REGISTRATION_FAILED("registration_failed"),
     LOGIN_FAILED("login_failed"),

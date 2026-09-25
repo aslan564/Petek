@@ -9,6 +9,7 @@ import az.petek.agent.testing.RunFunctionFixture
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.StepStatus
 import az.petek.mail.domain.MailPurpose
+import az.petek.mail.domain.MailboxException
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
@@ -148,6 +149,25 @@ class SessionRunFunctionsTest {
             outcome.status shouldBe ActionStatus.FAILED
             outcome.failureReason shouldBe FailureReason.MAIL_TIMEOUT
             currentTime shouldBe 60_000
+            fixture.runtime.variables[AgentVariableKeys.EMAIL_CODE].shouldBeNull()
+        }
+
+    @Test
+    fun `read_email_code reports an unreachable inbox as mail_unavailable, not as a missing e-mail`() =
+        runTest {
+            fixture.verification.outage = MailboxException("Mailpit at http://127.0.0.1:8025: search failed (ConnectException)")
+
+            val outcome = fixture.run("read_email_code")
+
+            outcome.status shouldBe ActionStatus.ERROR
+            outcome.failureReason shouldBe FailureReason.MAIL_UNAVAILABLE
+            outcome.summary shouldBe "Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed (ConnectException)"
+            currentTime shouldBe 60_000
+            val final = fixture.steps.last()
+            final.action shouldBe "run read_email_code"
+            final.status shouldBe StepStatus.ERROR
+            final.detail shouldBe
+                "mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed (ConnectException)"
             fixture.runtime.variables[AgentVariableKeys.EMAIL_CODE].shouldBeNull()
         }
 
