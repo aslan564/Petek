@@ -62,7 +62,9 @@ private val logger = KotlinLogging.logger {}
  * 1. creates the run record and the identity registry (tag derived from the run id);
  * 2. starts the browser and gives every identity its own session and [az.petek.agent.application.TesterAgent];
  * 3. executes the setup steps, then the main steps, in order and within the campaign's time budget
- *    (see [StepExecutor] for what happens inside a step);
+ *    (see [StepExecutor] for what happens inside a step). In a `wait_for` step, `visible_text`/`latency_max` are
+ *    checked as soon as the event arrives, before the receiver's own action, so t1 - t0 measures delivery rather
+ *    than the agent; the other assertions run after the action;
  * 4. always — also on abort, budget timeout or cancellation — records the observed real-time transports, tears down
  *    the test company (unless `keepData`), closes sessions, stops the browser, finishes the run record and asks the
  *    [RunFinalizer] for the report.
@@ -165,18 +167,18 @@ class DefaultCampaignRunner(
     // --- 1. identities --------------------------------------------------------------------------------------------
 
     private suspend fun planIdentities(run: RunState) {
-        val campaign = run.campaign.settings
+        val quotas = run.campaign.settings
         val spec =
             IdentitySpec(
-                testers = campaign.testers,
-                seed = campaign.seed,
-                names = campaign.names,
-                admins = campaign.roles.admin,
-                managers = campaign.roles.manager,
-                employees = campaign.roles.employee,
-                departments = campaign.departments,
-                inviteCount = campaign.registration.invite,
-                companyCodeCount = campaign.registration.companyCode,
+                testers = quotas.testers,
+                seed = quotas.seed,
+                names = quotas.names,
+                admins = quotas.roles.admin,
+                managers = quotas.roles.manager,
+                employees = quotas.roles.employee,
+                departments = quotas.departments,
+                inviteCount = quotas.registration.invite,
+                companyCodeCount = quotas.registration.companyCode,
                 mailDomain = settings.mailDomain,
             )
         val plan = identityPlanner.execute(run.runId, RunTags.forRun(run.runId), spec)
