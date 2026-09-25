@@ -13,6 +13,8 @@ data class Campaign(
     val steps: List<ScenarioStep>,
     /** SHA-256 of the source file; identifies the campaign version in run records. */
     val sourceHash: String,
+    /** Where settings, assertions and id sources were declared, for validation messages. Empty for code-built campaigns. */
+    val sourceLines: SourceLines = SourceLines.NONE,
 ) {
     val allSteps: List<ScenarioStep> get() = setup + steps
 }
