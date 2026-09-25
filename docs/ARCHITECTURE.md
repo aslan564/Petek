@@ -22,6 +22,7 @@ feature follows **clean architecture** (domain → application → infrastructur
 | `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds) | `AssertionEvaluator`, `VerifyStepUseCase` | — |
 | `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler, watchdog, teardown, repeat, live board | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
+| `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
 | `app` | CLI (`plan`, `run`, `report`, `teardown`, `smoke`, `doctor`), `.env` config, composition root, logging | — | Clikt, logback |
 | `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
@@ -30,12 +31,13 @@ feature follows **clean architecture** (domain → application → infrastructur
 
 ```mermaid
 flowchart TD
-  app --> orchestration & reporting & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
+  app --> orchestration & reporting & scenarios & llm & mail & oracle & browser & identity & evidence & campaign & sqlite[core/sqlite]
   orchestration --> agent & verification & identity & evidence & campaign
+  scenarios --> campaign & evidence & llm
   agent --> browser & llm & mail & oracle & evidence & identity & campaign
   verification --> browser & oracle & evidence & campaign
   reporting --> evidence
-  identity & evidence --> sqlite
+  identity & evidence & scenarios --> sqlite
   campaign & identity & evidence & mail & oracle & browser & llm --> core[core/domain]
 ```
 
@@ -86,6 +88,29 @@ sequenceDiagram
    that are not `is_test`.
 6. **Finalize.** The judge turns assertion records into findings. The report (Markdown + HTML) is written to
    `evidence/<run_id>/report/`.
+
+## Scenario catalog and triage (Faza 7)
+
+`features/scenarios` keeps every campaign text the owner works with as an immutable, numbered version and turns a
+finished run's surprises into explainable verdicts. The web panel (Faza 8) is built on its use cases.
+
+- **Versions.** `ScenarioCatalog` imports files, stores drafts (from the owner, the explorer or triage), approves,
+  freezes, lists, diffs and exports. Every version must load and pass the campaign validator, exactly as `petek run`
+  would. `DRAFT -> APPROVED -> FROZEN`: approving supersedes the previous `APPROVED` version of the name
+  (`SUPERSEDED`), a `FROZEN` baseline never changes again, and only `APPROVED`/`FROZEN` versions run by default. The
+  SQLite schema enforces the invariants itself (one approved version per name, immutable text and frozen rows).
+  Texts are exported byte-exact, so a run's `campaign_hash` points back to the version it executed.
+- **Surprises.** Per actor and scenario step, a run's `report_problem` steps, failed concluding steps and findings
+  form one surprise with all of that actor's evidence. `permission_denied` in a main step (an expected refusal), the
+  losers of a race whose `only_one_succeeds` passed and environment failures (`mail_unavailable`, `llm_unavailable`)
+  are listed as ignored instead.
+- **Triage.** `TriageRunUseCase` asks the LLM one structured question per surprise (redacted evidence facts plus the
+  scenario YAML) and validates the answer in code: `SYSTEM_BUG` (the target is wrong), `MODEL_GAP` (our knowledge of
+  the site is wrong), `SCENARIO_BUG` (the scenario is wrong). Each verdict links to the steps, artifacts and findings it
+  is based on. A proposed change is a list of exact text edits; it is kept only if the edited YAML passes the campaign
+  validator and keeps the campaign's identity settings, otherwise it is rejected with the reason and the verdict stays.
+  The usable changes of one run become a single v2 `DRAFT` (source `TRIAGE`, parent = the executed version) for the
+  owner to review as a diff. Re-running triage resumes: decided surprises are not asked again.
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 
