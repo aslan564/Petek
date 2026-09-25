@@ -1,0 +1,128 @@
+package az.petek.identity.domain
+
+/**
+ * Checks an [IdentitySpec] before anything is generated and reports every problem at once, so the user fixes the
+ * campaign in one go. A spec that fails here must not start a run ([IdentityConflictException]).
+ */
+internal class IdentitySpecValidator(
+    private val names: NameAllocator,
+) {
+    /** Normalized inputs the generator works with. */
+    data class Valid(
+        val names: List<String>,
+        val departments: List<String>,
+        val mailDomain: String,
+    )
+
+    fun validate(spec: IdentitySpec): Valid {
+        val problems = mutableListOf<String>()
+        val givenNames = spec.names.map(NameAllocator::normalize)
+        val departments = spec.departments.map(NameAllocator::normalize)
+        val mailDomain = spec.mailDomain.trim().lowercase()
+        checkCounts(spec, problems)
+        checkDepartments(departments, problems)
+        checkNames(givenNames, spec.testers, problems)
+        checkCatalog(givenNames, spec.testers, problems)
+        if (mailDomain.length > MAX_DOMAIN_LENGTH || !DOMAIN.matches(mailDomain)) {
+            problems += "mail domain '${spec.mailDomain}' is not a valid domain name"
+        }
+        if (problems.isNotEmpty()) {
+            throw IdentityConflictException("${NameAllocator.CANNOT_BUILD} " + problems.joinToString("; "))
+        }
+        return Valid(givenNames, departments, mailDomain)
+    }
+
+    private fun checkCounts(
+        spec: IdentitySpec,
+        problems: MutableList<String>,
+    ) {
+        val counts =
+            listOf(
+                "admins" to spec.admins,
+                "managers" to spec.managers,
+                "employees" to spec.employees,
+                "invite count" to spec.inviteCount,
+                "company code count" to spec.companyCodeCount,
+            )
+        counts.filter { it.second < 0 }.forEach { (label, value) -> problems += "$label must not be negative, was $value" }
+        if (spec.testers !in 1..MAX_TESTERS) {
+            problems += "testers must be between 1 and $MAX_TESTERS (agent ids a01..a$MAX_TESTERS), was ${spec.testers}"
+        }
+        if (spec.admins != 1) problems += "exactly 1 admin is supported, was ${spec.admins}"
+        val roles = spec.admins + spec.managers + spec.employees
+        if (roles != spec.testers) {
+            problems += "roles add up to $roles (${spec.admins} admin + ${spec.managers} managers + " +
+                "${spec.employees} employees) but testers is ${spec.testers}"
+        }
+        val joiners = spec.managers + spec.employees
+        val registrations = spec.inviteCount + spec.companyCodeCount
+        if (registrations != joiners) {
+            problems += "registration quota adds up to $registrations (${spec.inviteCount} invite + " +
+                "${spec.companyCodeCount} company code) but there are $joiners managers and employees"
+        }
+    }
+
+    private fun checkDepartments(
+        departments: List<String>,
+        problems: MutableList<String>,
+    ) {
+        if (departments.isEmpty()) problems += "at least one department is required"
+        if (departments.any { it.isEmpty() }) problems += "department names must not be blank"
+        departments.filter { it.length > MAX_TEXT_LENGTH }.forEach {
+            problems += "department '$it' is longer than $MAX_TEXT_LENGTH characters"
+        }
+        duplicates(departments).forEach { problems += "department '$it' is listed more than once" }
+    }
+
+    private fun checkNames(
+        givenNames: List<String>,
+        testers: Int,
+        problems: MutableList<String>,
+    ) {
+        if (givenNames.any { it.isEmpty() }) problems += "tester names must not be blank"
+        givenNames.filter { it.length > MAX_TEXT_LENGTH }.forEach {
+            problems += "name '$it' is longer than $MAX_TEXT_LENGTH characters"
+        }
+        duplicates(givenNames).forEach { problems += "name '$it' is given more than once" }
+        if (givenNames.size > testers) {
+            problems += "${givenNames.size} names are given but there are only $testers testers"
+        }
+    }
+
+    private fun checkCatalog(
+        givenNames: List<String>,
+        testers: Int,
+        problems: MutableList<String>,
+    ) {
+        val missing = testers - givenNames.size
+        if (missing > 0 && names.capacity < missing) {
+            problems += "the name catalog offers only ${names.capacity} unique names but $missing more are needed"
+        }
+        val needsSurname = givenNames.any { it.isNotEmpty() && !NameAllocator.isFullName(it) }
+        if (needsSurname && !names.hasSurnames) {
+            problems += "the name catalog has no surnames for the given first names"
+        }
+    }
+
+    /** Non-blank values that occur more than once, compared case-insensitively; reported in their first spelling. */
+    private fun duplicates(values: List<String>): List<String> =
+        values
+            .filter { it.isNotEmpty() }
+            .groupBy(NameAllocator::key)
+            .values
+            .filter { it.size > 1 }
+            .map { it.first() }
+
+    companion object {
+        /** Agent ids are `a01`..`a999`. */
+        const val MAX_TESTERS = 999
+
+        /** Keeps names and departments readable on screen and within the target's form limits. */
+        const val MAX_TEXT_LENGTH = 100
+
+        /** Leaves room for the local part within the 254-character limit of an e-mail address. */
+        private const val MAX_DOMAIN_LENGTH = 200
+
+        private val DOMAIN = Regex("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*")
+    }
+}
