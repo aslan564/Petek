@@ -28,7 +28,11 @@ import az.petek.llm.domain.LlmRequest
 import az.petek.llm.testing.ScriptedLlmClient
 import az.petek.mail.application.AwaitVerificationUseCase
 import az.petek.mail.domain.MailPurpose
+import az.petek.mail.domain.MailboxException
 import az.petek.mail.domain.VerificationCode
+import az.petek.oracle.domain.OracleException
+import az.petek.oracle.domain.TargetOracle
+import az.petek.oracle.testing.FakeTargetOracle
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
@@ -39,6 +43,7 @@ import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -61,6 +66,7 @@ class DefaultAgentLoopTest {
     private val evidence = InMemoryEvidence()
     private val artifacts = InMemoryArtifactStore()
     private val verification = FakeVerification()
+    private val oracle = FakeTargetOracle()
     private val protocol = JsonDecisionProtocol()
     private val identity = AgentTestData.itEmployee
     private val password = identity.password.reveal()
@@ -114,6 +120,7 @@ class DefaultAgentLoopTest {
     private fun loop(
         llm: LlmClient,
         mail: AwaitVerificationUseCase = verification,
+        testApi: TargetOracle = oracle,
     ) = DefaultAgentLoop(
         llm = llm,
         protocol = protocol,
@@ -121,6 +128,7 @@ class DefaultAgentLoopTest {
         recorder = evidence,
         artifacts = artifacts,
         verification = mail,
+        oracle = testApi,
         prompts = PromptBuilder(protocol),
         resolver = PlaceholderResolver(),
         clock = clock,
@@ -133,7 +141,24 @@ class DefaultAgentLoopTest {
         timeout: Duration = 10.minutes,
         target: AgentRuntime = runtime,
         mail: AwaitVerificationUseCase = verification,
-    ): ActionOutcome = loop(llm, mail).execute(target, "Daxil ol və elan yarat", AgentTestData.step(maxSteps = maxSteps, timeout = timeout))
+        testApi: TargetOracle = oracle,
+    ): ActionOutcome =
+        loop(llm, mail, testApi).execute(target, "Daxil ol və elan yarat", AgentTestData.step(maxSteps = maxSteps, timeout = timeout))
+
+    /** The fake test API with counted phone-code lookups; the first [failures] of them throw [failure]. */
+    private class CountingOracle(
+        private val delegate: FakeTargetOracle,
+        private val failure: OracleException? = null,
+        private val failures: Int = Int.MAX_VALUE,
+    ) : TargetOracle by delegate {
+        val otpLookups = mutableListOf<String>()
+
+        override suspend fun latestOtp(phone: String): String? {
+            otpLookups += phone
+            if (failure != null && otpLookups.size <= failures) throw failure
+            return delegate.latestOtp(phone)
+        }
+    }
 
     private fun ScriptedLlmClient.userTurn(index: Int): String = requests[index].messages.single().content
 
@@ -507,7 +532,7 @@ class DefaultAgentLoopTest {
         }
 
     @Test
-    fun `an e-mail without a code or a broken inbox is a failed action the model can react to`() =
+    fun `an e-mail without a code or an unexpected mail error is a failed action the model can react to`() =
         runTest {
             var calls = 0
             val odd =
@@ -542,6 +567,148 @@ class DefaultAgentLoopTest {
             outcome.status shouldBe ActionStatus.FAILED
             outcome.failureReason shouldBe FailureReason.MAIL_TIMEOUT
             currentTime shouldBe 60_000
+        }
+
+    @Test
+    fun `an unreachable test inbox ends the step with mail_unavailable, an environment error`() =
+        runTest {
+            val unreachable =
+                object : AwaitVerificationUseCase {
+                    override suspend fun await(
+                        to: String,
+                        since: Instant,
+                        purpose: MailPurpose,
+                        timeout: Duration,
+                        pollInterval: Duration,
+                    ): VerificationCode {
+                        delay(timeout)
+                        throw MailboxException("Mailpit at http://127.0.0.1:8025: search failed (ConnectException: Connection refused)")
+                    }
+                }
+            val llm = scripted(decision("get_email_code"))
+
+            val outcome = execute(llm, mail = unreachable)
+
+            outcome.status shouldBe ActionStatus.ERROR
+            outcome.failureReason shouldBe FailureReason.MAIL_UNAVAILABLE
+            outcome.summary shouldBe
+                "Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed (ConnectException: Connection refused)"
+            outcome.stepsTaken shouldBe 1
+            llm.requests shouldHaveSize 1
+            val step = evidence.stepList.single()
+            step.action shouldBe "get_email_code"
+            step.status shouldBe StepStatus.ERROR
+            step.detail!! shouldContain "outcome: ERROR mail_unavailable: Test inbox unreachable"
+            artifactsOf(ArtifactType.SCREENSHOT) shouldHaveSize 1
+            artifactsOf(ArtifactType.A11Y) shouldHaveSize 1
+            runtime.variables[AgentVariableKeys.EMAIL_CODE].shouldBeNull()
+        }
+
+    @Test
+    fun `get_phone_code stores the phone code and the model types it through a placeholder`() =
+        runTest {
+            oracle.otps[identity.phone] = "482913"
+            val llm =
+                scripted(
+                    decision("get_phone_code"),
+                    decision("type", """"ref": 5, "text": "{vars.phone_code}", "submit": true"""),
+                    decision("done", """"summary": "phone verified""""),
+                )
+
+            execute(llm).status shouldBe ActionStatus.SUCCEEDED
+
+            runtime.variables[AgentVariableKeys.PHONE_CODE] shouldBe "482913"
+            browser.actions shouldContainExactly listOf("fill 5=482913 +submit")
+            llm.userTurn(1) shouldContain "1. get_phone_code -> OK: phone code stored; type {vars.phone_code} to enter it."
+            llm.userTurn(1) shouldContain "{vars.phone_code}"
+            llm.requests.forEach { request -> request.messages.single().content shouldNotContain "482913" }
+            evidence.stepList.first().action shouldBe "get_phone_code"
+            evidence.stepList.first().status shouldBe StepStatus.PASSED
+            currentTime shouldBe 0
+        }
+
+    @Test
+    fun `get_phone_code waits a few seconds for a code the site has not published yet`() =
+        runTest {
+            val counting = CountingOracle(oracle)
+            launch {
+                delay(1500.milliseconds)
+                oracle.otps[identity.phone] = " 604418 "
+            }
+            val llm = scripted(decision("get_phone_code"), decision("done", """"summary": "ok""""))
+
+            execute(llm, testApi = counting).status shouldBe ActionStatus.SUCCEEDED
+
+            runtime.variables[AgentVariableKeys.PHONE_CODE] shouldBe "604418"
+            counting.otpLookups shouldBe List(3) { identity.phone }
+            currentTime shouldBe 2_000
+        }
+
+    @Test
+    fun `without a phone code after a few seconds the model is told so and can react`() =
+        runTest {
+            val counting = CountingOracle(oracle)
+            val llm =
+                scripted(
+                    decision("get_phone_code"),
+                    decision("report_problem", """"kind": "blocked", "note": "Telefon kodu gəlmədi""""),
+                )
+
+            val outcome = execute(llm, testApi = counting)
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.failureReason shouldBe FailureReason.PROBLEM_REPORTED
+            llm.userTurn(1) shouldContain
+                "get_phone_code -> No phone code has been sent to your phone yet (the test API was asked 5 times)."
+            counting.otpLookups shouldHaveSize DefaultAgentLoop.PHONE_CODE_ATTEMPTS
+            currentTime shouldBe 4_000
+            evidence.stepList.first().status shouldBe StepStatus.FAILED
+            runtime.variables[AgentVariableKeys.PHONE_CODE].shouldBeNull()
+        }
+
+    @Test
+    fun `a run without the test API tells the model the phone code is unavailable`() =
+        runTest {
+            val noTestApi = CountingOracle(FakeTargetOracle(isAvailable = false))
+            val llm = scripted(decision("get_phone_code"), decision("done", """"summary": "stuck", "success": false"""))
+
+            execute(llm, testApi = noTestApi)
+
+            llm.userTurn(1) shouldContain
+                "get_phone_code -> Phone code unavailable: this run has no access to the site's test API, the only source of phone codes."
+            noTestApi.otpLookups shouldHaveSize 0
+            evidence.stepList.first().status shouldBe StepStatus.FAILED
+            currentTime shouldBe 0
+        }
+
+    @Test
+    fun `a failing test API makes the phone code unavailable instead of crashing the step`() =
+        runTest {
+            val failing = CountingOracle(oracle, OracleException("GET /test/otp/%2B994501000004 answered HTTP 500"))
+            oracle.otps[identity.phone] = "111111"
+            val llm = scripted(decision("get_phone_code"), decision("done", """"summary": "stuck", "success": false"""))
+
+            execute(llm, testApi = failing)
+
+            llm.userTurn(1) shouldContain "get_phone_code -> ERROR: phone code unavailable: GET /test/otp/%2B994501000004 answered HTTP 500"
+            failing.otpLookups shouldHaveSize DefaultAgentLoop.PHONE_CODE_ATTEMPTS
+            evidence.stepList.first().status shouldBe StepStatus.ERROR
+            runtime.variables[AgentVariableKeys.PHONE_CODE].shouldBeNull()
+        }
+
+    @Test
+    fun `a test API that recovers within the retries still delivers the phone code`() =
+        runTest {
+            val flaky = CountingOracle(oracle, OracleException("GET /test/otp timed out"), failures = 1)
+            oracle.otps[identity.phone] = "777000"
+            val llm = scripted(decision("get_phone_code"), decision("done", """"summary": "ok""""))
+
+            execute(llm, testApi = flaky).status shouldBe ActionStatus.SUCCEEDED
+
+            runtime.variables[AgentVariableKeys.PHONE_CODE] shouldBe "777000"
+            llm.userTurn(1) shouldContain "OK: phone code stored"
+            flaky.otpLookups shouldHaveSize 2
+            currentTime shouldBe 1_000
         }
 
     @Test

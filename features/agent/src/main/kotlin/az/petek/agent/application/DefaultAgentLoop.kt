@@ -29,14 +29,20 @@ import az.petek.llm.domain.LlmRole
 import az.petek.mail.application.AwaitVerificationUseCase
 import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailTimeoutException
+import az.petek.mail.domain.MailboxException
+import az.petek.oracle.domain.OracleException
+import az.petek.oracle.domain.TargetOracle
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.net.URI
 import java.net.URISyntaxException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private val logger = KotlinLogging.logger {}
 
@@ -49,8 +55,13 @@ private val logger = KotlinLogging.logger {}
  *   invalid decision (fed back, nothing executed);
  * - [MAX_INVALID_DECISIONS] invalid decisions in a row -> `invalid_decision`;
  * - [MAX_FAILED_ACTIONS] failed browser/mail actions in a row -> `browser_error`;
- * - no verification e-mail for `get_email_code` -> `mail_timeout`;
+ * - no verification e-mail for `get_email_code` -> `mail_timeout`; a test inbox that stayed unreachable for the
+ *   whole wait -> `ERROR mail_unavailable` (an environment problem, not a finding about the target);
  * - an LLM that cannot answer -> `ERROR llm_unavailable` at once (retries belong to the LLM decorators).
+ *
+ * `get_phone_code` reads the agent's newest phone code from the target's test API ([TargetOracle.latestOtp]), asking
+ * up to [PHONE_CODE_ATTEMPTS] times because the site may publish it a moment after asking for it. A missing code or an
+ * unavailable test API is an observation for the model ("phone code unavailable"), which may then report a problem.
  *
  * `report_problem(permission_denied)` ends the step as BLOCKED/`permission_denied`: for forbidden-action tests that
  * is the expected outcome, and the verdict is left to the assertions.
@@ -69,6 +80,8 @@ class DefaultAgentLoop(
     recorder: EvidenceRecorder,
     artifacts: ArtifactStore,
     private val verification: AwaitVerificationUseCase,
+    /** Source of phone codes for `get_phone_code`; the target's test mode sends no SMS. */
+    private val oracle: TargetOracle,
     private val prompts: PromptBuilder,
     private val resolver: PlaceholderResolver,
     clock: HarnessClock,
@@ -245,11 +258,19 @@ class DefaultAgentLoop(
             reason: String,
         ): Turn =
             try {
-                if (action == AgentAction.GetEmailCode) {
-                    fetchEmailCode(described, reason)
-                } else {
-                    val (status, observation) = act(action, typedText)
-                    Turn(described, status, observation, reason, validDecision = true, actionFailed = false)
+                when (action) {
+                    AgentAction.GetEmailCode -> {
+                        fetchEmailCode(described, reason)
+                    }
+
+                    AgentAction.GetPhoneCode -> {
+                        fetchPhoneCode(described, reason)
+                    }
+
+                    else -> {
+                        val (status, observation) = act(action, typedText)
+                        Turn(described, status, observation, reason, validDecision = true, actionFailed = false)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -300,7 +321,7 @@ class DefaultAgentLoop(
                     }
                 }
 
-                AgentAction.GetEmailCode, is AgentAction.Done, is AgentAction.ReportProblem -> {
+                AgentAction.GetEmailCode, AgentAction.GetPhoneCode, is AgentAction.Done, is AgentAction.ReportProblem -> {
                     error("${action.toolName} is not a browser action")
                 }
             }
@@ -324,6 +345,17 @@ class DefaultAgentLoop(
                         actionFailed = false,
                         outcome = failed(FailureReason.MAIL_TIMEOUT, message),
                     )
+                } catch (e: MailboxException) {
+                    val message = "Test inbox unreachable: ${describe(e)}"
+                    return Turn(
+                        described,
+                        StepStatus.ERROR,
+                        "ERROR: $message",
+                        reason,
+                        validDecision = true,
+                        actionFailed = true,
+                        outcome = ActionOutcome(ActionStatus.ERROR, message, failureReason = FailureReason.MAIL_UNAVAILABLE),
+                    )
                 }
             val value =
                 code.code
@@ -344,6 +376,47 @@ class DefaultAgentLoop(
                 validDecision = true,
                 actionFailed = false,
             )
+        }
+
+        /**
+         * Stores the newest phone code as `{vars.phone_code}`. A code that is not there yet, a test API that fails or
+         * one this run cannot use is told to the model; none of them ends the step by itself.
+         */
+        private suspend fun fetchPhoneCode(
+            described: String,
+            reason: String,
+        ): Turn {
+            fun turn(
+                status: StepStatus,
+                observation: String,
+            ) = Turn(described, status, observation, reason, validDecision = true, actionFailed = status == StepStatus.ERROR)
+
+            if (!oracle.isAvailable) {
+                return turn(
+                    StepStatus.FAILED,
+                    "Phone code unavailable: this run has no access to the site's test API, the only source of phone codes.",
+                )
+            }
+            var failure: OracleException? = null
+            for (attempt in 1..PHONE_CODE_ATTEMPTS) {
+                if (attempt > 1) delay(PHONE_CODE_RETRY_DELAY)
+                val code =
+                    try {
+                        oracle.latestOtp(runtime.identity.phone).also { failure = null }
+                    } catch (e: OracleException) {
+                        failure = e
+                        null
+                    }
+                if (!code.isNullOrBlank()) {
+                    runtime.variables[AgentVariableKeys.PHONE_CODE] = code.trim()
+                    return turn(StepStatus.PASSED, "OK: phone code stored; type {vars.${AgentVariableKeys.PHONE_CODE}} to enter it.")
+                }
+            }
+            return failure?.let { turn(StepStatus.ERROR, "ERROR: phone code unavailable: ${describe(it)}") }
+                ?: turn(
+                    StepStatus.FAILED,
+                    "No phone code has been sent to your phone yet (the test API was asked $PHONE_CODE_ATTEMPTS times).",
+                )
         }
 
         private fun done(
@@ -542,6 +615,12 @@ class DefaultAgentLoop(
 
         /** Consecutive failed browser or mail actions that end the loop. */
         const val MAX_FAILED_ACTIONS = 3
+
+        /** How often `get_phone_code` asks the test API before telling the model there is no code. */
+        const val PHONE_CODE_ATTEMPTS = 5
+
+        /** Pause between two `get_phone_code` lookups: the site may publish the code a moment after asking for it. */
+        val PHONE_CODE_RETRY_DELAY: Duration = 1.seconds
 
         private const val MAX_READ_CHARS = 500
         private const val MAX_ERROR_CHARS = 500

@@ -119,14 +119,19 @@ internal class CampaignYamlMapper(
             return RoleQuota(admin ?: return null, manager ?: return null, employee ?: return null)
         }
 
-        /** Omitted: non-admins split evenly, the invitation side taking the odd one. */
+        /**
+         * Omitted: non-admins split evenly, the invitation side taking the odd one, but every manager is invited
+         * (managers always join by invitation, see [RegistrationQuota]).
+         */
         private fun registration(
             fields: YamlFields,
             roles: RoleQuota?,
         ): RegistrationQuota? {
             if (!fields.has("registration")) {
-                val nonAdmins = roles?.let { it.manager + it.employee } ?: return null
-                return RegistrationQuota(invite = (nonAdmins + 1) / 2, companyCode = nonAdmins / 2)
+                roles ?: return null
+                val nonAdmins = roles.manager + roles.employee
+                val invite = maxOf(roles.manager, (nonAdmins + 1) / 2)
+                return RegistrationQuota(invite = invite, companyCode = nonAdmins - invite)
             }
             val registration = fields.map("registration", REGISTRATION_KEYS) ?: return null
             val invite = registration.int("invite", required = true)

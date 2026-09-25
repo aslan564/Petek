@@ -60,6 +60,10 @@ internal class IdentitySpecValidator(
             problems += "registration quota adds up to $registrations (${spec.inviteCount} invite + " +
                 "${spec.companyCodeCount} company code) but there are $joiners managers and employees"
         }
+        if (spec.managers >= 0 && spec.inviteCount in 0 until spec.managers) {
+            problems += "invite count ${spec.inviteCount} is less than the ${spec.managers} managers; managers always join " +
+                "by invitation, because a company-code sign-up makes an employee"
+        }
     }
 
     private fun checkDepartments(

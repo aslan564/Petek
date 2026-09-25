@@ -19,6 +19,7 @@ internal fun AgentAction.describe(snapshot: PageSnapshot?): String =
         is AgentAction.ReadText -> "read_text $selector"
         is AgentAction.WaitText -> "wait_text ${quote(text)} ${timeout.inWholeSeconds}s"
         AgentAction.GetEmailCode -> "get_email_code"
+        AgentAction.GetPhoneCode -> "get_phone_code"
         is AgentAction.Done -> "done success=$success ${quote(summary)}" + (objectId?.let { " object_id=$it" } ?: "")
         is AgentAction.ReportProblem -> "report_problem ${kind.key} ${quote(note)}"
     }

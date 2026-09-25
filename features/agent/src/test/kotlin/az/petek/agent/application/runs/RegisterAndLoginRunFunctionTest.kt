@@ -9,6 +9,7 @@ import az.petek.agent.testing.RunFunctionFixture
 import az.petek.agent.testing.SimulatedKadro
 import az.petek.evidence.domain.StepStatus
 import az.petek.mail.domain.MailPurpose
+import az.petek.mail.domain.MailboxException
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
@@ -267,6 +268,27 @@ class RegisterAndLoginRunFunctionTest {
             outcome.status shouldBe ActionStatus.FAILED
             outcome.failureReason shouldBe FailureReason.IDENTITY_MISMATCH
             fixture.attempts() shouldHaveSize 1
+        }
+
+    @Test
+    fun `an unreachable test inbox is an environment error and is not retried`() =
+        runTest {
+            val fixture = RunFunctionFixture(invited)
+            fixture.shared.put(SharedRunState.inviteLink(invited.email), fixture.site.invite(invited))
+            fixture.verification.outage = MailboxException("Mailpit at http://127.0.0.1:8025: search answered HTTP 503")
+
+            val outcome = fixture.run("register_and_login")
+
+            outcome.status shouldBe ActionStatus.ERROR
+            outcome.failureReason shouldBe FailureReason.MAIL_UNAVAILABLE
+            outcome.summary shouldBe "Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search answered HTTP 503"
+            fixture.attempts() shouldHaveSize 1
+            fixture.verification.calls shouldContainExactly listOf(invited.email to MailPurpose.CODE)
+            currentTime shouldBe 60_000
+            fixture.storageStateSaved() shouldBe false
+            val await = fixture.steps.single { it.action == "register_and_login: await e-mail code for ${invited.email}" }
+            await.status shouldBe StepStatus.ERROR
+            await.detail shouldBe "mail_unavailable: Mailpit at http://127.0.0.1:8025: search answered HTTP 503"
         }
 
     @Test

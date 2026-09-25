@@ -31,6 +31,36 @@ class FailureKeysTest {
     }
 
     @Test
+    fun `an unreachable test inbox has its own key, distinct from a mail timeout`() {
+        FailureKeys.find("mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025") shouldBe
+            FailureKeys.MAIL_UNAVAILABLE
+        FailureKeys.find("agent stopped (mail_unavailable) after 60s") shouldBe "mail_unavailable"
+        FailureKeys.of(step("join", "a02", StepStatus.ERROR, detail = "mail_unavailable: Mailpit is down")) shouldBe
+            "mail_unavailable"
+    }
+
+    @Test
+    fun `the key of an agent loop outcome wins over words of the observation before it`() {
+        val detail =
+            "ERROR: Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed (HttpRequestTimeoutException: " +
+                "Request timeout has expired) | outcome: ERROR mail_unavailable: Test inbox unreachable: Mailpit at " +
+                "http://127.0.0.1:8025: search failed (HttpRequestTimeoutException: Request timeout has expired)"
+        FailureKeys.find(detail) shouldBe FailureKeys.MAIL_UNAVAILABLE
+        FailureKeys.find("ERROR: Timeout 30000ms exceeded | outcome: FAILED browser_error: 3 failed actions in a row") shouldBe
+            "browser_error"
+        FailureKeys.find("Stopped after 40 decisions | outcome: FAILED timeout: Task not finished within 10m") shouldBe "timeout"
+        FailureKeys.find("Finished: done | outcome: SUCCEEDED: Elan yaradıldı").shouldBeNull()
+    }
+
+    @Test
+    fun `only environment problems carry an environment explanation`() {
+        FailureKeys.environmentProblem(FailureKeys.MAIL_UNAVAILABLE) shouldBe "test inbox unreachable"
+        FailureKeys.environmentProblem(FailureKeys.MAIL_TIMEOUT).shouldBeNull()
+        FailureKeys.environmentProblem("otp_rejected").shouldBeNull()
+        FailureKeys.environmentProblem("quota_exceeded").shouldBeNull()
+    }
+
+    @Test
     fun `a plain timeout is still a key`() {
         FailureKeys.find("Navigation timeout of 30000 ms exceeded") shouldBe "timeout"
     }

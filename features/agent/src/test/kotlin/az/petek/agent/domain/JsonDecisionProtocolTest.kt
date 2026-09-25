@@ -49,7 +49,18 @@ class JsonDecisionProtocolTest {
     @Test
     fun `tool names in the schema, the parser and the actions agree`() {
         protocol.toolNames shouldContainExactly
-            listOf("navigate", "click", "type", "select", "read_text", "wait_text", "get_email_code", "done", "report_problem")
+            listOf(
+                "navigate",
+                "click",
+                "type",
+                "select",
+                "read_text",
+                "wait_text",
+                "get_email_code",
+                "get_phone_code",
+                "done",
+                "report_problem",
+            )
         validDecisions().map { it.get()[1] as AgentAction }.map { it.toolName }.toSet() shouldBe protocol.toolNames.toSet()
     }
 
@@ -173,6 +184,7 @@ class JsonDecisionProtocolTest {
         val reference = protocol.describeTools()
         protocol.toolNames.forEach { reference shouldContain "- $it(" }
         reference shouldContain "{vars.email_code}"
+        reference shouldContain "{vars.phone_code}"
         reference shouldContain "permission_denied"
     }
 
@@ -204,6 +216,8 @@ class JsonDecisionProtocolTest {
                     AgentAction.WaitText("Sabah 10:00", 20.seconds),
                 ),
                 Arguments.of("""{"reason": "because", "tool": "get_email_code"}""", AgentAction.GetEmailCode),
+                Arguments.of("""{"reason": "because", "tool": "get_phone_code"}""", AgentAction.GetPhoneCode),
+                Arguments.of("""{"reason": "because", "tool": " GET_PHONE_CODE ", "ref": null}""", AgentAction.GetPhoneCode),
                 Arguments.of(
                     """{"reason": "because", "tool": "done", "summary": "Elan yaradıldı", "success": true, "object_id": "a1"}""",
                     AgentAction.Done("Elan yaradıldı", true, "a1"),

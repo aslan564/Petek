@@ -14,9 +14,11 @@ import kotlin.random.Random
  *   ±1 of the others, for employees and for head count.
  * - Names: the spec's names first, then the catalog ([NameAllocator]).
  * - E-mail `<ascii first name>.<run tag>.<agent id>@<mail domain>`, unique because the agent id is.
- * - Registration modes: members of each department are shuffled, departments are interleaved and the first
- *   `inviteCount` join by invitation, the rest by company code, so every department gets a mix when both
- *   counts reach the number of departments.
+ * - Registration modes: every manager joins by invitation, because the target's company-code form (`/join`) has no
+ *   role field and makes everyone who uses it an employee. The remaining `inviteCount - managers` invitations go to
+ *   employees: the employees of each department are shuffled, departments are interleaved and the first ones are
+ *   invited, the rest join by company code, so the employees of every department get a mix when both their
+ *   invitations and the company codes reach the number of departments. Company-code identities are always employees.
  *
  * Names, roles, departments and registration modes depend only on the spec (its seed), so every run of a campaign
  * tests the same people. E-mails, passwords and phones also depend on the run tag, so concurrent or leftover runs
@@ -72,16 +74,36 @@ class DefaultIdentityRegistryGenerator(
         departments: List<String>,
         spec: IdentitySpec,
     ): Map<AgentId, RegistrationMode> {
-        val random = Random(spec.seed xor REGISTRATION_SALT)
-        val members = seats.filter { it.role != Role.ADMIN }.groupBy { it.department }
-        val groups = departments.shuffled(random).map { members[it].orEmpty().shuffled(random) }
-        val rounds = groups.maxOfOrNull { it.size } ?: 0
-        val order = (0 until rounds).flatMap { round -> groups.mapNotNull { it.getOrNull(round) } }
-        val joiners =
-            order.withIndex().associate { (i, seat) ->
-                seat.agentId to if (i < spec.inviteCount) RegistrationMode.INVITE else RegistrationMode.COMPANY_CODE
+        val fixed =
+            seats.mapNotNull { seat ->
+                when (seat.role) {
+                    Role.ADMIN -> seat.agentId to RegistrationMode.OWNER
+                    Role.MANAGER -> seat.agentId to RegistrationMode.INVITE
+                    Role.EMPLOYEE -> null
+                }
             }
-        return joiners + seats.filter { it.role == Role.ADMIN }.associate { it.agentId to RegistrationMode.OWNER }
+        val employeeInvites = spec.inviteCount - spec.managers
+        val employees =
+            stratifiedOrder(seats.filter { it.role == Role.EMPLOYEE }, departments, spec.seed).withIndex().map { (i, seat) ->
+                seat.agentId to if (i < employeeInvites) RegistrationMode.INVITE else RegistrationMode.COMPANY_CODE
+            }
+        return (fixed + employees).toMap()
+    }
+
+    /**
+     * [members] in a seeded order that takes one member of each department per round (departments and the members
+     * within each one shuffled), so any prefix of it is spread over the departments within one of each other.
+     */
+    private fun stratifiedOrder(
+        members: List<Seat>,
+        departments: List<String>,
+        seed: Long,
+    ): List<Seat> {
+        val random = Random(seed xor REGISTRATION_SALT)
+        val byDepartment = members.groupBy { it.department }
+        val groups = departments.shuffled(random).map { byDepartment[it].orEmpty().shuffled(random) }
+        val rounds = groups.maxOfOrNull { it.size } ?: 0
+        return (0 until rounds).flatMap { round -> groups.mapNotNull { it.getOrNull(round) } }
     }
 
     private fun phoneNumbers(

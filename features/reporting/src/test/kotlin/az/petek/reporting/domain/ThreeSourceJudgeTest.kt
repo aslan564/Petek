@@ -380,6 +380,60 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `an unreachable test inbox is an agent failure explained as an environment problem`() {
+            val steps =
+                listOf(
+                    step(
+                        "join",
+                        "a07",
+                        StepStatus.ERROR,
+                        StepKind.RUN,
+                        detail = "mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed",
+                        action = "run register_and_login",
+                    ),
+                )
+
+            val finding = judge.findings(run, emptyList(), steps).single()
+
+            finding.findingClass shouldBe FindingClass.AGENT_FAILURE
+            finding.note shouldBe
+                "Agent failure: mail_unavailable (test inbox unreachable: an environment problem, not an error of the target)."
+            finding.c.shouldBeNull()
+            finding.a shouldBe "run register_and_login"
+            finding.b shouldBe "mail_unavailable: Test inbox unreachable: Mailpit at http://127.0.0.1:8025: search failed"
+        }
+
+        @Test
+        fun `an inbox that timed out is one mail_unavailable finding, not also a timeout`() {
+            val mailpit = "Mailpit at http://127.0.0.1:8025: search failed (HttpRequestTimeoutException: Request timeout has expired)"
+            val unreachable = "Test inbox unreachable: $mailpit"
+            val steps =
+                listOf(
+                    // The agent loop's last turn of the `do` step, then the orchestrator's record of its outcome.
+                    step(
+                        "owner_signup",
+                        "a01",
+                        StepStatus.ERROR,
+                        detail = "ERROR: $unreachable | outcome: ERROR mail_unavailable: $unreachable",
+                        action = "get_email_code",
+                        stepId = "stp_turn",
+                    ),
+                    step("owner_signup", "a01", StepStatus.ERROR, detail = "mail_unavailable: $unreachable"),
+                    // A run function's sub-action that threw, then its concluding record.
+                    step("join", "a07", StepStatus.ERROR, StepKind.RUN, detail = "mail_unavailable: $mailpit", stepId = "stp_sub"),
+                    step("join", "a07", StepStatus.ERROR, StepKind.RUN, detail = "mail_unavailable: $unreachable"),
+                )
+
+            val findings = judge.findings(run, emptyList(), steps)
+
+            findings.map { it.scenarioStep to it.agentId?.value } shouldContainExactly listOf("owner_signup" to "a01", "join" to "a07")
+            findings.forEach {
+                it.findingClass shouldBe FindingClass.AGENT_FAILURE
+                it.note shouldContain "Agent failure: mail_unavailable (test inbox unreachable"
+            }
+        }
+
+        @Test
         fun `a blocked step without a key is an agent failure named blocked`() {
             val steps = listOf(step("read_announce", "a09", StepStatus.BLOCKED, detail = "no progress for 120s"))
 

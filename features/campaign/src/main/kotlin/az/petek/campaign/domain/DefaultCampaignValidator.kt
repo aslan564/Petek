@@ -1,5 +1,6 @@
 package az.petek.campaign.domain
 
+import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
 import java.net.URI
 import java.util.regex.Pattern
@@ -9,10 +10,12 @@ import kotlin.time.Duration
 /**
  * Checks every rule listed on [CampaignValidator] and the following, reporting all issues at once (never just the first):
  *
- * - settings: `testers > 0`, role and registration quotas are non-negative and add up, departments are non-empty,
- *   unique and addressable by the actor grammar, names are unique, the budget is positive, the target is an absolute
- *   http(s) URL without credentials (messages mask them);
- * - actors: named departments exist and every expression can match at least one tester under the quotas;
+ * - settings: `testers > 0`, role and registration quotas are non-negative and add up, `registration.invite` covers
+ *   every manager (managers always join by invitation: a company-code sign-up makes an employee), departments are
+ *   non-empty, unique and addressable by the actor grammar, names are unique, the budget is positive, the target is
+ *   an absolute http(s) URL without credentials (messages mask them);
+ * - actors: named departments exist and every expression can match at least one tester under the quotas (a manager
+ *   is never a company-code joiner, and employees get the invitations left after the managers);
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` needs a `do`/`run`, `parallel: true` and actors that can
@@ -125,6 +128,14 @@ class DefaultCampaignValidator(
                     "registration adds up to $joining (invite ${registration.invite} + company_code ${registration.companyCode}) " +
                         "but there are $nonAdmins non-admin testers (manager ${settings.roles.manager} + " +
                         "employee ${settings.roles.employee})",
+                )
+            }
+            val managers = settings.roles.manager
+            if (managers >= 0 && registration.invite in 0 until managers) {
+                report(
+                    "campaign.registration.invite",
+                    "campaign.registration.invite is ${registration.invite} but must be at least roles.manager ($managers): " +
+                        "managers always join by invitation, because a company-code sign-up becomes an employee on the target",
                 )
             }
         }
@@ -520,10 +531,39 @@ class DefaultCampaignValidator(
             val role = selector.role
             if (selector.department != null && (role == Role.ADMIN || selector.department !in settings.departments)) return 0
             var bound = settings.roles.count(role).coerceAtLeast(0)
-            selector.registration?.let { mode ->
-                bound = if (role == Role.ADMIN) 0 else minOf(bound, settings.registration.count(mode).coerceAtLeast(0))
-            }
+            selector.registration?.let { mode -> bound = minOf(bound, joinersOf(role, mode)) }
             return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
+        }
+
+        /**
+         * Upper bound of testers of [role] joining by [mode]: the admin owns the company, managers are always invited
+         * and employees get the invitations left after the managers plus every company code.
+         */
+        private fun joinersOf(
+            role: Role,
+            mode: RegistrationMode,
+        ): Int {
+            val managers = settings.roles.manager.coerceAtLeast(0)
+            val registration = settings.registration
+            val bound =
+                when (role) {
+                    Role.ADMIN -> {
+                        0
+                    }
+
+                    Role.MANAGER -> {
+                        if (mode == RegistrationMode.INVITE) managers else 0
+                    }
+
+                    Role.EMPLOYEE -> {
+                        when (mode) {
+                            RegistrationMode.INVITE -> registration.invite - managers
+                            RegistrationMode.COMPANY_CODE -> registration.companyCode
+                            RegistrationMode.OWNER -> 0
+                        }
+                    }
+                }
+            return bound.coerceAtLeast(0)
         }
     }
 

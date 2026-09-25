@@ -8,6 +8,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.mail.domain.MailTimeoutException
+import az.petek.mail.domain.MailboxException
 import az.petek.oracle.domain.OracleException
 import az.petek.oracle.domain.OracleSafetyException
 import kotlinx.coroutines.CancellationException
@@ -34,7 +35,11 @@ internal class RunEngine(
     }
 }
 
-/** Runs [body], mapping the failures a run function can expect to an outcome. Cancellation always propagates. */
+/**
+ * Runs [body], mapping the failures a run function can expect to an outcome. Cancellation always propagates.
+ * An unreachable test inbox ([MailboxException], left over after the mail use case retried it for its whole timeout)
+ * is an environment problem: `ERROR mail_unavailable`, never a generic error or a finding about the target.
+ */
 internal suspend fun RunTrace.outcomeOf(body: suspend RunTrace.() -> ActionOutcome): ActionOutcome =
     try {
         body()
@@ -44,6 +49,8 @@ internal suspend fun RunTrace.outcomeOf(body: suspend RunTrace.() -> ActionOutco
         ActionOutcome(e.status, e.message, failureReason = e.reason)
     } catch (e: MailTimeoutException) {
         failed(FailureReason.MAIL_TIMEOUT, e.message.orEmpty())
+    } catch (e: MailboxException) {
+        ActionOutcome(ActionStatus.ERROR, "Test inbox unreachable: ${e.message}", failureReason = FailureReason.MAIL_UNAVAILABLE)
     } catch (e: BrowserActionException) {
         failed(FailureReason.BROWSER_ERROR, "Browser error: ${e.message}")
     } catch (e: OracleException) {
@@ -53,6 +60,16 @@ internal suspend fun RunTrace.outcomeOf(body: suspend RunTrace.() -> ActionOutco
     } catch (e: Exception) {
         ActionOutcome(ActionStatus.ERROR, "Unexpected ${e::class.simpleName}: ${e.message}")
     }
+
+/**
+ * Detail of a recorded sub-action that threw [e]. An unreachable test inbox leads with `mail_unavailable:` like the
+ * concluding step (see [outcomeOf]), so the report files the sub-action under that key too instead of reading a word
+ * of Mailpit's error text ("Request timeout has expired") as a second, misleading failure key.
+ */
+internal fun errorDetail(e: Exception): String? {
+    val message = e.message ?: e::class.simpleName
+    return if (e is MailboxException) "${FailureReason.MAIL_UNAVAILABLE.key}: $message" else message
+}
 
 internal fun succeeded(
     summary: String,

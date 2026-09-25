@@ -1,5 +1,6 @@
 package az.petek.core.sqlite
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,7 +22,7 @@ class SqliteDatabaseTest {
     @Test
     fun `concurrent writers are serialized and every row is stored`(
         @TempDir dir: Path,
-    ) = runBlocking {
+    ) = runBlocking<Unit> {
         SqliteDatabase.open(dir.resolve("nested/petek.db")).use { db ->
             db.createMissing(Items)
             (1..200)
@@ -36,6 +37,33 @@ class SqliteDatabaseTest {
                     }
                 }.awaitAll()
             db.read { Items.selectAll().count() } shouldBe 200L
+        }
+    }
+
+    @Test
+    fun `a failing write is rolled back and the writer keeps serving later writes`(
+        @TempDir dir: Path,
+    ) = runBlocking<Unit> {
+        SqliteDatabase.open(dir.resolve("petek.db")).use { db ->
+            db.createMissing(Items)
+
+            shouldThrow<IllegalStateException> {
+                db.write {
+                    Items.insert {
+                        it[id] = 1
+                        it[name] = "half-written"
+                    }
+                    error("boom")
+                }
+            }
+            db.write {
+                Items.insert {
+                    it[id] = 2
+                    it[name] = "stored"
+                }
+            }
+
+            db.read { Items.selectAll().map { it[Items.name] } } shouldBe listOf("stored")
         }
     }
 

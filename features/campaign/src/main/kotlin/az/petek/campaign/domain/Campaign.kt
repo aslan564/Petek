@@ -50,8 +50,11 @@ data class RoleQuota(
 }
 
 /**
- * How non-admin testers join the company. `invite + companyCode` must equal managers + employees.
- * The YAML may omit it; the loader then splits evenly (invite gets the extra one).
+ * How non-admin testers join the company. `invite + companyCode` must equal managers + employees, and `invite` must
+ * be at least the number of managers: the target's company-code form has no role field, so whoever joins with the code
+ * becomes an employee, and managers therefore always join by invitation. The remaining invitations and every company
+ * code go to employees. The YAML may omit it; the loader then splits evenly (invite gets the extra one), but never
+ * invites fewer testers than there are managers.
  */
 data class RegistrationQuota(
     val invite: Int,

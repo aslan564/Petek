@@ -16,6 +16,12 @@ object FailureKeys {
     const val MAIL_TIMEOUT = "mail_timeout"
 
     /**
+     * The test inbox (Mailpit) could not be read at all. Unlike [MAIL_TIMEOUT] this says nothing about the target:
+     * it is an environment problem ([environmentProblem]), reported as an agent failure.
+     */
+    const val MAIL_UNAVAILABLE = "mail_unavailable"
+
+    /**
      * The agent BLOCKs an action with this key when the target refuses it (`report_problem(permission_denied)`).
      * The agent contract calls that the EXPECTED outcome of forbidden-action tests, whose verdict comes from their
      * assertions (`not_visible`, `http_status` 403), so such a step is not a failure (see [isExpectedRefusal]).
@@ -28,6 +34,7 @@ object FailureKeys {
     val KNOWN: List<String> =
         listOf(
             MAIL_TIMEOUT,
+            MAIL_UNAVAILABLE,
             "otp_rejected",
             "registration_failed",
             "login_failed",
@@ -44,6 +51,9 @@ object FailureKeys {
             BLOCKED,
         )
 
+    /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
+    private val ENVIRONMENT_PROBLEMS: Map<String, String> = mapOf(MAIL_UNAVAILABLE to "test inbox unreachable")
+
     /** Statuses that mean an action did not complete. */
     val FAILING_STATUSES: Set<StepStatus> = setOf(StepStatus.FAILED, StepStatus.ERROR, StepStatus.BLOCKED)
 
@@ -51,13 +61,19 @@ object FailureKeys {
     private val knownPattern = Regex("(?<![A-Za-z0-9_])(" + KNOWN.joinToString("|") { Regex.escape(it) } + ")(?![A-Za-z0-9_])")
     private val leadingKeyPattern = Regex("^\\s*\\[?([a-z][a-z0-9]*(?:_[a-z0-9]+)+)]?\\s*:")
 
+    // The agent loop's last turn of a `do` step: `<observation> | outcome: <STATUS> <failure key>: <summary>`.
+    private val outcomeKeyPattern = Regex("\\|\\s*outcome:\\s*[A-Z]+\\s+([a-z][a-z0-9]*(?:_[a-z0-9]+)*)\\s*:")
+
     /**
      * The failure key of [detail], or null when it carries none. A `key:` prefix wins, because the orchestrator
-     * writes `<failure key>: <summary>` and the summary is free text; otherwise the first known key counts.
+     * writes `<failure key>: <summary>` and the summary is free text; next the key of an agent loop's
+     * `| outcome: <STATUS> <key>:` marker, because the observation before it is free text too (an unreachable inbox
+     * may say "Request timeout has expired" and is still `mail_unavailable`); otherwise the first known key counts.
      */
     fun find(detail: String?): String? {
         if (detail.isNullOrBlank()) return null
         return leadingKeyPattern.find(detail)?.groupValues?.get(1)
+            ?: outcomeKeyPattern.find(detail)?.groupValues?.get(1)
             ?: knownPattern.find(detail)?.groupValues?.get(1)
     }
 
@@ -70,6 +86,12 @@ object FailureKeys {
 
     /** The action did not complete and that was not the expected outcome. */
     fun isFailure(step: StepRecord): Boolean = step.status in FAILING_STATUSES && !isExpectedRefusal(step)
+
+    /**
+     * What went wrong in the test environment when [key] names such a problem (`mail_unavailable` -> "test inbox
+     * unreachable"), or null for keys that are about the target or the agent. The report must not read those as bugs.
+     */
+    fun environmentProblem(key: String): String? = ENVIRONMENT_PROBLEMS[key]
 
     /** The failure key of a failed step; null for completed steps, expected refusals and failures without a key. */
     fun of(step: StepRecord): String? {

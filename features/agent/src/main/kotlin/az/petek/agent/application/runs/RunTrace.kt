@@ -54,7 +54,7 @@ internal class RunTrace(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                record(description, started, StepStatus.ERROR, e.message ?: e::class.simpleName)
+                record(description, started, StepStatus.ERROR, errorDetail(e))
                 throw e
             }
         record(description, started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, null)

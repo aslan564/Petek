@@ -22,8 +22,9 @@ import kotlinx.coroutines.delay
  * login when the site lands on the login page, storage state saved, identity verified.
  *
  * The whole flow is tried up to [RunFunctionSettings.registrationAttempts] times (docs/PLAN.md). Once a form was
- * accepted the account exists, so later attempts sign in instead of registering again. A missing prerequisite or an
- * identity mismatch is not retried: the first cannot heal by retrying, the second is a finding that a retry would hide.
+ * accepted the account exists, so later attempts sign in instead of registering again. A missing prerequisite, an
+ * unreachable test inbox or an identity mismatch is not retried: the first cannot heal by retrying, the second was
+ * already retried for the whole mail timeout, the third is a finding that a retry would hide.
  */
 internal class RegisterAndLoginRunFunction(
     private val engine: RunEngine,
@@ -152,6 +153,6 @@ internal class RegisterAndLoginRunFunction(
 
     private companion object {
         /** Failures a new attempt cannot fix, or must not hide. */
-        val FINAL = setOf(FailureReason.MISSING_PREREQUISITE, FailureReason.IDENTITY_MISMATCH)
+        val FINAL = setOf(FailureReason.MISSING_PREREQUISITE, FailureReason.MAIL_UNAVAILABLE, FailureReason.IDENTITY_MISMATCH)
     }
 }

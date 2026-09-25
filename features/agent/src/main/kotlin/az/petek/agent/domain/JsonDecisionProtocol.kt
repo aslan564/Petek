@@ -93,6 +93,10 @@ class JsonDecisionProtocol : DecisionProtocol {
                 AgentAction.GetEmailCode
             }
 
+            GET_PHONE_CODE -> {
+                AgentAction.GetPhoneCode
+            }
+
             DONE -> {
                 AgentAction.Done(
                     summary = required(tool, fields, ARG_SUMMARY, "a short factual summary of the result"),
@@ -206,12 +210,13 @@ class JsonDecisionProtocol : DecisionProtocol {
         const val READ_TEXT = "read_text"
         const val WAIT_TEXT = "wait_text"
         const val GET_EMAIL_CODE = "get_email_code"
+        const val GET_PHONE_CODE = "get_phone_code"
         const val DONE = "done"
         const val REPORT_PROBLEM = "report_problem"
 
         /** Every tool the model may name, in the order the prompt lists them. */
         val TOOL_NAMES: List<String> =
-            listOf(NAVIGATE, CLICK, TYPE, SELECT, READ_TEXT, WAIT_TEXT, GET_EMAIL_CODE, DONE, REPORT_PROBLEM)
+            listOf(NAVIGATE, CLICK, TYPE, SELECT, READ_TEXT, WAIT_TEXT, GET_EMAIL_CODE, GET_PHONE_CODE, DONE, REPORT_PROBLEM)
 
         const val DEFAULT_WAIT_SECONDS = 10
         const val MIN_WAIT_SECONDS = 1
@@ -290,6 +295,7 @@ class JsonDecisionProtocol : DecisionProtocol {
             - $READ_TEXT(selector): read the text of the first element matching a CSS selector.
             - $WAIT_TEXT(text, timeout_s?): wait until text is visible on the page ($MIN_WAIT_SECONDS-$MAX_WAIT_SECONDS s, default $DEFAULT_WAIT_SECONDS).
             - $GET_EMAIL_CODE(): fetch the newest verification code e-mailed to you; afterwards type {vars.email_code}.
+            - $GET_PHONE_CODE(): fetch the newest verification code sent to your phone; afterwards type {vars.phone_code}.
             - $DONE(summary, success?, object_id?): finish the task; success defaults to true; object_id = id of the object you created when the page shows it.
             - $REPORT_PROBLEM(kind, note): stop and report a problem; kind is one of ${ProblemKind.entries.joinToString(", ") { it.key }}.
             """.trimIndent()

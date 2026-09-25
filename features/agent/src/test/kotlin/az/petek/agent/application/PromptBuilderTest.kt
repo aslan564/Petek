@@ -58,6 +58,7 @@ class PromptBuilderTest {
         system shouldContain "exactly one tool"
         system shouldContain "Use only the tools listed below"
         system shouldContain "{vars.email_code}"
+        system shouldContain "{vars.phone_code} for the code sent to your phone (after get_phone_code)"
         system shouldContain "Stay strictly within the task"
         system shouldContain "Never try to bypass permissions"
         system shouldContain "report_problem with kind \"permission_denied\", or done with success=false"

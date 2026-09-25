@@ -20,8 +20,10 @@ import az.petek.evidence.domain.Verdict
  * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human.
  *
  * The step overload adds one finding per (scenario step, agent, failure key) for agent actions that failed with a
- * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), any other key AGENT_FAILURE. An expected
- * refusal (`permission_denied` in a forbidden-action test) is not a failure and yields none.
+ * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), any other key AGENT_FAILURE. An environment
+ * problem such as `mail_unavailable` (the test inbox was unreachable) is an AGENT_FAILURE whose note says so, never a
+ * finding about the target. An expected refusal (`permission_denied` in a forbidden-action test) is not a failure and
+ * yields none.
  */
 class ThreeSourceJudge(
     private val ids: IdGenerator,
@@ -129,9 +131,18 @@ class ThreeSourceJudge(
             a = compact(step.action),
             b = step.detail?.let(::compact),
             c = if (noMail) NO_EMAIL_SENT else null,
-            note = if (noMail) "$NO_EMAIL_SENT ($key)." else "Agent failure: $key.",
+            note = stepNote(key, noMail),
             artifactIds = emptyList(),
         )
+    }
+
+    private fun stepNote(
+        key: String,
+        noMail: Boolean,
+    ): String {
+        if (noMail) return "$NO_EMAIL_SENT ($key)."
+        val environment = FailureKeys.environmentProblem(key) ?: return "Agent failure: $key."
+        return "Agent failure: $key ($environment: an environment problem, not an error of the target)."
     }
 
     private fun observe(

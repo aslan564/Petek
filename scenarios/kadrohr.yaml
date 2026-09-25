@@ -8,7 +8,7 @@ campaign:
   names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog
   roles: {admin: 1, manager: 5, employee: 24}
   departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
-  registration: {invite: 15, company_code: 14}   # how the 29 non-admins join
+  registration: {invite: 15, company_code: 14}   # how the 29 non-admins join; all 5 managers are among the invited
   budget: {max_steps_per_agent: 60, max_minutes: 40}
   on_fail: continue
 
@@ -23,7 +23,7 @@ target_profile:
 setup:
   - id: owner_signup
     actor: admin
-    do: "Qeydiyyatdan keç, email kodunu təsdiqlə və 'Pətək Test MMC' adlı şirkət yarat"
+    do: "Qeydiyyatdan keç, email kodunu və istənsə telefon kodunu təsdiqlə, 'Pətək Test MMC' adlı şirkət yarat"
   - id: seed
     actor: admin
     run: seed_company              # departments + invitations for invite-mode testers (test API)
@@ -61,7 +61,7 @@ steps:
       - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
 
   - id: race
-    actor: [manager[IT], manager[HR]]
+    actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
     parallel: true
     do: "Eyni ticketi approve et"
     assert:
