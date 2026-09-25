@@ -88,6 +88,16 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `there is no upper limit on the number of testers`() {
+            listOf(31, 100, 999, 1_000, 5_000).forEach { testers ->
+                val roles = RoleQuota(admin = 1, manager = 3, employee = testers - 4)
+                val registration = RegistrationQuota(invite = 3 + (testers - 4) / 2, companyCode = testers - 4 - (testers - 4) / 2)
+
+                issues(with(settings(testers = testers, roles = roles, registration = registration))).shouldBeEmpty()
+            }
+        }
+
+        @Test
         fun `roles must add up to testers`() {
             val issue = issue(with(settings(testers = 11)), "roles add up")
             issue.line shouldBe 4
