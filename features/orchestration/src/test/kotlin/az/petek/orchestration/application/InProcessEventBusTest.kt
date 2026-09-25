@@ -2,18 +2,23 @@ package az.petek.orchestration.application
 
 import az.petek.core.ids.AgentId
 import az.petek.core.testing.SequentialIdGenerator
+import az.petek.core.time.SystemHarnessClock
 import az.petek.orchestration.testing.VirtualClock
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -147,5 +152,27 @@ class InProcessEventBusTest {
             events.map { it.eventId }.toSet().size shouldBe 50
             bus.history().zipWithNext().all { (a, b) -> a.sequence < b.sequence && a.t0.monotonicNanos <= b.t0.monotonicNanos } shouldBe
                 true
+        }
+
+    @Test
+    fun `publishers and waiters on many threads agree on order, t0 and the latest event`() =
+        runTest {
+            val bus = InProcessEventBus(SystemHarnessClock(), SequentialIdGenerator())
+
+            val (published, awaited) =
+                withContext(Dispatchers.Default) {
+                    val waiters = (1..20).map { async { bus.await("e0", afterSequence = 0, timeout = 10.seconds) } }
+                    val publishers = (1..400).map { i -> async { bus.publish("e${i % 4}", "$i", AgentId.of(i % 30 + 1)) } }
+                    publishers.awaitAll() to waiters.awaitAll()
+                }
+
+            published.map { it.sequence }.sorted() shouldBe (1L..400L).toList()
+            published.map { it.eventId }.toSet() shouldHaveSize 400
+            val history = bus.history()
+            history.map { it.sequence } shouldBe (1L..400L).toList()
+            history.zipWithNext().all { (a, b) -> a.t0.monotonicNanos <= b.t0.monotonicNanos } shouldBe true
+            awaited.all { it != null && it.name == "e0" } shouldBe true
+            bus.latest("e0") shouldBe history.last { it.name == "e0" }
+            bus.latestAny() shouldBe history.last()
         }
 }
