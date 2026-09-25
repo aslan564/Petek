@@ -37,7 +37,8 @@ private val logger = KotlinLogging.logger {}
  * [BrowserSession] on Playwright: one agent's isolated browser context (own cookies, localStorage and
  * sessionStorage) with a single page, created by the session's own [Playwright] instance on its own thread named
  * `browser-<label>`. Every Playwright object is created and used only on that thread (CLAUDE.md rule 9); the
- * suspend functions may be called from any coroutine and run one at a time, in call order.
+ * suspend functions may be called from any coroutine and run one at a time, in call order. A cancelled caller (step
+ * timeout, watchdog) is released at once; a browser call it already started finishes on the thread first.
  *
  * Contract details the callers rely on:
  * - Element refs come from the latest [snapshot] (`data-petek-ref` attributes); a stale ref fails with
@@ -47,7 +48,8 @@ private val logger = KotlinLogging.logger {}
  *   [WaitOutcome.observedAt] is taken from the harness clock right after the page reported the text or element
  *   visible (rule 1). The check is polled *inside* the page every [PROBE_POLLING_INTERVAL_MS] ms rather than with
  *   `getByText(...).waitFor()`, whose retries back off to 500 ms and would blur a real-time latency (t1 − t0).
- *   Text matching follows `getByText`: case-insensitive, whitespace-normalized substring of the rendered text.
+ *   Text matching follows `getByText`: case-insensitive, whitespace-normalized substring of the rendered text,
+ *   open shadow roots included.
  *   Selectors that are plain CSS are probed the same way; Playwright-only syntax (`text=…`) uses a locator wait.
  * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
