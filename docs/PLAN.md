@@ -390,9 +390,16 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 5 | Hesabat, stabillik, təmizlik | Tək əmr → hesabat; 3 run eyni nəticə; teardown | 3–5 gün |
 | 6 | Kəşfiyyatçı | Sayt modeli, avtomatik ssenari | sonra |
 | 7 | Sürpriz və əks-əlaqə | Triaj, ssenari v2, fərq kəşfiyyatı | sonra |
-| 8 | Universal platforma | Web paneli, API/mobil adapter, çoxmaşınlı | sonra |
+| 8 | Bünövrə düzəlişləri və biznes hazırlığı | Real KadroHR-da kəşfiyyat işləyir; lisenziya, `workspace_id`, edition portları | 3–5 gün |
+| 9 | Provayder-agnostik AI qatı | Layihə hansı AI-ı işlədirsə Pətək onunla işləyir (`auto`) | 1 həftə |
+| 10 | Hədəf profili və giriş zənciri | Bir neçə sayt, öz hesablarınla giriş, IMAP/manual OTP, sübut səviyyələri | 1–2 həftə |
+| 11 | Alət üzü | MCP server + `--json` CLI: ev sahibi AI Pətəki çağırır | 1 həftə |
+| 12 | Skill paketi və paylanma | `petek init`, rol təlimatları, Docker/CLI dist, `petek dev`, CI rejimi | 1–2 həftə |
+| 13 | Universal hədəf modeli | Şirkət modeli isteğe bağlı, sərbəst rollar, kor test naxışları | 2 həftə |
+| 14 | Ekosistem və ödənişli modullar | Kontrakt kitləri, log körpüsü, regressiya baseline, hosted sürü | sonra |
 
-Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablanıb.
+Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablanıb. Faza 8–14 "Pətək 2: universal alət" planıdır
+(aşağıda, Faza 7-dən sonra); köhnə Faza 8 ("Universal platforma") onun içində əridilib.
 
 **Faza 0 — Hədəf və mühit**
 
@@ -469,13 +476,287 @@ Hazır sayılır: tək əmr → tam run → hesabat; 3 ardıcıl run eyni nətic
 - [ ] Model versiyalama; run sonrası hesabat v2 → ssenari v2 diff → sənin təsdiqin
 - [ ] Təsdiqlənmiş ssenarilər dondurulur; fərq kəşfiyyatı (release-dən release-ə nə dəyişib)
 
-**Faza 8 — Universal platforma**
+Qeyd (2026-09-25): Faza 6 və 7-nin çoxu kodda var (explorer, triaj, ssenari təsdiqi/dondurulması, web paneli), amma
+yuxarıdakı qutular işarələnməyib. Faza 8-in ilk tapşırığı bu siyahını kodla tutuşdurub işarələməkdir.
 
-- [ ] Web paneli (kampaniya yaratma, canlı lövhə, hesabat tarixçəsi)
-- [ ] API adapteri, mobil adapter, IMAP `MailReader`
-- [ ] Sərbəst rejim, LLM hakim
-- [ ] Redis/NATS ilə çoxmaşınlı orkestrasiya
-- [ ] Real hesablar rejimi: öz hesablarını gətir (bring-your-own accounts) + real poçt qutusu (IMAP)
+## Pətək 2: universal alət planı (2026-09-25)
+
+### Sahibin qərarları (bu planın əsası)
+
+1. **Pətək məhsuldur, AI onun bir parçasıdır.** Adam Pətəki öz layihəsində işə salır, brauzerdə Pətəkin paneli açılır,
+   orada hansı saytı, hansı hissəni, neçə testerlə yoxlayacağını seçir, mühərrik işləyir, sübutlu hesabat çıxır. UI,
+   mühərrik, sübut sistemi və hesabat Pətəkindir; AI yalnız "düşünən" hissəni doldurur. BMAD kimi yalnız təlimat faylı
+   deyil, işləyən proqramdır — ideya və dəyər sahibdə qalır, satıla bilir.
+2. **AI provayderindən asılı deyil.** Layihə hansı AI-ı işlədirsə (Claude, Codex, Gemini, Copilot, Ollama...), Pətək
+   onu tapır və onunla işləyir. AI yoxdursa kəşfiyyat və `do` addımları işləmir (hələlik); dondurulmuş `run`
+   ssenariləri LLM-siz də icra olunur. İndi sahibin layihəsində Claude var, ona görə default Claude-dur.
+3. **Bir neçə sayt.** Sahibin 2–3 fərqli saytı var; KadroHR yalnız ilk hədəf və nümunə profildir.
+4. **Kəşfiyyatçı özü daxil ola bilməlidir**: test API ilə şirkət yarada bilmirsə sahibin verdiyi hesablarla, o da yoxsa
+   özü qeydiyyatdan keçib OTP-ni oxuyaraq; heç biri alınmasa anonim. Qeydiyyat alınmasa login məlumatlarına düşür.
+5. **Məlumat yoxdursa kor testlər**: kəşfiyyatçının topladığı modelə əsasən, model boş olsa da ümumi naxışlarla test.
+6. **Layihə ilə birgə işləmə və kod səviyyəsində kök səbəb**: Pətək layihənin yanında qalxır; tapıntılar layihənin öz
+   AI-ına verilir, o repoda kodu araşdırır. Pətək başqa AI-ı içinə almır.
+7. **Gələcəkdə pul qazanmaq mümkün olmalıdır**: açıq nüvə + ödənişli modullar/hosted; sərhədlər indi çəkilir.
+
+### Məhsul sərhədi: nə Pətəkdir, nə deyil
+
+| Pətəkin özü (məhsul) | Layihənin AI-ı (kənar) |
+|---|---|
+| Panel (UI), CLI, MCP server | Kəşfiyyatın "bu səhifə nə edir" nəticə çıxarması |
+| Brauzer sessiyaları, kimlik reyestri, poçt/OTP oxuma | `do` addımlarında növbəti hərəkəti seçmək |
+| Vaxt ölçmə, assert-lər, oracle, üç mənbəli hökm | Triaj (sistem bug / model boşluğu / ssenari xətası) |
+| Sübut bazası, hesabat, tarixçə, teardown | Kök səbəbi repoda tapmaq, düzəliş təklif etmək |
+| Hədəf profilləri, giriş zənciri, kontrakt | — |
+
+Pozulmamalı qaydalar (CLAUDE.md) bu bölgünü zaten diktə edir: vaxtı harness ölçür, assertləri kod yoxlayır, AI yalnız
+whitelist daxilində hərəkət seçir. Ona görə AI-ın kim olduğu nəticənin etibarını dəyişmir.
+
+### Üç qatlı arxitektura
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Ev sahibi AI (Claude Code / Codex / Gemini CLI / Cursor ...)  │
+│  oxuyur: SKILL.md · AGENTS.md · CLAUDE.md · .cursor/rules      │
+│  rollar: explorer · scenario author · judge · root-cause       │
+└───────────────┬──────────────────────────────────────────────┘
+                │ MCP (petek mcp)  /  CLI --json
+┌───────────────▼──────────────────────────────────────────────┐
+│ Pətək mühərriki + panel (deterministik, sübut əsaslı)         │
+│  explore · plan · run · report · teardown · findings           │
+│  hədəf profilləri · giriş zənciri · poçt mənbələri · oracle    │
+└───────────────┬──────────────────────────────────────────────┘
+                │ LlmClient (auto: CLI agent | OpenAI-uyğun HTTP)
+┌───────────────▼──────────────────────────────────────────────┐
+│ Sürü beyni: N tester agentinin `do` addımları                  │
+│  layihənin öz AI-ı ilə, whitelist daxilində, xərc ölçülür      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Niyə iki AI girişi var: kəşfiyyat, triaj və kök səbəb az sayda ardıcıl çağırışdır — ev sahibi AI bunu MCP/skill ilə
+edir. 100 tester × hər addım isə bir IDE agentinin daşıyacağı yük deyil — orada Pətək eyni AI-ı birbaşa çağırır
+(`LlmClient`), amma yenə layihənin öz provayderini.
+
+### Faza 8 — Bünövrə düzəlişləri və biznes hazırlığı
+
+Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan biznes qərarları indi verilsin.
+
+- [ ] `RoleSessions.kt:276` boş `TargetProfile` ilə setup kampaniyası qurur → default kontrakt axınları; hədəfin
+  real profilini (kampaniya YAML-dan və ya hədəf profilindən) götürsün. Test: fake target-də fərqli axınla.
+- [ ] `PETEK_MAIL_SOURCE=mailpit|test-api` konfiqurasiya açarı; `AppContainer` `TestApiMailbox`-u seçə bilsin
+  (`docs/KADROHR_READINESS.md` açıq maddəsi).
+- [ ] Faza 6–7 qutularını kodla tutuşdurub işarələmək; `docs/ARCHITECTURE.md`-də boş "Explorer" bölməsini yazmaq.
+- [ ] `LICENSE` faylı (qərar: aşağıdakı "Qərar gözləyən suallar"); `NOTICE`; ad/marka: `petek` latın yazılışı ilə
+  GitHub org, domen, npm/Maven adlarının tutulması (sahib).
+- [ ] `workspace_id` ID sisteminə əlavə olunur (qayda 4): `run`, `identity`, `finding` cədvəlləri və `ReportModel`;
+  lokal rejimdə həmişə `local`. Migrasiya `core/sqlite`-də.
+- [ ] Edition sərhədi ADR-i (ADR-0011): ödənişli implementasiyaların port arxasında ayrı modulda yaşayacağı portlar
+  adlandırılır (`RunRepository`, `ReportStore`, `Orchestrator`/`AgentScheduler`, `UsageSink`). Kodda yalnız portlar;
+  Konsist testi "açıq nüvə ödənişli modulu import etmir" qaydasını əlavə edir (modul mövcud olmasa da qayda dayanır).
+- [ ] Telemetriya portu `UsageSink` (opt-in, default söndürülü, yalnız sayğaclar, məzmun yoxdur); `UsageMeter` ona
+  yazır; hazırda tək implementasiya lokal fayldır.
+
+Hazır sayılır: `petek panel` real KadroHR-da (test API açıq) rol-əsaslı kəşfiyyatı tamamlayır; `./gradlew build`
+yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
+
+### Faza 9 — Provayder-agnostik AI qatı
+
+Məqsəd: `PETEK_LLM_PROVIDER=auto` default olsun; Claude, Codex, Gemini CLI və istənilən OpenAI-uyğun endpoint işləsin.
+Agent/explorer/triaj kodu dəyişmir — heç bir prompt Claude-a bağlı deyil (yoxlanıb: XML tag, thinking, native tool-use yoxdur).
+
+- [ ] `LlmProviderId` enum → açıq `value class LlmProviderKey`; `LlmProviders` reyestr (`Map<key, factory>`), exhaustive
+  `when` yoxdur (OCP). Köhnə açarlar `claude-cli`, `anthropic-api` saxlanır.
+- [ ] `CliAgentLlmClient` (generic): `ClaudeCliLlmClient`-in proses hissəsi (scratch dir, timeout, kill-tree, output
+  faylları, `ProcessRunner`) çıxarılır; hər agent üçün kiçik `CliAgentProfile` strategiyası: `command(config, request)`,
+  `environment`, `transcript(messages)`, `parse(ProcessOutput)`. Claude profili mövcud `ClaudeCliInvocation` +
+  `ClaudeCliResultParser`-dir; yeni profillər `codex exec`, `gemini -p`, `opencode run`.
+- [ ] Sxem dəstəyi olmayan CLI-lər üçün "sxem promptda" rejimi: sistem mətninə sxem əlavə olunur, `StructuredJson`
+  parse edir, kod validasiyası (`DecisionProtocol` və s.) qalan işi görür. Bir dəfə "düzəlt" təkrarı (`Retrying`).
+- [ ] `OpenAiCompatibleLlmClient` (`infrastructure/http/`): Ktor client (kataloqda var, yeni kitabxana yoxdur);
+  `POST {base}/v1/chat/completions`, `response_format: json_schema` (strict) → fallback `json_object` → prompt;
+  `PETEK_LLM_STRUCTURED=schema|json_object|prompt`. Xəta xəritəsi `AnthropicErrors` kimi (429 retry-after, 401/403,
+  404, 5xx). Bir adapter: OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio, Gemini/Anthropic compat.
+- [ ] Strict-sxem adapteri: bütün sahələr `required`, isteğe bağlılar `nullable` (OpenAI strict rejimi mövcud üç sxemi
+  rədd edir). Parserlər `null`-u "yoxdur" kimi oxuyur.
+- [ ] Konfiqurasiya: `PETEK_LLM_PROVIDER=auto` (default), `PETEK_LLM_BIN` (`PETEK_CLAUDE_BIN` alias), `PETEK_LLM_BASE_URL`,
+  `PETEK_LLM_API_KEY` (`Secret`; `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY` alias), `PETEK_LLM_EFFORT`.
+  Hər provayderin öz default modeli.
+- [ ] `auto` aşkarlama sırası (app/config `LlmProviderResolver`): (1) açıq `.env` dəyəri; (2) mühit açarları; (3) hədəf
+  repodakı işarələr — `CLAUDE.md`/`.claude/` → claude-cli, `AGENTS.md`/`.codex/` → codex-cli, `GEMINI.md`/`.gemini/` →
+  gemini-cli, `.github/copilot-instructions.md` → OpenAI-uyğun endpoint tələb olunur; (4) PATH-dakı binarlar
+  (`claude`, `codex`, `gemini`, `ollama`). Hər addım səbəbi ilə loglanır və `doctor`-da göstərilir.
+- [ ] `doctor`: aşkarlanan provayder + səbəb; binar `--version`; PING. Neytral mətnlər (`CapacityAdvisor` "Claude
+  planı" → "AI provayderinin limitləri"; login ipucları provayderə görə).
+- [ ] `TextRedactor` və triaj `SecretRedactor`: bütün provayder açar formatları (`sk-`, `sk-ant-`, `AIza`, `gsk_`...).
+- [ ] Testlər: `CliAgentLlmClientTest` (fake process, hər profil üçün arqument siyahısı və parse), `OpenAiCompatibleLlmClientTest`
+  (Ktor fake server), `LlmProviderResolverTest` (fixture qovluqları ilə aşkarlama), `ConfigLoaderTest` yeniləmə.
+  `ScriptedLlmClient.provider` neytral olur.
+- [ ] ADR-0008 (ADR-0003-ü genişləndirir), `.env.example`, `docs/ARCHITECTURE.md`, CLAUDE.md stack sətri.
+
+Hazır sayılır: eyni `scenarios/contract-demo.yaml` fake target-də (a) `claude -p`, (b) Ollama (lokal model) və (c) fake
+`codex` skripti ilə keçir; `.env`-də provayder yazılmayanda `doctor` "auto → claude-cli (CLAUDE.md tapıldı)" deyir.
+
+### Faza 10 — Hədəf profili və giriş zənciri
+
+Məqsəd: bir Pətək bir neçə saytı tanısın; kəşfiyyatçı və testerlər hədəfə mümkün olan ən yaxşı yolla daxil olsun;
+oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
+
+- [ ] `targets/<ad>.yaml` hədəf profili (domain: `campaign` feature-ində `TargetSpec`; DTO infrastructure-da):
+  ```yaml
+  target:
+    name: kadrohr
+    url: https://staging.kadrohr.com
+    api_url: https://api.staging.kadrohr.com     # oracle və TestApiMailbox üçün ayrıca baza (KADROHR_READINESS açıq maddəsi)
+    production_hosts: [kadrohr.com, www.kadrohr.com]
+    mail: {source: test-api | mailpit | imap | manual, domain: test.kadrohr.com}
+    test_api: {token: ${PETEK_TEST_TOKEN_KADROHR}}   # sirlər yalnız .env-dən referansla
+    sign_in:                                        # giriş zənciri, sıra ilə cəhd olunur
+      - test_company                                # /test API ilə şirkət + rollar (indiki yol)
+      - own_accounts                                # sahibin verdiyi hesablar (aşağıda)
+      - self_register                               # özü qeydiyyat + poçt/OTP
+      - anonymous
+    accounts:                                       # own_accounts üçün; parollar .env referansı
+      - {role: admin, email: owner@example.com, password: ${PETEK_ACC_KADROHR_ADMIN}}
+    profile: scenarios/kadrohr.yaml#target_profile  # selektorlar və axınlar (mövcud format)
+  ```
+  `PETEK_TARGET` yalnız default hədəfin adı/URL-i olur; `RunTargets` `config.copy(target=…)` yerinə profili götürür;
+  `PanelRunsAdapter.kt:119`-dakı "yalnız PETEK_TARGET" bloku qaldırılır.
+- [ ] Giriş zənciri (`identity` + `mail` application): `SignInStrategy` portu, zəncir dekoratoru; hər qərar
+  (`hansı strategiya, niyə keçildi`) `event` cədvəlinə və hesabata yazılır. Kəşfiyyatçı (`RoleSessions`) və
+  `register_and_login` eyni zənciri istifadə edir.
+- [ ] Öz hesabların (bring-your-own accounts): panelin "Təlimat" ekranında hədəf üzrə rol → e-poçt/parol (və ya hazır
+  `storage_state` faylı); `Secret` ilə gəzir, LLM `{self.password}` görür (qayda 10); panel sirləri `.env`-ə yazır,
+  bazaya yox.
+- [ ] Saxlanan sessiyalar: hər (hədəf, kimlik) üçün `storage_state` `<evidence>/sessions/` altında; növbəti kəşfiyyat
+  yenidən qeydiyyat etmir, sessiya köhnəlibsə `login` axınına düşür.
+- [ ] Poçt mənbələri: `TestApiMailbox` bağlanır (Faza 8); `ImapMailbox` (catch-all domen və ya `+` adresləmə;
+  kitabxana seçimi — qayda 11, aşağıdakı suallar); `ManualCodeMailbox`: panel "kodu daxil et" pəncərəsi açır, SSE ilə
+  agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün; sürüdə yalnız xəbərdarlıqla).
+- [ ] İmkan yoxlaması (`capability probe`, `diagnostics`): kəşfiyyatdan əvvəl hədəfin nəyi dəstəklədiyi — test API,
+  poçt mənbəyi, real-time nəqliyyat, CAPTCHA/rate limit əlamətləri — `TargetCapabilities` kimi bazaya və hesabata.
+- [ ] Sübut səviyyəsi hər tapıntıda: `ORACLE_CONFIRMED` / `UI_NETWORK` / `LLM_JUDGED` (`FindingRecord.evidenceTier`);
+  hesabat və panel göstərir; oracle olmayan hədəfdə `oracle` assert-ləri "SKIPPED" yox, "N/A (no oracle)" olur.
+- [ ] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
+  və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
+
+Hazır sayılır: iki fərqli hədəf profili (fake KadroHR + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
+paneldən seçilir; ikincidə kəşfiyyatçı sahibin hesabı ilə daxil olur, hesabat sübut səviyyələrini göstərir.
+
+### Faza 11 — Alət üzü (MCP + `--json`)
+
+Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-case-ləri işlətsin.
+
+- [ ] `PanelBackend` portu üstündə ikinci "üz": `features/dashboard` yanında `features/toolface` (və ya dashboard
+  daxilində `mcp` alt-paketi — ADR-0009 qərarı). Alətlər: `explore_site`, `list_unknowns`, `answer_unknown`,
+  `generate_scenario`, `approve_scenario`, `run_campaign`, `get_run_status`, `get_findings`, `get_evidence`,
+  `list_targets`, `teardown`. Hər alət giriş/çıxışı kotlinx.serialization sxemi ilə.
+- [ ] `petek mcp` (stdio) əmri; MCP Kotlin SDK əlavə olunur (qayda 11 — soruşulacaq) və ya nazik JSON-RPC
+  implementasiyası (SDK-sız; MCP-nin stdio profili kiçikdir). Yalnız loopback/stdio; yazan alətlər `allowWrites`
+  tələb edir; `PETEK_ALLOW_PRODUCTION` qaydası eynidir.
+- [ ] Bütün CLI əmrlərinə `--json` (stdout yalnız JSON, loglar stderr); çıxış kodları `ExitCodes`-da sənədlənir.
+- [ ] Tapıntı paketi (`FindingBundle`): tapıntı + addım + request/response + screenshot yolu + A/B/C + sübut səviyyəsi —
+  kök səbəb araşdırması üçün ev sahibi AI-ın oxuyacağı tək obyekt (`reporting` domain).
+- [ ] Testlər: MCP əl sıxma və hər alət üçün kontrakt testi (stdio üzərindən), `--json` çıxışının sxem testi.
+
+Hazır sayılır: Claude Code-da (`.mcp.json`) və başqa bir MCP müştərisində `explore_site` → `get_findings` zənciri
+fake target-də işləyir; eyni iş `petek explore --json | petek findings --json` ilə də alınır.
+
+### Faza 12 — Skill paketi və paylanma
+
+Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pətək yanında qalxsın; CI-da işləsin.
+
+- [ ] `petek init` (hədəf repoda): `.petek/` (hədəf profili şablonu, `petek.yaml`), AI-a görə təlimat faylları —
+  `SKILL.md` (açıq Agent Skills formatı), `AGENTS.md` parçası, `CLAUDE.md` parçası, `.cursor/rules/petek.mdc`,
+  `GEMINI.md`, `.github/copilot-instructions.md` parçası; `.mcp.json` qeydi. Mövcud faylların üstünə yazmır, parça
+  əlavə edir.
+- [ ] Rol təlimatları (skill fayllarında, ingiliscə; UI-da Azərbaycanca): *explorer* (naməlumları sahibdən soruş,
+  `answer_unknown`), *scenario author* (`generate_scenario` → sahib təsdiqi), *judge* (triaj), *root-cause* (
+  `get_findings` → repoda kodu tap → düzəliş təklifi, tətbiq etmə — sahib təsdiqləyir). Təlimatlar Pətəkin
+  alətlərindən kənar heç nə vəd etmir.
+- [ ] Paylanma: `installDist`/jlink CLI (yollar repo kökündən asılı olmur — `PETEK_HOME`), Docker image (Playwright
+  base + JDK 25, Mailpit companion), `npx petek` başladıcı (yalnız yükləyib işə salır). `:app`-dan `fake-target`
+  runtime asılılığı ayrılır (`petek demo` ayrıca dist).
+- [ ] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
+- [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; GitHub Action
+  və GitLab CI şablonları; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.
+- [ ] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar), PDF ixracı; hesabat başlığında hədəf, provayder,
+  model, sübut səviyyələri.
+- [ ] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
+
+Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; Claude Code və Codex
+həmin repoda `SKILL.md`-ni oxuyub `explore_site` çağırır; GitHub Action fake target-də yaşıl/qırmızı verir.
+
+### Faza 13 — Universal hədəf modeli
+
+Məqsəd: HR SaaS forması nüvədən çıxsın; sayt haqqında heç nə bilməyəndə də dəyərli test alınsın. Ən riskli refaktor,
+ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
+
+- [ ] `Roles.kt` enum-ları sərbəst sətirə: rollar və qeydiyyat rejimləri kampaniya/hədəf profili tərəfindən müəyyən
+  olunur; `admin/manager/employee` KadroHR profilinin dəyərləridir.
+- [ ] Şirkət/departament/`seed_company`/dəvət-şirkət kodu məntiqi "tenant" plugin-inə (`features/tenant` və ya
+  `campaign` daxilində isteğe bağlı bölmə): profil `tenant: none | company` deyir; `PromptBuilder` "Company context"
+  blokunu yalnız tenant varsa qoşur; teardown resurs üzrə ümumiləşir.
+- [ ] Oracle adapteri konfiqurasiya ilə: `/test/...` yolları və resurslar profildə (`ScenarioSettings.oracleResources`
+  başlanğıcdır); `none` rejimi birinci dərəcəli.
+- [ ] Kor test naxışları (`TestPatterns` genişlənir; site model boş olsa da işləyir): forma validasiyası (boş/uzun/yanlış
+  giriş), ikiqat submit (idempotentlik), birbaşa URL ilə icazə (rol A-nın səhifəsi rol B ilə), yarış (iki agent eyni
+  obyekt), sessiya bitməsi, geri düyməsi, qırıq linklər, konsol/şəbəkə xətaları, yavaş endpoint-lər, mobil viewport.
+  Hər naxış hansı sübut səviyyəsini verə bildiyini bildirir.
+- [ ] Kəşfiyyatçı draftları şirkətsiz setup ilə (yalnız login və ya anonim); seed yolları və açar sözlər profildə.
+- [ ] KadroHR default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → `targets/kadrohr.yaml`.
+- [ ] Testlər: tenant-sız kampaniya e2e ikinci fake saytda; Konsist "core/domain HR anlayışı bilmir" qaydası.
+
+Hazır sayılır: ikinci fake sayt (şirkət anlayışı olmayan, adi login-li tətbiq) `petek explore` → draft → `run` →
+hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
+
+### Faza 14 — Ekosistem və ödənişli modullar
+
+- [ ] Kontrakt kitləri: `TARGET_CONTRACT.md`-dəki `/test/...` endpointlərini bir sətirlə verən paketlər (Spring Boot
+  starter, Express router, Laravel paketi); test rejimində açılır, `X-Test-Token` yoxlayır.
+- [ ] Korrelyasiya körpüsü: hər agent sorğusuna `X-Petek-Correlation-Id`; run sonrası log/OpenTelemetry mənbəyindən
+  (adapter portu) həmin ID-lər çəkilir və `FindingBundle`-a əlavə olunur — kök səbəb üçün "düymə → request → server
+  exception".
+- [ ] Regressiya baseline: release-lər arası dondurulmuş ssenari nəticə fərqi (yeni/düzələn/yavaşlayan); vizual
+  regressiya (screenshot fərqi); əlçatanlıq və performans ölçüləri (Playwright içindən) ayrıca bölmə.
+- [ ] Production "yalnız oxu" monitorinq rejimi (yazan addım yoxdur, 2–3 agent, cron).
+- [ ] Ödənişli modullar (ayrı repo/modul, Faza 8 portları arxasında): hosted sürü (Redis/NATS ilə çoxmaşınlı
+  orkestrasiya), hesabat tarixçəsi/trend və paylaşılan panel, SSO/audit, hesabat hostingi.
+- [ ] Köhnə Faza 8 qalıqları: API adapteri, mobil adapter (Maestro/Appium), LLM hakim (yalnız `LLM_JUDGED` səviyyəsi ilə).
+
+### Eninə kəsən: biznes hazırlığı
+
+- Gəlir modeli: **açıq nüvə + ödənişli modullar/hosted**; ilk pul xidmətdən ("saytını Pətəklə yoxlayıram") gələ bilər,
+  məhsul hazır olmadan da. BYO-AI prinsipi pozulmur: LLM xərcini Pətək daşımır (marja), müştəri məlumatı Pətəkdən keçmir.
+- Faza 8: lisenziya, `workspace_id`, edition portları, telemetriya portu (opt-in), ad/marka.
+- Faza 11–12: paylaşıla bilən hesabat (satış materialı), `petek init` (yayılma).
+- Faza 14: hosted sürü, tarixçə/trend, SSO — ödənişli.
+- Çəkinilməli: model xərcini öz üzərinə almaq; hosted SaaS-ı 3–5 ödəyən müştəridən əvvəl qurmaq; portları qapalı saxlamaq.
+
+### Yeni konfiqurasiya açarları (Faza 9–10)
+
+| Açar | Default | Məna |
+|---|---|---|
+| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `anthropic-api`, `openai-compat` |
+| `PETEK_LLM_BIN` | provayderə görə | CLI binarı (`PETEK_CLAUDE_BIN` alias) |
+| `PETEK_LLM_BASE_URL` | — | OpenAI-uyğun endpoint (məs. `http://localhost:11434/v1`) |
+| `PETEK_LLM_API_KEY` | — | `Secret`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` alias |
+| `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt` |
+| `PETEK_LLM_EFFORT` | provayderə görə | yalnız dəstəkləyən provayderə ötürülür |
+| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api`, `imap`, `manual` (hədəf profili üstünlük alır) |
+| `PETEK_TARGETS_DIR` | `targets` | hədəf profilləri qovluğu |
+| `PETEK_HOME` | repo kökü | dist rejimində iş qovluğu |
+
+### Qərar gözləyən suallar (Pətək 2)
+
+- [ ] **Lisenziya:** Apache 2.0 (maksimum yayılma) və ya BSL 1.1 → 4 ildən sonra Apache 2.0 (hosted rəqabətdən
+  qorunma)? Tövsiyə: BSL 1.1, çünki hosted sürü satmaq niyyəti var.
+- [ ] **MCP:** Kotlin MCP SDK (yeni kitabxana, qayda 11) və ya SDK-sız nazik stdio JSON-RPC? Tövsiyə: SDK, əgər
+  Kotlin 2.4/JDK 25 ilə uyğundursa; deyilsə nazik implementasiya.
+- [ ] **IMAP kitabxanası:** Jakarta Mail (Angus) və ya Ktor üzərində minimal IMAP? Tövsiyə: Jakarta Mail (Angus).
+- [ ] **Sürü beyni üçün minimum:** OpenAI-uyğun + generic CLI kifayətdirmi, yoxsa Gemini/OpenAI native SDK-ları da?
+  Tövsiyə: hələlik kifayətdir.
+- [ ] **Rol adları:** skill fayllarında ingiliscə, UI-da Azərbaycanca? Tövsiyə: bəli.
+- [ ] **Ödənişli modulların yeri:** eyni repoda ayrı Gradle modulu (`premium/`) və ya ayrı repo? Tövsiyə: ayrı repo,
+  nüvədə yalnız portlar.
 
 ## Sübut bazası və hesabat
 

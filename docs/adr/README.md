@@ -9,5 +9,9 @@
 | [0005](0005-evidence-store.md) | SQLite evidence store with a single writer plus artifact files | Accepted |
 | [0006](0006-realtime-coordination-and-latency.md) | In-process event bus; latency measured in the receiver's DOM | Accepted |
 | [0007](0007-verdicts-and-target-safety.md) | Code-evaluated three-source verdicts and layered target safety | Accepted |
+| [0008](0008-provider-agnostic-llm-layer.md) | AI-provider-agnostic LLM layer with automatic detection (extends 0003) | Accepted |
+| [0009](0009-product-boundary-and-tool-surface.md) | Pətək is the product; host AI is a caller — MCP, `--json`, skill pack | Accepted |
+| [0010](0010-target-profiles-and-sign-in-chain.md) | Target profiles, sign-in strategy chain and evidence tiers | Accepted |
+| [0011](0011-open-core-edition-boundary.md) | Open-core edition boundary, workspace identity, opt-in telemetry | Proposed |
 
 Each ADR records the forces at the time of the decision. Supersede an ADR with a new one rather than rewriting it.
