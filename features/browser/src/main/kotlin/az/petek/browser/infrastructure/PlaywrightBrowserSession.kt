@@ -36,6 +36,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -230,6 +231,9 @@ internal class PlaywrightBrowserSession private constructor(
             Files.setPosixFilePermissions(path, permissions)
         } catch (_: UnsupportedOperationException) {
             // Not a POSIX file system (Windows): the user's own profile directory protects the file.
+        } catch (e: IOException) {
+            // Best effort: the state was saved; a mount that refuses chmod must not fail the tester's login.
+            logger.warn { "Could not restrict the permissions of $path (${e::class.simpleName}: ${e.message})" }
         }
     }
 

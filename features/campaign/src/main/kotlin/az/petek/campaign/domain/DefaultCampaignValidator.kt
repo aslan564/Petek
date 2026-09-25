@@ -55,14 +55,14 @@ class DefaultCampaignValidator(
     ) {
         private val settings = campaign.settings
         private val issues = mutableListOf<ValidationIssue>()
-        private val emittedAnywhere: Set<String> = campaign.allSteps.mapNotNullTo(LinkedHashSet()) { it.emits?.event }
 
-        /** How many steps emit each event; `wait_for` and `{last_id}` are unambiguous only when it is one. */
+        /** How many steps emit each event (first-seen order); `wait_for` and `{last_id}` are unambiguous only when it is one. */
         private val emittingSteps: Map<String, Int> =
             campaign.allSteps
                 .mapNotNull { it.emits?.event }
                 .groupingBy { it }
                 .eachCount()
+        private val emittedAnywhere: Set<String> get() = emittingSteps.keys
 
         fun check(): List<ValidationIssue> {
             checkSettings()
@@ -652,8 +652,12 @@ class DefaultCampaignValidator(
     private companion object {
         val WEB_SCHEMES = setOf("http", "https")
 
-        /** Run functions that create or seed the company: only the owner may perform them (isolation, rule 7). */
-        val ADMIN_ONLY_RUN_FUNCTIONS = setOf("register_owner", "seed_company")
+        /**
+         * Run functions that create or seed the company: only the owner may perform them (isolation, rule 7). They are
+         * the agent feature's `RunFunctions.REGISTER_OWNER` and `SEED_COMPANY`; the campaign domain cannot see that
+         * registry, so the seed function is named here (the owner sign-up is also the flow of that name).
+         */
+        val ADMIN_ONLY_RUN_FUNCTIONS = setOf(FlowNames.REGISTER_OWNER, "seed_company")
         val HTTP_METHODS = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 
         /**

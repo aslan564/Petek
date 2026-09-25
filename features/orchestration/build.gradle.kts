@@ -30,3 +30,8 @@ dependencies {
     testImplementation(testFixtures(project(":features:evidence")))
     testImplementation(testFixtures(project(":features:identity")))
 }
+
+// TesterIsolationAtScaleTest proves isolation with 100 and 1 000 testers on every build; -Dpetek.isolation.testers=5000 adds more.
+tasks.withType<Test>().configureEach {
+    System.getProperty("petek.isolation.testers")?.let { systemProperty("petek.isolation.testers", it) }
+}

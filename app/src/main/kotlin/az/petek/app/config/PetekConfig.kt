@@ -12,6 +12,7 @@ package az.petek.app.config
 import az.petek.browser.domain.BrowserTopology
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
+import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderId
 import java.net.URI
 import java.nio.file.Path
@@ -61,6 +62,9 @@ data class PetekConfig(
         }
         require(mailSource != MailSource.TEST_API || testToken?.isBlank == false) {
             "the test-api mail source needs the test token"
+        }
+        require(testApiUrl == null || targetPolicy.verify(testApiUrl) == TargetVerdict.Allowed) {
+            "the test API URL names a production host; set PETEK_ALLOW_PRODUCTION=true to allow it"
         }
     }
 

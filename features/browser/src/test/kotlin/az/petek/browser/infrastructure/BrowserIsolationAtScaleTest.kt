@@ -24,6 +24,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -36,8 +37,9 @@ import kotlin.time.measureTime
  * as a different user, then every session — all at the same time, twice — reads back who the site thinks it is (the
  * cookie), what its page shows, what its localStorage holds and which thread serves it. Saved storage states hold only
  * the session's own cookie. `petek.isolation.sessions` sets N (default 30; the machine's memory is the limit, see
- * docs/requirements/R01 for the recorded runs).
+ * docs/requirements/R01 for the recorded runs). Real browser, so tagged `e2e`: `./gradlew :features:browser:isolationTest`.
  */
+@Tag("e2e")
 class BrowserIsolationAtScaleTest {
     @TempDir
     lateinit var dir: Path

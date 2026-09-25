@@ -22,7 +22,18 @@ dependencies {
     testImplementation(libs.ktor.server.sse)
 }
 
-// BrowserIsolationAtScaleTest opens this many real Chromium contexts (default 30): -Dpetek.isolation.sessions=150
-tasks.withType<Test>().configureEach {
+// The isolation proof with real Chromium (BrowserIsolationAtScaleTest, tagged e2e) has its own task; it opens
+// -Dpetek.isolation.sessions=N contexts (default 30). CI runs it in the e2e job.
+tasks.register<Test>("isolationTest") {
+    description = "Tester isolation with N real Chromium contexts (petek.isolation.sessions, default 30)."
+    group = "verification"
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("e2e") }
+    maxHeapSize = "2g"
     System.getProperty("petek.isolation.sessions")?.let { systemProperty("petek.isolation.sessions", it) }
+    shouldRunAfter(tasks.test)
 }

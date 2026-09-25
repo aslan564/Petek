@@ -97,7 +97,7 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 | AI | Claude Code CLI (`claude -p`, Claude planınız) və ya Anthropic API — retry, paralellik limiti və ölçmə dekoratorları ilə bir `LlmClient` portu arxasında |
 | Sübut | SQLite (run, kimlik, addım, hadisə, qəbz, assert, tapıntı, istifadə) + artefakt faylları, hər qeydin ID-si var |
 | Keyfiyyət qapıları | Kotlin warning = error, Spotless ilə ktlint, məcburi lisenziya başlıqları, Konsist arxitektura testləri, Kover, real Chromium ilə e2e |
-| İzolyasiya | Hər tester öz brauzer kontekstində və öz thread-ində; kolleqalarını sirlərsiz tanıyır; paylaşılan dəyərlər write-once; hər build-də 5 000 testerlə (orkestrator) və 30 (ölçülüb: 60) real Chromium sessiyası ilə sübut olunur — [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
+| İzolyasiya | Hər tester öz brauzer kontekstində və öz thread-ində; kolleqalarını sirlərsiz tanıyır; paylaşılan dəyərlər write-once; hər build-də 1 000 testerlə (orkestrator), CI-da 5 000 tester və 30 real Chromium sessiyası ilə (60-a qədər ölçülüb) sübut olunur — [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
 
 ## Sürətli başlanğıc
 

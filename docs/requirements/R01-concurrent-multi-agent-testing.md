@@ -57,13 +57,15 @@ contention, never shared state); `PER_SESSION` gives every tester its own browse
 
 ## Verification
 
-- **`TesterIsolationAtScaleTest`** (`features/orchestration`, runs with `build`): the real orchestrator, step executor,
+- **`TesterIsolationAtScaleTest`** (`features/orchestration`; 100 and 1 000 testers on every `build`, 5 000 in CI's
+  e2e job via `-Dpetek.isolation.testers=5000`): the real orchestrator, step executor,
   event bus and shared state drive **100, 1 000 and 5 000** testers (fake browser and scripted decisions) through a
   KadroHR-shaped campaign and assert every guarantee above that the harness owns: distinct identity, session object,
   runtime and storage path per tester; every agent acted as itself; 4 999 attempts to change the admin's company code
   refused; every step, wait, event and receipt attributed to the right agent; `{last_id}` never a colleague's id.
   Measured 2026-09-25: 100 testers 0.15 s, 1 000 testers 1.5 s, 5 000 testers 13 s (virtual time).
-- **`BrowserIsolationAtScaleTest`** (`features/browser`, runs with `build`, `-Dpetek.isolation.sessions=N`): N real
+- **`BrowserIsolationAtScaleTest`** (`features/browser`, tagged `e2e`: `./gradlew :features:browser:isolationTest
+  -Dpetek.isolation.sessions=N`, run by CI's e2e job with the default 30): N real
   Chromium contexts on shared servers log in as different users at once; every session — all concurrently, twice —
   is checked for its own cookie (`/api/me`), page text, localStorage and thread; saved storage states hold only the own
   cookie. Measured 2026-09-25 on a 4-core / 16 GB container: **30 sessions** pass in 20 s (2 servers), **60 sessions**

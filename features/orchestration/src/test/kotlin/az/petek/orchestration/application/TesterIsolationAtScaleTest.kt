@@ -35,7 +35,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.params.provider.MethodSource
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -108,7 +108,7 @@ class TesterIsolationAtScaleTest {
     )
 
     @ParameterizedTest(name = "{0} testers")
-    @ValueSource(ints = [100, 1000, 5000])
+    @MethodSource("sizes")
     fun `every tester acts only as itself and the harness keeps them apart`(testers: Int) =
         runTest(timeout = 10.minutes) {
             val managers = testers / 10
@@ -226,8 +226,12 @@ class TesterIsolationAtScaleTest {
                 .shouldBeEmpty()
         }
 
-    private companion object {
-        const val ANNOUNCEMENT = "Sabah 10:00 ümumi iclas"
-        const val ADMIN_CODE = "PTK-1"
+    companion object {
+        private const val ANNOUNCEMENT = "Sabah 10:00 ümumi iclas"
+        private const val ADMIN_CODE = "PTK-1"
+
+        /** 100 and 1 000 on every build; `-Dpetek.isolation.testers=5000` (CI's e2e job) adds the large proof. */
+        @JvmStatic
+        fun sizes(): List<Int> = listOf(100, 1000) + listOfNotNull(System.getProperty("petek.isolation.testers")?.toIntOrNull())
     }
 }

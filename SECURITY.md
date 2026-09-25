@@ -65,8 +65,9 @@ trusted.
 - Saved storage states (live cookies) are written `rw-------` into a `rwx------` directory, one file per run and agent.
 - Injected page scripts (`features/browser/src/main/resources/**/*.js`) blank secret field values before serialising
   DOM snapshots.
-- Proven at scale: `TesterIsolationAtScaleTest` (5 000 testers through the real orchestrator) and
-  `BrowserIsolationAtScaleTest` (60 real Chromium contexts) run with `./gradlew build`.
+- Proven at scale: `TesterIsolationAtScaleTest` (1 000 testers through the real orchestrator on every build, 5 000 in
+  CI) and `BrowserIsolationAtScaleTest` (real Chromium contexts, 30 in CI, measured up to 60).
+- `PETEK_TEST_API_URL` is judged by the same production-host policy as the target: the test API writes and deletes.
 
 **Panel**
 - Ktor CIO bound to `127.0.0.1` only; `Host`/`Origin` headers must be local; every non-GET request needs the

@@ -125,17 +125,11 @@ internal class StepExecutor(
     private val board: AgentBoard get() = services.board
     private val tasks: TaskBoard get() = services.tasks
 
-    /**
-     * The object id of the newest event before the current step began: what `{last_id}` means for an actor that neither
-     * waited for nor emitted an event in this step. Taken once per step, so concurrent actors of one step never see each
-     * other's ids through it (an actor whose own action failed does not inherit a colleague's object).
-     */
-    @Volatile
-    private var lastIdBeforeStep: String? = null
-
     suspend fun execute(step: ScenarioStep): StepResult {
         board.stepStarted(step.id)
-        lastIdBeforeStep = run.bus.latestAny()?.objectId
+        // What `{last_id}` means for an actor that neither waits for nor emits an event in this step: the newest object
+        // before the step began, taken once, so concurrent actors never see each other's ids through it.
+        val lastIdBeforeStep = run.bus.latestAny()?.objectId
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors[step.id] = chosen.map { it.agentId }
@@ -156,7 +150,12 @@ internal class StepExecutor(
                         chosen
                             .map { identity ->
                                 async(services.diagnostics.of(run.runId, identity.agentId)) {
-                                    runActor(step, identity, barrier, race, pacer).also { if (it is ActorRun.Raced) raced += it }
+                                    runActor(step, identity, barrier, race, pacer, lastIdBeforeStep).also {
+                                        if (it is ActorRun.Raced) {
+                                            raced +=
+                                                it
+                                        }
+                                    }
                                 }
                             }.awaitAll()
                     } finally {
@@ -190,6 +189,7 @@ internal class StepExecutor(
         barrier: StartBarrier?,
         race: AssertionSpec.OnlyOneSucceeds?,
         pacer: StartPacer,
+        lastIdBeforeStep: String?,
     ): ActorRun {
         var arrived = false
         try {
@@ -202,7 +202,7 @@ internal class StepExecutor(
                     }
                 }
             val reception = waited?.let { receive(actor, it) }
-            val templates = templateContext(identity, waited?.event?.objectId)
+            val templates = templateContext(identity, waited?.event?.objectId ?: lastIdBeforeStep)
             val action =
                 try {
                     render(step.action, templates)
@@ -224,7 +224,7 @@ internal class StepExecutor(
             failureScreenshot(actor, performed.outcome)
             val succeeded = requests?.succeeded ?: performed.outcome.succeeded
             val emitted = if (succeeded) step.emits?.let { emit(actor, it, performed.outcome, templates) } else null
-            val lastId = emitted?.event?.objectId ?: waited?.event?.objectId
+            val lastId = emitted?.event?.objectId ?: waited?.event?.objectId ?: lastIdBeforeStep
             val checks =
                 verifyActor(actor, actor.stepId, afterActionSpecs(step), templateContext(identity, lastId), waited?.event?.t0)
             val acted = Acted(actor, performed, requests, emitted, listOfNotNull(reception, checks))
@@ -797,12 +797,13 @@ internal class StepExecutor(
 
     // --- helpers --------------------------------------------------------------------------------------------------
 
+    /** [lastId] is the actor's own emitted object, the one it waited for, or the newest before the step (see [execute]). */
     private fun templateContext(
         identity: Identity?,
-        lastIdOverride: String?,
+        lastId: String?,
     ): TemplateContext =
         TemplateContext(
-            lastId = lastIdOverride ?: lastIdBeforeStep,
+            lastId = lastId,
             self = identity?.let(::selfFields).orEmpty(),
             eventIds = latestEventIds(),
         )

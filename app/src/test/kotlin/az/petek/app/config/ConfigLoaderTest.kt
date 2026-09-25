@@ -187,6 +187,18 @@ class ConfigLoaderTest {
     }
 
     @Test
+    fun `the test API address is judged by the production-host policy like the target`() {
+        problems(target, "PETEK_TEST_API_URL" to "https://kadrohr.com") shouldContainExactlyInAnyOrder
+            listOf(
+                "PETEK_TEST_API_URL: Target 'kadrohr.com' is a production host (listed in PETEK_PRODUCTION_HOSTS). " +
+                    "Use a staging target, or set PETEK_ALLOW_PRODUCTION=true in .env to test it deliberately.",
+            )
+        load(target, "PETEK_TEST_API_URL" to "https://kadrohr.com", "PETEK_ALLOW_PRODUCTION" to "true").testApiBase shouldBe
+            URI("https://kadrohr.com")
+        load(target, "PETEK_TEST_API_URL" to "https://api.staging.kadrohr.com").testApiBase shouldBe URI("https://api.staging.kadrohr.com")
+    }
+
+    @Test
     fun `the test API mail source needs the test token`() {
         problems(target, "PETEK_MAIL_SOURCE" to "test-api") shouldContainExactlyInAnyOrder
             listOf("PETEK_TEST_TOKEN is required when PETEK_MAIL_SOURCE is test-api")

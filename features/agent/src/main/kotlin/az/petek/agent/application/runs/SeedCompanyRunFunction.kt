@@ -17,6 +17,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
 import az.petek.agent.domain.StepContext
 import az.petek.core.model.RegistrationMode
+import az.petek.evidence.domain.StepStatus
 import az.petek.oracle.domain.Invitee
 import az.petek.oracle.domain.SeedCompanyRequest
 import az.petek.oracle.domain.TargetOracle
@@ -62,12 +63,12 @@ internal class SeedCompanyRunFunction(
                 oracle.seedCompany(SeedCompanyRequest(company.id, departments, invites))
             }
         val shared = runtime.shared
-        shared.put(SharedRunState.COMPANY_ID, result.companyId)
-        result.inviteLinks.forEach { (email, link) -> shared.put(SharedRunState.inviteLink(email), link) }
-        val code = result.companyCode ?: company.code ?: codeFromUi()
-        code?.let { shared.put(SharedRunState.COMPANY_CODE, it) }
+        // Shared values are write-once: what the joiners will read is what is published, not what this answer said.
+        val companyId = publish(SharedRunState.COMPANY_ID, result.companyId)
+        result.inviteLinks.forEach { (email, link) -> publish(SharedRunState.inviteLink(email), link) }
+        val code = (result.companyCode ?: company.code ?: codeFromUi())?.let { publish(SharedRunState.COMPANY_CODE, it) }
         val summary =
-            "Seeded company ${result.companyId}: ${departments.size} departments, ${invites.size} invitations " +
+            "Seeded company $companyId: ${departments.size} departments, ${invites.size} invitations " +
                 "(${result.inviteLinks.size} links returned), company code ${code ?: "unknown"}."
         val codeJoiners = runtime.roster.count { it.registration == RegistrationMode.COMPANY_CODE }
         if (code == null && codeJoiners > 0) {
@@ -95,9 +96,19 @@ internal class SeedCompanyRunFunction(
         return company
     }
 
+    /** Publishes [value] under [key] and returns what the key holds afterwards: [value], or an earlier publication (noted). */
+    private suspend fun RunTrace.publish(
+        key: String,
+        value: String,
+    ): String {
+        if (runtime.shared.put(key, value)) return value
+        val kept = runtime.shared.get(key) ?: value
+        note("publish shared.$key", StepStatus.PASSED, "already published as '$kept'; kept (write-once), this step said '$value'")
+        return kept
+    }
+
     private suspend fun RunTrace.publishCodeFromUi(): ActionOutcome {
-        val code = codeFromUi()
-        code?.let { runtime.shared.put(SharedRunState.COMPANY_CODE, it) }
+        val code = codeFromUi()?.let { publish(SharedRunState.COMPANY_CODE, it) }
         val invitees = runtime.roster.count { it.registration == RegistrationMode.INVITE }
         val codeJoiners = runtime.roster.count { it.registration == RegistrationMode.COMPANY_CODE }
         return when {

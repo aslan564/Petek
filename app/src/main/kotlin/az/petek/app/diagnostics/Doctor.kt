@@ -71,11 +71,16 @@ class Doctor(
         }
     }
 
-    private fun policy(): CheckResult =
-        when (val verdict = config.targetPolicy.verify(WebUrls.canonical(config.target))) {
-            TargetVerdict.Allowed -> CheckResult(POLICY, CheckStatus.OK, "${PetekConfig.masked(config.target)} is allowed")
-            is TargetVerdict.Refused -> CheckResult(POLICY, CheckStatus.FAILED, verdict.reason)
+    /** The target and, when it lives elsewhere, the test API are both judged: the API writes and deletes (rule 8). */
+    private fun policy(): CheckResult {
+        val judged = listOf(config.target, config.testApiBase).distinct()
+        val refused = judged.map { config.targetPolicy.verify(WebUrls.canonical(it)) }.filterIsInstance<TargetVerdict.Refused>()
+        return if (refused.isEmpty()) {
+            CheckResult(POLICY, CheckStatus.OK, judged.joinToString(", ") { PetekConfig.masked(it) } + " allowed")
+        } else {
+            CheckResult(POLICY, CheckStatus.FAILED, refused.joinToString("; ") { it.reason })
         }
+    }
 
     private suspend fun targetReachable(): CheckResult =
         when (val answer = http.get(config.target)) {

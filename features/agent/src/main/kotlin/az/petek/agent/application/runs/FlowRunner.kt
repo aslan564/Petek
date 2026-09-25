@@ -385,13 +385,25 @@ internal class FlowRunner(
                 ValueTarget.Scope.SHARED -> runtime.shared.get(target.key)
             }
 
-        private fun store(
+        private suspend fun store(
             target: ValueTarget,
             value: String,
         ) {
             when (target.scope) {
-                ValueTarget.Scope.VARS -> runtime.variables[target.key] = value
-                ValueTarget.Scope.SHARED -> runtime.shared.put(target.key, value)
+                ValueTarget.Scope.VARS -> {
+                    runtime.variables[target.key] = value
+                }
+
+                ValueTarget.Scope.SHARED -> {
+                    if (!runtime.shared.put(target.key, value)) {
+                        val kept = runtime.shared.get(target.key).orEmpty()
+                        trace.note(
+                            "store shared.${target.key}",
+                            StepStatus.PASSED,
+                            "already published as ${quoted(kept)}; kept (write-once)",
+                        )
+                    }
+                }
             }
         }
 

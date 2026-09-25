@@ -11,6 +11,8 @@ package az.petek.app.config
 
 import az.petek.browser.domain.BrowserTopology
 import az.petek.core.security.Secret
+import az.petek.core.security.TargetPolicy
+import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderId
 import java.net.URI
 import java.net.URISyntaxException
@@ -55,6 +57,11 @@ class ConfigLoader(
             val allowProduction = flag(Keys.ALLOW_PRODUCTION, default = false)
             val testToken = token(Keys.TEST_TOKEN)
             val testApiUrl = url(Keys.TEST_API_URL, default = null)
+            // The test API writes and deletes: it is judged by the same production-host policy as the target (rule 8).
+            testApiUrl?.let { api ->
+                val verdict = TargetPolicy(productionHosts, allowProduction).verify(api)
+                if (verdict is TargetVerdict.Refused) problems += "${Keys.TEST_API_URL}: ${verdict.reason}"
+            }
             val mailSource = mailSource()
             if (mailSource == MailSource.TEST_API && testToken == null) {
                 problems += "${Keys.TEST_TOKEN} is required when ${Keys.MAIL_SOURCE} is ${MailSource.TEST_API.key}"
