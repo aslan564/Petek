@@ -147,6 +147,41 @@ class FileSystemArtifactStoreTest {
         }
 
     @Test
+    fun `two stores writing to the same run and owner in turn never overwrite each other`() =
+        runTest {
+            val first = store()
+            first.write(run, step, "a07", ArtifactType.SCREENSHOT, "A1".toByteArray())
+            val second = store()
+
+            val written =
+                listOf(
+                    second.write(run, step, "a07", ArtifactType.SCREENSHOT, "B1".toByteArray()),
+                    first.write(run, step, "a07", ArtifactType.SCREENSHOT, "A2".toByteArray()),
+                    second.write(run, step, "a07", ArtifactType.SCREENSHOT, "B2".toByteArray()),
+                    first.write(run, step, "a07", ArtifactType.SCREENSHOT, "A3".toByteArray()),
+                )
+
+            written.map { it.relativePath }.toSet().size shouldBe written.size
+            written.map { store().resolve(it).readBytes().decodeToString() } shouldContainExactly listOf("B1", "A2", "B2", "A3")
+            root.resolve("run_1/a07/0001-screenshot.png").readBytes().decodeToString() shouldBe "A1"
+        }
+
+    @Test
+    fun `a name taken on disk after the store started is skipped instead of replaced`() =
+        runTest {
+            val store = store()
+            store.write(run, step, "a07", ArtifactType.SCREENSHOT, "mine".toByteArray())
+            val foreign = root.resolve("run_1/a07/0002-screenshot.png")
+            foreign.writeBytes("foreign".toByteArray())
+
+            val next = store.write(run, step, "a07", ArtifactType.SCREENSHOT, "next".toByteArray())
+
+            next.relativePath shouldBe "run_1/a07/0003-screenshot.png"
+            foreign.readBytes().decodeToString() shouldBe "foreign"
+            store.resolve(next).readBytes().decodeToString() shouldBe "next"
+        }
+
+    @Test
     fun `numbering ignores stray files that do not start with a sequence`() =
         runTest {
             val ownerDir = Files.createDirectories(root.resolve("run_1/a07"))

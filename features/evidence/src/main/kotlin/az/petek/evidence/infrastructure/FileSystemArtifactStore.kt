@@ -10,6 +10,7 @@ import az.petek.evidence.domain.ArtifactType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
@@ -26,8 +27,9 @@ import kotlin.io.path.name
  * and returns their [ArtifactRecord] (the caller records it with the evidence recorder).
  *
  * - `seq` is a per-(run, owner) counter, safe under concurrent writers. It continues after the files already on
- *   disk, so a second store over the same root never overwrites earlier evidence. One store per root and process
- *   is expected; two stores writing the same run and owner at the same time could pick the same number.
+ *   disk, and a file name that is already taken is skipped, so earlier evidence is never overwritten (by a
+ *   restarted process, or by a second store over the same root). One store per root and process is expected: two
+ *   stores racing for the very same name in the same instant remain the only case the check cannot close.
  * - Each file is written to a temporary sibling and then moved into place with an atomic move, so readers see
  *   either nothing or the complete file. Blocking I/O runs on [Dispatchers.IO].
  * - `owner` is sanitized to `[A-Za-z0-9_-]` and run ids must be safe directory names; [resolve] rejects any
@@ -55,7 +57,7 @@ class FileSystemArtifactStore(
             val ownerDirectory = ArtifactPaths.sanitizeOwner(owner)
             val directory = root.resolve(runDirectory).resolve(ownerDirectory)
             Files.createDirectories(directory)
-            val fileName = ArtifactPaths.fileName(nextSeq(directory), type)
+            val fileName = nextFreeFileName(directory, type)
             writeAtomically(directory, fileName, bytes)
             ArtifactRecord(
                 artifactId = ids.artifactId(),
@@ -71,6 +73,22 @@ class FileSystemArtifactStore(
     override fun resolve(record: ArtifactRecord): Path = ArtifactPaths.resolveInside(root, record.relativePath)
 
     override fun runDirectory(runId: RunId): Path = root.resolve(ArtifactPaths.requireSafeRunId(runId))
+
+    /**
+     * The next sequence number whose file name is still free. An atomic move silently replaces an existing target
+     * on POSIX, so a name that is already taken (by another store over the same root, or by an owner directory that
+     * a case-insensitive file system folds into this one) is skipped instead of overwritten.
+     */
+    private fun nextFreeFileName(
+        directory: Path,
+        type: ArtifactType,
+    ): String {
+        while (true) {
+            val fileName = ArtifactPaths.fileName(nextSeq(directory), type)
+            // exists() is false when existence cannot be determined; the write then fails with the real I/O error.
+            if (!directory.resolve(fileName).exists(LinkOption.NOFOLLOW_LINKS)) return fileName
+        }
+    }
 
     /** The first call per directory scans it once, so numbering resumes after files written by earlier processes. */
     private fun nextSeq(directory: Path): Int =
@@ -92,8 +110,10 @@ class FileSystemArtifactStore(
         try {
             Files.write(temporary, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
             Files.move(temporary, directory.resolve(fileName), StandardCopyOption.ATOMIC_MOVE)
-        } finally {
-            Files.deleteIfExists(temporary)
+        } catch (failure: Throwable) {
+            // Clean up, but never let a failed cleanup hide the error that explains the lost artifact.
+            runCatching { Files.deleteIfExists(temporary) }.exceptionOrNull()?.let(failure::addSuppressed)
+            throw failure
         }
     }
 

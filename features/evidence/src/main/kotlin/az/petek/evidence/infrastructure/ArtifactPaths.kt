@@ -20,7 +20,8 @@ internal object ArtifactPaths {
 
     /**
      * Maps any owner to a safe directory name made of `[A-Za-z0-9_-]`: every other character (including `.`, `/`
-     * and `\`) becomes `_`, so `..` can never appear. Blank owners map to `_`.
+     * and `\`) becomes `_`, so `..` can never appear. An empty owner maps to `_`; longer owners are cut to
+     * [MAX_OWNER_LENGTH] characters first.
      */
     fun sanitizeOwner(owner: String): String = owner.take(MAX_OWNER_LENGTH).replace(OWNER_FORBIDDEN, "_").ifEmpty { "_" }
 
