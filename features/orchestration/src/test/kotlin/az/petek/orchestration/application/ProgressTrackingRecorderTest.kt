@@ -91,9 +91,20 @@ class ProgressTrackingRecorderTest {
         runTest {
             recorder.artifact(artifact("run_1/a07/0003-screenshot.png"))
             recorder.artifact(artifact("run_1\\a120\\0001-screenshot.png"))
+            recorder.artifact(artifact("run_1/a1000/0002-a11y.yaml"))
+            recorder.artifact(artifact("run_1/a25000/0002-a11y.yaml"))
 
-            progress shouldContainExactly listOf(a07, AgentId("a120"))
-            delegate.artifactList shouldHaveSize 2
+            progress shouldContainExactly listOf(a07, AgentId("a120"), AgentId("a1000"), AgentId("a25000"))
+            delegate.artifactList shouldHaveSize 4
+        }
+
+    @Test
+    fun `path segments that only look like agent ids are not taken for one`() =
+        runTest {
+            recorder.artifact(artifact("run_1/a007/0001-screenshot.png"))
+            recorder.artifact(artifact("run_1/a00/0001-screenshot.png"))
+
+            progress.shouldBeEmpty()
         }
 
     @Test

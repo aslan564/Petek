@@ -192,7 +192,7 @@ class DefaultCampaignRunner(
                 mailDomain = settings.mailDomain,
             )
         val plan = identityPlanner.execute(run.runId, RunTags.forRun(run.runId), spec)
-        run.identities = plan.identities.sortedBy { it.agentId.index }
+        run.identities = plan.identities.sortedBy { it.agentId }
     }
 
     // --- 2. browser and agents ------------------------------------------------------------------------------------
@@ -414,7 +414,7 @@ class DefaultCampaignRunner(
 
     /** One record per agent; reporting reads the comma-separated transports from `detail`. */
     private suspend fun recordNetworkObservations(run: RunState) {
-        run.sessions.entries.sortedBy { it.key.index }.forEach { (agentId, session) ->
+        run.sessions.entries.sortedBy { it.key }.forEach { (agentId, session) ->
             safely(run, "network observation of $agentId") {
                 val observation = session.networkObservation()
                 val transports =

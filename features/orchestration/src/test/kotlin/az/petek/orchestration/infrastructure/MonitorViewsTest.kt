@@ -77,6 +77,96 @@ class MonitorViewsTest {
         }
 
     @Test
+    fun `a board with more agents than the terminal fits shows the ones that need attention and counts the rest`() =
+        runTest {
+            val recorder = TerminalRecorder(ansiLevel = AnsiLevel.NONE, width = 160, height = 20, outputInteractive = true)
+            val view = board(recorder)
+            val states =
+                (1..100).map { i ->
+                    when (i) {
+                        in 40..42 -> AgentState.WORKING
+                        55 -> AgentState.BLOCKED
+                        77 -> AgentState.FAILED
+                        in 90..91 -> AgentState.WAITING
+                        in 1..33 -> AgentState.DONE
+                        else -> AgentState.IDLE
+                    }
+                }
+
+            view.runStarted(runId, states.mapIndexed { i, state -> status(i + 1, state, "announce", "action ${i + 1}") })
+            runCurrent()
+
+            val frame = recorder.output()
+            frame.trimEnd().lines().size shouldBeLessThanOrEqual 20
+            frame shouldContain "100 agents · idle 60  working 3  waiting 2  blocked 1  failed 1  done 33"
+            listOf("a40", "a41", "a42", "a55", "a77", "a90", "a91").forEach { frame shouldContain "$it " }
+            // 20 lines - 7 fixed = 13 rows: the 7 agents above plus the 6 idle ones with the lowest ids.
+            listOf("a34", "a35", "a36", "a37", "a38", "a39").forEach { frame shouldContain "$it " }
+            frame shouldNotContain "a43 "
+            frame shouldNotContain "a01 "
+            frame shouldContain "… 87 more: 54 idle, 33 done"
+            val shownIds = Regex("\\ba(\\d+) ").findAll(frame).map { it.groupValues[1].toInt() }.toList()
+            shownIds shouldBe shownIds.sorted()
+            view.close()
+        }
+
+    @Test
+    fun `the row budget leaves room for messages and follows a fixed limit when one is given`() =
+        runTest {
+            val recorder = recorder()
+            val view =
+                MordantMonitorView(
+                    Terminal(terminalInterface = recorder),
+                    250.milliseconds,
+                    StandardTestDispatcher(testScheduler),
+                    maxRows = 5,
+                )
+
+            view.runStarted(runId, (1..500).map { status(it, if (it % 100 == 0) AgentState.WORKING else AgentState.IDLE) })
+            view.message("a07 failed setup step 'join' (mail_timeout)")
+            runCurrent()
+
+            val frame = recorder.output()
+            listOf("a100", "a200", "a300", "a400", "a500").forEach { frame shouldContain "$it " }
+            frame shouldContain "… 495 more: 495 idle"
+            frame shouldContain "mail_timeout"
+            view.close()
+        }
+
+    @Test
+    fun `a board that fits shows every agent and no summary of hidden ones`() =
+        runTest {
+            val recorder = recorder()
+            val view = board(recorder)
+
+            view.runStarted(runId, (1..30).map { status(it) })
+            runCurrent()
+
+            val frame = recorder.output()
+            (1..30).forEach { frame shouldContain "${AgentId.of(it)} " }
+            frame shouldNotContain "more:"
+            view.close()
+        }
+
+    @Test
+    fun `long names and actions are shortened so every agent stays on one line`() =
+        runTest {
+            val recorder = recorder()
+            val view = board(recorder)
+            val long = AgentStatus(AgentId.of(1), "Ə".repeat(80), "admin", AgentState.WORKING, "s", "x".repeat(200), at)
+
+            view.runStarted(runId, listOf(long))
+            runCurrent()
+
+            val frame = recorder.output()
+            frame shouldContain "Ə".repeat(31) + "…"
+            frame shouldNotContain "Ə".repeat(32)
+            frame shouldContain "x".repeat(59) + "…"
+            frame shouldNotContain "x".repeat(60)
+            view.close()
+        }
+
+    @Test
     fun `updates never draw on the caller's thread and many updates cost few frames`() =
         runTest {
             val recorder = recorder()

@@ -46,13 +46,9 @@ class ProgressTrackingRecorder(
 
     override suspend fun usage(record: UsageRecord) = delegate.usage(record)
 
+    /** The first path segment that is an agent id, whatever its number of digits (`a07`, `a120`, `a1000`). */
     private fun ownerOf(record: ArtifactRecord): AgentId? =
         record.relativePath
             .split('/', '\\')
-            .firstOrNull { AGENT_SEGMENT.matches(it) }
-            ?.let(::AgentId)
-
-    private companion object {
-        val AGENT_SEGMENT = Regex("a\\d{2,3}")
-    }
+            .firstNotNullOfOrNull(AgentId::parseOrNull)
 }
