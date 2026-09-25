@@ -108,7 +108,7 @@ MVP-də bütün poçt Mailpit-ə gedir, telefon kodu KadroHR-ın test rejimində
 | `status` | `planned` → `registered` → `active` → `failed` | orkestrator yeniləyir |
 | `storage_state` | fayl yolu | login sonrası cookie/storage; bərpa üçün |
 
-Rol bölgüsü deterministikdir: admin = 1 (agent `a01`), hər departamentə 1 manager, qalan agentlər departamentlərə növbə ilə paylanır (5 departament × 5–6 nəfər).
+Rol bölgüsü deterministikdir: admin = 1 (agent `a01`), hər departamentə 1 manager, qalan agentlər departamentlərə növbə ilə paylanır (5 departament × 5–6 nəfər). Managerlər həmişə dəvətlə qoşulur (`/join` formasında rol sahəsi yoxdur, şirkət kodu ilə qoşulan işçi olur); qalan dəvətlər işçilərə seed-ə görə departamentlər üzrə paylanır, şirkət kodu ilə yalnız işçilər qoşulur.
 
 **Email: Mailpit ilə (MVP)**
 
@@ -373,7 +373,7 @@ Hazır sayılır: `plan` iki dəfə çağırılanda eyni 30 kimliyi verir; eyni 
 **Faza 2 — Tək agent (ən vacib faza)**
 
 - [ ] `adapter/``WebAdapter.kt + BrowserServer.kt`: context yaratma, accessibility snapshot (nömrələnmiş elementlər), screenshot, `storage_state`
-- [ ] `agent/``Tools.kt`: whitelist — `navigate`, `click(id)`, `type(id, text)`, `read_text(selector)`, `wait_text(text, timeout)`, `done(summary)`, `report_problem(kind, note)`
+- [ ] `agent/``Tools.kt`: whitelist — `navigate`, `click(id)`, `type(id, text)`, `select(id, option)`, `read_text(selector)`, `wait_text(text, timeout)`, `get_email_code()`, `get_phone_code()`, `done(summary)`, `report_problem(kind, note)`
 - [ ] `agent/``Llm.kt`: tool calling, sistem promptu (rol, məqsəd, qaydalar), token sayğacı
 - [ ] `agent/``AgentLoop.kt`: gör → qərar → et → qeyd; addım limiti; eyni əməliyyatın 3 dəfə təkrarı = dövrə, dayandır
 - [ ] Hər addımda: screenshot + accessibility snapshot + vaxt + LLM gerekçəsi → `step` və `artifact`
