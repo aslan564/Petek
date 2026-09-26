@@ -607,6 +607,12 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
   (48 s): 4 səhifənin hamısı məzmunla çəkildi, sayt modelində 4 form və 35 əməliyyat (giriş: e-poçt, şifrə, şirkət
   kodu; qeydiyyat: 7 sahə), 15 ideya, 9 sual Azərbaycan dilində. Rollarla gəzinti və sınaq toxunuşu test API tokeni
   olmadan atlanır — real KadroHR üçün növbəti addım sahibin staging-i və `docs/KADROHR_READINESS.md` P0 maddələridir.
+- **CI-da panel testləri (Release run #1–2):** panelin start-up import-u sahibin ssenarisini bəzən kataloqa
+  yazmırdı — `SQLITE_BUSY_SNAPSHOT`: yazı tranzaksiyası əvvəl oxuyub (versiya nömrəsi) sonra INSERT edirdi (deferred
+  snapshot), bu arada başqa thread-dəki repository `init`-i sxem ifadələri (indeks, trigger) yazırdı; SQLite belə
+  yüksəlməni `busy_timeout`-a baxmadan dərhal rədd edir, Exposed-un 3 təkrarı lokalda gizlədirdi, CI-da yetmirdi.
+  Düzəliş `core/sqlite`-dədir: yazılar və sxem ifadələri (`SqliteDatabase.setUp`) `BEGIN IMMEDIATE` ilə açılır,
+  kilid əvvəlcədən alınır və gözlənilir; reqressiya testi köhnə kodda qırmızıdır.
 - Qeyd (dəyişmədi): hesabatın "Keçən addımlar" sayı hər alt-hərəkəti sayır (10 tester üçün 315), CLI xülasəsi isə
   orkestratorun tapşırıq sayını (33). İkisi də doğrudur, amma eyni ad daşıyır — panel/hesabat işində birləşdirilməli.
 

@@ -20,6 +20,10 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class SqliteDatabaseTest {
     private object Items : Table("items") {
@@ -73,6 +77,51 @@ class SqliteDatabaseTest {
             }
 
             db.read { Items.selectAll().map { it[Items.name] } } shouldBe listOf("stored")
+        }
+    }
+
+    @Test
+    fun `a write that reads first is not broken by a schema statement on another thread`(
+        @TempDir dir: Path,
+    ) = runBlocking<Unit> {
+        SqliteDatabase.open(dir.resolve("petek.db")).use { db ->
+            db.createMissing(Items)
+            // The start-up race the panel once lost on CI: the writer numbers a row (a read) while a repository being
+            // constructed runs its schema statements on the caller's thread. With a deferred write transaction the
+            // writer's snapshot went stale and SQLite refused the insert at once (SQLITE_BUSY_SNAPSHOT).
+            val writerReading = CountDownLatch(1)
+            val setUpDone = CountDownLatch(1)
+            val attempts = AtomicInteger()
+            val setUp =
+                thread(name = "constructor") {
+                    writerReading.await()
+                    db.setUp {
+                        exec("CREATE INDEX IF NOT EXISTS items_name ON items (name)")
+                        Items.insert {
+                            it[id] = 1
+                            it[name] = "from-set-up"
+                        }
+                    }
+                    setUpDone.countDown()
+                }
+
+            db.write {
+                attempts.incrementAndGet()
+                val next = (Items.selectAll().count() + 1).toInt()
+                writerReading.countDown()
+                // With the lock taken up front the constructor waits for this transaction and the latch times out,
+                // which is the point; a deferred transaction would let the constructor commit first.
+                setUpDone.await(1, TimeUnit.SECONDS)
+                Items.insert {
+                    it[id] = next + 1
+                    it[name] = "from-writer"
+                }
+            }
+            setUp.join()
+
+            db.read { Items.selectAll().map { it[Items.name] }.sorted() } shouldBe listOf("from-set-up", "from-writer")
+            // Exposed retries a failed transaction, which hid the refusal locally; the block must have run once.
+            attempts.get() shouldBe 1
         }
     }
 

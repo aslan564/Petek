@@ -45,7 +45,7 @@ class SqliteScenarioRepository(
 ) : ScenarioRepository {
     init {
         db.createMissing(ScenarioVersionTable)
-        transaction(db.database) { ScenarioSchema.statements.forEach { exec(it) } }
+        db.setUp { ScenarioSchema.statements.forEach { exec(it) } }
     }
 
     override suspend fun add(draft: NewScenarioVersion): ScenarioVersion =
