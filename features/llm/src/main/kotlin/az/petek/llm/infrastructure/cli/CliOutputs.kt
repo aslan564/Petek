@@ -78,15 +78,21 @@ internal object CliOutputs {
 
     private const val MAX_DETAIL_CHARS = 500
 
+    /** Words of a login problem, which only the owner can fix; "authenticat" also covers "failed to authenticate". */
     private val AUTH_MARKERS =
         listOf(
             "not logged in",
             "unauthorized",
             "401",
             "403",
-            "authentication",
+            "authenticat",
+            "oauth",
+            "session expired",
+            "token expired",
             "api key",
             "login",
+            "log in",
+            "sign in",
             "credential",
             "billing",
             "quota exceeded for",

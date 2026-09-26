@@ -138,6 +138,26 @@ class GenericCliProfileTest {
         }
 
     @Test
+    fun `an expired login is a problem only the owner can fix, not one to retry`() =
+        runTest {
+            val envelope = """{"is_error":true,"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}"""
+            val answered = FakeProcessRunner.answering(stdout = envelope, stderr = "", exitCode = 1)
+            val printed =
+                FakeProcessRunner.answering(
+                    stdout = "",
+                    stderr = "Failed to authenticate: OAuth session expired and could not be refreshed",
+                    exitCode = 1,
+                )
+
+            for (runner in listOf(answered, printed)) {
+                val error = shouldThrow<LlmException.Unavailable> { client(config("-p"), runner).complete(request) }
+
+                error.message.orEmpty() shouldContain "OAuth session expired"
+                error.message.orEmpty() shouldContain GenericCliProfile.LOGIN_HINT
+            }
+        }
+
+    @Test
     fun `refused arguments point at the template and the tool's help`() =
         runTest {
             val runner = FakeProcessRunner.answering(stdout = "", stderr = "error: unknown option '--old-flag'", exitCode = 1)
