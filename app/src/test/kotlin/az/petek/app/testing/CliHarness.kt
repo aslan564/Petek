@@ -17,10 +17,13 @@ import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
 import az.petek.core.sqlite.SqliteDatabase
+import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
 import az.petek.identity.infrastructure.SqliteIdentityRepository
 import az.petek.llm.domain.LlmClient
 import az.petek.orchestration.infrastructure.NoOpMonitorView
+import az.petek.ownership.application.SiteOwnership
+import az.petek.ownership.testing.OwnershipTestKit
 import com.github.ajalt.clikt.command.test
 import com.github.ajalt.clikt.testing.CliktCommandTestResult
 import kotlinx.serialization.json.JsonObject
@@ -47,6 +50,8 @@ class CliHarness(
     var browser: FakeBrowserEngine = FakeBrowserEngine(),
     /** The fake browser plays the site, so the target is never contacted unless a test says otherwise. */
     var reachability: TargetReachability = TargetReachability.ALWAYS,
+    /** Every site counts as proved to be the tester's own unless a test says otherwise (ADR-0012). */
+    var ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
 ) {
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
@@ -65,7 +70,16 @@ class CliHarness(
                 workingDirectory = workingDirectory,
                 identitySecrets = IdentitySecretSource { error("tests must set PETEK_IDENTITY_SECRET instead of using ~/.petek") },
                 containers = { config ->
-                    AppContainer(config, AppOverrides(llm = llm, monitor = NoOpMonitorView, browser = browser, reachability = reachability))
+                    AppContainer(
+                        config,
+                        AppOverrides(
+                            llm = llm,
+                            monitor = NoOpMonitorView,
+                            browser = browser,
+                            reachability = reachability,
+                            ownership = ownership,
+                        ),
+                    )
                 },
                 configureLogging = { loggingRequests += it },
                 observationWindow = Duration.ZERO,

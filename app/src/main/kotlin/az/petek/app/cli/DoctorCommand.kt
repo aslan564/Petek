@@ -28,7 +28,8 @@ import kotlinx.serialization.json.putJsonArray
  * is invalid or the target policy refuses the target (nothing else can work then), 1 when another check fails.
  */
 class DoctorCommand : PetekSubcommand("doctor") {
-    override fun help(context: Context): String = "Check the configuration, target, browser, mailbox, test API and LLM provider."
+    override fun help(context: Context): String =
+        "Check the configuration, target, browser, mailbox, test API, site ownership and LLM provider."
 
     override suspend fun execute(): Int {
         val rows =

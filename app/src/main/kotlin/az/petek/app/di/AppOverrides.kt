@@ -18,6 +18,7 @@ import az.petek.evidence.domain.RunRepository
 import az.petek.identity.domain.IdentityRepository
 import az.petek.llm.domain.LlmClient
 import az.petek.orchestration.domain.MonitorView
+import az.petek.ownership.application.SiteOwnership
 
 /**
  * Replacements for the parts of [AppContainer] that tests cannot use for real: a scripted LLM instead of the
@@ -36,6 +37,8 @@ data class AppOverrides(
     val explorerBrowser: BrowserEngine? = null,
     /** The look at the target before a run or an exploration; tests with a fake browser use [TargetReachability.ALWAYS]. */
     val reachability: TargetReachability? = null,
+    /** Whether Pətək may write to a site; tests use the fakes of `ownership`'s test fixtures instead of the network. */
+    val ownership: SiteOwnership? = null,
     /**
      * A database opened by the caller, shared instead of opening `PETEK_DB` again: the web panel's containers for runs
      * against another site use the panel's database, so every run, exploration and scenario stays in one place.

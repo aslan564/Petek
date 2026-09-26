@@ -88,6 +88,13 @@ import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.infrastructure.CompositeMonitorView
 import az.petek.orchestration.infrastructure.LoggingMonitorView
 import az.petek.orchestration.infrastructure.MordantMonitorView
+import az.petek.ownership.application.FirstFoundOwnershipProbe
+import az.petek.ownership.application.SiteOwnership
+import az.petek.ownership.domain.HmacOwnershipTokens
+import az.petek.ownership.infrastructure.DnsProofRecord
+import az.petek.ownership.infrastructure.HttpProofFile
+import az.petek.ownership.infrastructure.InetHostLocality
+import az.petek.ownership.infrastructure.SqliteOwnershipLedger
 import az.petek.reporting.application.BuildReportUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
 import az.petek.reporting.domain.ThreeSourceJudge
@@ -230,6 +237,21 @@ class AppContainer(
      * given must answer, otherwise nothing is tested and the reason is reported.
      */
     val reachability: TargetReachability by lazy { overrides.reachability ?: HttpTargetReachability(resources.track(HttpProbe())) }
+
+    /**
+     * Whether Pətək may write to a site (ADR-0012): runs and the explorer's writing phases need the owner's proof, a file
+     * or a DNS TXT record carrying a token derived from the identity secret; loopback and private addresses are exempt.
+     */
+    val ownership: SiteOwnership by lazy {
+        overrides.ownership ?: SiteOwnership(
+            tokens = HmacOwnershipTokens(config.identitySecret.reveal().toByteArray(Charsets.UTF_8)),
+            // Opened on the first read or write, so a check that only inspects (petek doctor) creates no database.
+            ledger = DeferredOwnershipLedger { SqliteOwnershipLedger(database) },
+            probe = FirstFoundOwnershipProbe(resources.track(HttpProofFile()), DnsProofRecord()),
+            locality = InetHostLocality(),
+            clock = clock,
+        )
+    }
 
     // --- agents, verification, orchestration, reporting ---------------------------------------------------------
 

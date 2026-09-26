@@ -40,6 +40,7 @@ class PetekCommand(
             DoctorCommand(),
             CapacityCommand(),
             ProbeCommand(),
+            VerifyCommand(),
             PanelCommand(),
             McpCommand(),
         )

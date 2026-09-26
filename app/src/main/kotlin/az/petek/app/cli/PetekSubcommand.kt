@@ -13,6 +13,7 @@ import az.petek.app.config.ConfigException
 import az.petek.app.config.PetekConfig
 import az.petek.app.di.AppContainer
 import az.petek.app.diagnostics.TargetUnreachableException
+import az.petek.ownership.domain.OwnershipRequiredException
 import com.github.ajalt.clikt.command.SuspendingCliktCommand
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.ProgramResult
@@ -40,8 +41,13 @@ abstract class PetekSubcommand(
     /** The exit code of a failure; configuration and target refusals are 2, anything else 1 unless overridden. */
     protected open fun exitCodeFor(error: Exception): Int =
         when (error) {
-            is ConfigException, is TargetRefusedException, is TargetUnreachableException -> ExitCodes.CONFIG_OR_ABORTED
-            else -> ExitCodes.FAILURE
+            is ConfigException, is TargetRefusedException, is TargetUnreachableException, is OwnershipRequiredException -> {
+                ExitCodes.CONFIG_OR_ABORTED
+            }
+
+            else -> {
+                ExitCodes.FAILURE
+            }
         }
 
     final override suspend fun run() {

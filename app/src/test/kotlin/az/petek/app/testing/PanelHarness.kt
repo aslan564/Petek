@@ -20,12 +20,15 @@ import az.petek.browser.domain.BrowserEngine
 import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.capacity.domain.HostResources
 import az.petek.core.security.Secret
+import az.petek.core.testing.FakeHarnessClock
 import az.petek.dashboard.domain.PanelBudget
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.RegistrationSplit
 import az.petek.dashboard.domain.RoleSplit
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.testing.ScriptedLlmClient
+import az.petek.ownership.application.SiteOwnership
+import az.petek.ownership.testing.OwnershipTestKit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
@@ -54,6 +57,8 @@ internal class PanelHarness(
     roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
     /** The fake engines play the site, so the target is never contacted unless a test says otherwise. */
     reachability: TargetReachability = TargetReachability.ALWAYS,
+    /** Every site counts as proved to be the tester's own unless a test says otherwise (ADR-0012). */
+    ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
     /** Changes the panel's overrides further, e.g. to hold its repositories at a gate. */
     decorate: (AppOverrides) -> AppOverrides = { it },
 ) : AutoCloseable {
@@ -83,7 +88,15 @@ internal class PanelHarness(
                 ->
                 AppContainer(
                     config,
-                    decorate(overrides.copy(llm = llm.client, browser = runs, explorerBrowser = site, reachability = reachability)),
+                    decorate(
+                        overrides.copy(
+                            llm = llm.client,
+                            browser = runs,
+                            explorerBrowser = site,
+                            reachability = reachability,
+                            ownership = ownership,
+                        ),
+                    ),
                 )
             },
             workingDirectory = dir,

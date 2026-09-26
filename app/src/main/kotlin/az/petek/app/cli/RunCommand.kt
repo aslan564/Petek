@@ -70,6 +70,8 @@ class RunCommand : PetekSubcommand("run") {
             // The site that was given must answer before a single tester starts (rule 12): a site that is down or
             // blocked is reported as such, never tested against something else.
             container.reachability.require(campaign.settings.target)
+            // A run signs up and writes: only on a site whose owner proved it is theirs (ADR-0012), or a local one.
+            container.ownership.requireFullTest(campaign.settings.target)
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(

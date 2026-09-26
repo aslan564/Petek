@@ -20,6 +20,7 @@ import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmRole
+import az.petek.ownership.domain.OwnershipStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -45,7 +46,8 @@ data class CheckResult(
  * `petek doctor`: checks that everything a run needs is in place, independently of each other (and concurrently,
  * since the browser and the LLM take seconds): the target policy, the target answering HTTP, Chromium starting,
  * the test inbox answering (Mailpit, or the target's `GET /test/emails` when `PETEK_MAIL_SOURCE=test-api`), the
- * target's test API accepting the token, and the LLM provider answering one tiny structured
+ * target's test API accepting the token, the site's ownership being proved (runs write only then, ADR-0012; loopback
+ * and private addresses need no proof), and the LLM provider answering one tiny structured
  * request (its own [LlmProviders][az.petek.app.di.LlmProviders] timeout, no retries, the provider's exact error).
  *
  * A target the policy refuses is not contacted at all; its checks are SKIPPED. Nothing is written to the target.
@@ -66,6 +68,7 @@ class Doctor(
                 async { chromium() },
                 async { mail(allowed) },
                 async { if (allowed) testApi() else skipped(TEST_API) },
+                async { if (allowed) ownership() else skipped(OWNERSHIP) },
                 async { llm() },
             ).awaitAll()
         }
@@ -198,6 +201,29 @@ class Doctor(
         }
     }
 
+    /** Looks for the proof now and remembers nothing, so the doctor leaves no database behind; never writes to the site. */
+    private suspend fun ownership(): CheckResult =
+        when (val status = container.ownership.inspect(config.target)) {
+            is OwnershipStatus.Exempt -> {
+                CheckResult(OWNERSHIP, CheckStatus.OK, "no proof needed: ${status.host} is a loopback or private-network address")
+            }
+
+            is OwnershipStatus.Verified -> {
+                CheckResult(OWNERSHIP, CheckStatus.OK, "proved: the ${status.record.method.key} carries this machine's token")
+            }
+
+            is OwnershipStatus.Unverified -> {
+                val challenge = status.challenge
+                val dns = challenge.dnsName?.let { " or the DNS TXT record $it" }.orEmpty()
+                CheckResult(
+                    OWNERSHIP,
+                    CheckStatus.FAILED,
+                    "not proved, so runs are refused and the explorer only reads: publish ${challenge.proofLine} in " +
+                        "${challenge.fileUrl}$dns (petek verify shows how)",
+                )
+            }
+        }
+
     private fun skipped(name: String) = CheckResult(name, CheckStatus.SKIPPED, "not contacted: the target policy refuses the target")
 
     companion object {
@@ -207,6 +233,7 @@ class Doctor(
         const val CHROMIUM = "Chromium"
         const val MAIL = "Test inbox"
         const val TEST_API = "Test API"
+        const val OWNERSHIP = "Site ownership"
         const val LLM = "LLM provider"
 
         /** A fake number: a 404 (no OTP) or 200 proves the token is accepted without touching real data. */
@@ -223,7 +250,7 @@ class Doctor(
         /** The rows shown when the configuration itself cannot be loaded. */
         fun configurationFailed(problems: List<String>): List<CheckResult> =
             listOf(CheckResult(CONFIGURATION, CheckStatus.FAILED, problems.joinToString("; "))) +
-                listOf(POLICY, TARGET, CHROMIUM, MAIL, TEST_API, LLM).map {
+                listOf(POLICY, TARGET, CHROMIUM, MAIL, TEST_API, OWNERSHIP, LLM).map {
                     CheckResult(it, CheckStatus.SKIPPED, "not checked: the configuration is invalid")
                 }
 

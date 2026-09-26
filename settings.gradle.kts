@@ -40,6 +40,7 @@ include(
     ":features:llm",
     ":features:agent",
     ":features:verification",
+    ":features:ownership",
     ":features:orchestration",
     ":features:reporting",
     ":features:capacity",

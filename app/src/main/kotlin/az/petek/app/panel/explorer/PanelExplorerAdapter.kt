@@ -34,6 +34,7 @@ import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.ExplorationRecord
 import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
+import az.petek.ownership.domain.OwnershipStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -226,11 +227,18 @@ internal class PanelExplorerAdapter(
         try {
             val factory = engine.start(container.browserConfig())
             val request = run.instructions
+            // Logged-in sessions and trial touches write to the site: only on one whose owner proved it (ADR-0012).
+            val ownership = container.ownership.check(run.target)
+            val writable = ownership.allowsWrites
             sessions =
-                roleSessions.open(
-                    RoleSessionRequest(run.target, request?.allowWrites == true, request?.departments.orEmpty()),
-                    factory,
-                ) { line -> note(run, ExplorationTracker.SESSIONS, line) }
+                if (ownership is OwnershipStatus.Unverified) {
+                    RoleSessions.none(PanelTargets.readOnlyExploration(ownership))
+                } else {
+                    roleSessions.open(
+                        RoleSessionRequest(run.target, request?.allowWrites == true, request?.departments.orEmpty()),
+                        factory,
+                    ) { line -> note(run, ExplorationTracker.SESSIONS, line) }
+                }
             sessions.note?.let { note(run, ExplorationTracker.SESSIONS, it) }
             val explorer =
                 ExploreSiteUseCase(
@@ -247,7 +255,13 @@ internal class PanelExplorerAdapter(
             val grounding = synchronized(lock) { run.tracker.grounding }
             val result =
                 explorer.execute(
-                    ExplorationRequest(run.target, grounding, run.budget, ExplorationPhase.entries.toSet(), request?.allowWrites == true),
+                    ExplorationRequest(
+                        run.target,
+                        grounding,
+                        run.budget,
+                        ExplorationPhase.entries.toSet(),
+                        request?.allowWrites == true && writable,
+                    ),
                     sessions.sessions,
                 ) { event -> onEvent(run, event) }
             conclude(run, result.record.id)

@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":features:dashboard"))
     implementation(project(":features:explorer"))
     implementation(project(":features:scenarios"))
+    implementation(project(":features:ownership"))
     implementation(libs.clikt)
     // The explorer's stored answers (a small JSON file next to the evidence).
     implementation(libs.kotlinx.serialization.json)
@@ -44,6 +45,7 @@ dependencies {
     testImplementation(testFixtures(project(":features:explorer")))
     testImplementation(testFixtures(project(":features:scenarios")))
     testImplementation(testFixtures(project(":features:oracle")))
+    testImplementation(testFixtures(project(":features:ownership")))
     testImplementation(project(":testing:fake-target"))
     // The panel end-to-end test drives the real page in Chromium and takes screenshots (tag "e2e").
     testImplementation(libs.playwright)
@@ -146,6 +148,7 @@ val runtimeModules =
         "java.desktop",
         "java.instrument",
         "java.naming",
+        "jdk.naming.dns",
         "java.net.http",
         "java.sql",
         "jdk.management",

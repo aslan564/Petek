@@ -17,7 +17,10 @@ import az.petek.app.testing.CliHarness.Companion.tinyCampaign
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.app.testing.scriptedLlm
 import az.petek.core.ids.AgentId
+import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.domain.RunResult
+import az.petek.ownership.testing.OwnershipTestKit
+import az.petek.ownership.testing.ScriptedOwnershipProbe
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
@@ -79,6 +82,57 @@ class RunCommandTest {
             result.stderr shouldContain "Connection refused"
             cli.browser.options.shouldBeEmpty()
             cli.evidence { it.evidence.latest() } shouldBe null
+        }
+
+    @Test
+    fun `a stage whose owner has not proved it is refused with the proof to publish, and nothing is tested`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com"),
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                )
+            cli.write("tiny.yaml", tinyCampaign())
+
+            val result = cli.run("run", "tiny.yaml")
+
+            result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            result.stderr shouldContain
+                "Pətək writes to a site only after its owner proves ownership, so nothing was tested on stage.example.com"
+            result.stderr shouldContain "https://stage.example.com/.well-known/petek-verification.txt"
+            result.stderr shouldContain "_petek-verification.stage.example.com"
+            cli.browser.options.shouldBeEmpty()
+            cli.evidence { it.evidence.latest() } shouldBe null
+        }
+
+    @Test
+    fun `a stage whose owner has published the proof is tested`() =
+        runBlocking<Unit> {
+            val probe = ScriptedOwnershipProbe()
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com"),
+                    ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe),
+                )
+            cli.write("tiny.yaml", tinyCampaign())
+
+            cli.run("run", "tiny.yaml").statusCode shouldBe 0
+
+            probe.looks.map { it.host } shouldBe listOf("stage.example.com")
+        }
+
+    @Test
+    fun `a local target needs no proof`() =
+        runBlocking<Unit> {
+            val probe = ScriptedOwnershipProbe(found = null)
+            val cli = CliHarness(dir, ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe, local = setOf("127.0.0.1")))
+            cli.write("tiny.yaml", tinyCampaign())
+
+            cli.run("run", "tiny.yaml").statusCode shouldBe 0
+
+            probe.looks.shouldBeEmpty()
         }
 
     @Test

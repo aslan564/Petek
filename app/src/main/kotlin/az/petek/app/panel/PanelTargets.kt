@@ -17,6 +17,8 @@ import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.dashboard.domain.FieldProblem
 import az.petek.dashboard.domain.PanelRequestException
+import az.petek.ownership.application.SiteOwnership
+import az.petek.ownership.domain.OwnershipStatus
 import java.net.URI
 import java.net.URISyntaxException
 
@@ -59,6 +61,47 @@ internal object PanelTargets {
                 ),
             )
         }
+    }
+
+    /**
+     * Refuses a full test on [target] unless its owner proved it is theirs (ADR-0012): a [PanelRequestException] for
+     * [field] telling the owner, in Azerbaijani, which file or DNS record to publish. Nothing is written before.
+     */
+    suspend fun owned(
+        target: URI,
+        ownership: SiteOwnership,
+        field: String,
+    ) {
+        val status = ownership.check(target)
+        if (status is OwnershipStatus.Unverified) {
+            throw PanelRequestException(
+                listOf(
+                    FieldProblem(
+                        field,
+                        "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır, ona görə ${status.host} üzərində heç nə " +
+                            "test edilmədi. ${proofHowTo(status)} Sonra yenidən başladın.",
+                    ),
+                ),
+            )
+        }
+    }
+
+    /** Why an exploration of an unproved site only reads, and how to change that; shown under "Sessiyalar". */
+    fun readOnlyExploration(status: OwnershipStatus.Unverified): String =
+        "Sahiblik təsdiqlənmədiyi üçün kəşfiyyat yalnız anonim oxuyur: rollarla gəzinti və sınaq toxunuşu buraxıldı. " +
+            proofHowTo(status)
+
+    /** The proof to publish, in Azerbaijani: the file, the DNS record, and where Pətək looked. */
+    fun proofHowTo(status: OwnershipStatus.Unverified): String {
+        val challenge = status.challenge
+        val dns = challenge.dnsName?.let { " Və ya DNS-ə TXT qeydi əlavə edin: $it, dəyəri ${challenge.proofLine}." }.orEmpty()
+        val looked =
+            status.looked
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString("; ", prefix = " Yoxlanıldı: ", postfix = ".")
+                .orEmpty()
+        return "Təsdiq üçün saytda ${challenge.fileUrl} faylını yerləşdirin, içində bu sətir olsun: ${challenge.proofLine}." +
+            dns + looked + " Localhost və daxili şəbəkə ünvanları təsdiq tələb etmir."
     }
 
     /** The canonical URL of [text], or a [PanelRequestException] for [field]. */

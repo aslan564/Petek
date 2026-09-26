@@ -12,8 +12,11 @@ package az.petek.app.cli
 import az.petek.app.testing.CliHarness
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.app.testing.scriptedLlm
+import az.petek.core.testing.FakeHarnessClock
 import az.petek.faketarget.FakeTargetServer
 import az.petek.llm.domain.LlmException
+import az.petek.ownership.application.SiteOwnership
+import az.petek.ownership.testing.OwnershipTestKit
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
@@ -53,6 +56,7 @@ class DoctorCommandTest {
         vararg environment: Pair<String, String>,
         llm: az.petek.llm.domain.LlmClient = healthyLlm,
         browser: FakeBrowserEngine = FakeBrowserEngine(),
+        ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
     ) = CliHarness(
         dir,
         mapOf(
@@ -62,6 +66,7 @@ class DoctorCommandTest {
         ) + environment,
         llm = llm,
         browser = browser,
+        ownership = ownership,
     )
 
     /** The table row of [check], e.g. `│ ✓ │ Test inbox │ Mailpit: HTTP 200 from … │`. */
@@ -87,6 +92,28 @@ class DoctorCommandTest {
             browser.sessions.single().closed shouldBe true
             browser.stopCount shouldBe 1
             Files.exists(dir.resolve("evidence/petek.db")) shouldBe false
+        }
+
+    @Test
+    fun `an unproved site is a failed ownership row naming the proof, and nothing is remembered`() =
+        runBlocking<Unit> {
+            val result = cli(ownership = OwnershipTestKit.unowned(FakeHarnessClock())).run("doctor")
+
+            result.statusCode shouldBe 1
+            val ownership = row(result.stdout, "Site ownership")
+            ownership shouldContain "✗"
+            ownership shouldContain "not proved"
+            ownership shouldContain "/.well-known/petek-verification.txt"
+            Files.exists(dir.resolve("evidence/petek.db")) shouldBe false
+        }
+
+    @Test
+    fun `a local target needs no ownership proof`() =
+        runBlocking<Unit> {
+            val result = cli(ownership = OwnershipTestKit.unowned(FakeHarnessClock(), local = setOf("127.0.0.1"))).run("doctor")
+
+            result.statusCode shouldBe 0
+            row(result.stdout, "Site ownership") shouldContain "no proof needed"
         }
 
     @Test
