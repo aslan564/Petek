@@ -57,22 +57,192 @@ application {
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
-// The sidecar distribution (R15): `petek-<version>.zip` with bin/petek, every jar, the licence, the configuration
-// template and the example scenarios. It runs from any directory next to the site under test; the site's own build
-// never depends on Pətək. Published by .github/workflows/release.yml on a v<version> tag.
+// What every distribution carries besides the jars: the licence, the user documentation, the configuration template,
+// the example scenarios and the target contract.
+fun CopySpec.distributionDocuments() {
+    from(rootProject.file("LICENSE"))
+    from(rootProject.file("NOTICE"))
+    from(rootProject.file("README.md"))
+    from(rootProject.file("README.az.md"))
+    from(rootProject.file(".env.example"))
+    into("scenarios") { from(rootProject.file("scenarios")) }
+    into("docs") { from(rootProject.file("docs/TARGET_CONTRACT.md")) }
+}
+
+// The generic sidecar distribution (R15): `petek-<version>-any-jdk25.zip` with bin/petek, every jar and the documents;
+// it runs on any platform that has JDK 25 on PATH. The platform bundles below need no JDK. Both run from any directory
+// next to the site under test; the site's own build never depends on Pətək. Published by .github/workflows/release.yml.
 distributions {
     main {
         distributionBaseName.set("petek")
-        contents {
-            from(rootProject.file("LICENSE"))
-            from(rootProject.file("NOTICE"))
-            from(rootProject.file("README.md"))
-            from(rootProject.file("README.az.md"))
-            from(rootProject.file(".env.example"))
-            into("scenarios") { from(rootProject.file("scenarios")) }
-            into("docs") { from(rootProject.file("docs/TARGET_CONTRACT.md")) }
+        distributionClassifier.set("any-jdk25")
+        contents { distributionDocuments() }
+    }
+}
+
+// ---- Platform bundles (R15, Faza 12a): `petek-<version>-<platform>.tar.gz` (zip on Windows) ------------------------
+// A bundle is bin/petek (a small shell launcher, petek.cmd on Windows), lib/ with the jars, runtime/ with a jlink image
+// of the JDK modules the app needs, and the documents. Two things make it small: the runtime holds only the modules
+// jdeps found plus locale, charset and EC crypto data, and Playwright's driver-bundle jar (Node.js for five platforms,
+// about 200 MB) is repacked with the one platform the bundle is for. Platforms and Playwright's directory for each:
+val bundlePlatforms =
+    mapOf(
+        "linux-x64" to "linux",
+        "linux-arm64" to "linux-arm64",
+        "mac-x64" to "mac",
+        "mac-arm64" to "mac-arm64",
+        "win-x64" to "win32_x64",
+    )
+
+fun hostPlatform(): String {
+    val os = System.getProperty("os.name").lowercase()
+    val arm = System.getProperty("os.arch").lowercase() in setOf("aarch64", "arm64")
+    return when {
+        os.contains("win") -> "win-x64"
+        os.contains("mac") -> if (arm) "mac-arm64" else "mac-x64"
+        else -> if (arm) "linux-arm64" else "linux-x64"
+    }
+}
+
+// -Ppetek.platform=<platform> chooses the Playwright driver and the archive name; the runtime is always built from the
+// JDK that runs the build (jlink cannot cross-build without that platform's jmods), so a bundle is built on its own
+// platform, as the release workflow's matrix does. The default is the host.
+val bundlePlatform: String =
+    providers
+        .gradleProperty("petek.platform")
+        .orElse(hostPlatform())
+        .get()
+        .also {
+            require(it in bundlePlatforms) { "petek.platform must be one of ${bundlePlatforms.keys}, not '$it'" }
+        }
+val bundleDriverDirectory = bundlePlatforms.getValue(bundlePlatform)
+val bundleName = "petek-${project.version}"
+val bundleRoot = "$bundleName-$bundlePlatform"
+
+val runtimeJars = configurations.runtimeClasspath.map { it.filter { jar -> !jar.name.startsWith("driver-bundle-") } }
+val driverBundleJar = configurations.runtimeClasspath.map { it.files.single { jar -> jar.name.startsWith("driver-bundle-") } }
+
+val slimDriverBundle by tasks.registering(Jar::class) {
+    description = "Playwright's driver-bundle jar with only the $bundlePlatform driver."
+    group = "distribution"
+    archiveBaseName.set("driver-bundle")
+    archiveVersion.set(libs.versions.playwright)
+    archiveClassifier.set(bundlePlatform)
+    destinationDirectory.set(layout.buildDirectory.dir("bundle/lib"))
+    // A local copy: the spec is stored in the configuration cache and must not reference the build script.
+    val keep = bundleDriverDirectory
+    from(zipTree(driverBundleJar)) {
+        exclude { element ->
+            val path = element.relativePath.segments
+            path.size >= 2 && path[0] == "driver" && path[1] != keep
         }
     }
+}
+
+// The modules jdeps lists for the app's jars (sqlite-jdbc, Playwright, Ktor, logback, the SDK), plus what jdeps cannot
+// see: every locale (dates and names in Azerbaijani), the extra charsets, EC certificates for TLS, and zip file systems.
+val runtimeModules =
+    listOf(
+        "java.base",
+        "java.desktop",
+        "java.instrument",
+        "java.naming",
+        "java.net.http",
+        "java.sql",
+        "jdk.management",
+        "jdk.unsupported",
+        "jdk.localedata",
+        "jdk.crypto.ec",
+        "jdk.charsets",
+        "jdk.zipfs",
+    )
+
+val toolchainHome =
+    javaToolchains
+        .launcherFor {
+            languageVersion.set(
+                JavaLanguageVersion.of(
+                    libs.versions.jdk
+                        .get()
+                        .toInt(),
+                ),
+            )
+        }.map { it.metadata.installationPath.asFile }
+
+val jlinkRuntime by tasks.registering(Exec::class) {
+    description = "A jlink image of the JDK modules Pətək needs, for the $bundlePlatform bundle."
+    group = "distribution"
+    val image = layout.buildDirectory.dir("bundle/runtime")
+    inputs.property("modules", runtimeModules)
+    inputs.dir(toolchainHome.map { it.resolve("jmods") })
+    outputs.dir(image)
+    val jdk = toolchainHome.get()
+    executable = jdk.resolve("bin/jlink").path
+    // jlink refuses an existing output directory.
+    doFirst { image.get().asFile.deleteRecursively() }
+    args(
+        "--module-path",
+        jdk.resolve("jmods").path,
+        "--add-modules",
+        runtimeModules.joinToString(","),
+        "--strip-debug",
+        "--no-header-files",
+        "--no-man-pages",
+        "--compress",
+        "zip-6",
+        "--output",
+        image.get().asFile.path,
+    )
+}
+
+// The layout every bundle archive shares; the launcher scripts stay executable.
+fun CopySpec.bundleLayout() {
+    into(bundleRoot)
+    into("bin") {
+        from(file("src/bundle/bin"))
+        if (bundlePlatform == "win-x64") exclude("petek") else exclude("petek.cmd")
+        filePermissions { unix("rwxr-xr-x") }
+    }
+    into("lib") {
+        from(tasks.jar)
+        from(runtimeJars)
+        from(slimDriverBundle)
+    }
+    // Gradle's archives do not keep the image's permission bits; the runtime's programs get them back explicitly.
+    val runtimePrograms = listOf("bin/**", "lib/jspawnhelper", "lib/jexec")
+    into("runtime") {
+        from(jlinkRuntime) { exclude(runtimePrograms) }
+        from(jlinkRuntime) {
+            include(runtimePrograms)
+            filePermissions { unix("rwxr-xr-x") }
+        }
+    }
+    distributionDocuments()
+}
+
+val bundleTar by tasks.registering(Tar::class) {
+    description = "The $bundlePlatform bundle as petek-<version>-$bundlePlatform.tar.gz (a JDK is not needed)."
+    group = "distribution"
+    compression = Compression.GZIP
+    archiveFileName.set("$bundleRoot.tar.gz")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    bundleLayout()
+}
+
+val bundleZip by tasks.registering(Zip::class) {
+    description = "The $bundlePlatform bundle as petek-<version>-$bundlePlatform.zip (a JDK is not needed)."
+    group = "distribution"
+    archiveFileName.set("$bundleRoot.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    bundleLayout()
+}
+
+// `./gradlew :app:bundle` builds the archive for the host (tar.gz; zip on Windows, which has no tar permissions to
+// keep); `-Ppetek.platform=` names another platform's Playwright driver, see above.
+tasks.register("bundle") {
+    description = "The platform bundle for $bundlePlatform: build/distributions/$bundleRoot.tar.gz or .zip."
+    group = "distribution"
+    dependsOn(if (bundlePlatform == "win-x64") bundleZip else bundleTar)
 }
 
 // Every way of launching main (the run task, IntelliJ's run icon next to main(), run configurations) gets the JVM

@@ -551,9 +551,17 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
   `CONTRIBUTING.md`, `docs/requirements/` (R01–R15), GitHub Actions CI, PR şablonu, `CODEOWNERS`.
 - [ ] Ad/marka: `petek` latın yazılışı ilə GitHub org, domen, npm/Maven adlarının tutulması (sahib).
 - [x] Buraxılış xətti (R15-in ilk addımı): `main` buraxılış branch-ı, `gradle.properties`-də `version`, `:app:distZip`
-  (`petek-<versiya>.zip`: `bin/petek`, jar-lar, LICENSE, `.env.example`, `scenarios/`, hədəf kontraktı) və
-  `vX.Y.Z` teqində GitHub Release yaradan `release.yml`. README-də "Öz saytınızda istifadə" bölməsi: sidecar, kitabxana
-  deyil; müştərinin öz AI login-i.
+  (`petek-<versiya>-any-jdk25.zip`: `bin/petek`, jar-lar, LICENSE, `.env.example`, `scenarios/`, hədəf kontraktı) və
+  `main`-ə push-da (və ya `vX.Y.Z` teqində) GitHub Release yaradan `release.yml`. README-də "Öz saytınızda istifadə"
+  bölməsi: sidecar, kitabxana deyil; müştərinin öz AI login-i.
+- [x] Platform bundle-ları (Faza 12a, R15): `:app:bundle` → `petek-<versiya>-<platform>.tar.gz` (Windows-da `.zip`),
+  içində `bin/petek` (sh) / `bin/petek.cmd`, `lib/` (Playwright driver-bundle jar-ı yalnız o platformun Node-u ilə
+  yenidən paketlənir: ~200 MB → ~35 MB), `runtime/` (jlink: jdeps-in tapdığı modullar + `jdk.localedata`,
+  `jdk.crypto.ec`, `jdk.charsets`, `jdk.zipfs`; JDK lazım deyil), sənədlər. Platform `-Ppetek.platform=` ilə
+  (linux-x64, linux-arm64, mac-x64, mac-arm64, win-x64; default host). `release.yml` matrisi (ubuntu, ubuntu-arm,
+  macos, windows) hər bundle-ı öz platformunda qurur, `bin/petek --help`-i JDK-sız işlədir, `SHA256SUMS` ilə birlikdə
+  Release-ə qoyur; `build.yml` hər develop push-da linux bundle-ını qurub başladır. Lokal sübut: linux-x64 bundle-ı
+  (165 MB) `/tmp`-də JDK-sız `doctor` — Chromium slim driver-dən qalxdı, kadrohr.com HTTP 200.
 - [x] Konsist arxitektura testləri `e2e/`-də (CLAUDE.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
 - [x] Tester izolyasiyası auditi və sərtləşdirmə (`docs/requirements/R01` "Isolation guarantees"): roster parolsuz
   (`Colleague`), paylaşılan dəyərlər write-once, `{last_id}` eyni addımdakı başqa agentin ID-sinə düşmür, yalnız
@@ -719,9 +727,10 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   `answer_unknown`), *scenario author* (`generate_scenario` → sahib təsdiqi), *judge* (triaj), *root-cause* (
   `get_findings` → repoda kodu tap → düzəliş təklifi, tətbiq etmə — sahib təsdiqləyir). Təlimatlar Pətəkin
   alətlərindən kənar heç nə vəd etmir.
-- [ ] Paylanma: `installDist`/jlink CLI (yollar repo kökündən asılı olmur — `PETEK_HOME`), Docker image (Playwright
-  base + JDK 25, Mailpit companion), `npx petek` başladıcı (yalnız yükləyib işə salır). `:app`-dan `fake-target`
-  runtime asılılığı ayrılır (`petek demo` ayrıca dist).
+- [ ] Paylanma: ~~`installDist`/jlink CLI (yollar repo kökündən asılı olmur)~~ hazırdır (Faza 12a, yuxarıda; launcher
+  `-Dpetek.home` verir), qalır: Docker image (Playwright base + bundle, Mailpit companion), `npx petek` başladıcı
+  (yalnız yükləyib işə salır), mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə). `:app`-dan `fake-target` runtime
+  asılılığı ayrılır (`petek demo` ayrıca dist).
 - [ ] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
 - [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; GitHub Action
   və GitLab CI şablonları; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.

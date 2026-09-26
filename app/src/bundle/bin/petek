@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
+# Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
+#
+# Licensed under the Business Source License 1.1 (the "License"); you may not use this file except in
+# compliance with the License. See the LICENSE file in the repository root. Change Date: 2030-09-25;
+# Change License: Apache License, Version 2.0. The Licensed Work is provided "AS IS", without warranty.
+#
+# Launcher of the platform bundle: runs Pətək on the Java runtime shipped in ../runtime, so the machine needs no
+# JDK. Works from any directory (Pətək reads .env, scenarios/ and writes evidence/ relative to where it is called)
+# and through a symlink. Extra JVM options go in PETEK_OPTS.
+
+prg="$0"
+while [ -h "$prg" ]; do
+    ls=$(ls -ld "$prg")
+    link=$(expr "$ls" : '.*-> \(.*\)$')
+    case "$link" in
+        /*) prg="$link" ;;
+        *) prg=$(dirname "$prg")/"$link" ;;
+    esac
+done
+APP_HOME=$(cd "$(dirname "$prg")/.." > /dev/null && pwd -P) || exit 1
+
+JAVA="$APP_HOME/runtime/bin/java"
+if [ ! -x "$JAVA" ]; then
+    echo "petek: the bundled Java runtime is missing at $JAVA (extract the whole archive, not only bin/)" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC2086 # PETEK_OPTS is meant to be split into several options.
+exec "$JAVA" \
+    --enable-native-access=ALL-UNNAMED \
+    -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 \
+    "-Dpetek.home=$APP_HOME" \
+    $PETEK_OPTS \
+    -cp "$APP_HOME/lib/*" \
+    az.petek.app.MainKt "$@"

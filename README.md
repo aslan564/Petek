@@ -103,17 +103,21 @@ A run (`petek run scenarios/<campaign>.yaml`):
 
 ## Quick start
 
-**From a release (no build).** Download `petek-<version>.zip` from the
-[releases page](https://github.com/aslan564/Petek/releases), unzip it anywhere, and have JDK 25 on `PATH` and an AI: the
-[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) logged in with your plan, or an Anthropic API key.
-Chromium is downloaded by Playwright on first use.
+**From a release (no build, no JDK).** Download the bundle for your machine from the
+[releases page](https://github.com/aslan564/Petek/releases): `petek-<version>-linux-x64.tar.gz`, `-linux-arm64.tar.gz`,
+`-mac-arm64.tar.gz` or `-win-x64.zip` (each carries its own Java runtime and Chromium driver; `SHA256SUMS` lists the
+checksums), or `petek-<version>-any-jdk25.zip` for any other machine with JDK 25 on `PATH`. Extract it anywhere and
+have an AI: the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) logged in with your plan, or an
+Anthropic API key. Chromium is downloaded by Playwright on first use.
 
 ```bash
-unzip petek-0.1.0.zip && cd my-site                    # any directory: Pətək runs next to the site, never inside its build
-cp ../petek-0.1.0/.env.example .env                    # fill PETEK_TARGET (+ PETEK_TEST_TOKEN and PETEK_IDENTITY_SECRET for full runs)
-../petek-0.1.0/bin/petek doctor                        # target policy, target, Chromium, inbox, test API, AI provider
-../petek-0.1.0/bin/petek panel                         # opens the web panel at http://127.0.0.1:7070
+tar xzf petek-0.1.0-linux-x64.tar.gz && cd my-site     # any directory: Pətək runs next to the site, never inside its build
+cp ../petek-0.1.0-linux-x64/.env.example .env          # fill PETEK_TARGET (+ PETEK_TEST_TOKEN and PETEK_IDENTITY_SECRET for full runs)
+../petek-0.1.0-linux-x64/bin/petek doctor              # target policy, target, Chromium, inbox, test API, AI provider
+../petek-0.1.0-linux-x64/bin/petek panel               # opens the web panel at http://127.0.0.1:7070
 ```
+
+On Windows the launcher is `bin\petek.cmd`. Extra JVM options go in `PETEK_OPTS`.
 
 **From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain), Docker (for
 Mailpit) and the same AI.
@@ -152,7 +156,7 @@ Exit codes: `0` success, `1` failures found, `2` configuration error or aborted 
 ## Use it on your own site
 
 Pətək is a **sidecar, not a library**: you do not add it to your site's Maven, npm or Composer build. It is installed
-like a tool (the release zip today; `petek init` and an `npx petek` launcher in Faza 12, see R15), started next to
+like a tool (the release bundles today; `petek init` and an `npx petek` launcher in Faza 12, see R15), started next to
 the site, and pointed at the site's URL. It uses **your own AI login**, the way BMAD uses whatever assistant the
 project already has: with `PETEK_LLM_PROVIDER=claude-cli` it calls the `claude` CLI you are logged into, and your plan
 pays for the model; nothing is sent to Pətək's authors.
@@ -326,8 +330,9 @@ Rules that keep the code base healthy (enforced by the build where possible): Ko
 file carries the licence header; domain code imports no framework; application code never imports infrastructure;
 only `app` wires infrastructure; no mocking library (fakes live in `testFixtures`); tests are named as sentences; new
 libraries need the owner's approval; `./gradlew spotlessApply build` must pass before every commit. The full list is in
-[CONTRIBUTING.md](CONTRIBUTING.md). Branches: `main` is the release branch (a `vX.Y.Z` tag on it publishes the
-distribution); `develop` is the integration branch; `petek-mvp` and `petek-mvp-o6tpsw` are kept as the MVP history.
+[CONTRIBUTING.md](CONTRIBUTING.md). Branches: `main` is the release branch (a push to it with a new `version` in
+`gradle.properties`, or a `vX.Y.Z` tag, publishes the bundles); `develop` is the integration branch; `petek-mvp` and
+`petek-mvp-o6tpsw` are kept as the MVP history.
 
 ## Licence, trademark and copyright
 

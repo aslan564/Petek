@@ -70,6 +70,14 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: ./gradlew build --no-daemon --console=plain
 
+      - name: Platform bundle (jlink runtime, one Playwright driver) builds and its launcher starts without a JDK
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          ./gradlew :app:bundle --no-daemon --console=plain
+          tar xzf app/build/distributions/petek-*-linux-x64.tar.gz -C "$RUNNER_TEMP"
+          env -u JAVA_HOME PATH=/usr/bin:/bin "$RUNNER_TEMP"/petek-*-linux-x64/bin/petek --help
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

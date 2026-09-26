@@ -1,10 +1,13 @@
 name: Release
 
-# Publishes a GitHub Release with the sidecar distribution (app/build/distributions/petek-<version>.zip and .tar).
+# Publishes a GitHub Release with the platform bundles (petek-<version>-<platform>.tar.gz, .zip on Windows: launcher,
+# jars, a jlink runtime and the platform's Playwright driver, so the machine needs no JDK) and the generic distribution
+# (petek-<version>-any-jdk25.zip, runs wherever JDK 25 is on PATH), with a SHA256SUMS file over all of them.
 # Three ways in: a push to main whose `version` in gradle.properties has no release yet (main only receives develop,
 # so a version bump on main is the release), a tag v<version> pushed to main, or a manual run on main with the
 # version. The tree is built and tested first, so a release is never cut from a red tree; the version must match
-# gradle.properties, and a version that already has its tag is left alone.
+# gradle.properties, and a version that already has its tag is left alone. Each bundle is built on its own platform
+# (jlink cannot cross-build), and every bundle's launcher is started once before anything is published.
 on:
   push:
     branches: [main]
@@ -19,14 +22,22 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    shell: bash
+
+env:
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
 jobs:
-  release:
-    name: Build, test and publish the distribution
+  version:
+    name: Resolve the version
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      LANG: C.UTF-8
-      LC_ALL: C.UTF-8
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      skip: ${{ steps.version.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,48 +60,143 @@ jobs:
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
+  test:
+    name: Build and test the tree, generic distribution
+    needs: version
+    if: needs.version.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up JDK 25
-        if: steps.version.outputs.skip == 'false'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        if: steps.version.outputs.skip == 'false'
         uses: gradle/actions/setup-gradle@v4
         with:
           validate-wrappers: true
           cache-read-only: true
 
       - name: Install the Chromium Playwright needs (browser tests run in the normal build)
-        if: steps.version.outputs.skip == 'false'
         run: |
           PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
           npx --yes "playwright@${PW}" install --with-deps chromium
 
-      - name: Build, test and bundle
-        if: steps.version.outputs.skip == 'false'
+      - name: Build, test and pack the generic distribution
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-        run: ./gradlew build :app:distZip :app:distTar --no-daemon --console=plain
+        run: ./gradlew build :app:distZip --no-daemon --console=plain
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generic
+          path: app/build/distributions/petek-*-any-jdk25.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  bundle:
+    name: Bundle ${{ matrix.platform }}
+    needs: [version, test]
+    if: needs.version.outputs.skip == 'false'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - { platform: linux-x64, os: ubuntu-latest }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm }
+          - { platform: mac-arm64, os: macos-latest }
+          - { platform: win-x64, os: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (the bundle's runtime is linked from it)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Build the bundle
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: ./gradlew :app:bundle -Ppetek.platform=${{ matrix.platform }} --no-daemon --console=plain
+
+      - name: Start the bundle's launcher (no JDK on PATH)
+        if: runner.os != 'Windows'
+        run: |
+          tar xzf app/build/distributions/petek-*-${{ matrix.platform }}.tar.gz -C "$RUNNER_TEMP"
+          env -u JAVA_HOME PATH=/usr/bin:/bin "$RUNNER_TEMP"/petek-*-${{ matrix.platform }}/bin/petek --help
+
+      - name: Start the bundle's launcher (no JDK on PATH)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Expand-Archive (Get-Item app/build/distributions/petek-*-win-x64.zip) -DestinationPath $env:RUNNER_TEMP
+          $env:JAVA_HOME = ""
+          $env:Path = "C:\Windows\System32"
+          & (Get-Item "$env:RUNNER_TEMP\petek-*-win-x64\bin\petek.cmd") --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.platform }}
+          path: |
+            app/build/distributions/petek-*-${{ matrix.platform }}.tar.gz
+            app/build/distributions/petek-*-${{ matrix.platform }}.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish the release
+    needs: [version, test, bundle]
+    if: needs.version.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum petek-* > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Publish the release (creates the tag when it does not exist yet)
-        if: steps.version.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Pətək ${{ steps.version.outputs.version }}
-          files: |
-            app/build/distributions/petek-*.zip
-            app/build/distributions/petek-*.tar
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Pətək ${{ needs.version.outputs.version }}
+          files: dist/*
           generate_release_notes: true
           body: |
-            Pətək sidecar distribution. Unzip, then from any directory next to the site under test:
+            Pətək runs next to the site under test, never inside its build. Pick the archive for your machine
+            (no JDK needed) or the generic one (needs JDK 25 on PATH), extract it anywhere, then from the site's directory:
+
+            | Machine | Archive |
+            |---|---|
+            | Linux x64 | `petek-${{ needs.version.outputs.version }}-linux-x64.tar.gz` |
+            | Linux arm64 | `petek-${{ needs.version.outputs.version }}-linux-arm64.tar.gz` |
+            | macOS Apple silicon | `petek-${{ needs.version.outputs.version }}-mac-arm64.tar.gz` |
+            | Windows x64 | `petek-${{ needs.version.outputs.version }}-win-x64.zip` |
+            | Anything with JDK 25 (Intel Mac, ...) | `petek-${{ needs.version.outputs.version }}-any-jdk25.zip` |
 
             ```
-            petek-${{ steps.version.outputs.version }}/bin/petek doctor   # needs JDK 25 on PATH and the Claude Code CLI logged in (or ANTHROPIC_API_KEY)
-            petek-${{ steps.version.outputs.version }}/bin/petek panel    # opens the web panel at http://127.0.0.1:7070
+            tar xzf petek-${{ needs.version.outputs.version }}-linux-x64.tar.gz     # or unzip
+            cd my-site && cp ../petek-${{ needs.version.outputs.version }}-linux-x64/.env.example .env   # fill PETEK_TARGET
+            ../petek-${{ needs.version.outputs.version }}-linux-x64/bin/petek doctor   # target, Chromium, inbox, test API, AI (Claude Code CLI logged in, or ANTHROPIC_API_KEY)
+            ../petek-${{ needs.version.outputs.version }}-linux-x64/bin/petek panel    # the web panel at http://127.0.0.1:7070
             ```
 
-            Configuration: copy `.env.example` from the archive to `.env` in that directory. Licence: Business Source License 1.1 (see LICENSE).
+            Chromium is downloaded by Playwright on first use. Checksums: `SHA256SUMS`. Licence: Business Source License 1.1 (see LICENSE).

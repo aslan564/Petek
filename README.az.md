@@ -102,17 +102,21 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 ## Sürətli başlanğıc
 
-**Buraxılışdan (build lazım deyil).** [Releases](https://github.com/aslan564/Petek/releases) səhifəsindən
-`petek-<versiya>.zip` endirin, istənilən yerə açın; `PATH`-də JDK 25 və bir AI olsun: planınızla login olmuş
-[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), və ya Anthropic API açarı. Chromium-u Playwright ilk
-istifadədə özü yükləyir.
+**Buraxılışdan (build də, JDK də lazım deyil).** [Releases](https://github.com/aslan564/Petek/releases) səhifəsindən
+maşınınıza uyğun bundle-ı endirin: `petek-<versiya>-linux-x64.tar.gz`, `-linux-arm64.tar.gz`, `-mac-arm64.tar.gz` və ya
+`-win-x64.zip` (hər biri öz Java runtime-ını və Chromium driver-ini daşıyır; `SHA256SUMS` yoxlama cəmləridir), başqa
+maşın üçün `PATH`-də JDK 25 ilə işləyən `petek-<versiya>-any-jdk25.zip`. İstənilən yerə açın; bir AI olsun: planınızla
+login olmuş [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), və ya Anthropic API açarı. Chromium-u
+Playwright ilk istifadədə özü yükləyir.
 
 ```bash
-unzip petek-0.1.0.zip && cd my-site                    # istənilən qovluq: Pətək saytın yanında işləyir, build-inin içində yox
-cp ../petek-0.1.0/.env.example .env                    # PETEK_TARGET doldurun (+ tam run üçün PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET)
-../petek-0.1.0/bin/petek doctor                        # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
-../petek-0.1.0/bin/petek panel                         # veb paneli açır: http://127.0.0.1:7070
+tar xzf petek-0.1.0-linux-x64.tar.gz && cd my-site     # istənilən qovluq: Pətək saytın yanında işləyir, build-inin içində yox
+cp ../petek-0.1.0-linux-x64/.env.example .env          # PETEK_TARGET doldurun (+ tam run üçün PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET)
+../petek-0.1.0-linux-x64/bin/petek doctor              # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
+../petek-0.1.0-linux-x64/bin/petek panel               # veb paneli açır: http://127.0.0.1:7070
 ```
+
+Windows-da başladıcı `bin\petek.cmd`-dir. Əlavə JVM seçimləri `PETEK_OPTS`-a yazılır.
 
 **Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir), Mailpit üçün Docker
 və eyni AI.
@@ -151,7 +155,7 @@ Komanda sətri ilə, başdan sona:
 ## Öz saytınızda istifadə
 
 Pətək **kitabxana deyil, yanaşı işləyən alətdir (sidecar)**: onu saytınızın Maven, npm və ya Composer build-inə əlavə
-etmirsiniz. Alət kimi qurulur (bu gün buraxılış zip-i; Faza 12-də `petek init` və `npx petek` başladıcısı, bax R15),
+etmirsiniz. Alət kimi qurulur (bu gün buraxılış bundle-ları; Faza 12-də `petek init` və `npx petek` başladıcısı, bax R15),
 saytın yanında işə salınır və saytın URL-inə yönəldilir. **Sizin öz AI login-inizi** işlədir — BMAD layihədəki
 köməkçini necə işlədirsə, elə: `PETEK_LLM_PROVIDER=claude-cli` ilə login olduğunuz `claude` CLI-ni çağırır, modeli
 sizin planınız ödəyir; Pətək müəlliflərinə heç nə göndərilmir.
@@ -325,9 +329,9 @@ Kod bazasını sağlam saxlayan qaydalar (mümkün olan yerdə build məcbur edi
 faylı lisenziya başlığı daşıyır; domain kodu framework import etmir; application kodu infrastructure import etmir;
 infrastructure-ı yalnız `app` bağlayır; mock kitabxanası yoxdur (fake-lər `testFixtures`-dadır); testlər cümlə kimi
 adlanır; yeni kitabxana sahibin təsdiqini istəyir; hər commit-dən əvvəl `./gradlew spotlessApply build` keçməlidir. Tam
-siyahı: [CONTRIBUTING.md](CONTRIBUTING.md). Branch-lar: `main` buraxılış branch-ıdır (üstündəki `vX.Y.Z` teqi
-distribution-ı dərc edir); `develop` inteqrasiya branch-ıdır; `petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsi kimi
-saxlanır.
+siyahı: [CONTRIBUTING.md](CONTRIBUTING.md). Branch-lar: `main` buraxılış branch-ıdır (`gradle.properties`-də yeni
+`version` ilə push, və ya `vX.Y.Z` teqi bundle-ları dərc edir); `develop` inteqrasiya branch-ıdır; `petek-mvp` və
+`petek-mvp-o6tpsw` MVP tarixçəsi kimi saxlanır.
 
 ## Lisenziya, ticarət nişanı və müəllif hüququ
 
