@@ -567,6 +567,30 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
 Hazır sayılır: `petek panel` real KadroHR-da (test API açıq) rol-əsaslı kəşfiyyatı tamamlayır; `./gradlew build`
 yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
 
+#### İlk real run-lar (2026-09-26, fake KadroHR + real Chromium + real Claude CLI)
+
+`petek doctor` 7/7 yaşıl (LLM daxil), `smoke`, `plan`, `run` (10 və 30 tester), `report`, `teardown` real işlədi.
+10 tester: PASSED, 33 addım, 125 s, 70 screenshot, $0.45. 30 tester: 61 tapşırıq, 175 s; ilk run yalnız
+`forbidden` addımında qırmızı oldu. Tapıntılar və düzəlişlər (hamısı `develop`-da):
+
+- **Gözlənilən rədd LLM-in söz seçimindən asılı idi.** Agent artıq təsdiqlənmiş ticketi "problem" kimi bildirdi
+  (`problem_reported`), addımın assertləri (`not_visible`, HTTP 403) kodla keçmişdi, amma addım FAILED sayıldı.
+  İndi rədd gözləyən addımı kod tanıyır (assertlərində `not_visible` və ya `http_status` 401/403 olan əsas addım) və
+  agentin istənilən "problem"/`done success=false` hesabatı orada `permission_denied` kimi qeyd olunur; assertlər
+  qərar verir (ADR-0007). Hesabat agentin öz sətirlərini də eyni cür göstərir ("icazə verilmədi").
+- **`petek capacity` əmri sənədlərdə var idi, kodda yox idi.** Əlavə olundu (`--measure N`, `--url`); bu maşında:
+  24 tester (CPU həddi), ölçülmüş sessiya 110 MiB.
+- **`run --testers N`** sənədlərdəki addır; `--agents` köhnə ad kimi qalır.
+- **Hesabatın token xülasəsi** yalnız keşsiz giriş tokenlərini göstərirdi (30 tester üçün "giriş 106"); indi keşdən
+  oxunanlar da xülasədədir.
+- **Fake target** brauzer SSE axınını bağlayanda "Request /events failed" + stack trace yazırdı (hər run sonunda
+  onlarla); müştərinin getməsi indi debug səviyyəsindədir.
+- Qeyd (dəyişmədi): hesabatın "Keçən addımlar" sayı hər alt-hərəkəti sayır (10 tester üçün 315), CLI xülasəsi isə
+  orkestratorun tapşırıq sayını (33). İkisi də doğrudur, amma eyni ad daşıyır — panel/hesabat işində birləşdirilməli.
+
+Düzəlişlərdən sonra 30 tester yenidən: **PASSED**, 87 tapşırıq, 0 uğursuz, 185 s; real-time gecikmə 24 alanda orta
+104 ms / p95 161 ms; $1.06 (giriş 212 · keşdən 262 197 · çıxış 16 540 token).
+
 ### Faza 9 — Provayder-agnostik AI qatı
 
 Məqsəd: `PETEK_LLM_PROVIDER=auto` default olsun; Claude, Codex, Gemini CLI və istənilən OpenAI-uyğun endpoint işləsin.

@@ -34,9 +34,24 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.sse.SSE
+import io.ktor.util.cio.ChannelWriteException
+import io.ktor.utils.io.ClosedWriteChannelException
 import kotlinx.serialization.json.Json
+import java.io.IOException
 
 private val logger = KotlinLogging.logger {}
+
+/**
+ * The client went away while the server was still writing (an `EventSource` closed with its page, a browser context
+ * torn down at the end of a run): Ktor surfaces it as a closed write channel or a broken pipe somewhere in the cause
+ * chain. Such a request did not fail, so it is not an error worth a stack trace.
+ */
+internal fun Throwable.isClientDisconnect(): Boolean =
+    generateSequence(this) { it.cause }.any {
+        it is ClosedWriteChannelException ||
+            it is ChannelWriteException ||
+            (it is IOException && it.message?.contains("Broken pipe", ignoreCase = true) == true)
+    }
 
 /**
  * Wires the web application: plugins, the page routes, the JSON API, the test API and the SSE stream.
@@ -62,6 +77,11 @@ internal class WebApplication(
                 call.respondProblem(HttpStatusCode.UnsupportedMediaType, Failure.INVALID_REQUEST.message)
             }
             exception<Throwable> { call, cause ->
+                if (cause.isClientDisconnect()) {
+                    // A browser closed its SSE stream or left mid-response: nothing failed, and nobody is listening.
+                    logger.debug { "Client left ${call.request.path()} (${cause::class.simpleName})" }
+                    return@exception
+                }
                 logger.error(cause) { "Request ${call.request.path()} failed" }
                 call.respondProblem(HttpStatusCode.InternalServerError, "Daxili xəta baş verdi.")
             }

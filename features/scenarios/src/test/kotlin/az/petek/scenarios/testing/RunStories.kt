@@ -226,8 +226,7 @@ object RunStories {
                     StepKind.DO,
                     "report_problem permission_denied \"Approve düyməsi yoxdur\"",
                     StepStatus.BLOCKED,
-                    "Problem reported: permission_denied: Approve düyməsi yoxdur | outcome: BLOCKED permission_denied: " +
-                        "permission_denied: Approve düyməsi yoxdur",
+                    "Problem reported: Approve düyməsi yoxdur | outcome: BLOCKED permission_denied: Approve düyməsi yoxdur",
                 ),
                 step(
                     "stp_${agent}_f2",

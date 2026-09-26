@@ -457,7 +457,8 @@ class DefaultAgentLoop(
             val outcome =
                 ActionOutcome(
                     status = if (denied) ActionStatus.BLOCKED else ActionStatus.FAILED,
-                    summary = "${action.kind.key}: ${action.note}",
+                    // The failure reason already says permission_denied; other kinds are kept in front of the note.
+                    summary = if (denied) action.note else "${action.kind.key}: ${action.note}",
                     failureReason = if (denied) FailureReason.PERMISSION_DENIED else FailureReason.PROBLEM_REPORTED,
                 )
             val status = if (denied) StepStatus.BLOCKED else StepStatus.FAILED

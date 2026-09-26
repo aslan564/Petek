@@ -463,7 +463,7 @@ class DefaultAgentLoopTest {
             outcome shouldBe
                 ActionOutcome(
                     ActionStatus.BLOCKED,
-                    "permission_denied: Approve düyməsi yoxdur",
+                    "Approve düyməsi yoxdur",
                     failureReason = FailureReason.PERMISSION_DENIED,
                     stepsTaken = 1,
                 )
