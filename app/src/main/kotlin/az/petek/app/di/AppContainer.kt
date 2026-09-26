@@ -69,8 +69,12 @@ import az.petek.llm.application.UsageMeter
 import az.petek.llm.domain.LlmClient
 import az.petek.mail.application.AwaitVerificationUseCase
 import az.petek.mail.application.DefaultAwaitVerificationUseCase
+import az.petek.mail.application.ManualCodeDesk
+import az.petek.mail.application.ManualCodeMailbox
+import az.petek.mail.application.PatientVerification
 import az.petek.mail.domain.DefaultVerificationExtractor
 import az.petek.mail.domain.Mailbox
+import az.petek.mail.infrastructure.ImapMailbox
 import az.petek.mail.infrastructure.MailpitMailbox
 import az.petek.mail.infrastructure.TestApiMailbox
 import az.petek.oracle.domain.DefaultJsonFieldSelector
@@ -207,10 +211,18 @@ class AppContainer(
         when (config.mailSource) {
             MailSource.MAILPIT -> resources.track(MailpitMailbox(config.mailpitUrl))
             MailSource.TEST_API -> resources.track(TestApiMailbox(config.testApiBase, config.testToken))
+            MailSource.IMAP -> resources.track(ImapMailbox(checkNotNull(config.imap)))
+            MailSource.MANUAL -> ManualCodeMailbox(manualCodes)
         }
     }
 
-    val verification: AwaitVerificationUseCase by lazy { DefaultAwaitVerificationUseCase(mailbox, DefaultVerificationExtractor()) }
+    /** Codes the owner types into the panel when `PETEK_MAIL_SOURCE=manual` (Faza 10). */
+    val manualCodes: ManualCodeDesk by lazy { ManualCodeDesk { clock.now().wall } }
+
+    val verification: AwaitVerificationUseCase by lazy {
+        val base = DefaultAwaitVerificationUseCase(mailbox, DefaultVerificationExtractor())
+        if (config.mailSource == MailSource.MANUAL) PatientVerification(base) else base
+    }
 
     /** Opt-in telemetry (ADR-0011): counters only, into a local file; [UsageSink.NONE] unless `PETEK_TELEMETRY=local`. */
     val telemetry: UsageSink by lazy {
@@ -348,7 +360,12 @@ class AppContainer(
             finalizer = finalizer,
             clock = clock,
             ids = ids,
-            settings = RunnerSettings(mailDomain = config.mailDomain, storageRoot = config.evidenceDir.resolve(STORAGE_STATE_DIRECTORY)),
+            settings =
+                RunnerSettings(
+                    mailDomain = config.mailDomain,
+                    storageRoot = config.evidenceDir.resolve(STORAGE_STATE_DIRECTORY),
+                    mailbox = config.mailInbox,
+                ),
             sharedStateFactory = ::InMemorySharedRunState,
             watchdog = watchdog,
             diagnostics = MdcDiagnosticContext,

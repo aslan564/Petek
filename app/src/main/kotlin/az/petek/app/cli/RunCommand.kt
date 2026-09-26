@@ -103,7 +103,7 @@ class RunCommand : PetekSubcommand("run") {
         if (issues.isNotEmpty()) {
             throw CampaignValidationException(issues + ValidationIssue(null, "--testers $agents does not fit this campaign"))
         }
-        val spec = IdentitySpecs.of(scaled.settings, container.config.mailDomain)
+        val spec = IdentitySpecs.of(scaled.settings, container.config.mailDomain, container.config.mailInbox)
         val preview = container.identityGenerator.generate(spec, RunTags.forPlan(scaled.sourceHash, scaled.settings.seed))
         CampaignScaler.uncoveredSteps(scaled, preview.identities, DefaultActorResolver()).forEach { step ->
             echo(

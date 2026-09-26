@@ -17,6 +17,7 @@ import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.infrastructure.http.StructuredMode
+import az.petek.mail.infrastructure.ImapSettings
 import java.net.URI
 import java.net.URISyntaxException
 import java.nio.file.InvalidPathException
@@ -72,7 +73,9 @@ class ConfigLoader(
                 problems += "${Keys.TEST_TOKEN} is required when ${Keys.MAIL_SOURCE} is ${MailSource.TEST_API.key}"
             }
             val mailpitUrl = url(Keys.MAILPIT_URL, default = PetekConfig.DEFAULT_MAILPIT_URL)
-            val mailDomain = mailDomain()
+            val mailInbox = mailInbox()
+            val mailDomain = mailInbox?.substringAfter('@') ?: mailDomain()
+            val imap = if (mailSource == MailSource.IMAP) imap(mailInbox) else null
             val resolution = provider()
             val provider = resolution?.provider
             val model = text(Keys.LLM_MODEL)
@@ -118,6 +121,8 @@ class ConfigLoader(
                 mailSource = checkNotNull(mailSource),
                 mailpitUrl = checkNotNull(mailpitUrl),
                 mailDomain = checkNotNull(mailDomain),
+                mailInbox = mailInbox,
+                imap = imap,
                 identitySecret = checkNotNull(identitySecret),
                 llmProvider = checkNotNull(provider),
                 llmProviderReason = checkNotNull(resolution).reason,
@@ -207,6 +212,34 @@ class ConfigLoader(
                 return null
             }
             return domain
+        }
+
+        /** The owner's box: one plain address whose local part has no `+` of its own (Pətək adds the tag). */
+        private fun mailInbox(): String? {
+            val raw = text(Keys.MAIL_INBOX)?.lowercase() ?: return null
+            if (!MAILBOX.matches(raw)) {
+                problems += "${Keys.MAIL_INBOX} must be a plain e-mail address such as test@company.az (without '+')"
+                return null
+            }
+            return raw
+        }
+
+        /** `PETEK_IMAP_*`; the user defaults to the owner's box, the port to 993 with TLS and 143 without. */
+        private fun imap(mailInbox: String?): ImapSettings? {
+            val host = text(Keys.IMAP_HOST)
+            val user = text(Keys.IMAP_USER) ?: mailInbox
+            val password = text(Keys.IMAP_PASSWORD)
+            val tls = flag(Keys.IMAP_TLS, default = true)
+            val required = "is required when ${Keys.MAIL_SOURCE} is ${MailSource.IMAP.key}"
+            if (host == null) problems += "${Keys.IMAP_HOST} $required"
+            if (user == null) problems += "${Keys.IMAP_USER} (or ${Keys.MAIL_INBOX}) $required"
+            if (password == null) problems += "${Keys.IMAP_PASSWORD} $required"
+            val defaultPort = if (tls) ImapSettings.DEFAULT_TLS_PORT else ImapSettings.DEFAULT_PLAIN_PORT
+            val rawPort = text(Keys.IMAP_PORT)
+            val port = if (rawPort == null) defaultPort else rawPort.toIntOrNull()?.takeIf { it in 1..MAX_PORT }
+            if (port == null) problems += "${Keys.IMAP_PORT} must be a port number, was '$rawPort'"
+            if (host == null || user == null || password == null || port == null) return null
+            return ImapSettings(host, user, Secret(password), port, tls, text(Keys.IMAP_FOLDER) ?: ImapSettings.DEFAULT_FOLDER)
         }
 
         private fun mailSource(): MailSource? {
@@ -320,6 +353,13 @@ class ConfigLoader(
         const val MAIL_SOURCE = "PETEK_MAIL_SOURCE"
         const val MAILPIT_URL = "PETEK_MAILPIT_URL"
         const val MAIL_DOMAIN = "PETEK_MAIL_DOMAIN"
+        const val MAIL_INBOX = "PETEK_MAIL_INBOX"
+        const val IMAP_HOST = "PETEK_IMAP_HOST"
+        const val IMAP_PORT = "PETEK_IMAP_PORT"
+        const val IMAP_USER = "PETEK_IMAP_USER"
+        const val IMAP_PASSWORD = "PETEK_IMAP_PASSWORD"
+        const val IMAP_TLS = "PETEK_IMAP_TLS"
+        const val IMAP_FOLDER = "PETEK_IMAP_FOLDER"
         const val IDENTITY_SECRET = "PETEK_IDENTITY_SECRET"
         const val LLM_PROVIDER = "PETEK_LLM_PROVIDER"
         const val LLM_MODEL = "PETEK_LLM_MODEL"
@@ -346,6 +386,8 @@ class ConfigLoader(
 
     private companion object {
         const val MAX_LLM_CONCURRENCY = 64
+        const val MAX_PORT = 65_535
+        val MAILBOX = Regex("[a-z0-9._-]{1,48}@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
         const val AUTO = "auto"
         const val MIN_SECRET_LENGTH = 16
         val WEB_SCHEMES = setOf("http", "https")

@@ -207,6 +207,7 @@ class DefaultCampaignRunner(
                 inviteCount = quotas.registration.invite,
                 companyCodeCount = quotas.registration.companyCode,
                 mailDomain = settings.mailDomain,
+                mailbox = settings.mailbox,
             )
         val plan = identityPlanner.execute(run.runId, RunTags.forRun(run.runId), spec)
         run.identities = plan.identities.sortedBy { it.agentId }

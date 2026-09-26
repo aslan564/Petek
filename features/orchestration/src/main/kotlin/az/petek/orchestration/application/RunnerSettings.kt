@@ -15,6 +15,7 @@ import java.nio.file.Path
  * Environment-dependent settings of [DefaultCampaignRunner] (they come from `.env`, not from the campaign).
  *
  * @property mailDomain catch-all test domain used for every generated e-mail, e.g. `test.kadrohr.com`.
+ * @property mailbox the owner's own inbox; when set every tester gets its `+` address instead (Faza 16).
  * @property storageRoot directory for per-agent browser storage state: `<storageRoot>/<runId>/<agentId>.json`.
  * @property activatingRunFunctions `run` functions that log an agent in; a successful setup step running one of them
  *   (or any successful setup `do` step, which is how a UI sign-up is written) marks the identity ACTIVE.
@@ -22,6 +23,7 @@ import java.nio.file.Path
 data class RunnerSettings(
     val mailDomain: String,
     val storageRoot: Path,
+    val mailbox: String? = null,
     val activatingRunFunctions: Set<String> = DEFAULT_ACTIVATING_RUN_FUNCTIONS,
 ) {
     init {

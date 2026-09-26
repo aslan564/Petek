@@ -46,6 +46,20 @@ internal fun Route.panelRoutes(backend: PanelBackend) {
     explorationRoutes(backend)
     scenarioRoutes(backend)
     runRoutes(backend)
+    manualCodeRoutes(backend)
+}
+
+private fun Route.manualCodeRoutes(backend: PanelBackend) {
+    get("/api/manual-codes") { call.answer { PanelJson.manualCodes(backend.manualCodes()) } }
+    post("/api/manual-codes/{id}") {
+        call.answer {
+            val code = PanelJson.manualCode(call.jsonBody())
+            if (!backend.answerManualCode(call.id("id"), code)) {
+                throw invalid("code", "Kod qəbul edilmədi: bu sorğu artıq gözləmir və ya kod 3-16 hərf/rəqəm deyil.")
+            }
+            PanelJson.manualCodes(backend.manualCodes())
+        }
+    }
 }
 
 private fun Route.explorationRoutes(backend: PanelBackend) {

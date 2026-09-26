@@ -9,6 +9,7 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.explorer.AnswerBook
@@ -26,12 +27,14 @@ import az.petek.capacity.domain.LimitingFactor
 import az.petek.core.ids.ArtifactId
 import az.petek.dashboard.domain.CapacityLimit
 import az.petek.dashboard.domain.CapacityView
+import az.petek.dashboard.domain.ManualCodeView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelCapacity
 import az.petek.dashboard.domain.PanelExplorer
 import az.petek.dashboard.domain.PanelRuns
 import az.petek.dashboard.domain.PanelScenarios
 import az.petek.evidence.domain.ArtifactRecord
+import az.petek.mail.application.ManualCodeDesk
 import az.petek.orchestration.domain.MonitorView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +66,8 @@ internal class AppPanelBackend(
     private val scenarios: PanelScenarios,
     private val runs: PanelRunsAdapter,
     private val scope: CoroutineScope,
+    /** The desk of `PETEK_MAIL_SOURCE=manual`; null for every other mail source (nothing to answer then). */
+    private val manualCodes: ManualCodeDesk? = null,
 ) : PanelBackend,
     PanelCapacity by capacity,
     PanelExplorer by explorer,
@@ -71,6 +76,13 @@ internal class AppPanelBackend(
     AutoCloseable {
     override suspend fun explorationArtifact(artifactId: ArtifactId): ArtifactRecord? =
         explorer.explorationArtifact(artifactId) ?: runs.evidenceArtifact(artifactId)
+
+    override fun manualCodes(): List<ManualCodeView> = manualCodes?.pending().orEmpty().map { ManualCodeView(it.id, it.to, it.askedAt) }
+
+    override suspend fun answerManualCode(
+        id: String,
+        code: String,
+    ): Boolean = manualCodes?.answer(id, code) ?: false
 
     override fun close() {
         val work = scope.coroutineContext.job
@@ -110,7 +122,8 @@ internal class AppPanelBackend(
             val explorer = PanelExplorerAdapter(container, sessions, answers, scope)
             val scenarios = PanelScenariosAdapter(container, explorer, workingDirectory.resolve(SCENARIO_DIRECTORY), scope)
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
-            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope)
+            val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
+            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual)
         }
 
         const val SCENARIO_DIRECTORY = "scenarios"

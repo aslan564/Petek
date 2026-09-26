@@ -175,7 +175,7 @@ internal class PanelScenariosAdapter(
             try {
                 container.identityGenerator
                     .generate(
-                        IdentitySpecs.of(campaign.settings, container.config.mailDomain),
+                        IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
                         RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
                     ).identities
             } catch (e: Exception) {

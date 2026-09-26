@@ -21,6 +21,7 @@ internal class IdentitySpecValidator(
         val names: List<String>,
         val departments: List<String>,
         val mailDomain: String,
+        val mailbox: String? = null,
     )
 
     fun validate(spec: IdentitySpec): Valid {
@@ -35,10 +36,12 @@ internal class IdentitySpecValidator(
         if (mailDomain.length > MAX_DOMAIN_LENGTH || !DOMAIN.matches(mailDomain)) {
             problems += "mail domain '${spec.mailDomain}' is not a valid domain name"
         }
+        val mailbox = spec.mailbox?.trim()?.lowercase()
+        if (mailbox != null && !MAILBOX.matches(mailbox)) problems += "mailbox '${spec.mailbox}' is not a plain e-mail address"
         if (problems.isNotEmpty()) {
             throw IdentityConflictException("${NameAllocator.CANNOT_BUILD} " + problems.joinToString("; "))
         }
-        return Valid(givenNames, departments, mailDomain)
+        return Valid(givenNames, departments, mailDomain, mailbox)
     }
 
     private fun checkCounts(
@@ -129,6 +132,9 @@ internal class IdentitySpecValidator(
             .map { it.first() }
 
     companion object {
+        /** A box whose local part may take a `+` tag: no `+` of its own, one `@`, a dotted domain. */
+        private val MAILBOX = Regex("[a-z0-9._-]{1,48}@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
+
         /** Keeps names and departments readable on screen and within the target's form limits. */
         const val MAX_TEXT_LENGTH = 100
 

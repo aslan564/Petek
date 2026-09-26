@@ -54,6 +54,12 @@ data class IdentitySpec(
     val companyCodeCount: Int,
     /** Catch-all test domain, e.g. `test.kadrohr.com`. */
     val mailDomain: String,
+    /**
+     * The owner's own inbox, e.g. `test@company.az` (Faza 16): when set, every tester gets its `+` address,
+     * `test+<runTag>-<agentId>@company.az`, instead of an address of [mailDomain]; mail is routed back to the tester by
+     * that exact address.
+     */
+    val mailbox: String? = null,
 )
 
 data class IdentityPlan(

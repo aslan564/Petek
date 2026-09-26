@@ -213,7 +213,9 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_ALLOW_PRODUCTION` | `false` | … bu `true` deyilsə (qayda 8) |
 | `PETEK_TEST_TOKEN` | — | Hədəfin `/test/...` API-si üçün `X-Test-Token`; boş = oracle yoxlamaları və teardown yoxdur |
 | `PETEK_TEST_API_URL` | hədəf | `/test/...` API hədəfin origin-ində deyilsə onun baza ünvanı |
-| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit` və ya `test-api` (`GET /test/emails`, token lazımdır) |
+| `PETEK_MAIL_INBOX` | — | Sizin qutunuz (`test@sirket.az`): hər tester `test+<run>-<agent>@sirket.az` ilə qeydiyyatdan keçir; `PETEK_MAIL_DOMAIN`-i əvəz edir; `+`-u qəbul etməyən sayt hesabatda deyilir |
+| `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / qutu / — / `true` / `INBOX` | `imap` mənbəyi o qutunu necə oxuyur (Jakarta Mail/Angus); parol `Secret`-dir |
+| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün) |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | Test kimliklərinin e-poçt domeni |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Parol derivasiyasının açarı (≥ 16 simvol) |

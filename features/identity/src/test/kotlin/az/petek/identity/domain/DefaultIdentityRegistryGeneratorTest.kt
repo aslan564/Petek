@@ -68,6 +68,20 @@ class DefaultIdentityRegistryGeneratorTest {
     }
 
     @Test
+    fun `with the owner's own box every tester gets its own plus address of it`() {
+        val boxed = generator().generate(spec().copy(mailbox = "Test@Company.az"), RUN_TAG).identities
+
+        boxed.map { it.email } shouldBe identities.map { "test+${RUN_TAG.value}-${it.agentId.value}@company.az" }
+        boxed.map { it.email }.shouldNotContainDuplicates()
+    }
+
+    @Test
+    fun `a box that already has a plus tag is refused`() {
+        shouldThrow<IdentityConflictException> { generator().generate(spec().copy(mailbox = "test+x@company.az"), RUN_TAG) }
+            .message shouldContain "mailbox 'test+x@company.az' is not a plain e-mail address"
+    }
+
+    @Test
     fun `another password secret only changes the passwords`() {
         val other = generator(secret = "another-secret").generate(spec(), RUN_TAG).identities
         other.map { it.copy(password = Secret("x")) } shouldBe identities.map { it.copy(password = Secret("x")) }

@@ -281,6 +281,14 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .toast.error svg { color: var(--red); }
 .toast.ok svg { color: var(--green); }
 
+/* ---------- manual codes ("Kodu daxil et") ---------- */
+.manual-codes { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 90; width: min(520px, calc(100vw - 32px)); padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--border)); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 8px; }
+.manual-codes .title { font-weight: 750; }
+.manual-codes .hint { color: var(--muted); font-size: 12.5px; }
+.manual-codes .row { display: flex; align-items: center; gap: 8px; }
+.manual-codes .address { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+.manual-codes input { width: 9em; }
+
 /* ---------- run banner (agents and orchestrator) ---------- */
 .run-banner { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 16px 20px; }
 .run-banner .who { flex: 1 1 280px; min-width: 0; }

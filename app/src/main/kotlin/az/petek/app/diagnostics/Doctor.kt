@@ -32,6 +32,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.net.URI
+import java.time.Instant
 
 enum class CheckStatus { OK, FAILED, SKIPPED }
 
@@ -118,7 +119,31 @@ class Doctor(
         when (config.mailSource) {
             MailSource.MAILPIT -> mailpit()
             MailSource.TEST_API -> if (allowed) testApiMail() else skipped(MAIL)
+            MailSource.IMAP -> imapMail()
+            MailSource.MANUAL -> manualMail()
         }
+
+    /** `PETEK_MAIL_SOURCE=imap`: logs in and searches the owner's box for a fake address (nothing is read or changed). */
+    private suspend fun imapMail(): CheckResult {
+        val imap = checkNotNull(config.imap)
+        return try {
+            container.mailbox.findRecent(MAIL_PROBE_ADDRESS, Instant.now(), unreadOnly = false, limit = 1)
+            val plus = config.mailInbox?.let { ", testers get its + addresses ($it)" }.orEmpty()
+            CheckResult(MAIL, CheckStatus.OK, "IMAP: logged in to $imap$plus")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CheckResult(MAIL, CheckStatus.FAILED, "IMAP: ${e.message ?: e::class.simpleName}")
+        }
+    }
+
+    /** `PETEK_MAIL_SOURCE=manual`: nothing to contact; the owner types every code into the panel. */
+    private fun manualMail(): CheckResult =
+        CheckResult(
+            MAIL,
+            CheckStatus.OK,
+            "manual: you type each code into the panel (Kodu daxil et); meant for the explorer's 1-3 sessions, not a swarm",
+        )
 
     private suspend fun mailpit(): CheckResult {
         val url = URI(config.mailpitUrl.toString().trimEnd('/') + MAILPIT_INFO)
@@ -229,6 +254,7 @@ class Doctor(
     private fun skipped(name: String) = CheckResult(name, CheckStatus.SKIPPED, "not contacted: the target policy refuses the target")
 
     companion object {
+        private const val MAIL_PROBE_ADDRESS = "petek-doctor-probe@example.invalid"
         const val CONFIGURATION = "Configuration"
         const val POLICY = "Target policy"
         const val TARGET = "Target reachable"

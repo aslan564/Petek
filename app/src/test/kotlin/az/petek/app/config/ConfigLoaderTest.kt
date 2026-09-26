@@ -15,6 +15,7 @@ import az.petek.core.security.Secret
 import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.infrastructure.http.StructuredMode
+import az.petek.mail.infrastructure.ImapSettings
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldBeNull
@@ -163,7 +164,7 @@ class ConfigLoaderTest {
             "PETEK_ALLOW_PRODUCTION" to "maybe",
             "PETEK_MAILPIT_URL" to "localhost:8025",
             "PETEK_TEST_API_URL" to "api.kadrohr.com",
-            "PETEK_MAIL_SOURCE" to "imap",
+            "PETEK_MAIL_SOURCE" to "pop3",
             "PETEK_MAIL_DOMAIN" to "not a domain",
             "PETEK_LLM_PROVIDER" to "gpt",
             "PETEK_LLM_CONCURRENCY" to "0",
@@ -178,7 +179,7 @@ class ConfigLoaderTest {
                 "PETEK_ALLOW_PRODUCTION must be true or false",
                 "PETEK_MAILPIT_URL must be an absolute http(s) URL",
                 "PETEK_TEST_API_URL must be an absolute http(s) URL",
-                "PETEK_MAIL_SOURCE must be one of mailpit, test-api, was 'imap'",
+                "PETEK_MAIL_SOURCE must be one of mailpit, test-api, imap, manual, was 'pop3'",
                 "PETEK_MAIL_DOMAIN must be a bare domain such as test.kadrohr.com",
                 "PETEK_LLM_PROVIDER must be auto or one of claude-cli, anthropic-api, codex-cli, gemini-cli, opencode-cli, openai-compat, was 'gpt'",
                 "PETEK_LLM_CONCURRENCY must be a whole number between 1 and 64, was '0'",
@@ -266,6 +267,43 @@ class ConfigLoaderTest {
         load(target, "PETEK_TEST_API_URL" to "https://kadrohr.com", "PETEK_ALLOW_PRODUCTION" to "true").testApiBase shouldBe
             URI("https://kadrohr.com")
         load(target, "PETEK_TEST_API_URL" to "https://api.staging.kadrohr.com").testApiBase shouldBe URI("https://api.staging.kadrohr.com")
+    }
+
+    @Test
+    fun `the owner's box gives the mail domain and IMAP reads it with the box as user by default`() {
+        val config =
+            load(
+                target,
+                "PETEK_MAIL_SOURCE" to "imap",
+                "PETEK_MAIL_INBOX" to "Test@Company.az",
+                "PETEK_IMAP_HOST" to "imap.company.az",
+                "PETEK_IMAP_PASSWORD" to "imap-secret-123",
+            )
+
+        config.mailSource shouldBe MailSource.IMAP
+        config.mailInbox shouldBe "test@company.az"
+        config.mailDomain shouldBe "company.az"
+        config.imap shouldBe ImapSettings("imap.company.az", "test@company.az", Secret("imap-secret-123"), 993, true, "INBOX")
+        config.toString() shouldNotContain "imap-secret-123"
+        load(target, "PETEK_MAIL_SOURCE" to "manual").mailSource shouldBe MailSource.MANUAL
+    }
+
+    @Test
+    fun `IMAP needs a host, a user and a password, and a box must not carry its own plus tag`() {
+        problems(
+            target,
+            "PETEK_MAIL_SOURCE" to "imap",
+            "PETEK_IMAP_TLS" to "false",
+            "PETEK_IMAP_PORT" to "x",
+        ) shouldContainExactlyInAnyOrder
+            listOf(
+                "PETEK_IMAP_HOST is required when PETEK_MAIL_SOURCE is imap",
+                "PETEK_IMAP_USER (or PETEK_MAIL_INBOX) is required when PETEK_MAIL_SOURCE is imap",
+                "PETEK_IMAP_PASSWORD is required when PETEK_MAIL_SOURCE is imap",
+                "PETEK_IMAP_PORT must be a port number, was 'x'",
+            )
+        problems(target, "PETEK_MAIL_INBOX" to "test+a@company.az") shouldContainExactlyInAnyOrder
+            listOf("PETEK_MAIL_INBOX must be a plain e-mail address such as test@company.az (without '+')")
     }
 
     @Test

@@ -16,6 +16,7 @@ import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.infrastructure.http.StructuredMode
+import az.petek.mail.infrastructure.ImapSettings
 import java.net.URI
 import java.nio.file.Path
 
@@ -57,6 +58,10 @@ data class PetekConfig(
     val mailSource: MailSource = MailSource.MAILPIT,
     val mailpitUrl: URI = URI(DEFAULT_MAILPIT_URL),
     val mailDomain: String = DEFAULT_MAIL_DOMAIN,
+    /** The owner's own box (`PETEK_MAIL_INBOX`, e.g. `test@company.az`): testers get its `+` addresses (Faza 16). */
+    val mailInbox: String? = null,
+    /** How to read the owner's box when [mailSource] is IMAP (`PETEK_IMAP_*`). */
+    val imap: ImapSettings? = null,
     val identitySecret: Secret,
     val llmProvider: LlmProviderKey = LlmProviderKey.CLAUDE_CLI,
     val llmProviderReason: String = "default",
@@ -89,6 +94,7 @@ data class PetekConfig(
         require(mailSource != MailSource.TEST_API || testToken?.isBlank == false) {
             "the test-api mail source needs the test token"
         }
+        require(mailSource != MailSource.IMAP || imap != null) { "the imap mail source needs its IMAP settings" }
         require(testApiUrl == null || targetPolicy.verify(testApiUrl) == TargetVerdict.Allowed) {
             "the test API URL names a production host; set PETEK_ALLOW_PRODUCTION=true to allow it"
         }
@@ -121,7 +127,7 @@ data class PetekConfig(
     override fun toString(): String =
         "PetekConfig(target=${masked(target)}, productionHosts=$productionHosts, allowProduction=$allowProduction, " +
             "testToken=${setOrUnset(testToken)}, testApiUrl=${testApiUrl?.let(::masked)}, mailSource=${mailSource.key}, " +
-            "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, " +
+            "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, mailInbox=${mailInbox ?: "unset"}, imap=${imap ?: "unset"}, " +
             "identitySecret=***, llmProvider=$llmProvider ($llmProviderReason), llmModel=$llmModelLabel, llmBin=$effectiveLlmBin, " +
             "llmBaseUrl=${llmBaseUrl?.let(::masked)}, llmApiKey=${setOrUnset(llmApiKey)}, llmStructured=${llmStructured.key}, " +
             "llmEffort=$effectiveLlmEffort, llmConcurrency=$llmConcurrency, language=$language, " +

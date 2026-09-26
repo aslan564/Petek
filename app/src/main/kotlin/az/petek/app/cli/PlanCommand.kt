@@ -40,7 +40,12 @@ class PlanCommand : PetekSubcommand("plan") {
             val campaign = withContext(Dispatchers.IO) { container.campaigns.execute(path, container.knownRunFunctions) }
             val runId = planRunId(campaign)
             val tag = RunTags.forPlan(campaign.sourceHash, campaign.settings.seed)
-            val plan = container.planIdentities.execute(runId, tag, IdentitySpecs.of(campaign.settings, container.config.mailDomain))
+            val plan =
+                container.planIdentities.execute(
+                    runId,
+                    tag,
+                    IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
+                )
             if (json) {
                 emitJson(
                     buildJsonObject {

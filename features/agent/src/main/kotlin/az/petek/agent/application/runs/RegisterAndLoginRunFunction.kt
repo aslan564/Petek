@@ -13,10 +13,12 @@ import az.petek.agent.application.RunFunction
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.FailureReason
+import az.petek.agent.domain.PlusAddressRefusal
 import az.petek.agent.domain.StepContext
 import az.petek.campaign.domain.FlowNames
 import az.petek.core.model.RegistrationMode
 import az.petek.evidence.domain.StepStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
@@ -74,8 +76,22 @@ internal class RegisterAndLoginRunFunction(
             last = outcome
         }
         val failure = checkNotNull(last)
-        return failure.copy(summary = "Registration failed after ${settings.registrationAttempts} attempts; last: ${failure.summary}")
+        val plusHint = if (refusesPlusAddress(identity.email)) " ${PlusAddressRefusal.HINT}" else ""
+        return failure.copy(
+            summary = "Registration failed after ${settings.registrationAttempts} attempts; last: ${failure.summary}$plusHint",
+        )
     }
+
+    /** Whether the page the failed registration left shows an e-mail error for the tester's `+` address. */
+    private suspend fun RunTrace.refusesPlusAddress(email: String): Boolean =
+        '+' in email &&
+            try {
+                PlusAddressRefusal.detect(email, runtime.session.snapshot().visibleText)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
 
     private suspend fun RunTrace.joinOnce(
         mode: RegistrationMode,

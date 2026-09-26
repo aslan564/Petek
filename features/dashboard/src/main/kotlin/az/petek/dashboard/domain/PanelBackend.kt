@@ -36,7 +36,30 @@ interface PanelBackend :
     PanelCapacity,
     PanelExplorer,
     PanelScenarios,
-    PanelRuns
+    PanelRuns,
+    PanelManualCodes
+
+/**
+ * Codes the owner types in by hand (`PETEK_MAIL_SOURCE=manual`, "Kodu daxil et"): a tester waiting for a code is
+ * listed until the owner answers it. Without the manual mail source there is never anything to answer.
+ */
+interface PanelManualCodes {
+    /** Testers waiting for a code, oldest first. */
+    fun manualCodes(): List<ManualCodeView> = emptyList()
+
+    /** Gives [code] to request [id]; false when no such request waits or the code is not a plain code. */
+    suspend fun answerManualCode(
+        id: String,
+        code: String,
+    ): Boolean = false
+}
+
+/** One tester waiting for a code: the address the site sent it to (the owner's own box) and since when. */
+data class ManualCodeView(
+    val id: String,
+    val address: String,
+    val askedAt: java.time.Instant,
+)
 
 /** Capacity advice for the tester count on the instruction screen ("Təlimat"). */
 fun interface PanelCapacity {

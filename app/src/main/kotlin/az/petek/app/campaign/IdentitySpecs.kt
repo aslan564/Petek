@@ -17,6 +17,7 @@ object IdentitySpecs {
     fun of(
         settings: CampaignSettings,
         mailDomain: String,
+        mailbox: String? = null,
     ): IdentitySpec =
         IdentitySpec(
             testers = settings.testers,
@@ -29,5 +30,6 @@ object IdentitySpecs {
             inviteCount = settings.registration.invite,
             companyCodeCount = settings.registration.companyCode,
             mailDomain = mailDomain,
+            mailbox = mailbox,
         )
 }

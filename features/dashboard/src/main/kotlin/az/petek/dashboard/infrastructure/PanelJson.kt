@@ -14,6 +14,7 @@ import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.EventView
 import az.petek.dashboard.domain.ExplorationView
 import az.petek.dashboard.domain.FieldProblem
+import az.petek.dashboard.domain.ManualCodeView
 import az.petek.dashboard.domain.OrchestratorSnapshot
 import az.petek.dashboard.domain.PanelBudget
 import az.petek.dashboard.domain.PanelInstructions
@@ -402,6 +403,23 @@ internal object PanelJson {
         }
         return answer
     }
+
+    /** `{"code": "123456"}` from the owner's "Kodu daxil et" form. */
+    fun manualCode(body: String): String = parse(body).string("code").trim()
+
+    /** The testers waiting for a code the owner types in (`PETEK_MAIL_SOURCE=manual`). */
+    fun manualCodes(requests: List<ManualCodeView>): JsonElement =
+        buildJsonObject {
+            putJsonArray("requests") {
+                requests.forEach { request ->
+                    addJsonObject {
+                        put("id", request.id)
+                        put("address", request.address)
+                        put("askedAt", request.askedAt.toString())
+                    }
+                }
+            }
+        }
 
     // --- helpers --------------------------------------------------------------------------------------------------
 

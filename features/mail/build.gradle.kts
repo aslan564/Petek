@@ -20,6 +20,8 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlin.logging)
+    // IMAP (Jakarta Mail API + Eclipse Angus implementation) for the owner's own inbox.
+    implementation(libs.angus.mail)
     testImplementation(testFixtures(project(":core:domain")))
     testImplementation(libs.ktor.server.core)
     testImplementation(libs.ktor.server.cio)

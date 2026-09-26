@@ -13,6 +13,8 @@ import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.dashboard.application.LiveDashboard
 import az.petek.dashboard.demo.DemoPanelBackend
+import az.petek.dashboard.domain.ManualCodeView
+import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.testing.ServerHarness
 import az.petek.orchestration.domain.RunOutcome
 import io.kotest.matchers.collections.shouldContain
@@ -50,6 +52,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 
 /** Every panel endpoint against the demo backend, with the token rule for everything that changes something. */
@@ -111,6 +114,54 @@ class PanelRoutesTest {
             }
             h.post("/api/runs/cancel", token = h.token()).status.value shouldBe 200
             h.get("/api/scenarios").status.value shouldBe 200
+        }
+
+    @Test
+    fun `a tester waiting for a code is listed and the owner's code reaches it, a bad one is refused`() =
+        runBlocking<Unit> {
+            val root = dir.resolve("evidence")
+            val demo =
+                DemoPanelBackend(
+                    clock,
+                    SequentialIdGenerator(),
+                    az.petek.dashboard.testing
+                        .TempDirArtifactStore(root),
+                    jobs,
+                    { awaitCancellation() },
+                    root,
+                ) { _, _ -> runGate.await() }
+            val waiting = mutableListOf(ManualCodeView("m1", "test+r1-a01@company.az", Instant.parse("2026-09-26T10:00:00Z")))
+            val given = mutableListOf<String>()
+            val backend =
+                object : PanelBackend by demo {
+                    override fun manualCodes() = waiting.toList()
+
+                    override suspend fun answerManualCode(
+                        id: String,
+                        code: String,
+                    ): Boolean {
+                        if (id != "m1" || code.length < 3) return false
+                        given += code
+                        waiting.clear()
+                        return true
+                    }
+                }
+            val h = ServerHarness(LiveDashboard(clock), root, backend).also { harness = it }
+            val token = h.token()
+
+            val listed =
+                json(h.get("/api/manual-codes").bodyAsText())
+                    .jsonObject["requests"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            listed["address"]!!.jsonPrimitive.content shouldBe "test+r1-a01@company.az"
+            h.post("/api/manual-codes/m1", "{\"code\":\"12\"}").status.value shouldBe 403
+            h.post("/api/manual-codes/m1", "{\"code\":\"12\"}", token).status.value shouldBe 400
+            h.post("/api/manual-codes/m1", "{\"code\":\"123456\"}", token).status.value shouldBe 200
+
+            given shouldBe listOf("123456")
+            json(h.get("/api/manual-codes").bodyAsText()).jsonObject["requests"]!!.jsonArray.size shouldBe 0
         }
 
     @Test

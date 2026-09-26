@@ -130,6 +130,33 @@
     setMenu(false);
   };
 
+  // ---------- "Kodu daxil et": a tester waits for a code the owner types in (PETEK_MAIL_SOURCE=manual) ----------
+  const codeBox = h('section', { class: 'manual-codes', hidden: true, attrs: { 'aria-live': 'polite' } });
+  document.body.append(codeBox);
+  const typed = new Map();
+  async function pollCodes() {
+    const res = await P.api.get('/api/manual-codes');
+    const requests = res.ok && res.data && Array.isArray(res.data.requests) ? res.data.requests : [];
+    codeBox.hidden = requests.length === 0;
+    codeBox.replaceChildren(h('div', { class: 'title', text: 'Kodu daxil et' }),
+      h('div', { class: 'hint', text: 'Tester təsdiq kodunu gözləyir. Kodu öz poçtunuzdan və ya telefonunuzdan oxuyub yazın.' }));
+    for (const r of requests) {
+      const input = h('input', { attrs: { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 16, 'aria-label': 'Kod: ' + r.address } });
+      input.value = typed.get(r.id) || '';
+      input.addEventListener('input', () => typed.set(r.id, input.value));
+      const send = async () => {
+        const answer = await P.api.post('/api/manual-codes/' + encodeURIComponent(r.id), { code: input.value });
+        if (answer.ok) { typed.delete(r.id); P.toast('Kod testerə verildi.', 'ok'); pollCodes(); }
+        else P.toast((answer.problems[0] && answer.problems[0].message) || answer.error, 'error');
+      };
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+      codeBox.append(h('div', 'row', h('span', { class: 'address ellipsis', text: r.address, title: r.address }), input,
+        h('button', { class: 'btn primary', text: 'Göndər', attrs: { type: 'button' }, on: { click: send } })));
+    }
+  }
+  pollCodes();
+  setInterval(pollCodes, 3000);
+
   // ---------- first screen: the live board while a run goes on, the instructions otherwise ----------
   let firstRun = null;
   P.defaultScreen = () => (firstRun && firstRun.phase === 'RUNNING' ? 'agentler' : 'telimat');

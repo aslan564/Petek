@@ -732,7 +732,7 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   bazaya yox.
 - [ ] Saxlanan sessiyalar: hər (hədəf, kimlik) üçün `storage_state` `<evidence>/sessions/` altında; növbəti kəşfiyyat
   yenidən qeydiyyat etmir, sessiya köhnəlibsə `login` axınına düşür.
-- [ ] Poçt mənbələri: `TestApiMailbox` bağlanır (Faza 8); `ImapMailbox` (catch-all domen və ya `+` adresləmə;
+- [x] Poçt mənbələri: `TestApiMailbox` bağlanır (Faza 8); `ImapMailbox` (catch-all domen və ya `+` adresləmə;
   kitabxana seçimi — qayda 11, aşağıdakı suallar); `ManualCodeMailbox`: panel "kodu daxil et" pəncərəsi açır, SSE ilə
   agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün; sürüdə yalnız xəbərdarlıqla).
 - [ ] İmkan yoxlaması (`capability probe`, `diagnostics`): kəşfiyyatdan əvvəl hədəfin nəyi dəstəklədiyi — test API,
@@ -921,15 +921,20 @@ qoyulandan sonra eyni əmr işləyir; localhost-dakı fake target ilə e2e dəyi
 
 ### Faza 16 — Poçt: sahibin qutusu və artı ünvan
 
-- [ ] `ImapMailbox` (Faza 10 bəndi önə çəkilir). Kitabxana seçimi qayda 11-ə görə sahibin qərarıdır (yuxarıdakı
+- [x] `ImapMailbox` (Faza 10 bəndi önə çəkilir). Kitabxana seçimi qayda 11-ə görə sahibin qərarıdır (yuxarıdakı
   "IMAP kitabxanası" sualı).
-- [ ] Artı ünvanlı kimliklər: sahibin qutusu (məs. `test@sirket.az`) verilir, hər tester `test+<run>-<agent>@sirket.az`
+- [x] Artı ünvanlı kimliklər: sahibin qutusu (məs. `test@sirket.az`) verilir, hər tester `test+<run>-<agent>@sirket.az`
   alır; məktub alan ünvana görə testerə ayrılır.
-- [ ] "+" işarəsini qəbul etməyən sayt tanınır və hesabatda deyilir; alternativ: sahibin domenində catch-all.
-- [ ] Pətəkin serverindəki qutu: sonra, ödənişli modul (Faza 14 hosted xətti).
+- [x] "+" işarəsini qəbul etməyən sayt tanınır və hesabatda deyilir; alternativ: sahibin domenində catch-all.
+- [ ] Pətəkin serverindəki qutu: sonra, ödənişli modul (Faza 14 hosted xətti). — **sahib/ödənişli modul:** ayrı repo (ADR-0011), açıq nüvədə yalnız `Mailbox` portu.
 
 Hazır sayılır: fake target-də qeydiyyat kodu IMAP qutusundan (test IMAP serveri) oxunur, iki tester bir-birinin
 məktubunu görmür.
+
+Vəziyyət (2026-09-26): `ImapMailbox` (Angus 2.0.5), `PETEK_MAIL_INBOX` ilə artı ünvanlar, dəqiq ünvan uyğunluğu
+(`To`/`Cc`/`Delivered-To`), "+" imtinasının tanınması və `manual` mənbəyi (panelin "Kodu daxil et" pəncərəsi) kodda və
+vahid testlərdədir (IMAP söhbəti saxta gateway ilə, MIME oxunuşu yaddaşdakı məktubla). Real IMAP serveri ilə e2e yoxdur:
+test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qərarı** (qayda 11).
 
 ### Faza 17 — Kəşfiyyatçı: saytın növü, öz hesabı, Keçid 0 → 1
 

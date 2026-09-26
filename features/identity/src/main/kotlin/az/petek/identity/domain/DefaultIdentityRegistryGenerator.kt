@@ -58,7 +58,7 @@ class DefaultIdentityRegistryGenerator(
                 Identity(
                     agentId = seat.agentId,
                     displayName = names[i].displayName,
-                    email = email(names[i].firstName, runTag, seat.agentId, valid.mailDomain),
+                    email = email(names[i].firstName, runTag, seat.agentId, valid),
                     password = passwordDeriver.derive(runTag, seat.agentId),
                     phone = phones[i],
                     role = seat.role,
@@ -129,8 +129,11 @@ class DefaultIdentityRegistryGenerator(
         firstName: String,
         runTag: RunTag,
         agentId: AgentId,
-        mailDomain: String,
-    ): String = "${AsciiSlug.of(firstName)}.${runTag.value}.${agentId.value}@$mailDomain"
+        valid: IdentitySpecValidator.Valid,
+    ): String {
+        val box = valid.mailbox ?: return "${AsciiSlug.of(firstName)}.${runTag.value}.${agentId.value}@${valid.mailDomain}"
+        return "${box.substringBefore('@')}+${runTag.value}-${agentId.value}@${box.substringAfter('@')}"
+    }
 
     private data class Seat(
         val agentId: AgentId,
