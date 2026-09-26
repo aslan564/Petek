@@ -363,6 +363,62 @@ class RunnerConcurrencyTest {
         }
 
     @Test
+    fun `a problem the agent reports in a forbidden-action step is judged by the assertions, not by its wording`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { _, _ ->
+                ActionOutcome(ActionStatus.FAILED, "the ticket is already approved", failureReason = FailureReason.PROBLEM_REPORTED)
+            }
+            val forbidden =
+                step(
+                    "forbidden",
+                    employees("IT", nth = 2),
+                    assertions = listOf(AssertionSpec.HttpStatus("/api/tickets/{last_id}/approve", "POST", 403)),
+                )
+
+            val summary = f.runner().run(campaign(steps = listOf(forbidden)))
+
+            val record = f.step("forbidden", StepKind.DO, "a06")
+            record.status shouldBe StepStatus.BLOCKED
+            record.detail shouldBe
+                "permission_denied: the ticket is already approved " +
+                "(agent reported problem_reported; the step expects a refusal, its assertions decide)"
+            summary.outcome shouldBe RunOutcome.PASSED
+            summary.stepsFailed shouldBe 0
+            summary.failedAgents shouldBe 0
+        }
+
+    @Test
+    fun `a problem reported in a step whose assertions do not test a refusal stays a failure`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { _, _ ->
+                ActionOutcome(ActionStatus.FAILED, "the form never opened", failureReason = FailureReason.PROBLEM_REPORTED)
+            }
+            val work = step("work", employees("IT", nth = 2), assertions = listOf(AssertionSpec.VisibleText("Ticket", 5.seconds)))
+
+            val summary = f.runner().run(campaign(steps = listOf(work)))
+
+            f.step("work", StepKind.DO, "a06").detail shouldBe "problem_reported: the form never opened"
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.stepsFailed shouldBe 1
+        }
+
+    @Test
+    fun `a guard stop in a forbidden-action step is still a failure`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { _, _ -> ActionOutcome(ActionStatus.FAILED, "25 decisions", failureReason = FailureReason.STEP_LIMIT) }
+            val forbidden = step("forbidden", employees("IT", nth = 2), assertions = listOf(AssertionSpec.NotVisible("Approve", null)))
+
+            val summary = f.runner().run(campaign(steps = listOf(forbidden)))
+
+            f.step("forbidden", StepKind.DO, "a06").detail shouldBe "step_limit: 25 decisions"
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.stepsFailed shouldBe 1
+        }
+
+    @Test
     fun `a permission refusal during setup fails the tester`() =
         runTest {
             val f = fixture()

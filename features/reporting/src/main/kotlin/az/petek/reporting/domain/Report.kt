@@ -75,6 +75,8 @@ data class StepRow(
     val screenshot: String?,
     /** The row belongs to an action that lost a race: expected, shown as such (see [ExpectedOutcomes.showsLostRace]). */
     val lostRace: Boolean = false,
+    /** The row belongs to an action the target refused as the step expected (see [ExpectedOutcomes.showsRefusal]). */
+    val refused: Boolean = false,
 )
 
 data class LatencyStats(
@@ -116,6 +118,8 @@ data class ReportSummary(
     val outputTokens: Long,
     val costUsd: Double?,
     val realtimeTransports: List<String>,
+    /** Prompt tokens served from the provider's cache; most of a run's prompt when the provider caches, so shown too. */
+    val cacheReadTokens: Long = 0,
 )
 
 data class ReportModel(

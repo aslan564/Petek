@@ -64,7 +64,7 @@ internal object ReportFormat {
     fun stepStatus(row: StepRow): String =
         if (row.lostRace) {
             "yarışı uduzdu"
-        } else if (isExpectedRefusal(row)) {
+        } else if (row.refused || isExpectedRefusal(row)) {
             "icazə verilmədi"
         } else {
             when (StepStatus.entries.firstOrNull { it.name == row.status }) {
@@ -82,7 +82,7 @@ internal object ReportFormat {
         when {
             row.lostRace -> "muted"
             row.status == StepStatus.PASSED.name -> "ok"
-            row.status == StepStatus.SKIPPED.name || isExpectedRefusal(row) -> "muted"
+            row.status == StepStatus.SKIPPED.name || row.refused || isExpectedRefusal(row) -> "muted"
             else -> "bad"
         }
 

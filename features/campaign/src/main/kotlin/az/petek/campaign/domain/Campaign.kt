@@ -122,6 +122,25 @@ data class ScenarioStep(
     val line: Int,
 )
 
+/**
+ * The step tests that an action is forbidden: its assertions check the refusal itself (`not_visible` of the control,
+ * `http_status` 401/403 of the request). An agent that could not perform such an action did what the step asked, so
+ * the orchestrator lets those assertions decide (CLAUDE.md rule 2) instead of the wording of the agent's report.
+ */
+val ScenarioStep.expectsRefusal: Boolean get() = assertions.any(AssertionSpec::expectsRefusal)
+
+/** `not_visible`, or `http_status` expecting 401/403: the assertion itself checks that the target refuses. */
+val AssertionSpec.expectsRefusal: Boolean
+    get() =
+        when (this) {
+            is AssertionSpec.NotVisible -> true
+            is AssertionSpec.HttpStatus -> equals in REFUSAL_STATUSES
+            else -> false
+        }
+
+/** HTTP statuses that mean "refused": unauthenticated and forbidden. */
+private val REFUSAL_STATUSES = setOf(401, 403)
+
 sealed interface StepAction {
     /** Natural-language task interpreted by the LLM agent through whitelisted tools only. */
     data class Do(

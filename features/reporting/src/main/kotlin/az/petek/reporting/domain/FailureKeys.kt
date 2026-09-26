@@ -32,9 +32,11 @@ object FailureKeys {
     const val MAIL_UNAVAILABLE = "mail_unavailable"
 
     /**
-     * The agent BLOCKs an action with this key when the target refuses it (`report_problem(permission_denied)`).
-     * The agent contract calls that the EXPECTED outcome of forbidden-action tests, whose verdict comes from their
-     * assertions (`not_visible`, `http_status` 403), so such a step is not a failure (see [isExpectedRefusal]).
+     * The agent BLOCKs an action with this key when the target refuses it (`report_problem(permission_denied)`), and
+     * the orchestrator records any problem the agent reported in a step whose assertions test the refusal
+     * (`not_visible`, `http_status` 401/403) with the same key. Both are the EXPECTED outcome of forbidden-action
+     * tests, whose verdict comes from those assertions, so such a step is not a failure (see [isExpectedRefusal] and
+     * [ExpectedOutcomes], which extends this to the agent's own records of the action).
      */
     const val PERMISSION_DENIED = "permission_denied"
 

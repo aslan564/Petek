@@ -45,6 +45,7 @@ object SampleReport {
                 outputTokens = 89_012,
                 costUsd = 0.042,
                 realtimeTransports = listOf("SSE", "POLLING"),
+                cacheReadTokens = 1_600,
             ),
         steps =
             listOf(

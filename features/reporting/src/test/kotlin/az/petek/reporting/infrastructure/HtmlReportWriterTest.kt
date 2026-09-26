@@ -84,7 +84,7 @@ class HtmlReportWriterTest {
         text shouldContain "Tapıntılar 2"
         text shouldContain "Agentlər 30"
         text shouldContain "Müddət 4 dəq 05 san"
-        text shouldContain "Tokenlər 1 323 579 giriş 1 234 567 · çıxış 89 012"
+        text shouldContain "Tokenlər 1 325 179 giriş 1 234 567 · keşdən 1 600 · çıxış 89 012"
         text shouldContain "Xərc $0.0420"
         text shouldContain "Real-time SSE, POLLING"
         text shouldContain "Nəticə: keçmədi"

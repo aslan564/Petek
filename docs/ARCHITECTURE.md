@@ -209,7 +209,10 @@ finished run's surprises into explainable verdicts. The web panel (Faza 8) is bu
   SQLite schema enforces the invariants itself (one approved version per name, immutable text and frozen rows).
   Texts are exported byte-exact, so a run's `campaign_hash` points back to the version it executed.
 - **Surprises.** Per actor and scenario step, a run's `report_problem` steps, failed concluding steps and findings
-  form one surprise with all of that actor's evidence. `permission_denied` in a main step (an expected refusal), the
+  form one surprise with all of that actor's evidence. `permission_denied` in a main step (an expected refusal: the
+  agent's own `permission_denied`, or any problem it reported in a step whose assertions test the refusal with
+  `not_visible` or `http_status` 401/403; the orchestrator records both as `permission_denied` and the assertions
+  decide, see ADR-0007), the
   losers of a race whose `only_one_succeeds` passed, environment failures (`mail_unavailable`, `llm_unavailable`)
   together with the checks run after the action they broke, and receivers whose `wait_for` timed out for an event
   nobody published (the emitter's failure is the surprise) are listed as ignored instead.

@@ -19,6 +19,12 @@ production data (rule 8). The owner wants to test kadrohr.com, which is a produc
   - Otherwise: "investigate".
   - An expected `permission_denied` refusal is a pass, and so is a lost race (`lost_race`): `only_one_succeeds`
     decides who won from each actor's own requests and the target's answers, never from the agent's report.
+  - Which step is a permission test is decided by code too: a main step whose assertions check the refusal itself
+    (`not_visible` of the control, `http_status` 401/403). In such a step an agent that reported a problem or gave up
+    (`report_problem` of any kind, `done` with success=false) is recorded as the `permission_denied` refusal, its own
+    words kept, and the assertions decide. Guard stops and errors (timeout, step limit, loop, browser, LLM) stay
+    failures. Found in the first real run of 2026-09-26: the agent called an already-approved ticket "a problem" and
+    failed a step whose 403 assertion had passed.
 - **Target safety, in layers:**
   1. `TargetPolicy` refuses hosts listed in `PETEK_PRODUCTION_HOSTS` unless `PETEK_ALLOW_PRODUCTION=true`.
   2. The target's test API requires `X-Test-Token` and exists only in staging test mode.

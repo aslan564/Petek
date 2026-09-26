@@ -76,7 +76,8 @@ class MarkdownReportWriter : ReportWriter {
                 listOf("Müddət", ReportFormat.duration(s.durationMs)),
                 listOf(
                     "Tokenlər",
-                    "giriş ${ReportFormat.count(s.inputTokens)} · çıxış ${ReportFormat.count(s.outputTokens)}",
+                    "giriş ${ReportFormat.count(s.inputTokens)} · keşdən ${ReportFormat.count(s.cacheReadTokens)} · " +
+                        "çıxış ${ReportFormat.count(s.outputTokens)}",
                 ),
                 listOf("Xərc", ReportFormat.cost(s.costUsd)),
                 listOf("Real-time nəqliyyat", s.realtimeTransports.joinToString(", ") { md(it) }.ifEmpty { NONE }),

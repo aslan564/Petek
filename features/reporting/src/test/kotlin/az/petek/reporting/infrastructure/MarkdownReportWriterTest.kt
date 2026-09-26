@@ -57,7 +57,7 @@ class MarkdownReportWriterTest {
         md shouldContain "| Tapıntılar | 2 |"
         md shouldContain "| Agentlər | 30 |"
         md shouldContain "| Müddət | 4 dəq 05 san |"
-        md shouldContain "| Tokenlər | giriş 1 234 567 · çıxış 89 012 |"
+        md shouldContain "| Tokenlər | giriş 1 234 567 · keşdən 1 600 · çıxış 89 012 |"
         md shouldContain "| Xərc | $0.0420 |"
         md shouldContain "| Real-time nəqliyyat | SSE, POLLING |"
     }

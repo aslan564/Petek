@@ -73,7 +73,9 @@ private val logger = KotlinLogging.logger {}
  * unavailable test API is an observation for the model ("phone code unavailable"), which may then report a problem.
  *
  * `report_problem(permission_denied)` ends the step as BLOCKED/`permission_denied`: for forbidden-action tests that
- * is the expected outcome, and the verdict is left to the assertions.
+ * is the expected outcome, and the verdict is left to the assertions. The orchestrator treats any other problem the
+ * agent reports in such a step (one whose assertions test the refusal) the same way, so the verdict never depends on
+ * the kind the model chose.
  *
  * Evidence per turn: one DO [az.petek.evidence.domain.StepRecord] (readable action, the model's reason, harness
  * timings, the scenario step's correlation id), a screenshot after every executed action, and the accessibility

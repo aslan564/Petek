@@ -163,6 +163,65 @@ class ExpectedOutcomesTest {
         ExpectedOutcomes(listOf(refused)).isFailure(refused) shouldBe false
     }
 
+    /** The real run of 2026-09-26: the agent called the refusal a problem; the orchestrator judged it expected. */
+    private fun forbidden(
+        status: StepStatus,
+        detail: String,
+        id: String,
+        action: String = "do forbidden",
+        kind: StepKind = StepKind.DO,
+    ): StepRecord =
+        step("forbidden", "a12", status, kind, detail, action, stepId = id).copy(correlationId = CorrelationId("cor_forbidden_a12"))
+
+    private val refusedAsProblem =
+        listOf(
+            forbidden(StepStatus.PASSED, "OK: opened /tickets.", "a12_turn1", action = "navigate /tickets"),
+            forbidden(
+                StepStatus.FAILED,
+                "Finished: already approved, no approve action for an employee | outcome: FAILED problem_reported: already approved",
+                "a12_turn2",
+                action = "report_problem other \"already approved\"",
+            ),
+            forbidden(
+                StepStatus.BLOCKED,
+                "permission_denied: already approved (agent reported problem_reported; the step expects a refusal, its assertions decide)",
+                "a12_summary",
+            ),
+        )
+
+    @Test
+    fun `the agent's own records of an expected refusal are expected too`() {
+        val expected = ExpectedOutcomes(refusedAsProblem)
+
+        refusedAsProblem.map { expected.isExpectedRefusal(it) } shouldBe listOf(true, true, true)
+        refusedAsProblem.filter(expected::isFailure).shouldBeEmpty()
+        refusedAsProblem.mapNotNull(expected::failureKey).shouldBeEmpty()
+        refusedAsProblem.map { expected.showsRefusal(it) } shouldBe listOf(false, true, true)
+    }
+
+    @Test
+    fun `without the orchestrator's refusal record the agent's problem stays a failure`() {
+        val expected = ExpectedOutcomes(refusedAsProblem.dropLast(1))
+
+        expected.isFailure(refusedAsProblem[1]) shouldBe true
+        expected.failureKey(refusedAsProblem[1]) shouldBe "problem_reported"
+    }
+
+    @Test
+    fun `a wait of the refused actor is judged on its own`() {
+        val waitTimeout =
+            forbidden(
+                StepStatus.FAILED,
+                "not_received: ticket_created",
+                "a12_wait",
+                action = "wait_for ticket_created",
+                kind = StepKind.WAIT,
+            )
+        val expected = ExpectedOutcomes(refusedAsProblem + waitTimeout)
+
+        expected.isFailure(waitTimeout) shouldBe true
+    }
+
     // --- regressions of the two observed runs, through the judge and stability --------------------------------------
 
     private val ids: IdGenerator = SequentialIdGenerator()

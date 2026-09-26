@@ -97,6 +97,7 @@ class BuildReportUseCase(
                 detail = step.detail,
                 screenshot = screenshots.lastFor(step)?.artifactId?.value,
                 lostRace = expected.showsLostRace(step),
+                refused = expected.showsRefusal(step),
             )
         }
     }
@@ -123,6 +124,7 @@ class BuildReportUseCase(
             outputTokens = usage.sumOf { it.outputTokens },
             costUsd = usage.mapNotNull { it.costUsd }.takeIf { it.isNotEmpty() }?.sum(),
             realtimeTransports = realtimeTransports(steps),
+            cacheReadTokens = usage.sumOf { it.cacheReadTokens },
         )
     }
 

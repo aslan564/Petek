@@ -137,7 +137,7 @@ class HtmlReportWriter : ReportWriter {
                 tile("Tapıntılar", model.findings.size.toString(), if (model.findings.isNotEmpty()) "bad" else "ok")
                 tile("Agentlər", s.agents.toString())
                 tile("Müddət", ReportFormat.duration(s.durationMs))
-                tile("Tokenlər", ReportFormat.count(s.inputTokens + s.outputTokens), null, tokenHint(model))
+                tile("Tokenlər", ReportFormat.count(s.inputTokens + s.cacheReadTokens + s.outputTokens), null, tokenHint(model))
                 tile("Xərc", ReportFormat.cost(s.costUsd))
                 tile("Real-time", s.realtimeTransports.joinToString(", ").ifEmpty { NONE }, null, "aşkar edilən nəqliyyat")
             }
@@ -382,7 +382,8 @@ class HtmlReportWriter : ReportWriter {
     }
 
     private fun tokenHint(model: ReportModel): String =
-        "giriş ${ReportFormat.count(model.summary.inputTokens)} · çıxış ${ReportFormat.count(model.summary.outputTokens)}"
+        "giriş ${ReportFormat.count(model.summary.inputTokens)} · keşdən ${ReportFormat.count(model.summary.cacheReadTokens)} · " +
+            "çıxış ${ReportFormat.count(model.summary.outputTokens)}"
 
     private fun runTone(model: ReportModel): String =
         when (model.run.result) {

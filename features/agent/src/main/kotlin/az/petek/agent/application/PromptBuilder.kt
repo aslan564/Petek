@@ -176,7 +176,8 @@ class PromptBuilder(
                 "Stay strictly within the task. Do not explore, change settings or create anything the task does not ask for.",
                 "Never try to bypass permissions. If the UI does not offer an action, a control is disabled, or the server " +
                     "refuses (403, 'forbidden', 'not allowed', an error message), do not look for workarounds: call " +
-                    "report_problem with kind \"permission_denied\", or done with success=false.",
+                    "report_problem with kind \"permission_denied\", or done with success=false. Not being allowed to do " +
+                    "what the task asks is a valid result of a permission test, not a problem with the page.",
                 "When the goal is reached, call done with a short factual summary. If the page shows the id of an object " +
                     "you created, put it in object_id.",
                 "Element refs change after every action: always use a ref from the current page.",
