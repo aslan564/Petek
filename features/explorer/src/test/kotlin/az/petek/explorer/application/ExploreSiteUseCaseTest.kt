@@ -45,6 +45,7 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -619,7 +620,6 @@ class ExploreSiteUseCaseTest {
                     "clickSelector [data-testid=\"ticket-submit\"]",
                     "clickSelector [data-testid=\"company-department-submit\"]",
                 )
-            clicks shouldNotContain "clickSelector [data-testid=\"announcement-delete\"]"
             clicks shouldNotContain "clickSelector [data-testid=\"logout\"]"
             employee.actions.filter { it.startsWith("click") || it.startsWith("fill") }.shouldBeEmpty()
             admin.actions shouldContain "selectSelector [data-testid=\"ticket-department\"]=IT"
@@ -643,6 +643,46 @@ class ExploreSiteUseCaseTest {
             result.record.summary!!.notes shouldContain "Trial touch allowed: company c1 is_test=true"
             events.filterIsInstance<ExplorationEvent.PhaseStarted>().map { it.phase } shouldContainExactly
                 listOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH)
+        }
+
+    @Test
+    fun `what the trial touch created is deleted again through the site's delete action, only while it shows the marker`() =
+        runTest {
+            loggedInSite()
+            site.creates["[data-testid=\"announcement-submit\"]"] = "/announcements/a1" to false
+            site.creates["[data-testid=\"ticket-submit\"]"] = "/tickets/t9" to false
+            // The announcement's own page offers its deletion (a delete on a list page is never clicked: it may be another row's).
+            site.page("/announcements/a1", "Elan", view = "admin") {
+                form("/announcements/a1/delete") { submit("Sil", testId = "announcement-remove") }
+                link("Elanlar", "/announcements")
+            }
+            site.deletes += "[data-testid=\"announcement-remove\"]"
+            val admin = site.session("admin")
+            val confirmed = TestTargetCheck { TestTargetVerdict.Confirmed("company c1 is_test=true") }
+
+            val result =
+                useCase(check = confirmed).execute(
+                    request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
+                    mapOf("admin" to admin, "employee" to site.session("employee")),
+                    observer,
+                )
+
+            // The object page was never walked, so its one delete button is found on the page itself and clicked by ref.
+            println("ACTIONS=" + admin.actions.joinToString("\n"))
+            println(
+                "NOTES=" +
+                    result.record.summary!!
+                        .notes
+                        .joinToString("\n"),
+            )
+            val opened = admin.actions.lastIndexOf("navigate https://kadro.test/announcements/a1")
+            admin.actions.drop(opened + 1).first { !it.startsWith("request") } shouldStartWith "click "
+            admin.actions shouldNotContain "clickSelector [data-testid=\"announcement-delete\"]"
+            val notes = result.record.summary.notes
+            notes.single { it.startsWith("Trial touch deleted its object") } shouldContain "/announcements/{id}"
+            // The ticket page shows no delete button: the ticket is not deleted, and the notes say what stays.
+            notes.none { "deleted its object 'Pətək sınaq exp_1-2'" in it } shouldBe true
+            notes.single { "/tickets/{id}" in it } shouldContain "Pətək sınaq exp_1-2"
         }
 
     @Test

@@ -29,9 +29,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URI
 import java.time.ZoneOffset
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val logger = KotlinLogging.logger {}
@@ -48,8 +51,10 @@ private val logger = KotlinLogging.logger {}
  *   data is torn down), on a page of the target's own origin; nothing is typed when the browser does not land on the
  *   page the form was seen on (a redirect to the sign-in page, another site), because the same selectors could then
  *   address another form;
- * - every text carries a unique marker (`Pətək sınaq …`) so the result can be recognised, and nothing is deleted
- *   afterwards (a test target is torn down as a whole).
+ * - every text carries a unique marker (`Pətək sınaq …`) so the result can be recognised; at the end each object it
+ *   created is deleted again through the site's own delete action on the object's page, and only when that page still
+ *   shows the marker (Faza 17: in an admin account only Pətək-marked objects are made, and they are removed). An object
+ *   without a delete action the explorer saw is left, and the notes say so with its marker.
  *
  * After submitting it looks at what happened: the marker on the submitter's page (accepted), an error-like message
  * (rejected), and whether the other viewpoints' open pages ([watchers], the visitor included) showed the marker live
@@ -62,6 +67,16 @@ internal class TrialToucher(
     private val clock: HarnessClock,
 ) {
     private var touched = 0
+
+    /** An object a trial touch created: its page, the marker it carries and who created it. */
+    private data class Created(
+        val role: String,
+        val url: URI,
+        val marker: String,
+        val name: String,
+    )
+
+    private val created = mutableListOf<Created>()
 
     suspend fun run() {
         val accumulator = context.accumulator
@@ -91,6 +106,61 @@ internal class TrialToucher(
                 context.notes += "Trial touch of '${action.name}' on ${page.urlPattern} failed: ${e.message}"
             }
             context.modelUpdated()
+        }
+        cleanUp()
+    }
+
+    /** Deletes what the trial touches created, marker-checked, through the site's own delete action (see the class doc). */
+    private suspend fun cleanUp() {
+        for (item in created) {
+            currentCoroutineContext().ensureActive()
+            val pattern = UrlPatterns.of(item.url)
+            val delete =
+                context.accumulator.actions().firstOrNull { action ->
+                    action.kind == ActionKind.DELETE &&
+                        item.role in action.allowedRoles &&
+                        context.accumulator
+                            .pages()
+                            .firstOrNull { it.id == action.pageId }
+                            ?.urlPattern == pattern
+                }
+            val session = writers.getValue(item.role)
+            try {
+                session.navigate(item.url.toString())
+                if (!session.isTextVisible(item.marker)) {
+                    context.notes += "Trial touch did not delete $pattern: the page no longer shows '${item.marker}'"
+                    continue
+                }
+                // The delete the explorer saw on this object page, else the page's one delete button (only on the
+                // object's own page: a delete on a list could be another row's).
+                val clicked =
+                    if (delete != null) {
+                        session.clickSelector(delete.selector)
+                        true
+                    } else {
+                        val buttons = session.snapshot().elements.filter { it.enabled && DELETE_WORDS.matches(it.name.trim()) }
+                        buttons.singleOrNull()?.let { session.click(it.ref) } != null
+                    }
+                if (!clicked) {
+                    context.notes += "Trial touch left '${item.marker}' (${item.name}) on the site: no delete action was seen on $pattern"
+                    continue
+                }
+                val gone =
+                    withTimeoutOrNull(DELETE_TIMEOUT) {
+                        while (session.isTextVisible(item.marker)) delay(POLL)
+                        true
+                    } ?: false
+                context.notes +=
+                    if (gone) {
+                        "Trial touch deleted its object '${item.marker}' again ($pattern)"
+                    } else {
+                        "Trial touch could not delete '${item.marker}' ($pattern)"
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BrowserActionException) {
+                context.notes += "Trial touch could not delete '${item.marker}' ($pattern): ${e.message}"
+            }
         }
     }
 
@@ -149,7 +219,11 @@ internal class TrialToucher(
         val observers = watchers.filterKeys { it != role }
         val seenLiveBy = if (accepted) watch(observers, marker) else emptySet()
         val evidence = listOfNotNull(context.capture.screenshot(session, role))
-        val urlAfter = addressOf(session)?.let { if (context.origin.contains(it)) UrlPatterns.of(it) else null }
+        val landedAfter = addressOf(session)?.takeIf { context.origin.contains(it) }
+        val urlAfter = landedAfter?.let { UrlPatterns.of(it) }
+        if (accepted && landedAfter != null && urlAfter != null && UrlPatterns.ID in urlAfter) {
+            created += Created(role, landedAfter, marker, action.name)
+        }
         context.accumulator.recordTrial(action.id, TrialTouch(role, outcome, marker, messages, urlAfter, seenLiveBy, evidence))
         if (accepted && observers.isNotEmpty() && seenLiveBy.isEmpty()) {
             context.raiseUnknown(
@@ -238,6 +312,9 @@ internal class TrialToucher(
         }
 
     private companion object {
+        val DELETE_TIMEOUT = 5.seconds
+        val DELETE_WORDS = Regex("(?i)(sil|delete|remove|удалить)")
+        val POLL = 200.milliseconds
         val NEVER_FILLED = setOf("password", "file")
         val NEVER_SENT = setOf("DELETE", "PUT", "PATCH")
         val SKIPPED_TYPES = setOf("checkbox", "radio", "hidden", "submit", "button", "reset", "image", "week")

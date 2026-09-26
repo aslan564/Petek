@@ -52,6 +52,9 @@ class FakeSite(
     /** Selector of a submit button -> what submitting it creates: the page path it lands on, and whether others see it live. */
     val creates = HashMap<String, Pair<String, Boolean>>()
 
+    /** Selectors of delete buttons: clicking one removes what this session created from its page. */
+    val deletes = HashSet<String>()
+
     /** Served on `GET /robots.txt` when set. */
     var robotsTxt: String? = null
 
@@ -211,8 +214,18 @@ class FakeSite(
             typed[selector] = option
         }
 
+        override suspend fun click(ref: Int) {
+            recorder.click(ref)
+            val element = snapshot().elements.firstOrNull { it.ref == ref } ?: return
+            if (element.testId?.let { "[data-testid=\"$it\"]" } in deletes) liveTexts.clear()
+        }
+
         override suspend fun clickSelector(selector: String) {
             recorder.clickSelector(selector)
+            if (selector in deletes) {
+                liveTexts.clear()
+                return
+            }
             val (landing, live) = creates[selector] ?: return
             val created = typed.values.firstOrNull().orEmpty()
             current = resolve(landing)
@@ -230,6 +243,8 @@ class FakeSite(
         }
 
         override suspend fun isSelectorVisible(selector: String): Boolean = true
+
+        override suspend fun isTextVisible(text: String): Boolean = snapshot().visibleText.contains(text, ignoreCase = true)
 
         override suspend fun screenshot(): ByteArray = "png:$view:$current".toByteArray()
     }
