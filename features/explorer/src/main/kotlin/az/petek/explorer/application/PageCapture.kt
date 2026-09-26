@@ -24,7 +24,10 @@ import az.petek.explorer.domain.HtmlScanner
 import az.petek.explorer.domain.ScannedDocument
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URI
+import kotlin.time.Duration
 
 private val logger = KotlinLogging.logger {}
 
@@ -51,15 +54,42 @@ internal class PageCapture(
     private val clock: HarnessClock,
     private val ids: IdGenerator,
     private val explorationId: ExplorationId,
+    private val settleTimeout: Duration = ExplorerSettings().pageSettleTimeout,
+    private val settlePoll: Duration = ExplorerSettings().pageSettlePoll,
 ) {
-    /** Navigates and returns the load time in milliseconds. */
+    /**
+     * Navigates, waits for the page to show something (see [settle]) and returns the time until then in milliseconds:
+     * what a visitor waits for, not only the document's `load` event.
+     */
     suspend fun load(
         session: BrowserSession,
         url: URI,
     ): Long {
         val start = clock.now()
         session.navigate(url.toString())
+        settle(session)
         return start.elapsedUntil(clock.now()).inWholeMilliseconds
+    }
+
+    /**
+     * Single-page applications answer `load` with an empty shell and render afterwards; a snapshot taken then has no
+     * elements and no text, and the analyst asks whether the page is broken (seen on kadrohr.com, 2026-09-26). Polls
+     * the snapshot every [settlePoll] until it shows an element or visible text, for at most [settleTimeout]. A page
+     * that stays empty is captured as it is: that is a finding, not a reason to wait longer.
+     */
+    private suspend fun settle(session: BrowserSession) {
+        if (settleTimeout <= Duration.ZERO || hasContent(session)) return
+        withTimeoutOrNull(settleTimeout) {
+            do {
+                delay(settlePoll)
+            } while (!hasContent(session))
+        }
+    }
+
+    /** True when the page shows an element or text; also when the snapshot itself fails (nothing to wait for then). */
+    private suspend fun hasContent(session: BrowserSession): Boolean {
+        val snapshot = optional("snapshot") { session.snapshot() } ?: return true
+        return snapshot.elements.isNotEmpty() || snapshot.visibleText.isNotBlank()
     }
 
     suspend fun capture(

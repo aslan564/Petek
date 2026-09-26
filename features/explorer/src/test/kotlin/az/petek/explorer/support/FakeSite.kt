@@ -97,6 +97,20 @@ class FakeSite(
         laterRedirects[from] = to
     }
 
+    /**
+     * The page at [path] renders like a single-page application: its first [emptySnapshots] snapshots after every
+     * navigation show no title, no elements and no text, only later ones show the page.
+     */
+    fun rendersLate(
+        path: String,
+        emptySnapshots: Int,
+    ) {
+        lateRenders[path] = emptySnapshots
+    }
+
+    private val lateRenders = HashMap<String, Int>()
+    private val pendingEmptySnapshots = HashMap<String, Int>()
+
     fun session(view: String = "anonymous"): Session = Session(view).also { sessions += it }
 
     /** A factory whose sessions view the site anonymously. */
@@ -135,6 +149,7 @@ class FakeSite(
             }
             current = target
             clock.advance(lookup(pages, pathOf(target), view)?.loadTime ?: 50.milliseconds)
+            lateRenders[pathOf(target)]?.let { pendingEmptySnapshots[pathOf(target)] = it }
             onNavigate(pathOrUrl)
         }
 
@@ -144,6 +159,12 @@ class FakeSite(
 
         override suspend fun snapshot(): PageSnapshot {
             laterRedirects[pathOf(current)]?.takeIf { current.host == base.host }?.let { current = resolve(it) }
+            val pending = pendingEmptySnapshots[pathOf(current)] ?: 0
+            if (pending > 0) {
+                pendingEmptySnapshots[pathOf(current)] = pending - 1
+                recorder.actions += "empty snapshot"
+                return PageSnapshot(current.toString(), "", emptyList(), "")
+            }
             val page = currentPage()
             val text = (listOf(page?.text ?: "Səhifə tapılmadı.") + liveTexts).joinToString("\n")
             return PageSnapshot(current.toString(), page?.title ?: "Not found", page?.elements.orEmpty(), text)

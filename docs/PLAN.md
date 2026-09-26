@@ -585,6 +585,13 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
   oxunanlar da xülasədədir.
 - **Fake target** brauzer SSE axınını bağlayanda "Request /events failed" + stack trace yazırdı (hər run sonunda
   onlarla); müştərinin getməsi indi debug səviyyəsindədir.
+- **Real kadrohr.com (anonim, yalnız oxu, panel ilə):** `doctor` saytı, siyasəti və LLM-i yaşıl görür, test API tokeni
+  və test poçtu sahibin staging-ində olmalıdır. Kəşfiyyat 54 s-də 7 səhifə gəzdi, 18 ideya və ssenari qaralaması
+  yaratdı. Tapıntılar: (1) Chromium konteynerin proxy sertifikatına inanmırdı (`ERR_CERT_AUTHORITY_INVALID`) —
+  `PETEK_BROWSER_IGNORE_TLS_ERRORS` seçimi əlavə olundu (default söndürülü; bu maşında CA NSS-ə import edildi);
+  (2) kadrohr.com SPA-dır, `load`-dan sonra boş qabıq gəlir, kəşfiyyatçı 7 səhifədən 5-ini boş çəkirdi və analitik
+  "səhifə xarabdır?" soruşurdu — indi məzmun görünənə qədər gözləyir (`pageSettleTimeout` 4 s, 250 ms addımla);
+  (3) analitikin bəzi sualları türkcə gəlirdi — dil qaydası prompt-a yazıldı.
 - Qeyd (dəyişmədi): hesabatın "Keçən addımlar" sayı hər alt-hərəkəti sayır (10 tester üçün 315), CLI xülasəsi isə
   orkestratorun tapşırıq sayını (33). İkisi də doğrudur, amma eyni ad daşıyır — panel/hesabat işində birləşdirilməli.
 

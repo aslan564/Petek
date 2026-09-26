@@ -78,7 +78,8 @@ object PageAnalysisProtocol {
         - Use only element numbers from the Elements list. Never invent elements, pages or data.
         - kind is one of: ${ActionKind.entries.joinToString(", ")}. CREATE makes a new object, UPDATE changes one,
           SUBMIT sends a form that is none of the other kinds, NAVIGATE only opens another page.
-        - purpose: one short sentence in the language of the page.
+        - purpose: one short sentence in the language of the page. Write every text (purpose, unknowns) in the
+          language of the page; when the page gives no clue, write in Azerbaijani. Never answer in Turkish.
         - unknowns: at most a few questions for the site owner, only when something important for testing cannot be
           decided from the page (who may do what, what should happen live, what an unclear control does).
         - The owner's instructions say what matters most; list the related actions first.

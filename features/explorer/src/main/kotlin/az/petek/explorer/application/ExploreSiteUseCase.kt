@@ -97,7 +97,7 @@ class ExploreSiteUseCase(
                 accumulator = SiteModelAccumulator(request.target),
                 emitter = emitter,
                 analyst = PageAnalyst(llm, settings, id),
-                capture = PageCapture(artifacts, repository, clock, ids, id),
+                capture = PageCapture(artifacts, repository, clock, ids, id, settings.pageSettleTimeout, settings.pageSettlePoll),
                 findings = FindingRecorder(id, repository, emitter, ids),
                 clock = clock,
                 startedAt = started,

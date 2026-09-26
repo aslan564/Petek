@@ -10,6 +10,7 @@
 package az.petek.explorer.application
 
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -41,6 +42,12 @@ data class ExplorerSettings(
     val respectRobotsTxt: Boolean = true,
     val sessionLabel: String = "explorer",
     val maxRoles: Int = 20,
+    /**
+     * How long a page that loaded empty is given to render before it is captured: single-page applications answer
+     * `load` with an empty shell and draw the page afterwards (kadrohr.com, 2026-09-26). Polled every [pageSettlePoll].
+     */
+    val pageSettleTimeout: Duration = 4.seconds,
+    val pageSettlePoll: Duration = 250.milliseconds,
 ) {
     init {
         require(seedPaths.all { it.startsWith("/") && !it.startsWith("//") }) { "seed paths must be paths on the target" }
@@ -50,5 +57,8 @@ data class ExplorerSettings(
         require(maxConsecutiveLlmFailures > 0) { "maxConsecutiveLlmFailures must be positive" }
         require(liveEffectTimeout.isPositive()) { "liveEffectTimeout must be positive" }
         require(maxRoles > 0) { "maxRoles must be positive" }
+        require(!pageSettleTimeout.isNegative() && pageSettlePoll.isPositive()) {
+            "pageSettleTimeout must not be negative and pageSettlePoll must be positive"
+        }
     }
 }

@@ -39,6 +39,7 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldNotContain
+import io.kotest.matchers.ints.shouldBeInRange
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -213,6 +214,43 @@ class ExploreSiteUseCaseTest {
             session.navigations.none { "logout" in it || "delete" in it || ".pdf" in it || "/api/" in it } shouldBe true
             session.requests.none { "logout" in it || "delete" in it || "/api/" in it } shouldBe true
             session.recorder.closed shouldBe true
+        }
+
+    @Test
+    fun `a page that renders after load is captured once it shows content`() =
+        runTest {
+            publicSite()
+            site.rendersLate("/login", emptySnapshots = 2)
+
+            val result = useCase().execute(request())
+
+            result.record.status shouldBe ExplorationStatus.COMPLETED
+            val login = result.model.pageByPattern("/login")!!
+            login.forms.single { it.kind == ActionKind.LOGIN }.submitSelector shouldBe "[data-testid=\"login-submit\"]"
+            site.sessions
+                .single()
+                .actions
+                .count { it == "empty snapshot" } shouldBe 2
+        }
+
+    @Test
+    fun `a page that stays empty is captured as it is once the settle timeout passes`() =
+        runTest {
+            publicSite()
+            site.rendersLate("/login", emptySnapshots = 1_000)
+
+            val result = useCase(settings = ExplorerSettings(pageSettleTimeout = 1.seconds)).execute(request())
+
+            result.record.status shouldBe ExplorationStatus.COMPLETED
+            result.model
+                .pageByPattern("/login")!!
+                .forms
+                .shouldBeEmpty()
+            // Polled every 250 ms for one second, then captured empty: never waits forever.
+            site.sessions
+                .single()
+                .actions
+                .count { it == "empty snapshot" } shouldBeInRange 4..6
         }
 
     @Test

@@ -26,6 +26,10 @@ must be able to register, read the OTP, and fall back to provided credentials if
 - Logged-in sessions come from `TestCompanyRoleSessions` (app): a setup-only campaign creates a test company through
   the test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8).
 - Unknowns are questions; answers live in `AnswerBook` and ground later explorations and drafts.
+- `PageCapture` waits for a page that loaded empty to render (single-page applications draw after `load`; polled for
+  `pageSettleTimeout`, 4 s by default) before it snapshots, so the analyst judges the page, not the empty shell. The
+  analyst writes in the page's language and, without a clue, in Azerbaijani. Both from the first real exploration
+  of kadrohr.com (2026-09-26).
 - Triage (`features/scenarios`) classifies surprises and proposes scenario v2 as a diff.
 
 ## Architecture (Faza 10, ADR-0010)
