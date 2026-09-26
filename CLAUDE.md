@@ -13,12 +13,14 @@ Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.
 Müəllif hüququ © 2026 Kodcraft, müəllif Aslan Aslanov; lisenziya Business Source License 1.1 (`LICENSE`, `NOTICE`;
 2030-09-25-də Apache 2.0). Hər mənbə faylı (`.kt`, `.kts`, `.js`, `.css`, `.html`) `build-logic/.../PetekLicense.kt`-dəki
 başlığı daşıyır — `spotlessApply` qoyur, `spotlessCheck` (build-in içində) yoxlayır; başqa copyright sətri əlavə etmə.
-`main` buraxılış branch-ıdır (yalnız `develop`-dan gəlir; `vX.Y.Z` teqi `gradle.properties`-dəki `version` ilə eyni
-olmalıdır və `.github/workflows/release.yml` `main`-ə push-da GitHub Release-ə platform bundle-ları
-`petek-X.Y.Z-<platform>.tar.gz|zip` (`:app:bundle`, jlink runtime, JDK lazım deyil) və `petek-X.Y.Z-any-jdk25.zip`
-qoyur); `develop` inteqrasiya
-branch-ıdır; `petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsidir, dəyişdirilmir. Commit, PR və
-kodda model/alət adı yazılmır.
+`main` buraxılış branch-ıdır (yalnız `develop`-dan gəlir); `develop` inteqrasiya branch-ıdır; `petek-mvp` və
+`petek-mvp-o6tpsw` MVP tarixçəsidir, dəyişdirilmir. **GitHub Actions heç bir push-da işləmir** (sahibin qərarı:
+dəqiqə limiti, hər şey bitməmiş deploy yoxdur): `build.yml` və `release.yml` yalnız əl ilə (`workflow_dispatch`)
+başlayır; hər commit-in qapısı lokal `./gradlew spotlessApply build`-dir. Buraxılış: `gradle.properties` və
+`launcher/package.json`-da `version`-ı qaldır, `develop`-u `main`-ə fast-forward et, Actions → Release → Run
+workflow (branch `main`, versiya) — GitHub Release-ə `petek-X.Y.Z-<platform>.tar.gz|zip` (`:app:bundle`, jlink
+runtime, JDK lazım deyil), `petek-X.Y.Z-any-jdk25.zip`, `SHA256SUMS`, GHCR image və (`NPM_TOKEN` varsa) npm
+paketi gedir; mövcud teq rədd edilir. Commit, PR və kodda model/alət adı yazılmır.
 
 ## Stack (versiyalar `gradle/libs.versions.toml`-da)
 Kotlin 2.4 / JDK 25 toolchain, Gradle 9.8 (Kotlin DSL, version catalog, `build-logic` convention plugin-ləri,

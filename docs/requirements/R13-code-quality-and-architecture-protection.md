@@ -24,14 +24,12 @@ for a reviewer to notice.
 - **Coverage.** Kover verification per module and aggregated at the root.
 - **Tests without mocks.** Fakes in `testFixtures` (`FakeBrowserSession`, `ScriptedLlmClient`, `InMemoryEvidence`,
   `FakeMailbox`, `FakeTargetOracle`, `FakeHarnessClock`) keep tests honest about ports.
-- **CI.** `.github/workflows/build.yml` runs `./gradlew build` (with the Chromium the browser tests need) on every push
-  to `develop`/`petek-mvp` and on pull requests into `develop`; documentation-only changes skip it. The end-to-end job
-  (`./gradlew e2eTest`: panel end to end, e2e module, 30 real Chromium contexts; then 5 000 testers through the
-  orchestrator) runs only on a push to
-  `develop` or by hand (`workflow_dispatch`), so runner minutes are spent once per integration commit, never twice for
-  the same commit as push and pull request. A newer push cancels the run in progress; `develop` writes the Gradle
-  dependency cache the other runs read. `CODEOWNERS` routes every change to the owner; the PR template asks for the
-  requirement, the architecture check and the docs.
+- **CI.** `.github/workflows/build.yml` (the same `./gradlew build` on a clean runner, the npm launcher's tests, the
+  platform bundle and the Docker image, plus the end-to-end job when asked) and `release.yml` run **only by hand**
+  (`workflow_dispatch`), never on a push or a pull request: the owner decided on 2026-09-26 that Actions minutes are
+  not spent automatically and that nothing is deployed before everything is finished. The gate on every commit is the
+  local `./gradlew spotlessApply build`; the owner starts Build from the Actions tab when a clean-runner proof is
+  wanted, and Release on `main` when a version is done.
 - **Rules for agents.** `CLAUDE.md` is the single page every AI coding agent reads first; it points to the plan, the
   architecture, the contract and the eleven never-break rules.
 

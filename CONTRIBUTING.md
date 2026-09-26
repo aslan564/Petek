@@ -13,9 +13,11 @@ welcome under the terms below; the same rules apply to people and to AI coding a
 
 ## Workflow
 
-1. Branch from `develop` (`feature/<topic>` or `fix/<topic>`). `main` is the release branch: it only receives
-   `develop`, and a push to it whose `version` in `gradle.properties` has no tag yet (or the tag `vX.Y.Z` itself)
-   publishes the platform bundles and the generic distribution through `.github/workflows/release.yml`.
+1. Branch from `develop` (`feature/<topic>` or `fix/<topic>`). `main` is the release branch and only receives
+   `develop`. GitHub Actions never runs on a push (the owner's decision: the minute budget, and nothing is deployed
+   before everything is finished): `build.yml` and `release.yml` start only by hand from the Actions tab. The gate on
+   every commit is the local `./gradlew spotlessApply build`. A release is: bump `version` in `gradle.properties` and
+   `launcher/package.json`, fast-forward `main` to `develop`, run the Release workflow on `main` with that version.
    `petek-mvp` and `petek-mvp-o6tpsw` are frozen history.
 2. Read the relevant part of `docs/PLAN.md` (the phase you touch), `docs/ARCHITECTURE.md` and the requirement
    document in `docs/requirements/` before writing code. If your change alters architecture, write or amend an ADR in

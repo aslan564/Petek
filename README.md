@@ -374,9 +374,10 @@ Rules that keep the code base healthy (enforced by the build where possible): Ko
 file carries the licence header; domain code imports no framework; application code never imports infrastructure;
 only `app` wires infrastructure; no mocking library (fakes live in `testFixtures`); tests are named as sentences; new
 libraries need the owner's approval; `./gradlew spotlessApply build` must pass before every commit. The full list is in
-[CONTRIBUTING.md](CONTRIBUTING.md). Branches: `main` is the release branch (a push to it with a new `version` in
-`gradle.properties`, or a `vX.Y.Z` tag, publishes the bundles); `develop` is the integration branch; `petek-mvp` and
-`petek-mvp-o6tpsw` are kept as the MVP history.
+[CONTRIBUTING.md](CONTRIBUTING.md). Branches: `main` is the release branch (the Release workflow is started by hand
+on it with the version and publishes the bundles, the image and the npm launcher); `develop` is the integration
+branch; `petek-mvp` and `petek-mvp-o6tpsw` are kept as the MVP history. CI never runs on a push; the local
+`./gradlew build` is the gate.
 
 ## Licence, trademark and copyright
 

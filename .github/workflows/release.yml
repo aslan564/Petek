@@ -5,19 +5,16 @@ name: Release
 # (petek-<version>-any-jdk25.zip, runs wherever JDK 25 is on PATH), with a SHA256SUMS file over all of them; then the
 # Docker image ghcr.io/<owner>/petek:<version> (linux/amd64 + linux/arm64, from the two Linux bundles on Playwright's
 # image) and, when NPM_TOKEN is set, the npm launcher.
-# Three ways in: a push to main whose `version` in gradle.properties has no release yet (main only receives develop,
-# so a version bump on main is the release), a tag v<version> pushed to main, or a manual run on main with the
-# version. The tree is built and tested first, so a release is never cut from a red tree; the version must match
-# gradle.properties, and a version that already has its tag is left alone. Each bundle is built on its own platform
-# (jlink cannot cross-build), and every bundle's launcher is started once before anything is published.
+# Only by hand (Actions → Release → Run workflow, branch main, the version): the owner releases when everything is
+# finished, and no push spends Actions minutes. The tree is built and tested first, so a release is never cut from a
+# red tree; the version must match gradle.properties and launcher/package.json, and a version that already has its tag
+# is refused. Each bundle is built on its own platform (jlink cannot cross-build), and every bundle's launcher is
+# started once before anything is published.
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       version:
-        description: Version to release (must equal `version` in gradle.properties, e.g. 0.1.0)
+        description: Version to release (must equal `version` in gradle.properties and launcher/package.json, e.g. 0.1.1)
         required: true
         type: string
 
@@ -48,21 +45,16 @@ jobs:
         id: version
         run: |
           FILE=$(grep -E '^version=' gradle.properties | cut -d= -f2)
-          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
-            workflow_dispatch:*) V="${{ inputs.version }}" ;;
-            push:refs/tags/*)    V="${GITHUB_REF_NAME#v}" ;;
-            push:refs/heads/*)   V="$FILE" ;;
-          esac
+          V="${{ inputs.version }}"
           [ "$V" = "$FILE" ] || { echo "release version '$V' but gradle.properties says '$FILE'"; exit 1; }
           NPM=$(node -p "require('./launcher/package.json').version")
           [ "$V" = "$NPM" ] || { echo "release version '$V' but launcher/package.json says '$NPM' (npx petek@$V must run this release)"; exit 1; }
-          case "${GITHUB_REF}" in refs/tags/*|refs/heads/main) ;; *) echo "releases are cut from main, not ${GITHUB_REF_NAME}"; exit 1 ;; esac
-          if git ls-remote --exit-code --tags origin "refs/tags/v${V}" > /dev/null && [ "${GITHUB_REF}" != "refs/tags/v${V}" ]; then
-            echo "v${V} is already released; bump version in gradle.properties to release again"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+          [ "${GITHUB_REF}" = "refs/heads/main" ] || { echo "releases are cut from main, not ${GITHUB_REF_NAME}"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v${V}" > /dev/null; then
+            echo "v${V} is already released; bump version in gradle.properties and launcher/package.json to release again"
+            exit 1
           fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
   test:

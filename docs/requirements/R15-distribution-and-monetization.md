@@ -1,6 +1,6 @@
 # R15 — Distribution and monetization: installable in any project, runs beside it and in CI; paid editions possible
 
-**Status:** Distribution done 2026-09-26 (a push to `main` releases platform bundles with a jlink runtime and the
+**Status:** Distribution done 2026-09-26 (the Release workflow, started by hand on `main`, publishes platform bundles with a jlink runtime and the
 platform's Playwright driver, `petek-<v>-<platform>.tar.gz|zip`, the generic `petek-<v>-any-jdk25.zip`, `SHA256SUMS`,
 the Docker image `ghcr.io/aslan564/petek:<v>` for linux/amd64 and linux/arm64, and the npm launcher `petek` when
 `NPM_TOKEN` is set; `petek init` prepares a project; v0.1.0 is published), the rest planned (CI mode, `petek dev`,
@@ -50,9 +50,9 @@ that the open core deliberately leaves to paid editions, without ever carrying t
 
 - Done: the linux-x64 bundle, extracted outside the repository and started with no JDK on `PATH` (through a symlink,
   from a site directory), runs `--help` and `doctor` against the real target (Chromium starts from the repacked
-  driver); `build.yml` repeats the `--help` start on every push to develop, `release.yml` on every platform before
+  driver); `build.yml` (run by hand) repeats the `--help` start, `release.yml` on every platform before
   publishing.
-- Done: `build.yml` builds the image from the Linux bundle on every push to develop and checks with `--json doctor`
+- Done: `build.yml` (run by hand) builds the image from the Linux bundle and checks with `--json doctor`
   that Chromium starts inside it; `release.yml` pushes the multi-architecture image to GHCR.
 - Planned: the Docker image runs the contract demo end to end; `petek init` on empty Node and Spring projects; the
   GitHub Action template (`docs/ci/github-actions.yml`) on the fake target turns red on an injected failure.

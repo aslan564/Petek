@@ -1,30 +1,16 @@
 name: Build
 
-# Minutes are spent deliberately (the repository is public, so standard runners are free, but a run is still
-# a run): a push to an integration branch runs once, never again as the pull request it belongs to; pull
-# requests run only for feature branches heading into develop; the expensive end-to-end job runs only on a
-# push to develop or by hand; a newer push cancels the run in progress.
+# Runs only by hand (Actions → Build → Run workflow): the owner asked that no push spends Actions minutes and that
+# nothing is deployed before everything is finished. The gate on every commit is the local `./gradlew spotlessApply
+# build` (CLAUDE.md); this workflow is the same build on a clean runner, plus the bundle, the Docker image and, when
+# asked, the end-to-end job. A newer manual run cancels the one in progress.
 on:
-  push:
-    branches: [develop, petek-mvp]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "LICENSE"
-      - "NOTICE"
-  pull_request:
-    branches: [develop]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "LICENSE"
-      - "NOTICE"
   workflow_dispatch:
     inputs:
       e2e:
-        description: Also run the end-to-end job
+        description: Also run the end-to-end job (fake target, real Chromium, 5 000-tester isolation proof)
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -54,8 +40,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           validate-wrappers: true
-          # develop is the integration branch, so it writes the dependency cache every other run reads.
-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+          cache-read-only: false
 
       - name: Install the Chromium Playwright needs (browser tests run in the normal build)
         run: |
@@ -105,9 +90,7 @@ jobs:
     name: End-to-end against the fake target (real Chromium)
     runs-on: ubuntu-latest
     needs: build
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
-      (github.event_name == 'workflow_dispatch' && inputs.e2e)
+    if: inputs.e2e
     timeout-minutes: 30
     env:
       LANG: C.UTF-8

@@ -373,9 +373,9 @@ Kod bazasını sağlam saxlayan qaydalar (mümkün olan yerdə build məcbur edi
 faylı lisenziya başlığı daşıyır; domain kodu framework import etmir; application kodu infrastructure import etmir;
 infrastructure-ı yalnız `app` bağlayır; mock kitabxanası yoxdur (fake-lər `testFixtures`-dadır); testlər cümlə kimi
 adlanır; yeni kitabxana sahibin təsdiqini istəyir; hər commit-dən əvvəl `./gradlew spotlessApply build` keçməlidir. Tam
-siyahı: [CONTRIBUTING.md](CONTRIBUTING.md). Branch-lar: `main` buraxılış branch-ıdır (`gradle.properties`-də yeni
-`version` ilə push, və ya `vX.Y.Z` teqi bundle-ları dərc edir); `develop` inteqrasiya branch-ıdır; `petek-mvp` və
-`petek-mvp-o6tpsw` MVP tarixçəsi kimi saxlanır.
+siyahı: [CONTRIBUTING.md](CONTRIBUTING.md). Branch-lar: `main` buraxılış branch-ıdır (Release workflow-u üstündə əl
+ilə, versiya ilə başladılır və bundle-ları, image-i, npm başladıcısını dərc edir); `develop` inteqrasiya branch-ıdır;
+`petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsi kimi saxlanır. CI heç bir push-da işləmir; qapı lokal `./gradlew build`-dir.
 
 ## Lisenziya, ticarət nişanı və müəllif hüququ
 

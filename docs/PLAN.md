@@ -560,7 +560,7 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
   `jdk.crypto.ec`, `jdk.charsets`, `jdk.zipfs`; JDK lazım deyil), sənədlər. Platform `-Ppetek.platform=` ilə
   (linux-x64, linux-arm64, mac-x64, mac-arm64, win-x64; default host). `release.yml` matrisi (ubuntu, ubuntu-arm,
   macos, windows) hər bundle-ı öz platformunda qurur, `bin/petek --help`-i JDK-sız işlədir, `SHA256SUMS` ilə birlikdə
-  Release-ə qoyur; `build.yml` hər develop push-da linux bundle-ını qurub başladır. Lokal sübut: linux-x64 bundle-ı
+  Release-ə qoyur; `build.yml` (əl ilə) linux bundle-ını qurub başladır. Lokal sübut: linux-x64 bundle-ı
   (165 MB) `/tmp`-də JDK-sız `doctor` — Chromium slim driver-dən qalxdı, kadrohr.com HTTP 200.
 - [x] Konsist arxitektura testləri `e2e/`-də (CLAUDE.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
 - [x] Tester izolyasiyası auditi və sərtləşdirmə (`docs/requirements/R01` "Isolation guarantees"): roster parolsuz
@@ -607,6 +607,10 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
   (48 s): 4 səhifənin hamısı məzmunla çəkildi, sayt modelində 4 form və 35 əməliyyat (giriş: e-poçt, şifrə, şirkət
   kodu; qeydiyyat: 7 sahə), 15 ideya, 9 sual Azərbaycan dilində. Rollarla gəzinti və sınaq toxunuşu test API tokeni
   olmadan atlanır — real KadroHR üçün növbəti addım sahibin staging-i və `docs/KADROHR_READINESS.md` P0 maddələridir.
+- **CI siyasəti (sahibin qərarı, 2026-09-26):** Actions heç bir push-da işləmir — `build.yml` və `release.yml`
+  yalnız `workflow_dispatch`. Səbəb: dəqiqə limiti və "hər şey bitməmiş deploy yoxdur". Hər commit-in qapısı lokal
+  `./gradlew spotlessApply build`; buraxılış əl ilə (CLAUDE.md-də addımlar). Bunun üçün GitHub-da default branch
+  `main` olmalıdır (əks halda "Run workflow" düyməsi workflow-u görmür).
 - **CI-da panel testləri (Release run #1–2):** panelin start-up import-u sahibin ssenarisini bəzən kataloqa
   yazmırdı — `SQLITE_BUSY_SNAPSHOT`: yazı tranzaksiyası əvvəl oxuyub (versiya nömrəsi) sonra INSERT edirdi (deferred
   snapshot), bu arada başqa thread-dəki repository `init`-i sxem ifadələri (indeks, trigger) yazırdı; SQLite belə
@@ -753,7 +757,7 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   rəsmi `mcr.microsoft.com/playwright:v<playwright>-noble` image-i üstündə Linux bundle-ı, Chromium daxildə,
   `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, `/work` mount, `ENTRYPOINT petek`; `docker/prepare-context.sh` bundle-ı
   `docker/context/<arch>/`-ə açır, buildx `TARGETARCH` ilə bir build-də linux/amd64 + linux/arm64; `release.yml`
-  `ghcr.io/<owner>/petek:<versiya>` və `:latest` push edir; `build.yml` hər develop push-da image-i qurub `--json
+  `ghcr.io/<owner>/petek:<versiya>` və `:latest` push edir; `build.yml` (əl ilə) image-i qurub `--json
   doctor`-un Chromium sətrinin yaşıl olduğunu `jq` ilə yoxlayır). Panel loopback-ə bağlı qaldığından Docker-da
   `--network host` lazımdır (Linux); əsas istifadə CI-dır. CI şablonu: `docs/ci/github-actions.yml` (Mailpit servisi,
   `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə),
