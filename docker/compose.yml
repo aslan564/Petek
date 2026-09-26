@@ -1,0 +1,27 @@
+# Pətək's image with its Mailpit companion (Faza 12): the test inbox the target's SMTP points at, next to the tool.
+# Run from the project under test (its .env, scenarios/ and evidence/ are mounted as /work):
+#
+#   docker compose -f docker/compose.yml run --rm petek doctor
+#   docker compose -f docker/compose.yml run --rm petek --json run scenarios/my-site.yaml --ci
+#
+# The panel binds loopback only, so for `panel` use `--network host` with the plain image (Linux) instead.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.2   # pinned like the root docker-compose.yml
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP: the target's test mode sends here
+      - "127.0.0.1:8025:8025"   # REST API + UI
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  petek:
+    image: ghcr.io/aslan564/petek:${PETEK_VERSION:-latest}
+    depends_on: [mailpit]
+    working_dir: /work
+    volumes:
+      - ..:/work
+    env_file: ../.env
+    environment:
+      PETEK_MAILPIT_URL: http://mailpit:8025

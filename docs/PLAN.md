@@ -807,8 +807,8 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   `ghcr.io/<owner>/petek:<versiya>` və `:latest` push edir; `build.yml` (əl ilə) image-i qurub `--json
   doctor`-un Chromium sətrinin yaşıl olduğunu `jq` ilə yoxlayır). Panel loopback-ə bağlı qaldığından Docker-da
   `--network host` lazımdır (Linux); əsas istifadə CI-dır. CI şablonu: `docs/ci/github-actions.yml` (Mailpit servisi,
-  `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə),
-  Mailpit companion compose faylı image üçün. `:app`-ın `fake-target` runtime asılılığı 2026-09-26-da qayda 12 ilə
+  `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə) — **sahib**; Mailpit companion compose faylı hazırdır
+  (`docker/compose.yml`). `:app`-ın `fake-target` runtime asılılığı 2026-09-26-da qayda 12 ilə
   silindi (demo yoxdur; fake target yalnız test asılılığıdır).
 - [x] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
   **Vəziyyət:** `--health` / `.petek/petek.yaml` `health_url` / hədəf; `--wait` (180 s), 2xx gələndə panel; hədəf `.env`-dən.
