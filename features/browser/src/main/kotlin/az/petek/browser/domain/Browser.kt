@@ -368,7 +368,17 @@ interface BrowserEngine {
     suspend fun stop()
 }
 
-class BrowserActionException(
+open class BrowserActionException(
     message: String,
     cause: Throwable? = null,
 ) : PetekException(message, cause)
+
+/**
+ * The browser context itself is gone (the page or browser crashed, or was closed under the session): no call on this
+ * session can succeed any more. The runner answers it by restoring the tester in a new context with the same identity
+ * and its saved `storage_state` (docs/PLAN.md Faza 3).
+ */
+class BrowserContextLostException(
+    message: String,
+    cause: Throwable? = null,
+) : BrowserActionException(message, cause)

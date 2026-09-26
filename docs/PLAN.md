@@ -446,7 +446,8 @@ Hazır sayılır: bir agent "qeydiyyatdan keç, kodu təsdiqlə, şirkət yarat"
 - [x] `orchestrator/Scheduler.kt`: aktor seçici parseri, addımları agent korutinlərinə paylama, `parallel`
 - [x] Hər agent öz single-thread dispetçeri və öz Playwright instansı ilə ortaq browser server-ə connect() edir; 30 context bir Chromium-da; yaddaş və CPU ölçülür
 - [x] `orchestrator/Monitor.kt`: vəziyyət lövhəsi (Mordant), N saniyə hərəkətsizlik → `blocked`, agent növbəti addıma keçir
-- [ ] Çökən context eyni kimlik və `storage_state` ilə bərpa olunur
+- [x] Çökən context eyni kimlik və `storage_state` ilə bərpa olunur
+  **Vəziyyət:** `BrowserContextLostException` → `RestoringBrowserSession` yeni kontekst açır (saxlanmış `storage_state` ilə), səhifəni yenidən açır, çağırışı bir dəfə təkrarlayır; sübutda `restore_session` addımı (ən çox 2 dəfə).
 - [x] `on_fail: continue | abort`
 
 Hazır sayılır: 30 agent eyni anda login olur, hər biri ekranda öz adını oxuyub reyestrlə tutuşdurur (sessiya qarışmasının sübutu); biri süni ilişdiriləndə digərləri dayanmır; 30 agent eyni anda gözləyərkən gecikmə ölçüsü serialaşmır.

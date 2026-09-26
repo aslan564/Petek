@@ -64,6 +64,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.nio.file.Files
 import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
@@ -241,7 +242,23 @@ class DefaultCampaignRunner(
                     localStorage = run.campaign.target.localStorage,
                     correlationHeader = settings.correlationHeader,
                 )
-            val session = factory.open(options)
+            val stored = storageStatePath(run.runId, agentId)
+            val session =
+                RestoringBrowserSession(
+                    initial = factory.open(options),
+                    // Same identity, and still signed in when it had signed in: its saved storage state (rule 7).
+                    reopen = { factory.open(options.copy(storageState = stored.takeIf(Files::isRegularFile))) },
+                    onRestored = { count, reason, url ->
+                        val back = url?.let { ", back on $it" }.orEmpty()
+                        evidence.system(
+                            run,
+                            agentId,
+                            "restore_session",
+                            StepStatus.PASSED,
+                            "browser context lost ($reason); restored ($count) with the same identity and its storage state$back",
+                        )
+                    },
+                )
             run.sessions[agentId] = session
             val runtime =
                 AgentRuntime(
@@ -253,7 +270,7 @@ class DefaultCampaignRunner(
                     variables = AgentVariables(),
                     shared = run.shared,
                     runStartedAt = run.startedAt.wall,
-                    storageStatePath = storageStatePath(run.runId, agentId),
+                    storageStatePath = stored,
                 )
             run.agents[agentId] = agents.create(runtime)
         } catch (e: Exception) {

@@ -10,6 +10,7 @@
 package az.petek.browser.infrastructure
 
 import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.BrowserContextLostException
 import com.microsoft.playwright.PlaywrightException
 import com.microsoft.playwright.TimeoutError
 import io.kotest.assertions.throwables.shouldThrow
@@ -43,6 +44,21 @@ class PlaywrightFailuresTest {
         PlaywrightFailures.reasonOf("Target page, context or browser has been closed") shouldBe
             "Target page, context or browser has been closed"
         PlaywrightFailures.reasonOf("") shouldBe "unknown browser error"
+    }
+
+    @Test
+    fun `a page, context or browser that is gone is a lost context the runner can restore`() {
+        val lost =
+            shouldThrow<BrowserContextLostException> {
+                translatingFailures("click [3]") { throw PlaywrightException("Target page, context or browser has been closed") }
+            }
+        val crashed =
+            shouldThrow<BrowserActionException> { translatingFailures("snapshot") { throw PlaywrightException("Target crashed") } }
+        val ordinary = shouldThrow<BrowserActionException> { translatingFailures("click [3]") { throw TimeoutError(driverError) } }
+
+        lost.message shouldBe "click [3] failed: Target page, context or browser has been closed"
+        (crashed is BrowserContextLostException) shouldBe true
+        (ordinary is BrowserContextLostException) shouldBe false
     }
 
     @Test

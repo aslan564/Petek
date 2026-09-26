@@ -46,6 +46,8 @@ internal class TestSite : AutoCloseable {
             install(SSE)
             routing {
                 get("/form") { call.respondText(FORM_PAGE, ContentType.Text.Html) }
+                get("/health") { call.respondText(HEALTH_PAGE, ContentType.Text.Html) }
+                get("/api/broken") { call.respondText("boom", status = HttpStatusCode.InternalServerError) }
                 get("/dynamic") { call.respondText(DYNAMIC_PAGE, ContentType.Text.Html) }
                 get("/secret") {
                     val submitted = call.request.queryParameters["password"] != null
@@ -125,6 +127,17 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        /** A page that logs an error, calls a failing endpoint, links in and out of the site and is too wide for a phone. */
+        const val HEALTH_PAGE =
+            """
+            <!doctype html><html><body>
+            <a href="/me">Profil</a> <a href="/missing?x=1">Yoxdur</a> <a href="https://example.org/">Kənar</a>
+            <a href="mailto:a@b.az">Poçt</a> <a href="#top">Yuxarı</a>
+            <div style="width: 2000px">Geniş</div>
+            <script>console.error("Pətək sınağı"); fetch("/api/broken");</script>
+            </body></html>
+            """
+
         /** A ticket with a form post, API calls by `fetch` and one read; `#result` shows each call's status. */
         fun ticketPage(id: String): String =
             """

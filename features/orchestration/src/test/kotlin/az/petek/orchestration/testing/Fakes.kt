@@ -44,6 +44,7 @@ import az.petek.identity.domain.IdentityPlan
 import az.petek.identity.domain.IdentityRegistryGenerator
 import az.petek.identity.domain.IdentitySpec
 import az.petek.oracle.domain.JsonFieldSelector
+import az.petek.orchestration.application.RestoringBrowserSession
 import az.petek.orchestration.application.RunFinalizer
 import az.petek.orchestration.domain.AgentStatus
 import az.petek.orchestration.domain.MonitorView
@@ -185,7 +186,8 @@ class FakeVerify(
             val record =
                 when (spec) {
                     is AssertionSpec.VisibleText -> {
-                        val seen = (input.session as? FakeBrowserSession)?.visibleTexts?.contains(spec.text) == true
+                        val page = (input.session as? RestoringBrowserSession)?.active ?: input.session
+                        val seen = (page as? FakeBrowserSession)?.visibleTexts?.contains(spec.text) == true
                         latencyMs = if (seen) input.eventEmittedAt?.elapsedUntil(clock.now())?.inWholeMilliseconds else null
                         record(input, spec, EvidenceSource.RECEIVER, spec.text, if (seen) Verdict.PASSED else Verdict.FAILED, latencyMs)
                     }

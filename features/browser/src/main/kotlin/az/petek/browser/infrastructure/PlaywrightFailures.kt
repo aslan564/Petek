@@ -10,6 +10,7 @@
 package az.petek.browser.infrastructure
 
 import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.BrowserContextLostException
 import com.microsoft.playwright.PlaywrightException
 import java.io.IOException
 
@@ -44,8 +45,13 @@ internal object PlaywrightFailures {
         val secret = typedText?.takeIf { it.isNotEmpty() }
         val reason = reasonOf(raw).let { if (secret == null) it else it.replace(secret, "***") }
         val cause = if (secret != null && raw.contains(secret)) null else failure
+        if (LOST_CONTEXT.any { raw.contains(it, ignoreCase = true) }) return BrowserContextLostException("$action failed: $reason", cause)
         return BrowserActionException("$action failed: $reason", cause)
     }
+
+    /** What Playwright says when the page, context or browser behind a session is gone for good. */
+    private val LOST_CONTEXT =
+        listOf("Target page, context or browser has been closed", "Target crashed", "Page crashed", "Browser has been closed")
 
     /**
      * Playwright Java renders driver errors as `Error { message='…' name='…' stack='…' }` followed by a `Call log:`

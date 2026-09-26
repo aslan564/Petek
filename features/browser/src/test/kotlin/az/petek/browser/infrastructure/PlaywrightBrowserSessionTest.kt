@@ -25,10 +25,12 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.CoroutineStart
@@ -489,6 +491,39 @@ class PlaywrightBrowserSessionTest {
 
         failure.message shouldContain "absent.json does not exist"
     }
+
+    @Test
+    fun `the page's health, links, width and history are read from the browser itself`() =
+        withSession { session ->
+            val since = clock.now()
+            session.navigate("/form")
+            session.navigate("/health")
+            session.waitForText("Geniş", 3.seconds).found shouldBe true
+            withTimeout(5.seconds) {
+                while (session.health(since, Duration.INFINITE).failedRequests.isEmpty()) delay(50)
+            }
+
+            val health = session.health(since, Duration.ZERO)
+
+            health.consoleErrors shouldContain "Pətək sınağı"
+            health.failedRequests shouldContain "GET /api/broken -> 500"
+            health.slowResponses.map { it.path } shouldContain "/health"
+            session.links() shouldBe listOf("/me", "/missing?x=1")
+            (session.horizontalOverflow(375, 812) ?: 0) shouldBeGreaterThan 1000
+            session.goBack() shouldBe true
+            session.currentUrl() shouldEndWith "/form"
+        }
+
+    @Test
+    fun `clearing the cookies ends the session as an expired one would`() =
+        withSession { session ->
+            login(session, "leyla")
+            session.request("GET", "/api/me").status shouldBe 200
+
+            session.clearCookies()
+
+            session.request("GET", "/api/me").status shouldBe 401
+        }
 
     @Test
     fun `request carries the session cookies and does not follow redirects`() =
