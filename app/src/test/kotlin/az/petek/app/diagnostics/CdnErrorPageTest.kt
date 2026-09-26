@@ -41,6 +41,16 @@ class CdnErrorPageTest {
     }
 
     @Test
+    fun `the one-line error Cloudflare gives a client that is not a browser is named with its meaning`() {
+        CdnErrorPage.of(answer(521, "error code: 521", "server" to "cloudflare")) shouldBe
+            "Cloudflare error 521: the site's own server is down or refuses Cloudflare's connections"
+        CdnErrorPage.of(answer(403, "error code: 1000\n", "server" to "cloudflare")) shouldBe
+            "Cloudflare error 1000: DNS points to prohibited IP"
+        CdnErrorPage.of(answer(599, "error code: 599", "server" to "cloudflare")) shouldBe "Cloudflare error 599"
+        CdnErrorPage.of(answer(521, "error code: 521", "server" to "nginx")) shouldBe null
+    }
+
+    @Test
     fun `a bot challenge is a block, whatever the status`() {
         CdnErrorPage.of(
             answer(403, "<title>Just a moment...</title>", "server" to "cloudflare", "cf-mitigated" to "challenge"),

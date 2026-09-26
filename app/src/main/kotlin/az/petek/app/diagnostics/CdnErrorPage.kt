@@ -36,8 +36,15 @@ object CdnErrorPage {
 
             "cloudflare" in server && answer.status >= FIRST_ERROR && isCloudflarePage(body, title) -> {
                 val code = CLOUDFLARE_CODE.find(body)?.groupValues?.get(1)
-                val what = title?.substringBefore(" | ")?.takeIf { it.isNotBlank() } ?: "an error page"
+                val what =
+                    title?.substringBefore(" | ")?.takeIf { it.isNotBlank() } ?: code?.let(CLOUDFLARE_MEANINGS::get) ?: "an error page"
                 "Cloudflare " + (code?.let { "error $it: " } ?: "") + what
+            }
+
+            // What Cloudflare answers a client that is not a browser: a one-line `error code: 521`.
+            "cloudflare" in server && answer.status >= FIRST_ERROR && CLOUDFLARE_PLAIN.matches(body.trim()) -> {
+                val code = checkNotNull(CLOUDFLARE_PLAIN.matchEntire(body.trim())).groupValues[1]
+                "Cloudflare error $code" + (CLOUDFLARE_MEANINGS[code]?.let { ": $it" } ?: "")
             }
 
             "cloudfront" in server && answer.status >= FIRST_ERROR && "The request could not be satisfied" in body -> {
@@ -75,4 +82,24 @@ object CdnErrorPage {
     private val WHITESPACE = Regex("\\s+")
     private val CLOUDFLARE_CODE = Regex("Error\\s+(1\\d{3}|5\\d{2})")
     private val CLOUDFLARE_TITLES = listOf("| Cloudflare", "Attention Required!", "Just a moment...", "Access denied")
+    private val CLOUDFLARE_PLAIN = Regex("error code: (\\d{3,4})", RegexOption.IGNORE_CASE)
+
+    /** Cloudflare's own explanations of its common error codes (developers.cloudflare.com, "Troubleshooting"). */
+    private val CLOUDFLARE_MEANINGS =
+        mapOf(
+            "520" to "the site's server answered with an unknown error",
+            "521" to "the site's own server is down or refuses Cloudflare's connections",
+            "522" to "Cloudflare's connection to the site's server timed out",
+            "523" to "the site's server cannot be reached",
+            "524" to "the site's server took too long to answer",
+            "525" to "the TLS handshake between Cloudflare and the site's server failed",
+            "526" to "the site's server has an invalid TLS certificate",
+            "530" to "the site's server cannot be reached",
+            "1000" to "DNS points to prohibited IP",
+            "1001" to "DNS resolution error",
+            "1003" to "direct IP access is not allowed",
+            "1015" to "rate limited",
+            "1016" to "the site's origin DNS name does not resolve",
+            "1020" to "access denied by a firewall rule",
+        )
 }
