@@ -120,6 +120,17 @@ class DoctorCommandTest {
         }
 
     @Test
+    fun `a site without a test API shows it as not used and the doctor still passes`() =
+        runBlocking<Unit> {
+            val result = cli("PETEK_ORACLE" to "none", "PETEK_TEST_TOKEN" to "").run("doctor")
+
+            result.statusCode shouldBe 0
+            val testApi = row(result.stdout, "Test API")
+            testApi shouldContain "·"
+            testApi shouldContain "not used (PETEK_ORACLE=none)"
+        }
+
+    @Test
     fun `--json prints the checks as one document with the same exit code`() =
         runBlocking<Unit> {
             val result = cli("PETEK_TEST_TOKEN" to "wrong-token").run("--json", "doctor")

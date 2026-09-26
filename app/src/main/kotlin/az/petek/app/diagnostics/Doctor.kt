@@ -37,7 +37,8 @@ import kotlinx.serialization.json.putJsonObject
 import java.net.URI
 import java.time.Instant
 
-enum class CheckStatus { OK, FAILED, SKIPPED }
+/** [NOT_USED]: the part is switched off on purpose (e.g. no test API), so it neither passes nor fails the doctor. */
+enum class CheckStatus { OK, FAILED, SKIPPED, NOT_USED }
 
 /** One line of the `petek doctor` table. [detail] is shown verbatim (errors included) and never contains a secret. */
 data class CheckResult(
@@ -92,8 +93,9 @@ class Doctor(
     private suspend fun targetReachable(): CheckResult =
         when (val answer = http.get(config.target)) {
             is HttpCheck.Answered -> {
-                val status = if (answer.status < SERVER_ERROR) CheckStatus.OK else CheckStatus.FAILED
-                CheckResult(TARGET, status, "$answer from ${PetekConfig.masked(config.target)}")
+                val cdn = CdnErrorPage.of(answer)
+                val status = if (answer.status < SERVER_ERROR && cdn == null) CheckStatus.OK else CheckStatus.FAILED
+                CheckResult(TARGET, status, "$answer from ${PetekConfig.masked(config.target)}" + cdn?.let { ": $it" }.orEmpty())
             }
 
             is HttpCheck.Unreachable -> {
@@ -185,6 +187,13 @@ class Doctor(
     }
 
     private suspend fun testApi(): CheckResult {
+        if (!config.oracle) {
+            return CheckResult(
+                TEST_API,
+                CheckStatus.NOT_USED,
+                "not used (PETEK_ORACLE=none): findings rest on the screen and the network, no test API is asked",
+            )
+        }
         val oracle = container.oracle
         if (!oracle.isAvailable) {
             return CheckResult(

@@ -41,7 +41,11 @@ class HttpProbeTest {
     @Test
     fun `an answer carries its status`() =
         runBlocking<Unit> {
-            probe.get(URI("${target.baseUrl}/login")) shouldBe HttpCheck.Answered(200, null)
+            val answer = probe.get(URI("${target.baseUrl}/login")).shouldBeInstanceOf<HttpCheck.Answered>()
+
+            answer.status shouldBe 200
+            answer.location shouldBe null
+            answer.bodyStart.isNotEmpty() shouldBe true
         }
 
     @Test
@@ -59,11 +63,12 @@ class HttpProbeTest {
         runBlocking<Unit> {
             val url = URI("${target.baseUrl}/test/otp/%2B994500000000")
 
-            probe.get(url) shouldBe HttpCheck.Answered(401, null)
-            val withToken = probe.get(url, mapOf("X-Test-Token" to "dev-token"))
+            probe.get(url).shouldBeInstanceOf<HttpCheck.Answered>().status shouldBe 401
+            val withToken = probe.get(url, mapOf("X-Test-Token" to "dev-token")).shouldBeInstanceOf<HttpCheck.Answered>()
 
-            withToken shouldBe HttpCheck.Answered(404, null)
+            withToken.status shouldBe 404
             withToken.toString() shouldBe "HTTP 404"
+            withToken.headers.values.any { "dev-token" in it } shouldBe false
         }
 
     @Test

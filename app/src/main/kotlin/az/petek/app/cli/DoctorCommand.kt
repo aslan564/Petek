@@ -47,7 +47,7 @@ class DoctorCommand : PetekSubcommand("doctor") {
         if (json) {
             emitJson(
                 buildJsonObject {
-                    put("ok", rows.all { it.status == CheckStatus.OK })
+                    put("ok", rows.all { it.status in PASSING })
                     putJsonArray("checks") {
                         rows.forEach { row ->
                             addJsonObject {
@@ -73,7 +73,7 @@ class DoctorCommand : PetekSubcommand("doctor") {
     private fun exitCodeOf(rows: List<CheckResult>): Int {
         val failed = rows.filter { it.status == CheckStatus.FAILED }.map { it.name }
         return when {
-            rows.all { it.status == CheckStatus.OK } -> ExitCodes.OK
+            rows.all { it.status in PASSING } -> ExitCodes.OK
             Doctor.CONFIGURATION in failed || Doctor.POLICY in failed -> ExitCodes.CONFIG_OR_ABORTED
             else -> ExitCodes.FAILURE
         }
@@ -84,6 +84,7 @@ class DoctorCommand : PetekSubcommand("doctor") {
             CheckStatus.OK -> OK
             CheckStatus.FAILED -> FAILED
             CheckStatus.SKIPPED -> SKIPPED
+            CheckStatus.NOT_USED -> NOT_USED
         }
 
     private fun colored(cell: String): String =
@@ -97,5 +98,9 @@ class DoctorCommand : PetekSubcommand("doctor") {
         const val OK = "✓"
         const val FAILED = "✗"
         const val SKIPPED = "–"
+        const val NOT_USED = "·"
+
+        /** Rows that do not fail the doctor: passed, or switched off on purpose. */
+        private val PASSING = setOf(CheckStatus.OK, CheckStatus.NOT_USED)
     }
 }

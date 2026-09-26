@@ -47,8 +47,8 @@ fun interface TargetReachability {
 
 /**
  * One anonymous GET of the target with [HttpProbe]: any HTTP answer below 500 (a page, a redirect to `/login`, a
- * 404 on the root) means the site is there; a server error or no answer at all (DNS, firewall, TLS, timeout) means
- * it is not, with the client's own error as the reason.
+ * 404 on the root) means the site is there; a server error, no answer at all (DNS, firewall, TLS, timeout) or a CDN's
+ * error or block page in place of the site ([CdnErrorPage]) means it is not, with the reason as it is.
  */
 class HttpTargetReachability(
     private val http: HttpProbe,
@@ -56,7 +56,12 @@ class HttpTargetReachability(
     override suspend fun check(target: URI): TargetAnswer =
         when (val answer = http.get(target)) {
             is HttpCheck.Answered -> {
-                if (answer.status < SERVER_ERROR) TargetAnswer.Reachable else TargetAnswer.Unreachable("$answer")
+                val cdn = CdnErrorPage.of(answer)
+                when {
+                    cdn != null -> TargetAnswer.Unreachable("$answer: $cdn")
+                    answer.status < SERVER_ERROR -> TargetAnswer.Reachable
+                    else -> TargetAnswer.Unreachable("$answer")
+                }
             }
 
             is HttpCheck.Unreachable -> {

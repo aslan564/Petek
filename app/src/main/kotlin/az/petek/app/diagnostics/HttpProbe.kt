@@ -12,7 +12,9 @@
 package az.petek.app.diagnostics
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -27,6 +29,10 @@ sealed interface HttpCheck {
         val status: Int,
         /** `Location` of a redirect, as sent. */
         val location: String?,
+        /** Response headers, lower-case names, first value each (for recognising a CDN's error page). */
+        val headers: Map<String, String> = emptyMap(),
+        /** The first [HttpProbe.BODY_BYTES] of the body as text. */
+        val bodyStart: String = "",
     ) : HttpCheck {
         val isRedirect: Boolean get() = status / 100 == 3
 
@@ -73,8 +79,17 @@ class HttpProbe(
                 return HttpCheck.Unreachable(describe(e))
             }
         return try {
-            val response = client.sendAsync(request, HttpResponse.BodyHandlers.discarding()).await()
-            HttpCheck.Answered(response.statusCode(), response.headers().firstValue("Location").orElse(null))
+            val response = client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).await()
+            val body = withContext(Dispatchers.IO) { response.body().use { it.readNBytes(BODY_BYTES) } }
+            HttpCheck.Answered(
+                status = response.statusCode(),
+                location = response.headers().firstValue("Location").orElse(null),
+                headers =
+                    response.headers().map().entries.associate { (name, values) ->
+                        name.lowercase() to values.firstOrNull().orEmpty()
+                    },
+                bodyStart = body.decodeToString(),
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -99,5 +114,8 @@ class HttpProbe(
         }
 
         private const val MAX_CHAIN = 5
+
+        /** How much of a body is kept: enough for a CDN's error page title and code. */
+        const val BODY_BYTES = 8192
     }
 }
