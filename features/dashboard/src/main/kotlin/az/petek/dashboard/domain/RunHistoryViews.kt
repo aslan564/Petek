@@ -109,3 +109,10 @@ data class RunStartView(
     val scenarioId: String?,
     val testers: Int,
 )
+
+/** What a teardown removed from the target and what it could not; both empty when nothing was left. */
+data class TeardownView(
+    val runId: RunId,
+    val removed: List<String>,
+    val failures: List<String>,
+)

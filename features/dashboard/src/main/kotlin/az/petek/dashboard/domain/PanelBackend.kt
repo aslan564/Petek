@@ -117,6 +117,19 @@ interface PanelRuns {
 
     /** Directory of a run's written report (`index.html`, `report.md`); null when there is none. */
     suspend fun reportDirectory(runId: RunId): Path?
+
+    /**
+     * The judged findings of a run with their three sources and evidence artifacts (which [PanelExplorer.explorationArtifact]
+     * then resolves); empty for a run without findings or an unknown run.
+     */
+    suspend fun findings(runId: RunId): List<FindingView>
+
+    /**
+     * Deletes the test data a finished run created on its target (its test companies, through the target's test
+     * API, which refuses anything that is not `is_test`). Fails with [PanelNotFoundException] for an unknown run and
+     * [PanelConflictException] while the run is going or when it was made against another site.
+     */
+    suspend fun teardown(runId: RunId): TeardownView
 }
 
 /** A failure of a panel operation the owner should read; [message] is Azerbaijani and free of secrets. */

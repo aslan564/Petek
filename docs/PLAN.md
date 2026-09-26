@@ -706,17 +706,24 @@ paneldən seçilir; ikincidə kəşfiyyatçı sahibin hesabı ilə daxil olur, h
 
 Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-case-ləri işlətsin.
 
-- [ ] `PanelBackend` portu üstündə ikinci "üz": `features/dashboard` yanında `features/toolface` (və ya dashboard
-  daxilində `mcp` alt-paketi — ADR-0009 qərarı). Alətlər: `explore_site`, `list_unknowns`, `answer_unknown`,
-  `generate_scenario`, `approve_scenario`, `run_campaign`, `get_run_status`, `get_findings`, `get_evidence`,
-  `list_targets`, `teardown`. Hər alət giriş/çıxışı kotlinx.serialization sxemi ilə.
-- [ ] `petek mcp` (stdio) əmri; MCP Kotlin SDK əlavə olunur (qayda 11 — soruşulacaq) və ya nazik JSON-RPC
-  implementasiyası (SDK-sız; MCP-nin stdio profili kiçikdir). Yalnız loopback/stdio; yazan alətlər `allowWrites`
-  tələb edir; `PETEK_ALLOW_PRODUCTION` qaydası eynidir.
-- [ ] Bütün CLI əmrlərinə `--json` (stdout yalnız JSON, loglar stderr); çıxış kodları `ExitCodes`-da sənədlənir.
+- [x] `PanelBackend` portu üstündə ikinci "üz": dashboard daxilində `infrastructure/mcp` alt-paketi (`McpServer`,
+  `McpTools`, `McpSettings`, `JsonRpc`). 25 alət: `list_targets`, `get_capacity`, `explore_site` (`wait`),
+  `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`, `compare_explorations`,
+  `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`, `approve_scenario`,
+  `freeze_scenario`, `run_campaign` (`wait`), `cancel_run`, `list_runs`, `get_run_status`, `get_findings`,
+  `get_evidence`, `get_triage`, `run_triage`, `get_stability`, `teardown`. Giriş JSON Schema, çıxış `PanelJson`
+  (mətn + `structuredContent`). `PanelRuns`-a `findings(runId)` və `teardown(runId)` əlavə olundu.
+- [x] `petek mcp [--allow-writes] [--demo]` (stdio): nazik JSON-RPC implementasiyası, SDK-sız (qərar verildi;
+  R10-da qeyd). Yazan alətlər `--allow-writes` tələb edir; hədəf siyasəti eynidir; `.env` yoxdursa fake KadroHR.
+  `PanelCore` = panelin HTTP serversiz obyekt qrafı (WebPanel ondan istifadə edir).
+- [x] `--json`: `doctor`, `init`, `plan`, `run`, `report`, `teardown` (stdout bir JSON sənəd, loglar stderr,
+  uğursuzluq `{"error":...}` + adi çıxış kodu). Qalır: `capacity`, `probe`, `smoke` (CI rejimi ilə birlikdə).
 - [ ] Tapıntı paketi (`FindingBundle`): tapıntı + addım + request/response + screenshot yolu + A/B/C + sübut səviyyəsi —
   kök səbəb araşdırması üçün ev sahibi AI-ın oxuyacağı tək obyekt (`reporting` domain).
-- [ ] Testlər: MCP əl sıxma və hər alət üçün kontrakt testi (stdio üzərindən), `--json` çıxışının sxem testi.
+- [x] Testlər: `McpServerTest` (əl sıxma, alət siyahısı və sxemlər, oxu alətləri, tapılmadı → `isError`, yazma
+  rədd/icazə, JSON-RPC xəta kodları), `McpCommandTest` (real montaj, sahibin faylı MCP ilə siyahıda), `--json`
+  yoxlamaları doctor/init/teardown testlərində. Qalır: real MCP müştərisi ilə (Claude Code `.mcp.json`)
+  `explore_site` → `get_findings` zənciri fake target-də.
 
 Hazır sayılır: Claude Code-da (`.mcp.json`) və başqa bir MCP müştərisində `explore_site` → `get_findings` zənciri
 fake target-də işləyir; eyni iş `petek explore --json | petek findings --json` ilə də alınır.

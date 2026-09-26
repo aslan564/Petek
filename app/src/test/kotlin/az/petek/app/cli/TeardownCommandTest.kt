@@ -90,6 +90,10 @@ class TeardownCommandTest {
 
             again.statusCode shouldBe 0
             again.stdout shouldContain "nothing left to tear down"
+
+            val asJson = cli.run("--json", "teardown")
+            asJson.statusCode shouldBe 0
+            asJson.stdout.trim() shouldBe """{"runId":"run_1","removed":[],"failures":[]}"""
         }
 
     @Test

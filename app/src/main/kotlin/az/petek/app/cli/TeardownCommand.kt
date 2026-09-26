@@ -13,6 +13,10 @@ import az.petek.core.ids.RunId
 import az.petek.reporting.domain.RunNotFoundException
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.options.option
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * `petek teardown [--run <run_id>]`: deletes what a run left on the target (its test company), e.g. after a crash or
@@ -32,12 +36,22 @@ class TeardownCommand : PetekSubcommand("teardown") {
                 run?.let { id -> RunId(id.trim()).let { container.runs.find(it) ?: throw RunNotFoundException(it) } }
                     ?: container.runs.latest()
             if (record == null) {
-                echo("No run is recorded in ${config.dbPath}; nothing to tear down.")
+                if (json) {
+                    emitJson(
+                        teardownJson(null, emptyList(), emptyList()),
+                    )
+                } else {
+                    echo("No run is recorded in ${config.dbPath}; nothing to tear down.")
+                }
                 return@withContainer ExitCodes.OK
             }
             TargetGuard.requireAllowed(config.targetPolicy, config.target)
             TargetGuard.requireRunTarget(record.target, config.target)
             val result = container.teardown.teardown(record.runId)
+            if (json) {
+                emitJson(teardownJson(record.runId, result.removed, result.failures))
+                return@withContainer if (result.failures.isEmpty()) ExitCodes.OK else ExitCodes.FAILURE
+            }
             if (result.removed.isEmpty() && result.failures.isEmpty()) {
                 echo("Run ${record.runId}: nothing left to tear down.")
             }
@@ -45,4 +59,14 @@ class TeardownCommand : PetekSubcommand("teardown") {
             result.failures.forEach { echo("Run ${record.runId}: could not remove $it", err = true) }
             if (result.failures.isEmpty()) ExitCodes.OK else ExitCodes.FAILURE
         }
+
+    private fun teardownJson(
+        runId: RunId?,
+        removed: List<String>,
+        failures: List<String>,
+    ) = buildJsonObject {
+        put("runId", runId?.value)
+        putJsonArray("removed") { removed.forEach { add(it) } }
+        putJsonArray("failures") { failures.forEach { add(it) } }
+    }
 }

@@ -25,6 +25,10 @@ import com.github.ajalt.clikt.testing.CliktCommandTestResult
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
@@ -44,6 +48,10 @@ class CliHarness(
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
 
+    /** What `petek mcp` reads and writes its protocol on; empty input ends the server at once. */
+    var standardInput: InputStream = ByteArrayInputStream(ByteArray(0))
+    var standardOutput: OutputStream = ByteArrayOutputStream()
+
     val evidenceDir: Path get() = workingDirectory.resolve("evidence")
     val dbPath: Path get() = evidenceDir.resolve("petek.db")
 
@@ -56,6 +64,8 @@ class CliHarness(
                 containers = { config -> AppContainer(config, AppOverrides(llm = llm, monitor = NoOpMonitorView, browser = browser)) },
                 configureLogging = { loggingRequests += it },
                 observationWindow = Duration.ZERO,
+                standardInput = standardInput,
+                standardOutput = standardOutput,
             )
 
     suspend fun run(vararg args: String): CliktCommandTestResult = PetekCommand(runtime).test(args.toList(), width = WIDE)

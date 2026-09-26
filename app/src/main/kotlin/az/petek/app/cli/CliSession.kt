@@ -25,6 +25,8 @@ class CliSession(
     /** `--env-file`; null means `.env` in the working directory, which may be absent. */
     private val envFile: Path?,
     val verbose: Boolean,
+    /** `--json`: the command prints its result as one JSON document (R10); tables and prose stay off stdout. */
+    val json: Boolean = false,
 ) {
     /**
      * Whether this invocation names a configuration: `--env-file` was given (a missing one is [loadConfig]'s error), or

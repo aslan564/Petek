@@ -268,6 +268,23 @@ modeli, tapıntılar, cavablanacaq suallar), **Ssenarilər** (versiyalar, YAML, 
 **Hesabatlar** (tarixçə, xərc, stabillik). GET olmayan sorğular hər başlanğıcda yaranan `X-Petek-Token` tələb edir;
 yad `Host`/`Origin` başlıqları rədd edilir.
 
+## MCP serveri və `--json`
+
+Eyni use-case-lərin ev sahibi AI üçün iki üzü daha var (ADR-0009, R10). `petek mcp` stdio üzərindən Model Context
+Protocol serveridir (əl ilə yazılmış JSON-RPC, əlavə kitabxana yoxdur; `initialize`, `ping`, `tools/list`,
+`tools/call`); `petek init` onu layihənin MCP faylında `petek` serveri kimi qeyd edir. Alətlər: `list_targets`,
+`get_capacity`, `explore_site` (`wait` ilə), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
+`compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
+`approve_scenario`, `freeze_scenario`, `run_campaign` (`wait` ilə), `cancel_run`, `list_runs`, `get_run_status`,
+`get_findings` (A/B/C mənbələri və sübut id-ləri), `get_evidence` (screenshot və ya capture-un tam yolu), `get_triage`,
+`run_triage`, `get_stability`, `teardown`. Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: run,
+təsdiq, teardown və yazma ilə kəşfiyyat rədd edilir; hədəf siyasəti hər yerdəki kimi tətbiq olunur. Hər nəticə panelin
+JSON-unu mətn və strukturlu məzmun kimi daşıyır; uğursuzluq panelin mesajı ilə `isError` nəticəsidir. `.env` yoxdursa
+server panel kimi lokal fake KadroHR-dan istifadə edir.
+
+`petek --json <əmr>` `doctor`, `init`, `plan`, `run`, `report` və `teardown` üçün stdout-a bir JSON sənəd çap edir
+(loglar stderr-də qalır; uğursuzluq adi çıxış kodu ilə `{"error": ...}`), skriptlər və CI üçün.
+
 ## Arxitektura
 
 Gradle modullarında feature-əsaslı clean architecture: hər imkan `features/<ad>`-dır, içində `domain` (saf Kotlin:

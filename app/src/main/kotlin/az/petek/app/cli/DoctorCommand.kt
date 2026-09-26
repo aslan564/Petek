@@ -17,6 +17,10 @@ import az.petek.app.diagnostics.HttpProbe
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.mordant.rendering.TextColors
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * `petek doctor`: a ✓/✗ table of everything a run depends on (see [Doctor]). An invalid configuration is itself a
@@ -37,6 +41,23 @@ class DoctorCommand : PetekSubcommand("doctor") {
             } catch (e: ConfigException) {
                 Doctor.configurationFailed(e.problems)
             }
+        if (json) {
+            emitJson(
+                buildJsonObject {
+                    put("ok", rows.all { it.status == CheckStatus.OK })
+                    putJsonArray("checks") {
+                        rows.forEach { row ->
+                            addJsonObject {
+                                put("name", row.name)
+                                put("status", row.status.name)
+                                put("detail", row.detail)
+                            }
+                        }
+                    }
+                },
+            )
+            return exitCodeOf(rows)
+        }
         echo(
             TextTable.render(listOf("", "Check", "Result"), rows.map { listOf(symbol(it.status), it.name, it.detail) }) { column, cell ->
                 if (column == 0) colored(cell) else cell

@@ -13,6 +13,8 @@ import az.petek.core.error.PetekException
 import az.petek.core.ids.RunId
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * `petek report <run_id|latest>`: rebuilds the Markdown and HTML report of a stored run from its evidence. A finished
@@ -33,6 +35,16 @@ class ReportCommand : PetekSubcommand("report") {
                     RunId(run.trim())
                 }
             val directory = container.finalizeRun.finalize(runId)
+            if (json) {
+                emitJson(
+                    buildJsonObject {
+                        put("runId", runId.value)
+                        put("html", directory.resolve(RunCommand.HTML_REPORT).toAbsolutePath().toString())
+                        put("markdown", directory.resolve(MARKDOWN_REPORT).toAbsolutePath().toString())
+                    },
+                )
+                return@withContainer ExitCodes.OK
+            }
             echo("Report of $runId: ${directory.resolve(RunCommand.HTML_REPORT)}")
             echo("Markdown: ${directory.resolve(MARKDOWN_REPORT)}")
             ExitCodes.OK

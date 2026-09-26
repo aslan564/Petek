@@ -25,6 +25,7 @@ import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
 import az.petek.dashboard.domain.FieldProblem
+import az.petek.dashboard.domain.FindingView
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.PanelNotFoundException
@@ -36,6 +37,7 @@ import az.petek.dashboard.domain.RunStartView
 import az.petek.dashboard.domain.RunSummaryView
 import az.petek.dashboard.domain.StabilityView
 import az.petek.dashboard.domain.StepStabilityView
+import az.petek.dashboard.domain.TeardownView
 import az.petek.dashboard.domain.TriageCategory
 import az.petek.dashboard.domain.TriageVerdictView
 import az.petek.dashboard.domain.TriageView
@@ -73,6 +75,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -205,7 +208,32 @@ internal class PanelRunsAdapter(
                 .takeIf { it.resolve(REPORT_FILE).exists() }
         }
 
-    /** An artifact a shown triage verdict cites as its evidence, so the panel may serve it; null for anything else. */
+    override suspend fun findings(runId: RunId): List<FindingView> {
+        val findings = container.evidenceQuery.findings(runId)
+        if (findings.isEmpty()) return emptyList()
+        // The findings' screenshots and captures become servable, like a triage verdict's evidence.
+        val cited = findings.flatMapTo(mutableSetOf()) { it.artifactIds }
+        container.evidenceQuery
+            .artifacts(runId)
+            .filter { it.artifactId in cited }
+            .forEach { evidenceShown[it.artifactId] = it }
+        return findings.map {
+            FindingView(it.findingId, it.findingClass, it.scenarioStep, it.agentId, it.a, it.b, it.c, it.note, it.artifactIds)
+        }
+    }
+
+    override suspend fun teardown(runId: RunId): TeardownView {
+        val run = container.runs.find(runId) ?: throw PanelNotFoundException("Run tapılmadı.")
+        if (run.result == RunResult.RUNNING) throw PanelConflictException("Run hələ bitməyib; teardown yalnız bitmiş run üçündür.")
+        val recorded = runCatching { URI(run.target) }.getOrNull()
+        if (recorded == null || !PanelTargets.sameSite(recorded, container.config.target)) {
+            throw PanelConflictException("Run başqa saytda (${run.target}) aparılıb; teardown yalnız PETEK_TARGET-dəki run üçün işləyir.")
+        }
+        val result = container.teardown.teardown(runId)
+        return TeardownView(runId, result.removed, result.failures)
+    }
+
+    /** An artifact a shown triage verdict or finding cites as its evidence, so the panel may serve it; null for anything else. */
     fun evidenceArtifact(artifactId: ArtifactId): ArtifactRecord? = evidenceShown[artifactId]
 
     // --- the explorer's session setup -----------------------------------------------------------------------------

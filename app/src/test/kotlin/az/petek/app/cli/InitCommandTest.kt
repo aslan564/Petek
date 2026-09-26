@@ -10,10 +10,16 @@
 package az.petek.app.cli
 
 import az.petek.app.testing.CliHarness
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -38,6 +44,19 @@ class InitCommandTest {
             result.stdout shouldContain "petek doctor"
             Files.readString(dir.resolve(".env")) shouldContain "PETEK_TARGET=https://staging.example.com"
             Files.exists(dir.resolve("AGENTS.md")) shouldBe false
+        }
+
+    @Test
+    fun `--json prints the changes as one document and nothing else`() =
+        runBlocking<Unit> {
+            val result = CliHarness(dir).run("--json", "init", "--ai", "codex")
+
+            result.statusCode shouldBe 0
+            val document = Json.parseToJsonElement(result.stdout.trim()).jsonObject
+            document["ais"]!!.jsonArray.map { it.jsonPrimitive.content } shouldBe listOf("codex")
+            document["detected"]!!.jsonPrimitive.boolean shouldBe false
+            document["changes"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content } shouldContain "AGENTS.md"
+            result.stdout.lines().count { it.isNotBlank() } shouldBe 1
         }
 
     @Test

@@ -16,6 +16,10 @@ import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
 import az.petek.app.logging.LoggingSettings
 import az.petek.app.logging.LoggingSetup
+import java.io.FileDescriptor
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.file.Path
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -38,4 +42,7 @@ class CliRuntime(
     val observationWindow: Duration = 3.seconds,
     val panelContainers: (PetekConfig, AppOverrides) -> AppContainer = { config, overrides -> AppContainer(config, overrides) },
     val openInBrowser: (String) -> Boolean = BrowserOpener::open,
+    /** The process's stdin and stdout, which `petek mcp` speaks its protocol over; tests pass pipes. */
+    val standardInput: InputStream = System.`in`,
+    val standardOutput: OutputStream = FileOutputStream(FileDescriptor.out),
 )

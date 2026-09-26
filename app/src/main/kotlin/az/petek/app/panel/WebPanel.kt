@@ -31,48 +31,37 @@ import java.net.URI
 import java.nio.file.Path
 
 /**
- * One running web panel: the live board ([LiveDashboard]), the container every panel action uses (its evidence
- * recorder, run and identity repositories and monitor decorated so the board, the orchestrator matrix and the run
- * watch see everything), the [AppPanelBackend] over it and the [DashboardServer] on 127.0.0.1. `petek panel` starts one
- * and waits; tests start one on a free port and close it.
- *
- * [close] stops the server, cancels the backend's work (a run still tears down and writes its report) and closes the
+ * The panel without its HTTP server: the live board ([LiveDashboard]), the container every panel action uses (its
+ * evidence recorder, run and identity repositories and monitor decorated so the board, the orchestrator matrix and the
+ * run watch see everything) and the [AppPanelBackend] over it. [WebPanel] serves it over HTTP; `petek mcp` speaks
+ * MCP over it. [close] cancels the backend's work (a run still tears down and writes its report) and closes the
  * container, in that order.
  */
-internal class WebPanel private constructor(
+internal class PanelCore private constructor(
     val dashboard: LiveDashboard,
     val container: AppContainer,
     val backend: AppPanelBackend,
-    private val server: DashboardServer,
-    /** Where the page is served, e.g. `http://127.0.0.1:7070/`. */
-    val url: URI,
 ) : AutoCloseable {
     override fun close() {
         try {
-            server.close()
+            backend.close()
         } finally {
-            try {
-                backend.close()
-            } finally {
-                container.close()
-            }
+            container.close()
         }
     }
 
     companion object {
         /**
-         * Starts the panel for [config]. [containers] builds an object graph with the given overrides (production:
-         * `AppContainer(config, overrides)`); [port] 0 takes any free port, another port the next free one from it
-         * ([PORT_ATTEMPTS] tries, then any). [roleSessions] replaces the explorer's test-company sessions (tests).
+         * Builds the panel's object graph for [config]. [containers] builds a container with the given overrides
+         * (production: `AppContainer(config, overrides)`); [roleSessions] replaces the explorer's test-company sessions (tests).
          */
         fun start(
             config: PetekConfig,
             containers: (PetekConfig, AppOverrides) -> AppContainer,
             workingDirectory: Path,
             capacityAdvice: RecommendCapacityUseCase,
-            port: Int,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
-        ): WebPanel {
+        ): PanelCore {
             val dashboard = LiveDashboard(SystemHarnessClock())
             val tasks = DerivedTaskStates(dashboard)
             val watch =
@@ -99,15 +88,56 @@ internal class WebPanel private constructor(
                         derive = { other -> containers(other, overrides.copy(database = container.database)) },
                         roleSessions = roleSessions,
                     )
-                try {
-                    val (server, url) = bind(dashboard, container, backend, port)
-                    return WebPanel(dashboard, container, backend, server, url)
-                } catch (e: Exception) {
-                    backend.close()
-                    throw e
-                }
+                return PanelCore(dashboard, container, backend)
             } catch (e: Exception) {
                 container.close()
+                throw e
+            }
+        }
+    }
+}
+
+/**
+ * One running web panel: a [PanelCore] served by the [DashboardServer] on 127.0.0.1. `petek panel` starts one and
+ * waits; tests start one on a free port and close it. [close] stops the server first, then the core.
+ */
+internal class WebPanel private constructor(
+    private val core: PanelCore,
+    private val server: DashboardServer,
+    /** Where the page is served, e.g. `http://127.0.0.1:7070/`. */
+    val url: URI,
+) : AutoCloseable {
+    val dashboard: LiveDashboard get() = core.dashboard
+    val container: AppContainer get() = core.container
+    val backend: AppPanelBackend get() = core.backend
+
+    override fun close() {
+        try {
+            server.close()
+        } finally {
+            core.close()
+        }
+    }
+
+    companion object {
+        /**
+         * Starts the panel for [config] (see [PanelCore.start]); [port] 0 takes any free port, another port the next free
+         * one from it ([PORT_ATTEMPTS] tries, then any).
+         */
+        fun start(
+            config: PetekConfig,
+            containers: (PetekConfig, AppOverrides) -> AppContainer,
+            workingDirectory: Path,
+            capacityAdvice: RecommendCapacityUseCase,
+            port: Int,
+            roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
+        ): WebPanel {
+            val core = PanelCore.start(config, containers, workingDirectory, capacityAdvice, roleSessions)
+            try {
+                val (server, url) = bind(core.dashboard, core.container, core.backend, port)
+                return WebPanel(core, server, url)
+            } catch (e: Exception) {
+                core.close()
                 throw e
             }
         }

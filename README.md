@@ -269,6 +269,23 @@ site model, findings, questions to answer), **Ssenarilər** (versions, YAML, dif
 **Hesabatlar** (history, cost, stability). Non-GET requests need the per-start `X-Petek-Token`; foreign `Host`/`Origin`
 headers are refused.
 
+## MCP server and `--json`
+
+The same use cases have two more faces for a host AI (ADR-0009, R10). `petek mcp` is a Model Context Protocol server
+over stdio (hand-rolled JSON-RPC, no extra dependency; `initialize`, `ping`, `tools/list`, `tools/call`), which
+`petek init` registers as the `petek` server in the project's MCP file. Tools: `list_targets`, `get_capacity`,
+`explore_site` (with `wait`), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
+`compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
+`approve_scenario`, `freeze_scenario`, `run_campaign` (with `wait`), `cancel_run`, `list_runs`, `get_run_status`,
+`get_findings` (A/B/C sources and evidence ids), `get_evidence` (absolute path of a screenshot or capture), `get_triage`,
+`run_triage`, `get_stability`, `teardown`. A session is read-only unless started with `petek mcp --allow-writes`:
+runs, approvals, teardown and exploration with writes are refused otherwise, and the target policy applies as
+everywhere. Every result carries the panel's JSON as text and structured content; a failure is an `isError` result with
+the panel's message. Without `.env` the server uses the local fake KadroHR, like the panel.
+
+`petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `plan`, `run`, `report` and
+`teardown` (logs stay on stderr; a failure is `{"error": ...}` with the usual exit code), for scripts and CI.
+
 ## Architecture
 
 Feature-based clean architecture in Gradle modules: every capability is `features/<name>` with `domain`

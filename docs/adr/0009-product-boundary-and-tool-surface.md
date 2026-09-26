@@ -40,6 +40,9 @@ code checks assertions, the AI only picks whitelisted actions.
 - Role instructions are written in English (global use); the panel stays Azerbaijani.
 
 ## Action Items
-1. [ ] Tool surface module over `PanelBackend`; `FindingBundle` in the reporting domain.
-2. [ ] `petek mcp` and `--json`; contract tests over stdio.
-3. [ ] `petek init` skill pack; role instructions; `.mcp.json` entry.
+1. [x] Tool surface over `PanelBackend` (`features/dashboard/infrastructure/mcp`, 25 tools; `findings` and `teardown`
+   added to `PanelRuns`); [ ] `FindingBundle` as one object in the reporting domain (today: `get_findings` +
+   `get_evidence`).
+2. [x] `petek mcp` (thin stdio JSON-RPC, no SDK — decided 2026-09-26) and `--json` on `doctor`, `init`, `plan`, `run`,
+   `report`, `teardown`; contract tests over byte streams (`McpServerTest`, `McpCommandTest`).
+3. [x] `petek init` skill pack; role instructions (`.petek/SKILL.md`); MCP entry per agent.

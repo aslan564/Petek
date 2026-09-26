@@ -31,6 +31,10 @@ import com.github.ajalt.clikt.parameters.types.path
 import com.github.ajalt.clikt.parameters.types.restrictTo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.nio.file.Path
 import java.util.Locale
 
@@ -64,10 +68,12 @@ class RunCommand : PetekSubcommand("run") {
             val campaign = agents?.let { scaled(container, loaded, it) } ?: loaded
             TargetGuard.requireAllowed(config.targetPolicy, campaign.settings.target)
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
-            echo(
-                "Running '${campaign.settings.name}' with ${campaign.settings.testers} agents against ${config.targetLabel}" +
-                    (if (repeat > 1) ", $repeat times" else "") + (if (keepData) ", keeping the test data" else "") + ".",
-            )
+            if (!json) {
+                echo(
+                    "Running '${campaign.settings.name}' with ${campaign.settings.testers} agents against ${config.targetLabel}" +
+                        (if (repeat > 1) ", $repeat times" else "") + (if (keepData) ", keeping the test data" else "") + ".",
+                )
+            }
             val summaries =
                 try {
                     if (repeat == 1) {
@@ -78,7 +84,7 @@ class RunCommand : PetekSubcommand("run") {
                 } finally {
                     container.closeMonitor()
                 }
-            summaries.forEach { printSummary(it, config.logDirectory.resolve(LOG_FILE)) }
+            if (json) emitJson(summariesJson(summaries)) else summaries.forEach { printSummary(it, config.logDirectory.resolve(LOG_FILE)) }
             exitCodeOf(summaries)
         }
 
@@ -120,6 +126,34 @@ class RunCommand : PetekSubcommand("run") {
             echo("  Report: ${Path.of(report).resolve(HTML_REPORT)}")
         }
     }
+
+    private fun summariesJson(summaries: List<RunSummary>) =
+        buildJsonObject {
+            put("exitCode", exitCodeOf(summaries))
+            putJsonArray("runs") {
+                summaries.forEach { summary ->
+                    addJsonObject {
+                        put("runId", summary.runId.value)
+                        put("outcome", summary.outcome.name)
+                        put("durationMs", summary.durationMs)
+                        put("stepsPassed", summary.stepsPassed)
+                        put("stepsFailed", summary.stepsFailed)
+                        put("assertionsFailed", summary.assertionsFailed)
+                        put("failedAgents", summary.failedAgents)
+                        put(
+                            "report",
+                            summary.reportDirectory?.let {
+                                Path
+                                    .of(it)
+                                    .resolve(HTML_REPORT)
+                                    .toAbsolutePath()
+                                    .toString()
+                            },
+                        )
+                    }
+                }
+            }
+        }
 
     private fun seconds(millis: Long): String = String.format(Locale.ROOT, "%.1f s", millis / MILLIS_PER_SECOND)
 

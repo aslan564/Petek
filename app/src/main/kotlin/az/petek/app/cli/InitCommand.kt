@@ -18,6 +18,11 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.nio.file.Path
 
 /**
@@ -50,6 +55,25 @@ class InitCommand(
             withContext(Dispatchers.IO) {
                 initializer.initialize(ProjectInitializer.Request(project, target, ais, force))
             }
+        if (json) {
+            emitJson(
+                buildJsonObject {
+                    put("directory", project.toAbsolutePath().toString())
+                    putJsonArray("ais") { result.ais.forEach { add(it.key) } }
+                    put("detected", result.detected)
+                    putJsonArray("changes") {
+                        result.changes.forEach { change ->
+                            addJsonObject {
+                                put("path", change.path)
+                                put("outcome", change.outcome.name)
+                                put("note", change.note)
+                            }
+                        }
+                    }
+                },
+            )
+            return ExitCodes.OK
+        }
         val how = if (result.detected) "detected" else "requested"
         echo("Pətək in ${project.toAbsolutePath()} for ${result.ais.joinToString(", ") { it.key }} ($how):")
         result.changes.forEach { change ->

@@ -15,11 +15,17 @@ import az.petek.app.testing.scriptedLlm
 import az.petek.faketarget.FakeTargetServer
 import az.petek.llm.domain.LlmException
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -81,6 +87,20 @@ class DoctorCommandTest {
             browser.sessions.single().closed shouldBe true
             browser.stopCount shouldBe 1
             Files.exists(dir.resolve("evidence/petek.db")) shouldBe false
+        }
+
+    @Test
+    fun `--json prints the checks as one document with the same exit code`() =
+        runBlocking<Unit> {
+            val result = cli("PETEK_TEST_TOKEN" to "wrong-token").run("--json", "doctor")
+
+            result.statusCode shouldBe 1
+            val document = Json.parseToJsonElement(result.stdout.trim()).jsonObject
+            document["ok"]!!.jsonPrimitive.boolean shouldBe false
+            val checks = document["checks"]!!.jsonArray.map { it.jsonObject }
+            checks.map { it["name"]!!.jsonPrimitive.content } shouldContain "Test API"
+            checks.single { it["name"]!!.jsonPrimitive.content == "Test API" }["status"]!!.jsonPrimitive.content shouldBe "FAILED"
+            result.stdout shouldNotContain "✓"
         }
 
     @Test

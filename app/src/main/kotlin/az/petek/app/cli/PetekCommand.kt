@@ -18,7 +18,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.path
 
 /**
- * `petek`: the root command. It only holds the global options (`--env-file`, `--verbose`) and hands them to the
+ * `petek`: the root command. It only holds the global options (`--env-file`, `--verbose`, `--json`) and hands them to the
  * subcommand that runs; see [PetekSubcommand] for error handling and exit codes.
  */
 class PetekCommand(
@@ -27,6 +27,7 @@ class PetekCommand(
     private val envFile by option("--env-file", help = "configuration file (default: .env in the working directory)", metavar = "PATH")
         .path()
     private val verbose by option("--verbose", "-v", help = "debug logging and stack traces on errors").flag()
+    private val json by option("--json", help = "print the command's result as one JSON document on stdout (logs stay on stderr)").flag()
 
     init {
         subcommands(
@@ -40,6 +41,7 @@ class PetekCommand(
             CapacityCommand(),
             ProbeCommand(),
             PanelCommand(),
+            McpCommand(),
         )
     }
 
@@ -48,6 +50,6 @@ class PetekCommand(
             "Configuration comes from .env and the environment (see .env.example)."
 
     override suspend fun run() {
-        currentContext.obj = CliSession(runtime, envFile, verbose)
+        currentContext.obj = CliSession(runtime, envFile, verbose, json)
     }
 }

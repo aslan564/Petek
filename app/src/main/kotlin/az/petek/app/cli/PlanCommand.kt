@@ -19,6 +19,10 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * `petek plan <campaign.yaml>`: validates the campaign and shows who would test (docs/PLAN.md Faza 1). The identities
@@ -37,6 +41,30 @@ class PlanCommand : PetekSubcommand("plan") {
             val runId = planRunId(campaign)
             val tag = RunTags.forPlan(campaign.sourceHash, campaign.settings.seed)
             val plan = container.planIdentities.execute(runId, tag, IdentitySpecs.of(campaign.settings, container.config.mailDomain))
+            if (json) {
+                emitJson(
+                    buildJsonObject {
+                        put("campaign", campaign.settings.name)
+                        put("seed", campaign.settings.seed)
+                        put("planId", runId.value)
+                        put("tag", plan.runTag.value)
+                        putJsonArray("identities") {
+                            plan.identities.forEach { identity ->
+                                addJsonObject {
+                                    put("agentId", identity.agentId.value)
+                                    put("name", identity.displayName)
+                                    put("email", identity.email)
+                                    put("role", identity.role.key)
+                                    put("department", identity.department)
+                                    put("registration", identity.registration.key)
+                                    put("phone", identity.phone)
+                                }
+                            }
+                        }
+                    },
+                )
+                return@withContainer ExitCodes.OK
+            }
             echo(
                 "Campaign '${campaign.settings.name}' (seed ${campaign.settings.seed}) against ${container.config.targetLabel}: " +
                     "${plan.identities.size} identities, plan $runId, tag ${plan.runTag}.",

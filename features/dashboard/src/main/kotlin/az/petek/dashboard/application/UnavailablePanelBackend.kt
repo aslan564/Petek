@@ -14,6 +14,7 @@ import az.petek.core.ids.RunId
 import az.petek.dashboard.domain.CapacityView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.ExplorationView
+import az.petek.dashboard.domain.FindingView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.PanelUnavailableException
@@ -25,6 +26,7 @@ import az.petek.dashboard.domain.ScenarioVersionView
 import az.petek.dashboard.domain.ScenarioView
 import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.dashboard.domain.StabilityView
+import az.petek.dashboard.domain.TeardownView
 import az.petek.dashboard.domain.TriageView
 import az.petek.evidence.domain.ArtifactRecord
 import kotlinx.coroutines.flow.Flow
@@ -86,6 +88,10 @@ class UnavailablePanelBackend : PanelBackend {
     override suspend fun runTriage(runId: RunId): TriageView = unavailable()
 
     override suspend fun reportDirectory(runId: RunId): Path? = null
+
+    override suspend fun findings(runId: RunId): List<FindingView> = emptyList()
+
+    override suspend fun teardown(runId: RunId): TeardownView = unavailable()
 
     private fun unavailable(): Nothing = throw PanelUnavailableException(MESSAGE)
 

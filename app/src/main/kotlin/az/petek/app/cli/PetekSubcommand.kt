@@ -18,6 +18,10 @@ import com.github.ajalt.clikt.core.ProgramResult
 import com.github.ajalt.clikt.core.requireObject
 import com.github.ajalt.clikt.core.terminal
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Common behaviour of every `petek` subcommand: the configuration and the container are built only when the command
@@ -66,9 +70,23 @@ abstract class PetekSubcommand(
 
     protected val PetekConfig.targetLabel: String get() = PetekConfig.masked(target)
 
+    /** `--json` was given: the command prints [emitJson] instead of its tables and prose. */
+    protected val json: Boolean get() = session.json
+
+    /** Prints [element] as one compact JSON line on stdout (the `--json` result). */
+    protected fun emitJson(element: JsonElement) {
+        echo(JSON.encodeToString(JsonElement.serializer(), element))
+    }
+
     private fun fail(error: Exception) {
         val reason = error.message?.takeIf { it.isNotBlank() } ?: error::class.simpleName ?: "unknown error"
         echo("Error: $reason", err = true)
         if (session.verbose) echo(error.stackTraceToString(), err = true)
+        // Scripts reading stdout get the failure there too, as a document with only an error.
+        if (session.json) emitJson(buildJsonObject { put("error", reason) })
+    }
+
+    private companion object {
+        val JSON = Json { prettyPrint = false }
     }
 }

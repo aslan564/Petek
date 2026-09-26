@@ -22,6 +22,7 @@ import az.petek.dashboard.domain.ExplorationEventView
 import az.petek.dashboard.domain.ExplorationPhase
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.ExplorationView
+import az.petek.dashboard.domain.FindingView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelBudget
 import az.petek.dashboard.domain.PanelConflictException
@@ -41,6 +42,7 @@ import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.dashboard.domain.SiteModelView
 import az.petek.dashboard.domain.StabilityView
 import az.petek.dashboard.domain.StepStabilityView
+import az.petek.dashboard.domain.TeardownView
 import az.petek.dashboard.domain.TriageCategory
 import az.petek.dashboard.domain.TriageVerdictView
 import az.petek.dashboard.domain.TriageView
@@ -782,6 +784,15 @@ class DemoPanelBackend(
     override suspend fun reportDirectory(runId: RunId): Path? =
         withContext(kotlinx.coroutines.Dispatchers.IO) {
             reportRoot.resolve(runId.value).resolve("report").takeIf { Files.isDirectory(it) }
+        }
+
+    override suspend fun findings(runId: RunId): List<FindingView> = emptyList()
+
+    override suspend fun teardown(runId: RunId): TeardownView =
+        lock.withLock {
+            val run = runList.firstOrNull { it.runId == runId } ?: throw PanelNotFoundException("Run tapılmadı.")
+            if (run.result == RunResult.RUNNING) throw PanelConflictException("Run hələ bitməyib.")
+            TeardownView(runId, listOf("company demo-${runId.value.takeLast(4)}"), emptyList())
         }
 
     private fun resultOf(outcome: RunOutcome): RunResult =

@@ -27,17 +27,18 @@ the same use cases:
 
 | Goal | CLI | MCP tool |
 |---|---|---|
-| Check readiness | `petek doctor`, `petek probe --url <url>` | — |
-| Explore the site (read-only unless writes are allowed) | `petek panel` → Kəşf et | `explore_site` |
+| Check readiness | `petek doctor [--json]`, `petek probe --url <url>` | `list_targets`, `get_capacity` |
+| Explore the site (read-only unless writes are allowed) | `petek panel` → Kəşf et | `explore_site` (`wait: true` to block until it ends), `get_exploration`, `cancel_exploration`, `compare_explorations` |
 | See what the explorer could not decide, answer it | panel → Naməlumlar | `list_unknowns`, `answer_unknown` |
-| Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario` |
-| Approve a scenario version (the owner decides) | panel → Təsdiqlə | `approve_scenario` |
-| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N]` | `run_campaign`, `get_run_status` |
-| Read the findings with their evidence | `petek report <run_id>` | `get_findings`, `get_evidence` |
-| Remove the test data a run created | `petek teardown --run <run_id>` | `teardown` |
+| Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan` |
+| Approve or freeze a scenario version (the owner decides) | panel → Təsdiqlə / Dondur | `approve_scenario`, `freeze_scenario` |
+| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N] [--json]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
+| Read the findings with their evidence | `petek report <run_id> [--json]` | `get_findings`, `get_evidence`, `get_triage`, `run_triage` |
+| Remove the test data a run created | `petek teardown --run <run_id> [--json]` | `teardown` |
 
-Writes (exploration with writes, runs, teardown) need the owner's permission (`allowWrites`); production hosts are
-refused unless `PETEK_ALLOW_PRODUCTION=true` in `.env`.
+Writes (exploration with writes, runs, approvals, teardown) need an MCP session started with `petek mcp --allow-writes`
+(the owner's permission); production hosts are refused unless `PETEK_ALLOW_PRODUCTION=true` in `.env`. `--json` makes
+a CLI command print one JSON document on stdout.
 
 ## Roles
 

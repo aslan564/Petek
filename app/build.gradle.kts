@@ -252,12 +252,16 @@ tasks.register("bundle") {
     dependsOn(if (bundlePlatform == "win-x64") bundleZip else bundleTar)
 }
 
-// `petek init` writes the project's .env from the repository's own template, so the two never drift apart.
+// `petek init` writes the project's .env from the repository's own template, so the two never drift apart; the
+// version (gradle.properties) reaches the program through version.properties (PetekVersion).
 tasks.processResources {
     from(rootProject.file(".env.example")) {
         into("az/petek/app/init")
         rename { "env.example" }
     }
+    val version = project.version.toString()
+    inputs.property("version", version)
+    filesMatching("az/petek/app/version.properties") { expand("version" to version) }
 }
 
 // Every way of launching main (the run task, IntelliJ's run icon next to main(), run configurations) gets the JVM
