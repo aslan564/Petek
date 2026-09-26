@@ -122,22 +122,23 @@ val bundleRoot = "$bundleName-$bundlePlatform"
 val runtimeJars = configurations.runtimeClasspath.map { it.filter { jar -> !jar.name.startsWith("driver-bundle-") } }
 val driverBundleJar = configurations.runtimeClasspath.map { it.files.single { jar -> jar.name.startsWith("driver-bundle-") } }
 
-val slimDriverBundle by tasks.registering(Jar::class) {
-    description = "Playwright's driver-bundle jar with only the $bundlePlatform driver."
-    group = "distribution"
-    archiveBaseName.set("driver-bundle")
-    archiveVersion.set(libs.versions.playwright)
-    archiveClassifier.set(bundlePlatform)
-    destinationDirectory.set(layout.buildDirectory.dir("bundle/lib"))
-    // A local copy: the spec is stored in the configuration cache and must not reference the build script.
-    val keep = bundleDriverDirectory
-    from(zipTree(driverBundleJar)) {
-        exclude { element ->
-            val path = element.relativePath.segments
-            path.size >= 2 && path[0] == "driver" && path[1] != keep
+val slimDriverBundle =
+    tasks.register<Jar>("slimDriverBundle") {
+        description = "Playwright's driver-bundle jar with only the $bundlePlatform driver."
+        group = "distribution"
+        archiveBaseName.set("driver-bundle")
+        archiveVersion.set(libs.versions.playwright)
+        archiveClassifier.set(bundlePlatform)
+        destinationDirectory.set(layout.buildDirectory.dir("bundle/lib"))
+        // A local copy: the spec is stored in the configuration cache and must not reference the build script.
+        val keep = bundleDriverDirectory
+        from(zipTree(driverBundleJar)) {
+            exclude { element ->
+                val path = element.relativePath.segments
+                path.size >= 2 && path[0] == "driver" && path[1] != keep
+            }
         }
     }
-}
 
 // The modules jdeps lists for the app's jars (sqlite-jdbc, Playwright, Ktor, logback, the SDK), plus what jdeps cannot
 // see: every locale (dates and names in Azerbaijani), the extra charsets, EC certificates for TLS, and zip file systems.
@@ -169,31 +170,35 @@ val toolchainHome =
             )
         }.map { it.metadata.installationPath.asFile }
 
-val jlinkRuntime by tasks.registering(Exec::class) {
-    description = "A jlink image of the JDK modules Pətək needs, for the $bundlePlatform bundle."
-    group = "distribution"
-    val image = layout.buildDirectory.dir("bundle/runtime")
-    inputs.property("modules", runtimeModules)
-    inputs.dir(toolchainHome.map { it.resolve("jmods") })
-    outputs.dir(image)
-    val jdk = toolchainHome.get()
-    executable = jdk.resolve("bin/jlink").path
-    // jlink refuses an existing output directory.
-    doFirst { image.get().asFile.deleteRecursively() }
-    args(
-        "--module-path",
-        jdk.resolve("jmods").path,
-        "--add-modules",
-        runtimeModules.joinToString(","),
-        "--strip-debug",
-        "--no-header-files",
-        "--no-man-pages",
-        "--compress",
-        "zip-6",
-        "--output",
-        image.get().asFile.path,
-    )
-}
+val jlinkRuntime =
+    tasks.register<Exec>("jlinkRuntime") {
+        description = "A jlink image of the JDK modules Pətək needs, for the $bundlePlatform bundle."
+        group = "distribution"
+        val image = layout.buildDirectory.dir("bundle/runtime")
+        val jdk = toolchainHome.get()
+        // A JDK built as a linkable run-time image (JDK 24+, e.g. Temurin for Linux arm64) ships no jmods/ directory;
+        // jlink then links from the JDK's own lib/modules, so the module path is given only when the directory exists.
+        val jmods = jdk.resolve("jmods").takeIf { it.isDirectory }
+        inputs.property("modules", runtimeModules)
+        inputs.file(jdk.resolve("lib/modules"))
+        jmods?.let { inputs.dir(it) }
+        outputs.dir(image)
+        executable = jdk.resolve("bin/jlink").path
+        // jlink refuses an existing output directory.
+        doFirst { image.get().asFile.deleteRecursively() }
+        jmods?.let { args("--module-path", it.path) }
+        args(
+            "--add-modules",
+            runtimeModules.joinToString(","),
+            "--strip-debug",
+            "--no-header-files",
+            "--no-man-pages",
+            "--compress",
+            "zip-6",
+            "--output",
+            image.get().asFile.path,
+        )
+    }
 
 // The layout every bundle archive shares; the launcher scripts stay executable.
 fun CopySpec.bundleLayout() {
@@ -220,22 +225,24 @@ fun CopySpec.bundleLayout() {
     distributionDocuments()
 }
 
-val bundleTar by tasks.registering(Tar::class) {
-    description = "The $bundlePlatform bundle as petek-<version>-$bundlePlatform.tar.gz (a JDK is not needed)."
-    group = "distribution"
-    compression = Compression.GZIP
-    archiveFileName.set("$bundleRoot.tar.gz")
-    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
-    bundleLayout()
-}
+val bundleTar =
+    tasks.register<Tar>("bundleTar") {
+        description = "The $bundlePlatform bundle as petek-<version>-$bundlePlatform.tar.gz (a JDK is not needed)."
+        group = "distribution"
+        compression = Compression.GZIP
+        archiveFileName.set("$bundleRoot.tar.gz")
+        destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+        bundleLayout()
+    }
 
-val bundleZip by tasks.registering(Zip::class) {
-    description = "The $bundlePlatform bundle as petek-<version>-$bundlePlatform.zip (a JDK is not needed)."
-    group = "distribution"
-    archiveFileName.set("$bundleRoot.zip")
-    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
-    bundleLayout()
-}
+val bundleZip =
+    tasks.register<Zip>("bundleZip") {
+        description = "The $bundlePlatform bundle as petek-<version>-$bundlePlatform.zip (a JDK is not needed)."
+        group = "distribution"
+        archiveFileName.set("$bundleRoot.zip")
+        destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+        bundleLayout()
+    }
 
 // `./gradlew :app:bundle` builds the archive for the host (tar.gz; zip on Windows, which has no tar permissions to
 // keep); `-Ppetek.platform=` names another platform's Playwright driver, see above.
@@ -243,6 +250,14 @@ tasks.register("bundle") {
     description = "The platform bundle for $bundlePlatform: build/distributions/$bundleRoot.tar.gz or .zip."
     group = "distribution"
     dependsOn(if (bundlePlatform == "win-x64") bundleZip else bundleTar)
+}
+
+// `petek init` writes the project's .env from the repository's own template, so the two never drift apart.
+tasks.processResources {
+    from(rootProject.file(".env.example")) {
+        into("az/petek/app/init")
+        rename { "env.example" }
+    }
 }
 
 // Every way of launching main (the run task, IntelliJ's run icon next to main(), run configurations) gets the JVM

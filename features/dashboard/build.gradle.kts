@@ -32,7 +32,7 @@ dependencies {
 }
 
 // The whole panel with simulated data, for looking at it by hand: ./gradlew :features:dashboard:panelDemo
-val panelDemo by tasks.registering(JavaExec::class) {
+tasks.register<JavaExec>("panelDemo") {
     description = "Serves the Pətək panel with a simulated backend on http://127.0.0.1:7070 (args: --port P --agents N --no-run)."
     group = "application"
     classpath = sourceSets.test.get().runtimeClasspath
