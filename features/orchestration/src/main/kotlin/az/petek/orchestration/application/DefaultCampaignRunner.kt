@@ -247,6 +247,7 @@ class DefaultCampaignRunner(
                     label = agentId.value,
                     baseUrl = run.campaign.settings.target,
                     localStorage = run.campaign.target.localStorage,
+                    correlationHeader = settings.correlationHeader,
                 )
             val session = factory.open(options)
             run.sessions[agentId] = session

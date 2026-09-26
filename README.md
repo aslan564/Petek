@@ -246,6 +246,7 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `PETEK_BROWSER_HEADLESS` | `true` | `--headful` on `run` overrides it |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | or `per-session` |
 | `PETEK_BROWSER_IGNORE_TLS_ERRORS` | `false` | accept untrusted certificates (self-signed staging, re-signing proxy); `doctor` shows when it is on |
+| `PETEK_CORRELATION_HEADER` / `PETEK_TRACE_LOG` | `false` / — | Testers send `X-Petek-Correlation-Id` (CORS must allow it); the site's log lines with a finding's id join its bundle (`petek findings`, MCP `get_finding_bundle`) |
 | `PETEK_TELEMETRY` | `off` | `local`: counters only (AI calls, tokens, runs by provider and tester bucket) into `evidence/telemetry/usage.jsonl`; never content, nothing is sent |
 | `PETEK_EVIDENCE_DIR` / `PETEK_DB` | `evidence` / `evidence/petek.db` | Where evidence, reports, logs and the database live |
 

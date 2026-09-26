@@ -237,6 +237,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_BROWSER_HEADLESS` | `true` | `run --headful` bunu üstələyir |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | və ya `per-session` |
 | `PETEK_BROWSER_IGNORE_TLS_ERRORS` | `false` | etibarsız sertifikatları qəbul et (self-signed staging, trafiki yenidən imzalayan proxy); `doctor` açıq olduğunu göstərir |
+| `PETEK_CORRELATION_HEADER` / `PETEK_TRACE_LOG` | `false` / — | Testerlər `X-Petek-Correlation-Id` göndərir (CORS icazə verməlidir); saytın logunda tapıntının ID-si olan sətirlər paketinə düşür (`petek findings`, MCP `get_finding_bundle`) |
 | `PETEK_TELEMETRY` | `off` | `local`: yalnız sayğaclar (AI çağırışları, tokenlər, provayder və tester qrupuna görə run-lar) `evidence/telemetry/usage.jsonl`-a; məzmun yoxdur, heç yerə göndərilmir |
 | `PETEK_EVIDENCE_DIR` / `PETEK_DB` | `evidence` / `evidence/petek.db` | Sübut, hesabat, log və bazanın yeri |
 

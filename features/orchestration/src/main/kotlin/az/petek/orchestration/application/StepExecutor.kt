@@ -195,6 +195,8 @@ internal class StepExecutor(
         var arrived = false
         try {
             val actor = ActorContext(step, identity, run.sessions.getValue(identity.agentId), run.agents.getValue(identity.agentId))
+            // The step's requests carry its correlation id when the owner turned the header on (Faza 14).
+            actor.session.setCorrelationId(actor.correlationId.value)
             val waited =
                 step.waitFor?.let { spec ->
                     when (val result = awaitEvent(actor, spec)) {

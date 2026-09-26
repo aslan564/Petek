@@ -24,6 +24,8 @@ data class RunnerSettings(
     val mailDomain: String,
     val storageRoot: Path,
     val mailbox: String? = null,
+    /** Send `X-Petek-Correlation-Id` with every tester request (`PETEK_CORRELATION_HEADER`, Faza 14). */
+    val correlationHeader: Boolean = false,
     val activatingRunFunctions: Set<String> = DEFAULT_ACTIVATING_RUN_FUNCTIONS,
 ) {
     init {

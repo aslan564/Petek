@@ -18,6 +18,7 @@ import az.petek.evidence.domain.RunRepository
 import az.petek.reporting.domain.BundleEvidence
 import az.petek.reporting.domain.FindingBundle
 import az.petek.reporting.domain.RunNotFoundException
+import az.petek.reporting.domain.TraceSource
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,6 +31,7 @@ class BuildFindingBundlesUseCase(
     private val query: EvidenceQuery,
     private val artifacts: ArtifactStore,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val traces: TraceSource = TraceSource.NONE,
 ) {
     suspend fun bundles(
         runId: RunId,
@@ -40,20 +42,25 @@ class BuildFindingBundlesUseCase(
         if (findings.isEmpty()) return emptyList()
         val steps = query.steps(runId).associateBy { it.stepId }
         val evidence = query.artifacts(runId).associateBy { it.artifactId }
-        return withContext(io) {
-            findings.map { finding ->
-                FindingBundle(
-                    finding = finding,
-                    target = run.target,
-                    step = finding.stepId?.let(steps::get),
-                    evidence =
-                        finding.artifactIds.mapNotNull { id ->
-                            val record = evidence[id] ?: return@mapNotNull null
-                            val path = artifacts.resolve(record)
-                            BundleEvidence(id.value, record.type, path.toString(), if (record.type in TEXT_TYPES) text(path) else null)
-                        },
-                )
+        val bundles =
+            withContext(io) {
+                findings.map { finding ->
+                    FindingBundle(
+                        finding = finding,
+                        target = run.target,
+                        step = finding.stepId?.let(steps::get),
+                        evidence =
+                            finding.artifactIds.mapNotNull { id ->
+                                val record = evidence[id] ?: return@mapNotNull null
+                                val path = artifacts.resolve(record)
+                                BundleEvidence(id.value, record.type, path.toString(), if (record.type in TEXT_TYPES) text(path) else null)
+                            },
+                    )
+                }
             }
+        return bundles.map { bundle ->
+            val correlation = bundle.step?.correlationId?.value ?: return@map bundle
+            bundle.copy(serverLog = traces.lines(correlation))
         }
     }
 

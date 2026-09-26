@@ -462,6 +462,7 @@ internal class McpTools(
                         bundle.stepDurationMs?.let { put("durationMs", it) }
                         put("correlationId", bundle.correlationId)
                     }
+                    putJsonArray("serverLog") { bundle.serverLog.forEach { add(it) } }
                     putJsonArray("evidence") {
                         bundle.evidence.forEach { evidence ->
                             addJsonObject {

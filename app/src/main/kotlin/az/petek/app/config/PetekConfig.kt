@@ -85,6 +85,10 @@ data class PetekConfig(
     val targets: List<ResolvedTarget> = emptyList(),
     /** Where target profiles live (`PETEK_TARGETS_DIR`); the panel adds accounts there. */
     val targetsDir: Path? = null,
+    /** `PETEK_CORRELATION_HEADER`: testers send `X-Petek-Correlation-Id` (the site's CORS must allow it). */
+    val correlationHeader: Boolean = false,
+    /** `PETEK_TRACE_LOG`: the target's log file, searched for the correlation ids of a finding's step. */
+    val traceLog: Path? = null,
 ) {
     init {
         require(llmConcurrency >= 1) { "llmConcurrency must be at least 1, was $llmConcurrency" }

@@ -211,6 +211,13 @@ internal class PlaywrightBrowserSession private constructor(
             }
         }
 
+    override suspend fun setCorrelationId(id: String?) {
+        if (!options.correlationHeader) return
+        perform("set the correlation header") {
+            handles.context.setExtraHTTPHeaders(if (id == null) emptyMap() else mapOf(CORRELATION_HEADER to id))
+        }
+    }
+
     override suspend fun saveStorageState(path: Path) {
         perform("save storage state") {
             // The file holds live session cookies: only this user may read the directory and the file (POSIX; a no-op elsewhere).
@@ -435,6 +442,9 @@ internal class PlaywrightBrowserSession private constructor(
     private fun secretValues(): List<String> = (page.evaluate(BundledScripts.secretValues) as? List<*>).orEmpty().filterIsInstance<String>()
 
     companion object {
+        /** Joins a request in the target's own logs to Pətək's evidence (Faza 14). */
+        const val CORRELATION_HEADER = "X-Petek-Correlation-Id"
+
         /** Attribute the snapshot writes on every numbered element. */
         const val REF_ATTRIBUTE = "data-petek-ref"
 

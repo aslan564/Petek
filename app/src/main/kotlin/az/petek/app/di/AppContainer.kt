@@ -107,9 +107,11 @@ import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
 import az.petek.reporting.domain.ThreeSourceJudge
+import az.petek.reporting.domain.TraceSource
 import az.petek.reporting.infrastructure.CustomerSummaryWriter
 import az.petek.reporting.infrastructure.HtmlReportWriter
 import az.petek.reporting.infrastructure.JUnitReportWriter
+import az.petek.reporting.infrastructure.LogFileTraceSource
 import az.petek.reporting.infrastructure.MarkdownReportWriter
 import az.petek.reporting.infrastructure.SarifReportWriter
 import az.petek.reporting.infrastructure.ShareableHtmlReportWriter
@@ -349,7 +351,10 @@ class AppContainer(
     }
 
     /** Root-cause bundles of a run's findings (Faza 11): `petek findings`, the panel and MCP `get_finding_bundle`. */
-    val findingBundles: BuildFindingBundlesUseCase by lazy { BuildFindingBundlesUseCase(runs, evidenceQuery, artifacts) }
+    val findingBundles: BuildFindingBundlesUseCase by lazy {
+        val traces = config.traceLog?.let(::LogFileTraceSource) ?: TraceSource.NONE
+        BuildFindingBundlesUseCase(runs, evidenceQuery, artifacts, traces = traces)
+    }
 
     val monitor: MonitorView by lazy { overrides.monitor ?: defaultMonitor() }
 
@@ -381,6 +386,7 @@ class AppContainer(
                     mailDomain = config.mailDomain,
                     storageRoot = config.evidenceDir.resolve(STORAGE_STATE_DIRECTORY),
                     mailbox = config.mailInbox,
+                    correlationHeader = config.correlationHeader,
                 ),
             sharedStateFactory = ::InMemorySharedRunState,
             watchdog = watchdog,

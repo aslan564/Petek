@@ -273,6 +273,7 @@ internal class PanelRunsAdapter(
                 stepDurationMs = bundle.step?.durationMs,
                 correlationId = bundle.step?.correlationId?.value,
                 evidence = bundle.evidence.map { BundleEvidenceView(it.artifactId, it.type.name, it.path, it.text) },
+                serverLog = bundle.serverLog,
             )
         }
     }

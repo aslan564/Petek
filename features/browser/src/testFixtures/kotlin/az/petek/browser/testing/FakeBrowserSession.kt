@@ -128,6 +128,13 @@ class FakeBrowserSession(
 
     override suspend fun saveStorageState(path: Path) = record("saveStorageState $path")
 
+    /** Correlation ids the harness tagged the session's requests with, in order (kept apart from [actions]). */
+    val correlationIds = CopyOnWriteArrayList<String?>()
+
+    override suspend fun setCorrelationId(id: String?) {
+        correlationIds += id
+    }
+
     override suspend fun request(
         method: String,
         path: String,

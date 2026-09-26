@@ -173,6 +173,8 @@ data class FindingBundleView(
     val stepDurationMs: Long?,
     val correlationId: String?,
     val evidence: List<BundleEvidenceView>,
+    /** The target's own log lines with the step's correlation id (Faza 14). */
+    val serverLog: List<String> = emptyList(),
 )
 
 /** One evidence file of a [FindingBundleView]: type, absolute path, and the text of text evidence. */

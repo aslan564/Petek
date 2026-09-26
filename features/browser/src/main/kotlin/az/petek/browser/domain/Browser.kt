@@ -76,6 +76,12 @@ data class SessionOptions(
      * such as "first-visit dialog dismissed" holds even after the site clears it). Other origins are left alone.
      */
     val localStorage: Map<String, String> = emptyMap(),
+    /**
+     * Send `X-Petek-Correlation-Id` with every request of the session (Faza 14, `PETEK_CORRELATION_HEADER`), so the
+     * target's own logs can be joined to the evidence. Off by default: a custom header makes cross-origin API calls
+     * preflighted, which a site's CORS must allow.
+     */
+    val correlationHeader: Boolean = false,
 )
 
 /** Result of waiting for something to appear. [observedAt] is the harness time it was seen (t1). */
@@ -217,6 +223,12 @@ interface BrowserSession {
     suspend fun domSnapshot(): String
 
     suspend fun saveStorageState(path: Path)
+
+    /**
+     * Tags the session's next requests with [id] as `X-Petek-Correlation-Id` (null stops it) when the session was opened
+     * with [SessionOptions.correlationHeader]; otherwise nothing happens.
+     */
+    suspend fun setCorrelationId(id: String?) = Unit
 
     /** HTTP call that carries this session's cookies (for `http_status` assertions). */
     suspend fun request(

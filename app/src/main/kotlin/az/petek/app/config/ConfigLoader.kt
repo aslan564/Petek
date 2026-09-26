@@ -151,6 +151,8 @@ class ConfigLoader(
                     telemetry = telemetry,
                     targets = targets,
                     targetsDir = path(Keys.TARGETS_DIR, DEFAULT_TARGETS_DIR),
+                    correlationHeader = flag(Keys.CORRELATION_HEADER, default = false),
+                    traceLog = if (text(Keys.TRACE_LOG) != null) path(Keys.TRACE_LOG, default = null) else null,
                 )
             // PETEK_TARGET naming a profile takes that profile's settings; a URL keeps the .env ones.
             return if (named != null) TargetProfileConfig.apply(loaded, named) else loaded
@@ -395,6 +397,8 @@ class ConfigLoader(
         const val MAIL_DOMAIN = "PETEK_MAIL_DOMAIN"
         const val MAIL_INBOX = "PETEK_MAIL_INBOX"
         const val TARGETS_DIR = "PETEK_TARGETS_DIR"
+        const val CORRELATION_HEADER = "PETEK_CORRELATION_HEADER"
+        const val TRACE_LOG = "PETEK_TRACE_LOG"
         const val IMAP_HOST = "PETEK_IMAP_HOST"
         const val IMAP_PORT = "PETEK_IMAP_PORT"
         const val IMAP_USER = "PETEK_IMAP_USER"

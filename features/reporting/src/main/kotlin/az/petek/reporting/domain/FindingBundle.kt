@@ -23,7 +23,21 @@ data class FindingBundle(
     val target: String,
     val step: StepRecord?,
     val evidence: List<BundleEvidence>,
+    /** The target's own log lines carrying the step's correlation id (Faza 14), when a [TraceSource] is configured. */
+    val serverLog: List<String> = emptyList(),
 )
+
+/**
+ * The correlation bridge (Faza 14): where the target's own logs are read for a correlation id (`X-Petek-Correlation-Id`
+ * sent by the testers). The open core reads a log file; a hosted edition may read OpenTelemetry.
+ */
+fun interface TraceSource {
+    suspend fun lines(correlationId: String): List<String>
+
+    companion object {
+        val NONE: TraceSource = TraceSource { emptyList() }
+    }
+}
 
 /** One evidence file of a [FindingBundle]: its kind, where it is, and (for text kinds) what it says. */
 data class BundleEvidence(

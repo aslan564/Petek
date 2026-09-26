@@ -851,9 +851,10 @@ hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
 
 - [ ] Kontrakt kitləri: `TARGET_CONTRACT.md`-dəki `/test/...` endpointlərini bir sətirlə verən paketlər (Spring Boot
   starter, Express router, Laravel paketi); test rejimində açılır, `X-Test-Token` yoxlayır.
-- [ ] Korrelyasiya körpüsü: hər agent sorğusuna `X-Petek-Correlation-Id`; run sonrası log/OpenTelemetry mənbəyindən
+- [x] Korrelyasiya körpüsü: hər agent sorğusuna `X-Petek-Correlation-Id`; run sonrası log/OpenTelemetry mənbəyindən
   (adapter portu) həmin ID-lər çəkilir və `FindingBundle`-a əlavə olunur — kök səbəb üçün "düymə → request → server
   exception".
+  **Vəziyyət:** `PETEK_CORRELATION_HEADER` (default söndürülü: başlıq cross-origin sorğuda CORS preflight yaradır), hər addım öz ID-si ilə; `TraceSource` portu, `LogFileTraceSource` (`PETEK_TRACE_LOG`); OpenTelemetry adapteri ödənişli/sonra.
 - [ ] Regressiya baseline: release-lər arası dondurulmuş ssenari nəticə fərqi (yeni/düzələn/yavaşlayan); vizual
   regressiya (screenshot fərqi); əlçatanlıq və performans ölçüləri (Playwright içindən) ayrıca bölmə.
 - [ ] Production "yalnız oxu" monitorinq rejimi (yazan addım yoxdur, 2–3 agent, cron).

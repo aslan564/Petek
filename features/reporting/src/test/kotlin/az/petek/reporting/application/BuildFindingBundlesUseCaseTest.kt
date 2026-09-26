@@ -56,7 +56,14 @@ class BuildFindingBundlesUseCaseTest {
                 ),
             )
             evidence.finding(ReportTestData.finding("fnd_2", "join", "a07"))
-            val useCase = BuildFindingBundlesUseCase(evidence, evidence, artifacts, Dispatchers.Unconfined)
+            val useCase =
+                BuildFindingBundlesUseCase(
+                    evidence,
+                    evidence,
+                    artifacts,
+                    Dispatchers.Unconfined,
+                    traces = { id -> listOf("2026-09-26 ERROR [$id] NullPointerException in AnnouncementService") },
+                )
 
             val bundle = useCase.bundles(run.runId, FindingId("fnd_1")).single()
 
@@ -66,8 +73,23 @@ class BuildFindingBundlesUseCaseTest {
             bundle.evidence[0].text shouldBe null
             bundle.evidence[0].path shouldBe artifacts.resolve(screenshot).toString()
             bundle.evidence[1].text shouldBe "{\"status\":\"published\"}"
+            bundle.serverLog shouldBe listOf("2026-09-26 ERROR [${step.correlationId.value}] NullPointerException in AnnouncementService")
             useCase.bundles(run.runId).map { it.finding.findingId.value } shouldBe listOf("fnd_1", "fnd_2")
             useCase.bundles(run.runId, FindingId("fnd_none")).shouldBeEmpty()
             shouldThrow<RunNotFoundException> { useCase.bundles(RunId("run_unknown")) }
+        }
+
+    @Test
+    fun `the log file source returns the lines with the correlation id, bounded, and nothing for a missing file`() =
+        runBlocking<Unit> {
+            val log = Files.writeString(root.resolve("app.log"), "a cid-1 x\nb other\nc cid-1 y\n")
+
+            az.petek.reporting.infrastructure
+                .LogFileTraceSource(log, maxLines = 1)
+                .lines("cid-1") shouldBe listOf("a cid-1 x")
+            az.petek.reporting.infrastructure
+                .LogFileTraceSource(root.resolve("absent.log"))
+                .lines("cid-1")
+                .shouldBeEmpty()
         }
 }

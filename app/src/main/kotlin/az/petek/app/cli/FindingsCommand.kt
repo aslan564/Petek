@@ -101,6 +101,7 @@ class FindingsCommand : PetekSubcommand("findings") {
                     }
                 }
                 putJsonArray("artifactIds") { finding.artifactIds.forEach { add(it.value) } }
+                putJsonArray("serverLog") { bundle.serverLog.forEach { add(it) } }
             }
         }
     }
