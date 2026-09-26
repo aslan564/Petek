@@ -12,6 +12,7 @@ package az.petek.app.panel
 import az.petek.app.config.EnvFileWriter
 import az.petek.app.config.PetekConfig
 import az.petek.app.config.ResolvedAccount
+import az.petek.campaign.infrastructure.YamlTargetSpecSource
 import az.petek.core.security.Secret
 import az.petek.dashboard.domain.AccountRequest
 import az.petek.dashboard.domain.AccountView
@@ -63,8 +64,8 @@ internal class OwnerAccounts(
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val site = siteName(target)
         val variable = variable(site, role)
-        EnvFileWriter.set(envFile, variable, request.password)
         writeProfile(site, target, role, email, variable)
+        EnvFileWriter.set(envFile, variable, request.password)
         added.removeIf { it.first == site && it.second.role == role }
         added += site to ResolvedAccount(role, email, Secret(request.password), null)
         return views()
@@ -96,6 +97,27 @@ internal class OwnerAccounts(
     ) {
         Files.createDirectories(targetsDir)
         val file = profileFile(site) ?: targetsDir.resolve("$site.yaml")
+        val before = if (Files.exists(file)) Files.readString(file) else null
+        patchProfile(file, target, site, role, email, variable)
+        // The profile is patched as text to keep the owner's comments; it must still load, with the account in it,
+        // or the owner's file is put back as it was and nothing is added.
+        val loaded = runCatching { YamlTargetSpecSource().load(file) }.getOrNull()
+        if (loaded == null || loaded.accounts.none { it.role == role && it.email == email }) {
+            if (before == null) Files.deleteIfExists(file) else Files.writeString(file, before)
+            throw PanelRequestException(
+                listOf(FieldProblem(ROLE_FIELD, "${file.fileName} profilinə hesab əlavə edilə bilmədi; faylı əl ilə yoxlayın.")),
+            )
+        }
+    }
+
+    private fun patchProfile(
+        file: Path,
+        target: URI,
+        site: String,
+        role: String,
+        email: String,
+        variable: String,
+    ) {
         val entry = "    - {role: $role, email: '$email', password: '\${$variable}'}"
         if (!Files.exists(file)) {
             val url = URI(target.scheme, null, target.host, target.port, null, null, null)

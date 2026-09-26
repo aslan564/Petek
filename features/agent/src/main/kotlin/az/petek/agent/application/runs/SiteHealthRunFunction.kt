@@ -67,7 +67,8 @@ internal class SiteHealthRunFunction(
                 open(ref)
                 val links = if ("links" in checks || "back" in checks) act("read the links of $path") { session.links() } else emptyList()
                 if ("links" in checks) {
-                    links.take(maxLinks).forEach { link ->
+                    // Only paths on the site itself: links() never gives another origin, and a full URL is not followed.
+                    links.filter { it.startsWith("/") && !it.startsWith("//") }.take(maxLinks).forEach { link ->
                         val status = probe("check link $link", { session.request("GET", link).status }) { it < BROKEN }
                         if (status >= BROKEN) problems += "$path links to $link, which answers $status"
                     }

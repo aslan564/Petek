@@ -50,6 +50,12 @@ internal object PanelWaits {
     suspend fun PanelHarness.exploration(predicate: (ExplorationView) -> Boolean): ExplorationView =
         withTimeout(TIMEOUT) { backend.explorationUpdates.first(predicate) }
 
+    /** Starts an exploration and returns its view once it ended, whether or not it produced a draft. */
+    suspend fun PanelHarness.ended(instructions: PanelInstructions): ExplorationView {
+        backend.startExploration(instructions)
+        return exploration { it.id != "hazırlanır" && it.status != ExplorationStatus.RUNNING }
+    }
+
     /** Starts an exploration and returns its view once it ended and its draft preview is on the screen. */
     suspend fun PanelHarness.explored(instructions: PanelInstructions = PanelHarness.instructions(site.base.toString())): ExplorationView {
         backend.startExploration(instructions)

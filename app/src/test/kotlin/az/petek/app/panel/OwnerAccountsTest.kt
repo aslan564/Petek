@@ -99,6 +99,19 @@ class OwnerAccountsTest {
     }
 
     @Test
+    fun `a hand-edited profile the patch would break is put back as it was and nothing is added`() {
+        Files.createDirectories(targets)
+        val broken = "target:\n  name: stage-shop-example\n  url: https://stage.shop.example\n  accounts: [{role: admin, email: 'a@b.az'"
+        Files.writeString(targets.resolve("shop.yaml"), broken)
+        val accounts = OwnerAccounts(config, env, targets)
+
+        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://stage.shop.example", "editor", "e@b.az", "pw-1")) }
+
+        Files.readString(targets.resolve("shop.yaml")) shouldBe broken
+        Files.exists(env) shouldBe false
+    }
+
+    @Test
     fun `the env writer keeps other lines and replaces an exported key`() {
         Files.writeString(env, "export PETEK_X=old\nOTHER=1\n")
 

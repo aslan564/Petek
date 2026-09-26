@@ -49,10 +49,17 @@ internal class AngusImapGateway(
                 put("mail.$protocol.connectiontimeout", timeout)
                 put("mail.$protocol.timeout", timeout)
                 put("mail.$protocol.writetimeout", timeout)
-                if (!settings.tls) put("mail.imap.starttls.enable", "true")
+                if (!settings.tls) {
+                    // Without implicit TLS the connection must still be encrypted (STARTTLS), except to this machine
+                    // (a local test IMAP server): the password never crosses a network in clear text.
+                    put("mail.imap.starttls.enable", "true")
+                    if (!isLoopback(settings.host)) put("mail.imap.starttls.required", "true")
+                }
             },
         )
     private var store: Store? = null
+
+    private fun isLoopback(host: String): Boolean = host.lowercase() in setOf("localhost", "127.0.0.1", "::1") || host.startsWith("127.")
 
     override fun candidates(
         recipient: String,

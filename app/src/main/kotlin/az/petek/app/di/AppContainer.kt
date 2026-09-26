@@ -364,7 +364,8 @@ class AppContainer(
 
     /** Root-cause bundles of a run's findings (Faza 11): `petek findings`, the panel and MCP `get_finding_bundle`. */
     val findingBundles: BuildFindingBundlesUseCase by lazy {
-        val traces = config.traceLog?.let(::LogFileTraceSource) ?: TraceSource.NONE
+        val known = listOfNotNull(config.testToken, config.llmApiKey, config.identitySecret).map { it.reveal() }
+        val traces = config.traceLog?.let { LogFileTraceSource(it, secrets = known) } ?: TraceSource.NONE
         BuildFindingBundlesUseCase(runs, evidenceQuery, artifacts, traces = traces)
     }
 

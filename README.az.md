@@ -89,13 +89,13 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 | Sahə | Bu gün |
 |---|---|
-| CLI | `panel` (default), `doctor`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N`, `report`, `teardown`, `probe` |
+| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts`, `report`, `findings`, `teardown`, `probe`, `mcp` |
 | Veb panel | Təlimat, Kəşfiyyat, Ssenarilər (draft → təsdiq → dondurma, diff, triaj), Orkestrator tapşırıq matrisi, canlı Agentlər lövhəsi, Hesabatlar və stabillik |
 | Kəşfiyyatçı | Sayt modelini üç fazada öyrənir (səhifələr, formalar, əməliyyatlar, rollar, realtime, naməlumlar), sahibə sual verir, test ideyaları çıxarır, kampaniya layihəsi yazır |
 | Triaj | Run-ın sürprizlərini sistem bug / model boşluğu / ssenari xətası kimi ayırır və ssenari v2-ni diff kimi təklif edir |
 | Hədəflər | KadroHR (real, `scenarios/kadrohr.yaml`) və e2e üçün fake kontrakt saytı (`testing/fake-target`) |
 | Poçt / OTP | Mailpit catch-all qutusu və ya hədəfin test API-si (`PETEK_MAIL_SOURCE`); telefon OTP test API-dən |
-| AI | Claude Code CLI (`claude -p`, Claude planınız) və ya Anthropic API — retry, paralellik limiti və ölçmə dekoratorları ilə bir `LlmClient` portu arxasında |
+| AI | Layihənizin artıq işlətdiyi (`PETEK_LLM_PROVIDER=auto`): Claude, Codex, Gemini və ya OpenCode CLI, Anthropic API və ya istənilən OpenAI-uyğun endpoint (Ollama, LM Studio, vLLM) — retry, paralellik limiti və ölçmə ilə bir `LlmClient` portu arxasında; `doctor` hansını və niyə seçdiyini deyir |
 | Sübut | SQLite (run, kimlik, addım, hadisə, qəbz, assert, tapıntı, istifadə) + artefakt faylları, hər qeydin ID-si var |
 | Keyfiyyət qapıları | Kotlin warning = error, Spotless ilə ktlint, məcburi lisenziya başlıqları, Konsist arxitektura testləri, Kover, real Chromium ilə e2e |
 | İzolyasiya | Hər tester öz brauzer kontekstində və öz thread-ində; kolleqalarını sirlərsiz tanıyır; paylaşılan dəyərlər write-once; hər build-də 1 000 testerlə (orkestrator), CI-da 5 000 tester və 30 real Chromium sessiyası ilə (60-a qədər ölçülüb) sübut olunur — [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
@@ -202,6 +202,15 @@ Saytınızdan nə tələb olunur — testin dərinliyinə görə:
 | Tam kampaniyalar: 30 tester, qeydiyyat, OTP, assertlər, real-time yoxlamalar, teardown | [Hədəf kontraktı](docs/TARGET_CONTRACT.md): `X-Test-Token` arxasında `/test/...` API, `is_test` şirkətlər, catch-all poçt (Mailpit) və ya `GET /test/emails`; `data-testid`-lər faydalıdır, məcburi deyil | `PETEK_TEST_TOKEN`, `PETEK_MAIL_SOURCE`, `PETEK_IDENTITY_SECRET` doldurulur; `petek doctor` tam yaşıl olmalıdır |
 | Production host | Açıq icazə `PETEK_ALLOW_PRODUCTION=true` (`PETEK_PRODUCTION_HOSTS`-dakı hostlar əks halda rədd edilir) | Yalnız kontraktı danışan staging ilə, və ya yalnız oxu |
 
+**Yalnız öz saytınız, yalnız test hesabları.** Pətək (run-lar, qeydiyyatlar, kəşfiyyatçının rolları və sınaq toxunuşu)
+yalnız sahibliyi təsdiqlənmiş sayta yazır: `petek verify` bir kod verir, onu ya `/.well-known/petek-verification.txt`
+faylı, ya da `_petek-verification.<host>` DNS TXT qeydi kimi dərc edirsiniz (hər ikisində `petek-verification=<kod>`),
+sonra yoxlayır. Kod dəqiq host üçündür (kiçik hərflə): `www.example.com` və `example.com` iki ayrı hostdur; fayl həmin
+origin-dən başqa hosta yönləndirmə olmadan verilməlidir. Sübut 30 gün yadda qalır, `petek verify` onu yenidən yoxlayır.
+`localhost`, loopback və daxili şəbəkə ünvanları təsdiq istəmir. Təsdiqlənməmiş sayt yalnız anonim ziyarətçi kimi
+oxunur; `petek verify` sübut yoxdursa 1, `petek run` belə saytı rədd edəndə 2 kodu ilə çıxır. Pətəki öz pre-production
+və ya staging nüsxənizə yönəldin, yalnız test hesabları işlədin, real istifadəçinin hesabını heç vaxt verməyin (ADR-0012).
+
 Sonra dövrə hər sayt üçün eynidir: `doctor` → `panel` → kəşf et → kəşfiyyatçının suallarına cavab ver → qaralamanı
 ssenarilərə göndər → təsdiqlə → run → hesabat → tapıntıların sübutlarını (`FindingBundle`, Faza 11) öz AI-nizə oxut
 və səbəbi kodunuzda düzəlt.
@@ -224,7 +233,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün) |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | Test kimliklərinin e-poçt domeni |
-| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Parol derivasiyasının açarı (≥ 16 simvol) |
+| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Test parollarının derivasiyası **və** `petek verify`-ın verdiyi sahiblik kodunun açarı (≥ 16 simvol). Eyni saytı test edən hər maşında eyni olsun: başqa açar başqa kod verir və dərc olunmuş sübut artıq uyğun gəlmir |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`; `auto` mühitdəki açarlara, layihənin AI işarəsinə (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) və `PATH`-dakı CLI-lərə görə seçir, `doctor` səbəbini deyir |
 | `PETEK_LLM_MODEL` | provayderin | Claude üçün `claude-sonnet-5`; Codex/Gemini/OpenCode-da CLI-nin öz modeli; `openai-compat` üçün məcburidir |
 | `PETEK_LLM_BIN` | `claude`, `codex`, … | CLI binarı (`PETEK_CLAUDE_BIN` də oxunur) |

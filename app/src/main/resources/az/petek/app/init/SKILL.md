@@ -80,5 +80,6 @@ judged only by a model (`LLM_JUDGED`) needs its screenshot checked first. Propos
    doing anything else.
 7. Only a site the owner owns, only test accounts. Pətək writes only on a site whose ownership is proved
    (`petek verify`: a `/.well-known/petek-verification.txt` file or a `_petek-verification.<host>` DNS TXT record);
-   when it refuses a site as unproved, pass the instructions to the owner and wait. Never hand Pətək a real user's
+   an unproved site makes `run_campaign`/`petek run` refuse (pass the instructions to the owner and wait), while
+   `explore_site` still succeeds but only reads anonymously (its activity says so; roles and trial touch are skipped). Never hand Pətək a real user's
    account, and never point it at a production site you were not told to test.

@@ -14,6 +14,7 @@ import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.RoleSessions
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelWaits
+import az.petek.app.testing.PanelWaits.ended
 import az.petek.app.testing.PanelWaits.exploration
 import az.petek.app.testing.PanelWaits.explored
 import az.petek.browser.domain.SessionOptions
@@ -44,6 +45,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
 
@@ -64,10 +66,11 @@ class PanelExplorerTest {
             az.petek.app.testing
                 .PanelLlm(),
         ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
+        site: URI = URI("http://127.0.0.1:9"),
     ): PanelHarness =
         PanelHarness(
             dir,
-            site = PanelWaits.site(),
+            site = PanelWaits.site(site),
             llm = llm,
             allowProduction = allowProduction,
             ownership = ownership,
@@ -288,18 +291,28 @@ class PanelExplorerTest {
         runBlocking<Unit> {
             val sessions =
                 RoleSessionSource { _, _, _ -> error("no logged-in session may open on an unproved site") }
-            val panel = harness(roleSessions = sessions, ownership = OwnershipTestKit.unowned(FakeHarnessClock()))
+            // A public stage host: loopback would be exempt in production, so it could not show the read-only path.
+            val panel =
+                harness(
+                    roleSessions = sessions,
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                    site = URI("https://stage.example.com"),
+                )
             panel.site.page("/", "Kadro") { link("Qoşul", "/join") }
             panel.site.page("/join", "Qoşul")
 
-            val view = panel.explored(PanelHarness.instructions(panel.site.base.toString(), allowWrites = true))
+            // Waits for the end of the exploration itself: a read-only walk need not produce a draft.
+            val view = panel.ended(PanelHarness.instructions(panel.site.base.toString(), allowWrites = true))
 
+            view.status shouldBe ExplorationStatus.FINISHED
             view.visited.shouldNotBeEmpty()
             view.visited.map { it.visitedAs }.distinct() shouldBe listOf("anonymous")
-            view.activity.map { it.text }.any {
-                it.startsWith("Sahiblik təsdiqlənmədiyi üçün kəşfiyyat yalnız anonim oxuyur") &&
-                    it.contains("/.well-known/petek-verification.txt")
-            } shouldBe true
-            panel.site.sessions.none { it.view == "admin" } shouldBe true
+            view.phases.single { it.phase == ExplorationPhase.ANONYMOUS }.state shouldBe PhaseState.DONE
+            view.phases.single { it.phase == ExplorationPhase.ROLE_BASED }.state shouldBe PhaseState.SKIPPED
+            view.phases.single { it.phase == ExplorationPhase.TRIAL_TOUCH }.state shouldBe PhaseState.SKIPPED
+            val note =
+                view.activity.map { it.text }.single { it.startsWith("Sahiblik təsdiqlənmədiyi üçün kəşfiyyat yalnız anonim oxuyur") }
+            note shouldContain "https://stage.example.com/.well-known/petek-verification.txt"
+            note shouldContain "_petek-verification.stage.example.com"
         }
 }

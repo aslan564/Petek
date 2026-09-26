@@ -90,13 +90,13 @@ A run (`petek run scenarios/<campaign>.yaml`):
 
 | Area | Today |
 |---|---|
-| CLI | `panel` (default), `doctor`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N`, `report`, `teardown`, `probe` |
+| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts`, `report`, `findings`, `teardown`, `probe`, `mcp` |
 | Web panel | Instructions, Explorer, Scenarios (draft → approve → freeze, diff, triage), Orchestrator task matrix, live Agents board with screenshots, Reports and stability |
 | Explorer | Learns a site model (pages, forms, actions, roles, realtime, unknowns) in three phases, asks the owner about unknowns, derives test ideas, drafts a campaign |
 | Triage | Sorts a run's surprises into system bug / model gap / scenario bug and proposes scenario v2 as a reviewable diff |
 | Targets | KadroHR (real, `scenarios/kadrohr.yaml`) and a fake contract site (`testing/fake-target`) for e2e |
 | Mail / OTP | Mailpit catch-all inbox or the target's test API (`PETEK_MAIL_SOURCE`); phone OTP from the test API |
-| AI | Claude Code CLI (`claude -p`, your Claude plan) or the Anthropic API, behind one `LlmClient` port with retry, concurrency limit and metering |
+| AI | Whatever your project already uses (`PETEK_LLM_PROVIDER=auto`): the Claude, Codex, Gemini or OpenCode CLI, the Anthropic API, or any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM), behind one `LlmClient` port with retry, concurrency limit and metering; `doctor` says which one and why |
 | Evidence | SQLite (runs, identities, steps, events, receipts, assertions, findings, usage) + artifact files, every record with an id |
 | Quality gates | Kotlin warnings as errors, ktlint via Spotless, licence headers enforced, Konsist architecture tests, Kover coverage, e2e with real Chromium |
 | Isolation | Every tester in its own browser context and thread, knowing colleagues without their secrets; shared values write-once; proven with 1 000 testers through the orchestrator on every build, 5 000 and 30 real Chromium sessions in CI (measured up to 60) — see [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
@@ -209,7 +209,10 @@ only on a site whose ownership is proved: `petek verify` prints a code to publis
 `petek-verification=<code>`), then checks it. `localhost`, loopback and private-network addresses need no proof. An
 unproved site is only read, as an anonymous visitor would read it; `petek run` refuses it with exit code 2 and the
 instructions. Point Pətək at a pre-production or staging copy you own, use test accounts only, and never hand it a real
-user's account (ADR-0012).
+user's account (ADR-0012). The code is made for the host exactly (lower case): `www.example.com` and `example.com`
+are two hosts, each with its own proof; the file must be served from that origin without a redirect to another host.
+A proof is remembered for 30 days; `petek verify` checks it again. `petek verify` exits with 1 while the proof is
+missing, `petek run` with 2 when it refuses an unproved site.
 
 Then the loop is the same for every site: `doctor` → `panel` → explore → answer the explorer's questions → send the
 draft to scenarios → approve → run → report → let your AI read the findings' evidence (`FindingBundle`, Faza 11) and
@@ -233,7 +236,7 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / the box / — / `true` / `INBOX` | How `imap` reads that box (Jakarta Mail/Angus); the password is a `Secret` |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | E-mail domain of the test identities |
-| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the password derivation (≥ 16 chars) |
+| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`; `auto` picks by keys in the environment, your project's AI marker (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) and the CLIs on `PATH`, and `doctor` says why |
 | `PETEK_LLM_MODEL` | the provider's | `claude-sonnet-5` for Claude; the CLI's own model for Codex/Gemini/OpenCode; required for `openai-compat` |
 | `PETEK_LLM_BIN` | `claude`, `codex`, … | The CLI binary (`PETEK_CLAUDE_BIN` is still read) |

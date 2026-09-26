@@ -13,6 +13,7 @@ page content or the model steer the tool.
 | Threat | Control | Where |
 |---|---|---|
 | Secret in a log, report or prompt | `Secret` wrapper; configs print set/unset; redactors for triage and explorer prompts; `{self.password}` placeholder; secret-field masking in DOM snapshots and dialog text | `core/security`, `scenarios` `TextRedactor`/`SecretRedactor`, `explorer` `PromptRedaction`, `browser` JS probes |
+| Writing to somebody else's site | Site ownership proved by a `/.well-known/petek-verification.txt` file or a `_petek-verification.<host>` DNS TXT record (HMAC of the host with `PETEK_IDENTITY_SECRET`), remembered 30 days; loopback and private addresses exempt; unproved sites are only read; teardown outside the gate by design (ADR-0012) | `features/ownership`, `app` (`RunCommand`, `PanelTargets.owned`, explorer) |
 | Wrong target / production | `TargetPolicy` + `PETEK_ALLOW_PRODUCTION`; `PETEK_TARGET` overrides scenario targets; same policy in CLI, doctor, panel | `core/security`, `app` |
 | Destructive writes on real data | Oracle and teardown only on `is_test=true`; trial touch needs permission and a confirmed test target; token only to the configured API base, no redirects | `oracle`, `explorer`, `app` |
 | Prompt injection from pages | One structured decision validated against the action whitelist; the harness executes; page text is data | `agent`, `llm` |

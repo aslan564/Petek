@@ -1,6 +1,6 @@
 # R16 — Link-only swarm: a link in, a tested site out
 
-**Status:** Planned (Faza 15 next) · **Plan:** Faza 15–22 · **ADRs:** 0012, 0007, 0010
+**Status:** Partial — Faza 15, 16, 20, 21 done; 17–19 largely done (see `docs/PLAN.md`); 22 open (owner's servers) · **Plan:** Faza 15–22 · **ADRs:** 0012, 0007, 0010
 
 ## Requirement
 
@@ -18,8 +18,9 @@ account between concurrent testers, and never lets testers see each other.
 
 ## Architecture (by phase)
 
-- **Faza 15 — ownership and the permission gate** (planned): `features/ownership`, the proof file or DNS record, the
-  exemption of loopback and private addresses, the gate on runs, teardown, panel, MCP and the explorer's writing phases.
+- **Faza 15 — ownership and the permission gate** (done): `features/ownership`, the proof file or DNS record, the
+  exemption of loopback and private addresses, the gate on runs (CLI, panel, MCP) and the explorer's writing phases.
+  Teardown is deliberately outside the gate (ADR-0012): it only deletes what a run itself created on an `is_test` company.
 - **Faza 16 — mail**: the owner's mailbox with plus addressing over IMAP.
 - **Faza 17 — explorer**: site type, the explorer's own account, pass 0 → pass 1.
 - **Faza 18 — gates, accounts, isolation**: gate assignment, gate learnt once and replayed by code, gate barrier, no

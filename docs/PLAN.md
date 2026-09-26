@@ -444,7 +444,7 @@ Hazır sayılır: bir agent "qeydiyyatdan keç, kodu təsdiqlə, şirkət yarat"
 **Faza 3 — N agent və orkestrator**
 
 - [x] `orchestrator/Scheduler.kt`: aktor seçici parseri, addımları agent korutinlərinə paylama, `parallel`
-- [x] Hər agent öz single-thread dispetçeri və öz Playwright instansı ilə ortaq browser server-ə connect() edir; 30 context bir Chromium-da; yaddaş və CPU ölçülür
+- [x] Hər agent öz single-thread dispetçeri və öz Playwright instansı ilə ortaq browser server-ə connect() edir; bir Chromium-da default 20 context (`BrowserEngineConfig.DEFAULT_CONTEXTS_PER_BROWSER`, 30-a qədər sınanıb); yaddaş və CPU ölçülür
 - [x] `orchestrator/Monitor.kt`: vəziyyət lövhəsi (Mordant), N saniyə hərəkətsizlik → `blocked`, agent növbəti addıma keçir
 - [x] Çökən context eyni kimlik və `storage_state` ilə bərpa olunur
   **Vəziyyət:** `BrowserContextLostException` → `RestoringBrowserSession` yeni kontekst açır (saxlanmış `storage_state` ilə), səhifəni yenidən açır, çağırışı bir dəfə təkrarlayır; sübutda `restore_session` addımı (ən çox 2 dəfə).
@@ -587,6 +587,8 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
 
 Hazır sayılır: `petek panel` real KadroHR-da (test API açıq) rol-əsaslı kəşfiyyatı tamamlayır; `./gradlew build`
 yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
+Vəziyyət: build və `LICENSE` şərti ödənir; real KadroHR-da rol-əsaslı kəşfiyyat KadroHR staging-i (test API) gözləyir —
+fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu deyir, qəbulun real sayt hissəsini yox.
 
 #### İlk real run-lar (2026-09-26, fake KadroHR + real Chromium + real Claude CLI)
 

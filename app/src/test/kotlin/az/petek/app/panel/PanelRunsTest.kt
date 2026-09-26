@@ -439,7 +439,8 @@ class PanelRunsTest {
             val panel =
                 PanelHarness(
                     dir,
-                    site = PanelWaits.site(),
+                    // A public stage host: loopback would be exempt in production, so it could not show the refusal.
+                    site = PanelWaits.site(URI("https://stage.example.com")),
                     runs = runs,
                     scenarios = mapOf("tiny.yaml" to tinyCampaign()),
                     ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
@@ -450,7 +451,8 @@ class PanelRunsTest {
 
             refused.problems.single().field shouldBe PanelInstructions.TARGET
             refused.problems.single().message shouldContain "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır"
-            refused.problems.single().message shouldContain "/.well-known/petek-verification.txt"
+            refused.problems.single().message shouldContain "https://stage.example.com/.well-known/petek-verification.txt"
+            refused.problems.single().message shouldContain "DNS-ə TXT qeydi əlavə edin: _petek-verification.stage.example.com"
             runs.options.shouldBeEmpty()
             panel.backend.runs().shouldBeEmpty()
         }
