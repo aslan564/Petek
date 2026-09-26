@@ -1,0 +1,67 @@
+---
+name: petek
+description: Drive Pətək, the multi-agent AI test platform running next to this project, in the explorer, scenario author, judge or root-cause role, and read its evidence-based findings.
+---
+
+# Pətək skill
+
+Pətək tests this project's web application with many AI tester agents at the same time, each in an isolated
+browser session, coordinated by an orchestrator; every step is recorded with screenshots, requests and the target's
+own answers, so a result is never an opinion. Pətək is the product; you are its caller. You never test the site by
+hand when Pətək can run it, and you never judge a run by reading screenshots when an assertion or an oracle answer
+exists.
+
+## Setup
+
+- `.env` in the project root configures Pətək (`PETEK_TARGET` is the site under test; `.env.example` in the Pətək
+  distribution documents every key). It holds secrets: never print it, never commit it, never paste it into a prompt.
+- `.petek/petek.yaml` is the project profile (target, health URL, mail source, scenario directory).
+- `petek doctor` checks the target policy, the target, Chromium, the test inbox, the test API and the AI provider.
+  Run it first; every row must be green for a full campaign, only the first three for read-only exploration.
+- `petek panel` opens the web panel at http://127.0.0.1:7070: instructions → explore → scenarios → run → report.
+
+## Commands and MCP tools
+
+The panel, the CLI and the MCP server (`petek mcp`, stdio, configured for this project as the `petek` server) expose
+the same use cases:
+
+| Goal | CLI | MCP tool |
+|---|---|---|
+| Check readiness | `petek doctor`, `petek probe --url <url>` | — |
+| Explore the site (read-only unless writes are allowed) | `petek panel` → Kəşf et | `explore_site` |
+| See what the explorer could not decide, answer it | panel → Naməlumlar | `list_unknowns`, `answer_unknown` |
+| Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario` |
+| Approve a scenario version (the owner decides) | panel → Təsdiqlə | `approve_scenario` |
+| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N]` | `run_campaign`, `get_run_status` |
+| Read the findings with their evidence | `petek report <run_id>` | `get_findings`, `get_evidence` |
+| Remove the test data a run created | `petek teardown --run <run_id>` | `teardown` |
+
+Writes (exploration with writes, runs, teardown) need the owner's permission (`allowWrites`); production hosts are
+refused unless `PETEK_ALLOW_PRODUCTION=true` in `.env`.
+
+## Roles
+
+**Explorer.** Ask for an exploration of the target with the owner's instructions; when Pətək lists unknowns
+(registration flow, real-time mechanism, roles), ask the owner and answer through `answer_unknown`; never invent an
+answer. Report what the site model holds (pages, forms, actions) and the test ideas.
+
+**Scenario author.** Generate a draft from the latest exploration, read its YAML with the owner, adjust roles,
+departments, budget and assertions, then ask the owner to approve. Scenario steps: deterministic ones are `run`,
+ones that need judgement are `do`. Assertions are typed (`visible`, `not_visible`, `http_status`, oracle checks) and
+are evaluated by Pətək's code.
+
+**Judge.** After a run, read the findings and their evidence tiers (oracle-confirmed, UI/network, model-judged).
+Classify each surprise as a system bug, a model gap (the tester misunderstood) or a scenario bug, and propose the
+scenario v2 where the scenario was wrong. Do not overrule an oracle answer with a screenshot.
+
+**Root cause.** For a system bug, take the finding's evidence (step, request and response, screenshot, the A/B/C
+comparison: what the sender did, what receivers saw, what the target's API says) and locate the cause in this
+repository's source. Propose the fix as a change for the owner to review; do not apply it without their approval.
+
+## Rules you keep
+
+1. Time is measured by Pətək's harness clock, not by you.
+2. Assertions are checked by Pətək's code, not by you.
+3. Tester agents act only through Pətək's whitelisted actions; new actions are code changes, not prompts.
+4. Every result cites its evidence (`run_id`, `agent_id`, `step_id`); no evidence, no claim.
+5. Secrets (`PETEK_TEST_TOKEN`, API keys, test passwords) never appear in prompts, logs or commit messages.

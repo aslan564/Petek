@@ -1,0 +1,25 @@
+{
+  "name": "petek",
+  "version": "0.1.0",
+  "description": "Launcher for Pətək, the multi-agent AI test platform: downloads the release bundle for this machine once and runs it. No JDK needed.",
+  "license": "BUSL-1.1",
+  "author": "Aslan Aslanov (Kodcraft)",
+  "homepage": "https://github.com/aslan564/Petek#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aslan564/Petek.git",
+    "directory": "launcher"
+  },
+  "bugs": "https://github.com/aslan564/Petek/issues",
+  "keywords": ["testing", "e2e", "ai-agents", "playwright", "multi-agent", "qa"],
+  "bin": {
+    "petek": "bin/petek.js"
+  },
+  "files": ["bin/", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

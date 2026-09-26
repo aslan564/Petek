@@ -118,6 +118,16 @@ cp ../petek-0.1.0-linux-x64/.env.example .env          # PETEK_TARGET doldurun (
 
 Windows-da başladıcı `bin\petek.cmd`-dir. Əlavə JVM seçimləri `PETEK_OPTS`-a yazılır.
 
+**Node.js ilə (`npx`).** `petek` npm paketi yalnız başladıcıdır: yuxarıdakı bundle-ı bir dəfə
+`~/.petek/versions/<versiya>`-ya endirir, yoxlama cəmini yoxlayır və işə salır; başqa heç nə qurulmur.
+
+```bash
+cd my-site
+npx petek init --target https://staging.my-site.com   # .env, .petek/, skill paketi + AI agentiniz üçün MCP qeydi
+npx petek doctor
+npx petek panel
+```
+
 **Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir), Mailpit üçün Docker
 və eyni AI.
 
@@ -155,8 +165,14 @@ Komanda sətri ilə, başdan sona:
 ## Öz saytınızda istifadə
 
 Pətək **kitabxana deyil, yanaşı işləyən alətdir (sidecar)**: onu saytınızın Maven, npm və ya Composer build-inə əlavə
-etmirsiniz. Alət kimi qurulur (bu gün buraxılış bundle-ları; Faza 12-də `petek init` və `npx petek` başladıcısı, bax R15),
-saytın yanında işə salınır və saytın URL-inə yönəldilir. **Sizin öz AI login-inizi** işlədir — BMAD layihədəki
+etmirsiniz. Alət kimi qurulur (buraxılış bundle-ı və ya `npx petek`, bax R15), saytın yanında işə salınır və saytın
+URL-inə yönəldilir. `petek init` layihəni bir addımda hazırlayır: şablondan `.env` (bir daha toxunulmur),
+`.petek/petek.yaml` profili, `.petek/SKILL.md` skill paketi (rollar: kəşfiyyatçı, ssenari müəllifi, hakim, kök səbəb),
+repoda aşkarladığı AI kod agentləri üçün (və ya `--ai claude,codex,cursor,gemini,copilot|all`) təlimat faylında
+işarəli parça (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`, `.github/copilot-instructions.md`;
+əlavə olunur, təkrar çağırışda yenilənir, sizin mətninizin üstünə yazmır), layihənin MCP faylında `petek` serveri
+(`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`) və Claude Code üçün
+`.claude/skills/petek/` skill-i. `.env` və `evidence/` `.gitignore`-a düşür. **Sizin öz AI login-inizi** işlədir — BMAD layihədəki
 köməkçini necə işlədirsə, elə: `PETEK_LLM_PROVIDER=claude-cli` ilə login olduğunuz `claude` CLI-ni çağırır, modeli
 sizin planınız ödəyir; Pətək müəlliflərinə heç nə göndərilmir.
 

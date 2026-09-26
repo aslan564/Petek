@@ -725,18 +725,25 @@ fake target-də işləyir; eyni iş `petek explore --json | petek findings --jso
 
 Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pətək yanında qalxsın; CI-da işləsin.
 
-- [ ] `petek init` (hədəf repoda): `.petek/` (hədəf profili şablonu, `petek.yaml`), AI-a görə təlimat faylları —
-  `SKILL.md` (açıq Agent Skills formatı), `AGENTS.md` parçası, `CLAUDE.md` parçası, `.cursor/rules/petek.mdc`,
-  `GEMINI.md`, `.github/copilot-instructions.md` parçası; `.mcp.json` qeydi. Mövcud faylların üstünə yazmır, parça
-  əlavə edir.
-- [ ] Rol təlimatları (skill fayllarında, ingiliscə; UI-da Azərbaycanca): *explorer* (naməlumları sahibdən soruş,
-  `answer_unknown`), *scenario author* (`generate_scenario` → sahib təsdiqi), *judge* (triaj), *root-cause* (
-  `get_findings` → repoda kodu tap → düzəliş təklifi, tətbiq etmə — sahib təsdiqləyir). Təlimatlar Pətəkin
-  alətlərindən kənar heç nə vəd etmir.
+- [x] `petek init` (hədəf repoda): `.env` (şablondan; bir daha toxunulmur), `.petek/petek.yaml` (profil),
+  `.petek/SKILL.md` (Agent Skills formatı), AI-a görə (`HostAi`, repodakı işarələrlə aşkarlanır; `--ai` ilə seçilir)
+  təlimat faylında işarəli parça (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
+  `.github/copilot-instructions.md`), layihə MCP faylında `petek` serveri (`.mcp.json`, `.cursor/mcp.json`,
+  `.gemini/settings.json`, `.vscode/mcp.json`), Claude Code üçün `.claude/skills/petek/SKILL.md`; `.gitignore`-a
+  `.env`, `evidence/`. Mövcud faylların üstünə yazmır: parça əlavə edir/yeniləyir, JSON-a bir qeyd qatır, öz
+  fayllarını yalnız `--force` ilə yenidən yazır. Testlər: `ProjectInitializerTest`, `InitCommandTest`.
+- [x] Rol təlimatları (`.petek/SKILL.md`, ingiliscə): *explorer* (naməlumları sahibdən soruş, `answer_unknown`),
+  *scenario author* (`generate_scenario` → sahib təsdiqi), *judge* (triaj, oracle cavabını screenshot ilə üstələmə),
+  *root-cause* (`get_findings` → repoda kodu tap → düzəliş təklifi, tətbiq etmə — sahib təsdiqləyir); qaydalar
+  (vaxt harness-in, assertlər kodun, sirlər prompt-a düşmür). MCP alət adları Faza 11-də serverlə eyni saxlanmalı.
 - [ ] Paylanma: ~~`installDist`/jlink CLI (yollar repo kökündən asılı olmur)~~ hazırdır (Faza 12a, yuxarıda; launcher
-  `-Dpetek.home` verir), qalır: Docker image (Playwright base + bundle, Mailpit companion), `npx petek` başladıcı
-  (yalnız yükləyib işə salır), mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə). `:app`-dan `fake-target` runtime
-  asılılığı ayrılır (`petek demo` ayrıca dist).
+  `-Dpetek.home` verir); ~~`npx petek` başladıcı~~ hazırdır (`launcher/`: asılılıqsız Node skripti, GitHub Release-dən
+  öz versiyasının bundle-ını `~/.petek/versions/<v>`-yə bir dəfə endirir, `SHA256SUMS` ilə yoxlayır, `tar` ilə açır,
+  `bin/petek`-i eyni arqumentlərlə işə salır; `PETEK_VERSION`, `PETEK_DOWNLOAD_BASE`, `PETEK_HOME`; `node --test`
+  ilə lokal stand-in release üzərində 3 test, `build.yml`-də işləyir; `release.yml` `NPM_TOKEN` secret-i olanda
+  `npm publish` edir, versiya `gradle.properties` ilə eyni olmalıdır — **sahib: npm-də `petek` adını tutub
+  `NPM_TOKEN` secret-ini əlavə etsin**). Qalır: Docker image (Playwright base + bundle, Mailpit companion), mac-x64
+  bundle-ı (runner yoxdur; `any-jdk25` ilə). `:app`-dan `fake-target` runtime asılılığı ayrılır (`petek demo` ayrıca dist).
 - [ ] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
 - [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; GitHub Action
   və GitLab CI şablonları; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.

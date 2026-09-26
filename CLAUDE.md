@@ -66,6 +66,9 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     ./gradlew :testing:fake-target:run                     # lokal fake KadroHR: http://127.0.0.1:18080, poçt 18025
     ./gradlew :app:run --args="--env-file .env.fake-target doctor"   # fake saytla yoxlama (IntelliJ: hazır run konfiqurasiyaları)
     ./gradlew :app:run --args="doctor"
+    ./gradlew :app:run --args="init --dir /path/to/site --target https://staging.site"   # müştəri layihəsini hazırlayır (.env, .petek/, skill paketi, MCP qeydi)
+    ./gradlew :app:bundle                                  # bu platformun bundle-ı (jlink runtime, JDK-sız): app/build/distributions/
+    node --test launcher/test/*.test.js                    # npx petek başladıcısının testləri (Node 18+)
     ./gradlew :app:run --args="capacity"                   # bu maşın üçün tövsiyə olunan maksimum tester (limit deyil)
     ./gradlew :app:run --args="capacity --measure 5"       # real sessiyalarla ölçərək
     ./gradlew :app:run --args="plan scenarios/kadrohr.yaml"

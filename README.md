@@ -119,6 +119,16 @@ cp ../petek-0.1.0-linux-x64/.env.example .env          # fill PETEK_TARGET (+ PE
 
 On Windows the launcher is `bin\petek.cmd`. Extra JVM options go in `PETEK_OPTS`.
 
+**With Node.js (`npx`).** The `petek` npm package is a launcher only: it downloads the bundle above once into
+`~/.petek/versions/<version>`, checks its checksum and runs it, so nothing else is installed.
+
+```bash
+cd my-site
+npx petek init --target https://staging.my-site.com   # .env, .petek/, skill pack + MCP entry for your AI agent
+npx petek doctor
+npx petek panel
+```
+
 **From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain), Docker (for
 Mailpit) and the same AI.
 
@@ -156,8 +166,14 @@ Exit codes: `0` success, `1` failures found, `2` configuration error or aborted 
 ## Use it on your own site
 
 Pətək is a **sidecar, not a library**: you do not add it to your site's Maven, npm or Composer build. It is installed
-like a tool (the release bundles today; `petek init` and an `npx petek` launcher in Faza 12, see R15), started next to
-the site, and pointed at the site's URL. It uses **your own AI login**, the way BMAD uses whatever assistant the
+like a tool (a release bundle or `npx petek`, see R15), started next to the site, and pointed at the site's URL.
+`petek init` prepares the project in one step: it writes `.env` from the template (never touched again), the profile
+`.petek/petek.yaml`, the skill pack `.petek/SKILL.md` (roles: explorer, scenario author, judge, root-cause), and for
+the AI coding agents it detects in the repository (or `--ai claude,codex,cursor,gemini,copilot|all`) a marked
+fragment in their instruction file (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
+`.github/copilot-instructions.md`; appended, refreshed on a re-run, never overwriting your text), the `petek` server
+in their project MCP file (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`) and, for
+Claude Code, the skill under `.claude/skills/petek/`. `.env` and `evidence/` go into `.gitignore`. It uses **your own AI login**, the way BMAD uses whatever assistant the
 project already has: with `PETEK_LLM_PROVIDER=claude-cli` it calls the `claude` CLI you are logged into, and your plan
 pays for the model; nothing is sent to Pətək's authors.
 

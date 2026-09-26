@@ -51,6 +51,8 @@ jobs:
             push:refs/heads/*)   V="$FILE" ;;
           esac
           [ "$V" = "$FILE" ] || { echo "release version '$V' but gradle.properties says '$FILE'"; exit 1; }
+          NPM=$(node -p "require('./launcher/package.json').version")
+          [ "$V" = "$NPM" ] || { echo "release version '$V' but launcher/package.json says '$NPM' (npx petek@$V must run this release)"; exit 1; }
           case "${GITHUB_REF}" in refs/tags/*|refs/heads/main) ;; *) echo "releases are cut from main, not ${GITHUB_REF_NAME}"; exit 1 ;; esac
           if git ls-remote --exit-code --tags origin "refs/tags/v${V}" > /dev/null && [ "${GITHUB_REF}" != "refs/tags/v${V}" ]; then
             echo "v${V} is already released; bump version in gradle.properties to release again"
@@ -161,7 +163,13 @@ jobs:
     if: needs.version.outputs.skip == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # The npm launcher is published only when the repository has the token (Settings → Secrets → NPM_TOKEN);
+      # without it the release still happens and `npx petek` is skipped, which the job log says.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -199,4 +207,18 @@ jobs:
             ../petek-${{ needs.version.outputs.version }}-linux-x64/bin/petek panel    # the web panel at http://127.0.0.1:7070
             ```
 
+            Or, with Node.js installed: `npx petek@${{ needs.version.outputs.version }} doctor` downloads this bundle once and runs it.
+
             Chromium is downloaded by Playwright on first use. Checksums: `SHA256SUMS`. Licence: Business Source License 1.1 (see LICENSE).
+
+      - name: Publish the npm launcher (npx petek), when NPM_TOKEN is set
+        if: env.NPM_TOKEN != ''
+        working-directory: launcher
+        run: |
+          npm test
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+          npm publish --access public
+
+      - name: npm launcher not published
+        if: env.NPM_TOKEN == ''
+        run: echo "NPM_TOKEN is not set; the release is published without the npm launcher (add the secret to publish npx petek)."

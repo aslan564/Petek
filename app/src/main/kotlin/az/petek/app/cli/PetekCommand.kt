@@ -30,6 +30,7 @@ class PetekCommand(
 
     init {
         subcommands(
+            InitCommand(),
             PlanCommand(),
             RunCommand(),
             ReportCommand(),

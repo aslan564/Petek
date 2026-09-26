@@ -1,0 +1,56 @@
+/*
+ * Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
+ * Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
+ *
+ * Licensed under the Business Source License 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. See the LICENSE file in the repository root. Change Date: 2030-09-25;
+ * Change License: Apache License, Version 2.0. The Licensed Work is provided "AS IS", without warranty.
+ */
+
+package az.petek.app.init
+
+import java.nio.file.Files
+import java.nio.file.Path
+
+/**
+ * The AI coding agents `petek init` can write instructions for (R10), each with the files whose presence in a project
+ * shows it is in use ([markers]), the shared instruction file it reads ([instructionFile], the Pətək fragment is
+ * appended there between markers) and, where the agent reads a project-level MCP configuration, that file and the
+ * key its servers live under.
+ */
+enum class HostAi(
+    val key: String,
+    val markers: List<String>,
+    val instructionFile: String,
+    val mcpFile: String?,
+    val mcpServersKey: String = "mcpServers",
+) {
+    CLAUDE("claude", listOf("CLAUDE.md", ".claude"), "CLAUDE.md", ".mcp.json"),
+    CODEX("codex", listOf("AGENTS.md", ".codex"), "AGENTS.md", null),
+    CURSOR("cursor", listOf(".cursor"), ".cursor/rules/petek.mdc", ".cursor/mcp.json"),
+    GEMINI("gemini", listOf("GEMINI.md", ".gemini"), "GEMINI.md", ".gemini/settings.json"),
+    COPILOT("copilot", listOf(".github/copilot-instructions.md"), ".github/copilot-instructions.md", ".vscode/mcp.json", "servers"),
+    ;
+
+    /** Whether [project] carries one of this agent's marker files. */
+    fun isUsedIn(project: Path): Boolean = markers.any { Files.exists(project.resolve(it)) }
+
+    companion object {
+        const val ALL = "all"
+
+        /** The agents used in [project] by their markers; empty when none is recognisable. */
+        fun detect(project: Path): Set<HostAi> = entries.filter { it.isUsedIn(project) }.toSet()
+
+        /** Parses a comma-separated `--ai` value (`all` means every agent); throws on an unknown name. */
+        fun parse(value: String): Set<HostAi> =
+            value
+                .split(',')
+                .map { it.trim().lowercase() }
+                .filter { it.isNotEmpty() }
+                .flatMapTo(linkedSetOf()) { name ->
+                    if (name == ALL) entries else listOf(requireNotNull(entries.find { it.key == name }) { unknown(name) })
+                }
+
+        private fun unknown(name: String) = "unknown AI '$name'; use ${entries.joinToString(", ") { it.key }} or $ALL"
+    }
+}

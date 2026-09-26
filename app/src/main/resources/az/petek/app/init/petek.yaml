@@ -1,0 +1,12 @@
+# Pətək project profile, written by `petek init`. Edit freely; Pətək never rewrites it without --force.
+# Today the CLI and the panel read `.env` (see .env.example in the distribution). This profile is what `petek dev`
+# (start the panel once the app answers its health URL) and the skill pack read; keep the two in step.
+target: {target}
+# `petek dev` waits for HTTP 200 here before opening the panel.
+health_url: /healthz
+# Hosts that are refused as a target unless PETEK_ALLOW_PRODUCTION=true (rule 8).
+production_hosts: []
+# Where e-mail codes for test identities come from: mailpit (catch-all Mailpit) or test-api (GET /test/emails).
+mail_source: mailpit
+# The campaign files the panel imports at start; approved versions run from the panel or `petek run`.
+scenarios: scenarios/

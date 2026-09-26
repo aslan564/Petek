@@ -70,6 +70,9 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: ./gradlew build --no-daemon --console=plain
 
+      - name: The npm launcher (npx petek) downloads, verifies and starts a bundle from a local stand-in release
+        run: node --test launcher/test/*.test.js
+
       - name: Platform bundle (jlink runtime, one Playwright driver) builds and its launcher starts without a JDK
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
