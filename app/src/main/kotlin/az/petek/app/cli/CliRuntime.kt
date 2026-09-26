@@ -16,6 +16,7 @@ import az.petek.app.config.IdentitySecretSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
+import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
 import az.petek.app.logging.LoggingSetup
 import java.io.FileDescriptor
@@ -34,6 +35,8 @@ import kotlin.time.Duration.Companion.seconds
  * @property observationWindow how long `smoke` and `probe` watch a page's traffic for live-update transports.
  * @property panelContainers builds the object graph of `petek panel`, with the overrides that connect it to the live board.
  * @property openInBrowser opens a local file or URL in the user's browser; returns false when that is impossible.
+ * @property siteReachability how `petek panel`'s setup page looks at the site the owner names before writing `.env`;
+ *   null: a real HTTP request.
  */
 class CliRuntime(
     val environment: () -> Map<String, String> = System::getenv,
@@ -44,6 +47,7 @@ class CliRuntime(
     val observationWindow: Duration = 3.seconds,
     val panelContainers: (PetekConfig, AppOverrides) -> AppContainer = { config, overrides -> AppContainer(config, overrides) },
     val openInBrowser: (String) -> Boolean = BrowserOpener::open,
+    val siteReachability: TargetReachability? = null,
     /** The process's stdin and stdout, which `petek mcp` speaks its protocol over; tests pass pipes. */
     val standardInput: InputStream = System.`in`,
     val standardOutput: OutputStream = FileOutputStream(FileDescriptor.out),

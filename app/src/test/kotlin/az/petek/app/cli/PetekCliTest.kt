@@ -11,13 +11,28 @@
 
 package az.petek.app.cli
 
+import az.petek.app.config.EnvFile
 import az.petek.app.testing.CliHarness
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse.BodyHandlers
+import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.seconds
 
 class PetekCliTest {
     @TempDir
@@ -48,14 +63,58 @@ class PetekCliTest {
     }
 
     @Test
-    fun `the panel without a site to test asks for one and starts nothing`() =
+    fun `the panel without a site to test asks for it in the browser, then writes env and opens for the answer`() =
         runBlocking<Unit> {
-            val result = CliHarness(dir).run("panel", "--no-open")
+            val cli = CliHarness(dir).apply { env.remove("PETEK_TARGET") }
+            val command = launch(Dispatchers.Default) { cli.run("panel", "--port", "0") }
+            try {
+                val question = withTimeout(30.seconds) { awaitOpened(cli) }
+                Files.exists(dir.resolve(".env")) shouldBe false
+                Files.exists(cli.evidenceDir) shouldBe false
 
-            result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
-            result.stderr shouldContain PanelCommand.NO_TARGET
-            result.stdout shouldBe ""
+                val page = http.send(get(question), BodyHandlers.ofString()).body()
+                val token = TOKEN.find(page).shouldNotBeNull().groupValues[1]
+                val answer = http.send(setup(question, token, "http://127.0.0.1:9"), BodyHandlers.ofString())
+
+                answer.statusCode() shouldBe 200
+                val panel =
+                    Json
+                        .parseToJsonElement(answer.body())
+                        .jsonObject["panel"]
+                        .shouldNotBeNull()
+                        .jsonPrimitive.content
+                EnvFile.load(dir.resolve(".env"))["PETEK_TARGET"] shouldBe "http://127.0.0.1:9"
+                http.send(get(panel), BodyHandlers.ofString()).statusCode() shouldBe 200
+                http
+                    .send(get(question), BodyHandlers.discarding())
+                    .headers()
+                    .firstValue("Location")
+                    .orElse(null) shouldBe panel
+            } finally {
+                command.cancelAndJoin()
+            }
         }
+
+    private val http: HttpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build()
+
+    private fun get(url: String): HttpRequest = HttpRequest.newBuilder(URI(url)).GET().build()
+
+    private fun setup(
+        question: String,
+        token: String,
+        target: String,
+    ): HttpRequest =
+        HttpRequest
+            .newBuilder(URI(question).resolve("/api/setup"))
+            .header("Content-Type", "application/json")
+            .header("X-Petek-Token", token)
+            .POST(HttpRequest.BodyPublishers.ofString("""{"target":"$target"}"""))
+            .build()
+
+    private suspend fun awaitOpened(cli: CliHarness): String {
+        while (cli.opened.isEmpty()) delay(20)
+        return cli.opened.first()
+    }
 
     @Test
     fun `help of a command exits with 0`() =
@@ -69,4 +128,8 @@ class PetekCliTest {
             cli.execute(listOf("report", "run_unknown")) shouldBe ExitCodes.FAILURE
             cli.execute(listOf("--env-file", "absent.env", "doctor")) shouldBe ExitCodes.CONFIG_OR_ABORTED
         }
+
+    private companion object {
+        val TOKEN = Regex("""<meta name="petek-token" content="([A-Za-z0-9_-]+)">""")
+    }
 }

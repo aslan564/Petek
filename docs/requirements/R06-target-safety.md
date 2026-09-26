@@ -30,7 +30,12 @@ destroying a customer's data.
   `AppContainer.reachability`, `TargetReachability.ALWAYS` in tests with a fake browser) looks at the target before
   `petek run`, a panel run and an exploration open a browser: no answer or a 5xx is `TargetUnreachableException`
   (exit 2) on the command line or a `PanelRequestException` under the target field in the panel and MCP, and nothing
-  is tested. Without a configuration `petek panel` asks for the site and exits with 2; `petek mcp` still answers the
+  is tested. A target that answers only with a CDN's error or challenge page (`CdnErrorPage`: Cloudflare's
+  `error code: 1000`-style pages and `cf-mitigated` challenges, CloudFront, Akamai, Sucuri, Imperva) counts as not
+  answering, with the CDN's reason. Without a configuration `petek panel` serves one question in the browser
+  (`SetupServer` over `PanelSetup`: loopback only, the page's token on the POST): the site to test must answer, is then
+  written to `.env` from the template (never over an existing file, `rw-------`) and the panel opens for it; nothing
+  else starts before the answer. `petek mcp` still answers the
   handshake but serves `UnavailablePanelBackend(NO_TARGET)`, so every tool tells the host AI to ask the owner which
   site to test and wait. The former fallback to a local fake KadroHR when `.env` was missing (`--demo`, `DemoTarget`)
   is gone; the fake target is a developer stand-in reached only through an explicit `--env-file .env.fake-target`.
@@ -48,7 +53,9 @@ destroying a customer's data.
 - `app`: `TargetGuardTest`, `ConfigLoaderTest` (policy), `PanelTargetsTest`, `OracleTestTargetCheckTest`,
   `OracleTestApiProbeTest`, `TeardownCommandTest`; rule 12: `RunCommandTest` (a site that does not answer: exit 2,
   no browser, no run record), `PanelRunsTest` and `PanelExplorerTest` (refusal under the target field, nothing
-  starts), `McpCommandTest` and `PetekCliTest` (no configuration: the owner is asked, nothing starts).
+  starts), `McpCommandTest` (no configuration: the host AI is told to ask the owner), `PetekCliTest` (no configuration:
+  the browser asks, nothing starts before the answer, then `.env` and the panel), `PanelSetupTest`, `SetupServerTest`,
+  `CdnErrorPageTest`.
 - `oracle`: `HttpTargetOracleTest` (token handling, `is_test` refusal, no redirects).
 - `explorer`: trial touch refused without a confirmed test target.
 - ownership (ADR-0012): `features/ownership` domain tests (proof line, exemptions, ledger); `RunCommandTest` (public

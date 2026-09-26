@@ -145,20 +145,22 @@ docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 --j
 docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.1.0 panel --no-open
 ```
 
-**Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir), Mailpit üçün Docker
-və eyni AI.
+**Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir) və eyni AI; Docker
+yalnız e-poçt kodları Mailpit ilə gələndə lazımdır (`docker compose up -d`, `PETEK_MAIL_SOURCE=mailpit`).
 
 ```bash
 git clone https://github.com/aslan564/Petek.git && cd Petek
-docker compose up -d                                   # Mailpit :1025 (SMTP) / :8025 (API)
-cp .env.example .env                                   # PETEK_TARGET, PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET doldurun
+./gradlew :app:run                                     # .env hələ yoxdur: brauzer hansı saytın test olunacağını soruşur, sonra panel açılır
 ./gradlew :app:run --args="doctor"                     # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
-./gradlew :app:run                                     # veb paneli açır: http://127.0.0.1:7070
 ```
 
-Pətək yalnız sizin verdiyiniz saytı test edir. `.env` olmayanda panel və MCP serveri hansı saytın test olunacağını
-soruşur və heç nə başlatmır; cavab verməyən sayt (işləmir, bloklanıb, ünvan səhvdir) heç bir tester başlamazdan əvvəl
-olduğu kimi bildirilir, başqa bir şeylə əvəz edilmir; heç bir ekran və ya nəticə uydurulmur. Pətəkin öz kontrakt saytı
+Pətək yalnız sizin verdiyiniz saytı test edir. `.env` olmayanda `petek panel` bir sualı olan səhifə açır — hansı sayt
+test olunsun — və cavab gələnə qədər başqa heç nə başlatmır: ünvan cavab verməlidir (işləməyən, bloklanan və ya yalnız
+CDN-in xəta səhifəsini göstərən sayt səbəbi ilə rədd edilir), sonra `.env.example`-dən `.env`-ə yazılır (test API
+tokeni, IMAP və ya Mailpit üçün bu faylı sonra redaktə edin) və panel həmin sayt üçün açılır. `cp .env.example .env`
+edib əl ilə doldurmaq da olar. `.env` olmayanda MCP serveri host AI-a sizdən soruşmağı deyir. Cavab verməyən sayt
+(işləmir, bloklanıb, ünvan səhvdir) heç bir tester başlamazdan əvvəl olduğu kimi bildirilir, başqa bir şeylə əvəz
+edilmir; heç bir ekran və ya nəticə uydurulmur. Pətəkin öz kontrakt saytı
 (`testing/fake-target`, e2e dəstinin əvəzedicisi) Pətəkin özünü inkişaf etdirmək üçündür və yalnız açıq
 konfiqurasiya ilə açılır:
 

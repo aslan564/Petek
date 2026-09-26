@@ -151,11 +151,8 @@ internal class WebPanel private constructor(
             backend: AppPanelBackend,
             port: Int,
         ): Pair<DashboardServer, URI> {
-            val candidates = if (port == 0) listOf(0) else (port until port + PORT_ATTEMPTS).toList() + 0
             var last: Exception? = null
-            for (candidate in candidates) {
-                // Probe first: Ktor reports a taken port as an uncaught exception on a worker thread (noise in the console).
-                if (candidate != 0 && !isFree(candidate)) continue
+            for (candidate in portCandidates(port)) {
                 val server =
                     DashboardServer(
                         dashboard,
@@ -173,6 +170,12 @@ internal class WebPanel private constructor(
             }
             throw IllegalStateException("The panel could not start on any port", last)
         }
+
+        /**
+         * The ports to try for [port]: itself and the next ones that are free now, then any (0). Probed first, since Ktor
+         * reports a taken port as an uncaught exception on a worker thread (noise in the console).
+         */
+        fun portCandidates(port: Int): List<Int> = if (port == 0) listOf(0) else (port until port + PORT_ATTEMPTS).filter(::isFree) + 0
 
         private fun isFree(port: Int): Boolean =
             runCatching { ServerSocket(port, 1, InetAddress.getLoopbackAddress()).use { true } }.getOrDefault(false)

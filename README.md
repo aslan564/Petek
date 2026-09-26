@@ -146,20 +146,22 @@ docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 --j
 docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.1.0 panel --no-open
 ```
 
-**From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain), Docker (for
-Mailpit) and the same AI.
+**From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain) and the same AI;
+Docker only when e-mail codes come through Mailpit (`docker compose up -d`, `PETEK_MAIL_SOURCE=mailpit`).
 
 ```bash
 git clone https://github.com/aslan564/Petek.git && cd Petek
-docker compose up -d                                   # Mailpit on :1025 (SMTP) / :8025 (API)
-cp .env.example .env                                   # fill PETEK_TARGET, PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET
+./gradlew :app:run                                     # no .env yet: the browser asks which site to test, then opens the panel
 ./gradlew :app:run --args="doctor"                     # target policy, target, Chromium, inbox, test API, AI provider
-./gradlew :app:run                                     # opens the web panel at http://127.0.0.1:7070
 ```
 
-Pətək tests only the site you name. Without a `.env` the panel and the MCP server ask which site to test and start
-nothing; a site that does not answer (down, blocked, wrong address) is reported as such before any tester starts,
-never tested against something else; no screen or result is ever invented. Pətək's own contract site
+Pətək tests only the site you name. Without a `.env`, `petek panel` opens a page with one question, which site to
+test, and starts nothing else until you answer: the address must answer (a site that is down, blocked or shows only a
+CDN's error page is refused with the reason), then it is written to `.env` from `.env.example` (edit that file later
+for a test API token, IMAP or Mailpit) and the panel opens for it. `cp .env.example .env` and editing by hand works
+too. Without a `.env` the MCP server tells the host AI to ask you. A site that does not answer (down, blocked, wrong
+address) is reported as such before any tester starts, never tested against something else; no screen or result is
+ever invented. Pətək's own contract site
 (`testing/fake-target`, the stand-in of its e2e suite) is for developing Pətək itself and is reached only through an
 explicit configuration:
 

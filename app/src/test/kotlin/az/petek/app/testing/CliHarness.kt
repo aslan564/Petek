@@ -58,6 +58,9 @@ class CliHarness(
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
 
+    /** What the commands opened in the owner's browser (the panel, the setup page, a report); nothing is opened for real. */
+    val opened = CopyOnWriteArrayList<String>()
+
     /** What `petek mcp` reads and writes its protocol on; empty input ends the server at once. */
     var standardInput: InputStream = ByteArrayInputStream(ByteArray(0))
     var standardOutput: OutputStream = ByteArrayOutputStream()
@@ -85,6 +88,17 @@ class CliHarness(
                 },
                 configureLogging = { loggingRequests += it },
                 observationWindow = Duration.ZERO,
+                panelContainers = { config, overrides ->
+                    AppContainer(
+                        config,
+                        overrides.copy(llm = llm, browser = browser, reachability = reachability, ownership = ownership),
+                    )
+                },
+                openInBrowser = {
+                    opened += it
+                    true
+                },
+                siteReachability = reachability,
                 standardInput = standardInput,
                 standardOutput = standardOutput,
             )

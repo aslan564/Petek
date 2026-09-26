@@ -633,7 +633,11 @@ fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu 
   ekran, saxta səhifə, uydurma nəticə qəti qadağandır. `TargetReachability` (`app/diagnostics`,
   `AppContainer.reachability`) `petek run`, paneldən run və kəşfiyyat brauzer açmazdan əvvəl sayta baxır: cavab
   yoxdursa və ya 5xx-dirsə `TargetUnreachableException` (çıxış kodu 2) / hədəf sahəsi altında
-  `PanelRequestException`, heç nə test edilmir. `.env` olmayanda `petek panel` saytı soruşub 2 ilə çıxır, `petek mcp`
+  `PanelRequestException`, heç nə test edilmir; yalnız CDN-in xəta səhifəsini göstərən sayt (`CdnErrorPage`:
+  Cloudflare `error code: 521`/`1000`, challenge, CloudFront, Akamai, Sucuri, Imperva) da cavab verməyən sayılır.
+  `.env` olmayanda `petek panel` brauzerdə bir sual verir — hansı sayt (`SetupServer` + `PanelSetup`): cavab verən sayt
+  `.env`-ə şablondan yazılır və panel onun üçün açılır, cavab gələnə qədər heç nə başlamır (sahibin istəyi,
+  2026-09-26: "məlumatları brauzerdə yazmalıydım"); `petek mcp`
   `UnavailablePanelBackend(NO_TARGET)` ilə cavab verir (host AI sahibdən soruşur və gözləyir). Əvvəlki
   "`.env` yoxdursa fake KadroHR" fallback-i və `--demo` silindi (`DemoTarget`, `app`-ın fake-target runtime
   asılılığı); fake target yalnız `--env-file .env.fake-target` ilə, Pətəkin öz e2e testləri üçün.

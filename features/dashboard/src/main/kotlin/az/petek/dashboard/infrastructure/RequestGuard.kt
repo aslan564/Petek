@@ -11,8 +11,10 @@
 
 package az.petek.dashboard.infrastructure
 
+import java.net.InetAddress
 import java.net.URI
 import java.net.URISyntaxException
+import java.net.UnknownHostException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -68,5 +70,13 @@ internal class RequestGuard(
             val bytes = ByteArray(TOKEN_BYTES).also(SecureRandom()::nextBytes)
             return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
         }
+
+        /** Whether [host] (a name or an address, IPv6 with or without brackets) is the loopback interface. */
+        fun isLoopback(host: String): Boolean =
+            try {
+                InetAddress.getByName(host.removeSurrounding("[", "]")).isLoopbackAddress
+            } catch (_: UnknownHostException) {
+                false
+            }
     }
 }

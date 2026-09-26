@@ -39,9 +39,7 @@ import io.ktor.server.sse.SSE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.net.InetAddress
 import java.net.URI
-import java.net.UnknownHostException
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import kotlin.time.Duration
@@ -89,7 +87,7 @@ class DashboardServer(
 ) : AutoCloseable {
     init {
         require(port in 0..MAX_PORT) { "port must be in 0..$MAX_PORT, was $port" }
-        require(isLoopback(host)) { "The dashboard binds to the loopback interface only; '$host' is not a loopback address" }
+        require(RequestGuard.isLoopback(host)) { "The dashboard binds to the loopback interface only; '$host' is not a loopback address" }
     }
 
     private val guard = RequestGuard(host)
@@ -219,13 +217,6 @@ class DashboardServer(
         const val TIMEOUT_MILLIS = 2_000L
         const val NO_STORE = "no-store"
         val SAFE_METHODS = setOf(HttpMethod.Get, HttpMethod.Head)
-
-        fun isLoopback(host: String): Boolean =
-            try {
-                InetAddress.getByName(host.removeSurrounding("[", "]")).isLoopbackAddress
-            } catch (_: UnknownHostException) {
-                false
-            }
 
         fun agentIdOrNull(text: String?): AgentId? =
             try {

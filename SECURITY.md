@@ -80,6 +80,8 @@ trusted.
 **Panel**
 - Ktor CIO bound to `127.0.0.1` only; `Host`/`Origin` headers must be local; every non-GET request needs the
   per-start `X-Petek-Token`; inline scripts carry a nonce; tester e-mails are masked in views.
+- The setup page `petek panel` shows without a configuration (one question: which site) follows the same rules; it
+  writes `.env` only when none exists, `rw-------`, and only for a site that answers.
 
 **Supply chain**
 - Dependencies are pinned in `gradle/libs.versions.toml`; the Gradle distribution is checksum-verified; Mailpit is
