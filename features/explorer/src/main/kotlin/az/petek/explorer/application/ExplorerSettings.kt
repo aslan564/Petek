@@ -28,6 +28,8 @@ import kotlin.time.Duration.Companion.seconds
  *   pages actually visited.
  * @property maxConsecutiveLlmFailures after this many failed LLM calls in a row the explorer stops asking the LLM and
  *   continues with what code finds, noting it in the summary.
+ * @property phoneWidth the phone screen every visited page is measured at (with [phoneHeight]); a page wider than it
+ *   by more than [mobileTolerancePx] is a [az.petek.explorer.domain.FindingKind.MOBILE_OVERFLOW].
  * @property liveEffectTimeout how long other roles' pages are watched for a trial touch's marker text.
  * @property language what the analyst writes purposes, questions and ideas in ([WorkingLanguage.AUTO]: the owner's
  *   own language, else the page's).
@@ -37,6 +39,9 @@ data class ExplorerSettings(
     val slowPageMs: Long = 3_000,
     val verySlowPageMs: Long = 8_000,
     val maxLinkChecks: Int = 200,
+    val phoneWidth: Int = 375,
+    val phoneHeight: Int = 812,
+    val mobileTolerancePx: Int = 1,
     val maxActionsPerPage: Int = 25,
     val maxUnknownsPerPage: Int = 3,
     val maxConsecutiveLlmFailures: Int = 3,

@@ -17,6 +17,7 @@ import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.core.ids.ArtifactId
+import az.petek.core.time.HarnessTimestamp
 import az.petek.explorer.domain.ActionCandidate
 import az.petek.explorer.domain.ActionKind
 import az.petek.explorer.domain.ExplorationEvent
@@ -41,6 +42,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.net.URI
 import java.util.PriorityQueue
+import kotlin.time.Duration.Companion.milliseconds
 
 private val logger = KotlinLogging.logger {}
 
@@ -55,8 +57,9 @@ private val logger = KotlinLogging.logger {}
  *   viewpoint, 404/410 are broken links, 5xx and other 4xx are HTTP errors; only then is the page opened.
  * - The session is a [ReadOnlyBrowserSession]: the pass can look, never act, and never leave the origin; links are
  *   also filtered by [az.petek.explorer.domain.LinkPolicy] (logout/delete-looking links, robots.txt, APIs, files).
- * - Per page: evidence, code heuristics, one LLM question, findings (slow, accessibility, leaked errors), live-update
- *   transports, then the page's links.
+ * - Per page: evidence, code heuristics, one LLM question, findings (slow, accessibility, leaked errors, what the
+ *   browser saw go wrong: script errors and failed requests to the site, and whether it fits a phone's screen),
+ *   live-update transports, then the page's links.
  */
 internal class CrawlPass(
     private val context: ExplorationContext,
@@ -147,6 +150,7 @@ internal class CrawlPass(
         if (!visitedPatterns.add(pattern)) return
         val answer = probe(link.url)
         if (answer != null && refusedBeforeLoading(link, pattern, answer)) return
+        val since = context.now()
         val loadMs =
             try {
                 context.capture.load(session, link.url)
@@ -176,7 +180,7 @@ internal class CrawlPass(
         visited++
         context.pagesVisitedByRole.merge(role, 1, Int::plus)
         try {
-            learn(finalUrl, finalPattern, link.depth, answer?.status, loadMs)
+            learn(finalUrl, finalPattern, link.depth, answer?.status, loadMs, since)
         } catch (e: CancellationException) {
             throw e
         } catch (e: BrowserActionException) {
@@ -237,6 +241,7 @@ internal class CrawlPass(
         depth: Int,
         status: Int?,
         loadMs: Long,
+        since: HarnessTimestamp,
     ) {
         val captured = context.capture.capture(session, role)
         val snapshot = captured.snapshot
@@ -275,6 +280,7 @@ internal class CrawlPass(
         recordActions(pageId, facts, analysis, snapshot, captured.document, evidence)
         analysis?.unknowns?.forEach { context.raiseUnknown(it.question, it.context, pageId, Provenance.INFERRED, evidence) }
         recordFindings(url, facts, loadMs, evidence)
+        recordBrowserHealth(url, since, evidence)
         observeRealtime(pageId, evidence)
         followLinks(url, pattern, depth, facts, evidence)
         context.modelUpdated()
@@ -360,6 +366,78 @@ internal class CrawlPass(
             )
         }
     }
+
+    /**
+     * What the browser itself saw go wrong since the page started loading (script errors, failed requests to the site)
+     * and whether the page fits a phone's screen. A session that cannot tell reports nothing, never a problem.
+     */
+    private suspend fun recordBrowserHealth(
+        url: URI,
+        since: HarnessTimestamp,
+        evidence: List<ArtifactId>,
+    ) {
+        val page = UrlPatterns.display(url)
+        val settings = context.settings
+        val health = looked("the page's health") { session.health(since, settings.slowPageMs.milliseconds) }
+        if (health != null && health.consoleErrors.isNotEmpty()) {
+            context.findings.record(
+                FindingKind.CONSOLE_ERROR,
+                Severity.MEDIUM,
+                page,
+                "The page reported ${health.consoleErrors.size} script error(s): " + listed(health.consoleErrors),
+                role,
+                evidence,
+            )
+        }
+        if (health != null && health.failedRequests.isNotEmpty()) {
+            val severity = if (health.failedRequests.any(::serverError)) Severity.HIGH else Severity.MEDIUM
+            context.findings.record(
+                FindingKind.FAILED_REQUEST,
+                severity,
+                page,
+                "${health.failedRequests.size} request(s) of the page to the site failed: " + listed(health.failedRequests),
+                role,
+                evidence,
+            )
+        }
+        val overflow = looked("the page at a phone's width") { session.horizontalOverflow(settings.phoneWidth, settings.phoneHeight) }
+        if (overflow != null && overflow > settings.mobileTolerancePx) {
+            context.findings.record(
+                FindingKind.MOBILE_OVERFLOW,
+                Severity.MEDIUM,
+                page,
+                "At ${settings.phoneWidth}x${settings.phoneHeight} (a phone) the page is $overflow px wider than the screen: " +
+                    "part of it is cut off or scrolls sideways.",
+                role,
+                evidence,
+            )
+        }
+    }
+
+    /** [look] at the page; a session that cannot tell (it answers with a browser error) gives null, not a finding. */
+    private suspend fun <T> looked(
+        what: String,
+        look: suspend () -> T,
+    ): T? =
+        try {
+            look()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BrowserActionException) {
+            logger.debug { "Reading $what as $role failed: ${e.message}" }
+            null
+        }
+
+    private fun listed(items: List<String>): String =
+        items.take(MAX_LISTED).joinToString("; ") + if (items.size > MAX_LISTED) "; and ${items.size - MAX_LISTED} more" else ""
+
+    /** `GET /api/x -> 500`: the site itself failed, not the request. */
+    private fun serverError(request: String): Boolean =
+        request
+            .substringAfterLast("-> ", "")
+            .trim()
+            .toIntOrNull()
+            ?.let { it >= SERVER_ERROR } == true
 
     private suspend fun observeRealtime(
         pageId: String,
@@ -479,6 +557,10 @@ internal class CrawlPass(
     private companion object {
         val WEB_SCHEMES = setOf("http", "https")
         val SIGN_IN_WORDS = setOf("login", "signin", "sign", "auth", "daxil")
+
+        /** How many script errors or failed requests one finding lists before it only counts the rest. */
+        const val MAX_LISTED = 5
+        const val SERVER_ERROR = 500
 
         /** How the browser adapter labels each transport in its details. */
         val DETAIL_PREFIX =

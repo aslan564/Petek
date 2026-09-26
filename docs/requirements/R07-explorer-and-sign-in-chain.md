@@ -25,6 +25,13 @@ must be able to register, read the OTP, and fall back to provided credentials if
   diffs versions. `TestPatterns` derive ideas; `GenerateScenarioUseCase` drafts a campaign the validator accepts.
 - Logged-in sessions come from `TestCompanyRoleSessions` (app): a setup-only campaign creates a test company through
   the test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8).
+- Findings are recorded by code, never judged by the AI: broken links, HTTP errors, slow pages, accessibility gaps,
+  leaked error text, and what the browser itself saw go wrong on each page since it started loading (script errors
+  and uncaught exceptions, failed requests to the site: `CONSOLE_ERROR`, `FAILED_REQUEST`), plus the page measured at
+  a phone's width (375×812, `MOBILE_OVERFLOW`). All of it is reading, so an anonymous exploration of a site whose
+  ownership is not proved already catches these small bugs (first seen on www.joeinthestudio.com, 2026-09-26: a
+  home page 12 px wider than a phone and 4.4 s to load). The expired-session test idea is proposed only where people
+  sign in.
 - Unknowns are questions; answers live in `AnswerBook` and ground later explorations and drafts.
 - `PageCapture` waits for a page that loaded empty to render (single-page applications draw after `load`; polled for
   `pageSettleTimeout`, 4 s by default) before it snapshots, so the analyst judges the page, not the empty shell. The
@@ -69,7 +76,8 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 ## Verification
 
-- `explorer`: `ExploreSiteUseCaseTest`, crawl/heuristics/classifier tests, `ExplorerFakeTargetIntegrationTest`.
+- `explorer`: `ExploreSiteUseCaseTest` (including script errors, failed requests and phone-width overflow as findings),
+  `TestPatternLibraryTest`, crawl/heuristics/classifier tests, `ExplorerFakeTargetIntegrationTest`.
 - `app`: `TestCompanyRoleSessionsTest` (refusals, sessions, profile from the catalog, teardown on cancel),
   `SignInChainTest` (order and fallbacks, saved sessions, the profile's login flow with account fields, the reason a
   login form stays), `ExplorerLoginFlowTest`, `OwnerAccountsTest` (a re-given account keeps its `fields`),

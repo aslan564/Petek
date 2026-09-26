@@ -21,8 +21,14 @@ enum class FindingKind {
     /** A page answers with an error status (5xx, or another 4xx than 401/403/404/410), or fails to load. */
     HTTP_ERROR,
 
-    /** A script error on the page. Needs console access that the browser port does not offer yet. */
+    /** The page reported a script error: a `console.error` message or an uncaught exception, as the browser saw it. */
     CONSOLE_ERROR,
+
+    /** A request the page made to the site failed: an answer of 400 or more, or no answer at all. */
+    FAILED_REQUEST,
+
+    /** At a phone's width the page is wider than the screen: part of it is cut off or scrolls sideways. */
+    MOBILE_OVERFLOW,
 
     /** A page took longer than the configured threshold to load (measured by the harness clock). */
     SLOW_PAGE,

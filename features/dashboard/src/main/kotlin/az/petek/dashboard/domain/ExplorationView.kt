@@ -159,7 +159,7 @@ data class RealtimeView(
 )
 
 data class ExplorationFindingView(
-    /** BROKEN_LINK, HTTP_ERROR, CONSOLE_ERROR, SLOW_PAGE, ACCESSIBILITY or UNEXPECTED_UI. */
+    /** BROKEN_LINK, HTTP_ERROR, CONSOLE_ERROR, FAILED_REQUEST, MOBILE_OVERFLOW, SLOW_PAGE, ACCESSIBILITY or UNEXPECTED_UI. */
     val kind: String,
     val severity: FindingSeverity,
     val pageUrl: String,

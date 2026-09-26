@@ -13,10 +13,13 @@ package az.petek.explorer.application
 
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.PageHealth
+import az.petek.core.time.HarnessTimestamp
 import az.petek.explorer.domain.SiteOrigin
 import java.net.URI
 import java.net.URISyntaxException
 import java.nio.file.Path
+import kotlin.time.Duration
 
 /**
  * The only view of a browser session the crawl passes get: it can look (navigate, snapshot, screenshot, GET) but
@@ -42,6 +45,17 @@ internal class ReadOnlyBrowserSession(
         if (!method.equals("GET", ignoreCase = true) || body != null) refuse("$method request")
         return delegate.request("GET", requireOnOrigin(path), null)
     }
+
+    // Reading what the page reported and measuring it at a phone's width are looks, not actions.
+    override suspend fun health(
+        since: HarnessTimestamp,
+        slowAfter: Duration,
+    ): PageHealth = delegate.health(since, slowAfter)
+
+    override suspend fun horizontalOverflow(
+        width: Int,
+        height: Int,
+    ): Int? = delegate.horizontalOverflow(width, height)
 
     override suspend fun click(ref: Int) = refuse("click")
 

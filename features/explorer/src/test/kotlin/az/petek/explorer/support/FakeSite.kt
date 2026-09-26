@@ -16,11 +16,13 @@ import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.PageElement
+import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.browser.testing.FakeBrowserSession
 import az.petek.core.testing.FakeHarnessClock
+import az.petek.core.time.HarnessTimestamp
 import java.net.URI
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
@@ -43,6 +45,10 @@ class FakeSite(
         val text: String,
         val loadTime: Duration,
         val transports: Set<RealtimeTransport>,
+        /** What the browser reports for the page (script errors, failed requests to the site). */
+        val health: PageHealth = PageHealth.NONE,
+        /** How many pixels the page is wider than a phone's screen. */
+        val overflow: Int = 0,
     )
 
     private val pages = HashMap<Pair<String, String?>, Page>()
@@ -69,10 +75,13 @@ class FakeSite(
         view: String? = null,
         loadTime: Duration = 100.milliseconds,
         transports: Set<RealtimeTransport> = emptySet(),
+        health: PageHealth = PageHealth.NONE,
+        overflow: Int = 0,
         build: PageBuilder.() -> Unit = {},
     ) {
         val builder = PageBuilder().apply(build)
-        pages[path to view] = Page(title, builder.elements, builder.html(title), builder.visibleText(title), loadTime, transports)
+        pages[path to view] =
+            Page(title, builder.elements, builder.html(title), builder.visibleText(title), loadTime, transports, health, overflow)
     }
 
     fun redirect(
@@ -194,6 +203,16 @@ class FakeSite(
             val page = lookup(pages, key, view) ?: return HttpProbeResult(404, "Səhifə tapılmadı.")
             return HttpProbeResult(200, page.html)
         }
+
+        override suspend fun health(
+            since: HarnessTimestamp,
+            slowAfter: Duration,
+        ): PageHealth = currentPage()?.health ?: PageHealth.NONE
+
+        override suspend fun horizontalOverflow(
+            width: Int,
+            height: Int,
+        ): Int? = currentPage()?.overflow
 
         override suspend fun networkObservation(): NetworkObservation {
             val transports = currentPage()?.transports.orEmpty()

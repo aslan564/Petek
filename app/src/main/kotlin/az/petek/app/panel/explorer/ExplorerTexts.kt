@@ -64,6 +64,8 @@ internal object ExplorerTexts {
             FindingKind.BROKEN_LINK -> "Qırıq keçid"
             FindingKind.HTTP_ERROR -> "HTTP xətası"
             FindingKind.CONSOLE_ERROR -> "Konsol xətası"
+            FindingKind.FAILED_REQUEST -> "Uğursuz sorğu"
+            FindingKind.MOBILE_OVERFLOW -> "Mobil ekrana sığmır"
             FindingKind.SLOW_PAGE -> "Yavaş səhifə"
             FindingKind.ACCESSIBILITY -> "Əlçatanlıq"
             FindingKind.UNEXPECTED_UI -> "Gözlənilməz UI"

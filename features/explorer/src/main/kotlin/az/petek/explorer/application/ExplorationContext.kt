@@ -96,6 +96,9 @@ internal class ExplorationContext(
     val phasesSkipped = LinkedHashMap<ExplorationPhase, String>()
     val notes = mutableListOf<String>()
 
+    /** The harness clock's now, e.g. to ask the browser what a page reported since it started loading. */
+    fun now(): HarnessTimestamp = clock.now()
+
     /** True once the time budget is used up (measured by the harness clock); remembered as a timeout. */
     fun deadlinePassed(): Boolean {
         if (!timedOut && startedAt.elapsedUntil(clock.now()) >= request.budget.timeLimit) timedOut = true

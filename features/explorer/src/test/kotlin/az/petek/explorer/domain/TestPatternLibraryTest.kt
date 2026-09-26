@@ -13,8 +13,10 @@ package az.petek.explorer.domain
 
 import az.petek.explorer.support.Models
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
@@ -38,6 +40,21 @@ class TestPatternLibraryTest {
         ideas.map { it.pattern }.toSet() shouldBe TestPattern.entries.filter { it.siteWide }.toSet()
         ideas.all { it.actionId == TestPatternLibrary.SITE } shouldBe true
         ideas.single { it.pattern == TestPattern.CONSOLE_ERRORS }.rationale shouldContain "(ui_network)"
+    }
+
+    @Test
+    fun `a site where nobody signs in gets no expired-session idea, one with a sign-in form does`() {
+        val visitorsOnly = Models.model(listOf(Models.page("/lyrics")), emptyList(), roles = listOf("anonymous"))
+        val withLogin =
+            Models.model(
+                listOf(Models.page("/login", Models.form(ActionKind.LOGIN, "login-submit", "/login", Models.field("email", "email")))),
+                emptyList(),
+                roles = listOf("anonymous"),
+            )
+
+        library.ideas(visitorsOnly).map { it.pattern } shouldNotContain TestPattern.SESSION_EXPIRY
+        library.ideas(visitorsOnly).map { it.pattern } shouldContain TestPattern.MOBILE_VIEWPORT
+        library.ideas(withLogin).map { it.pattern } shouldContain TestPattern.SESSION_EXPIRY
     }
 
     @ParameterizedTest(name = "{0} -> {1}")

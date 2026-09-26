@@ -102,10 +102,14 @@ class TestPatternLibrary {
             .sortedWith(compareByDescending<TestIdea> { it.priority }.thenBy { it.actionId }.thenBy { it.pattern.ordinal })
     }
 
-    /** The blind checks every site gets, even one the explorer could not see into ([TestPattern.siteWide]). */
+    /**
+     * The blind checks every site gets, even one the explorer could not see into ([TestPattern.siteWide]); the expired
+     * session check only where people sign in, since a site without accounts has no session to expire.
+     */
     private fun siteWide(model: SiteModel): List<TestIdea> {
         val pages = model.pages.count { UrlPatterns.ID !in it.urlPattern }.coerceAtLeast(1)
-        return TestPattern.entries.filter { it.siteWide }.map { pattern ->
+        val patterns = TestPattern.entries.filter { it.siteWide && (it != TestPattern.SESSION_EXPIRY || hasSignIn(model)) }
+        return patterns.map { pattern ->
             TestIdea(
                 pattern = pattern,
                 actionId = SITE,
@@ -115,6 +119,12 @@ class TestPatternLibrary {
             )
         }
     }
+
+    /** Signs that people sign in: a logged-in role, pages refused to a visitor, or a sign-in or sign-up form. */
+    private fun hasSignIn(model: SiteModel): Boolean =
+        model.roles.any { !it.anonymous || it.deniedPatterns.isNotEmpty() } ||
+            model.actions.any { it.kind in SIGN_IN_KINDS } ||
+            model.pages.any { page -> page.forms.any { it.kind in SIGN_IN_KINDS } }
 
     private fun ideasFor(
         action: ActionModel,
@@ -235,6 +245,7 @@ class TestPatternLibrary {
             )
 
         private val NO_IDEAS = setOf(ActionKind.NAVIGATE, ActionKind.OTHER)
+        private val SIGN_IN_KINDS = setOf(ActionKind.LOGIN, ActionKind.REGISTER)
 
         val PATTERNS_BY_KIND: Map<ActionKind, List<TestPattern>> =
             mapOf(

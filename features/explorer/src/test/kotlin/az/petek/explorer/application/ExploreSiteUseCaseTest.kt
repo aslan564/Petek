@@ -11,6 +11,7 @@
 
 package az.petek.explorer.application
 
+import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.core.security.TargetPolicy
 import az.petek.core.testing.SequentialIdGenerator
@@ -40,6 +41,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.ints.shouldBeInRange
 import io.kotest.matchers.nulls.shouldBeNull
@@ -273,6 +275,36 @@ class ExploreSiteUseCaseTest {
                 .artifact(broken.evidence.single())
                 .shouldNotBeNull()
                 .type.name shouldBe "HTTP"
+        }
+
+    @Test
+    fun `script errors, failed requests and a page too wide for a phone, as the browser saw them, become findings`() =
+        runTest {
+            site.page(
+                "/about",
+                "About",
+                health =
+                    PageHealth(
+                        listOf("TypeError: x is undefined"),
+                        listOf("GET /api/news -> 500", "GET /img/a.png -> 404"),
+                        emptyList(),
+                    ),
+                overflow = 120,
+            )
+            site.page("/", "Home") { link("About", "/about") }
+
+            val result = useCase().execute(request())
+
+            val console = result.findings.single { it.kind == FindingKind.CONSOLE_ERROR }
+            console.pageUrl shouldBe "https://kadro.test/about"
+            console.detail shouldContain "TypeError: x is undefined"
+            console.evidence.shouldNotBeEmpty()
+            val failed = result.findings.single { it.kind == FindingKind.FAILED_REQUEST }
+            failed.severity shouldBe Severity.HIGH
+            failed.detail shouldContain "GET /api/news -> 500"
+            val mobile = result.findings.single { it.kind == FindingKind.MOBILE_OVERFLOW }
+            mobile.detail shouldContain "120 px wider"
+            result.findings.none { it.pageUrl == "https://kadro.test/" && it.kind == FindingKind.MOBILE_OVERFLOW } shouldBe true
         }
 
     @Test

@@ -127,7 +127,7 @@
     phaseState: { PENDING: 'Növbədə', RUNNING: 'Gedir', DONE: 'Bitdi', SKIPPED: 'Buraxıldı' },
     provenance: { OBSERVED: 'Müşahidə', INFERRED: 'Ehtimal' },
     severity: { HIGH: 'Yüksək', MEDIUM: 'Orta', LOW: 'Aşağı' },
-    exploreFinding: { BROKEN_LINK: 'Qırıq keçid', HTTP_ERROR: 'HTTP xətası', CONSOLE_ERROR: 'Konsol xətası', SLOW_PAGE: 'Yavaş səhifə', ACCESSIBILITY: 'Əlçatanlıq', UNEXPECTED_UI: 'Gözlənilməz UI' },
+    exploreFinding: { BROKEN_LINK: 'Qırıq keçid', HTTP_ERROR: 'HTTP xətası', CONSOLE_ERROR: 'Konsol xətası', FAILED_REQUEST: 'Uğursuz sorğu', MOBILE_OVERFLOW: 'Mobil ekrana sığmır', SLOW_PAGE: 'Yavaş səhifə', ACCESSIBILITY: 'Əlçatanlıq', UNEXPECTED_UI: 'Gözlənilməz UI' },
     pattern: { HAPPY_PATH: 'Uğurlu yol', PERMISSION: 'İcazə', RACE: 'Yarış', REALTIME: 'Real-time', BOUNDARY: 'Sərhəd', IDEMPOTENCY: 'Təkrar göndərmə',
       DIRECT_URL: 'Birbaşa ünvan', BROKEN_LINKS: 'Qırıq linklər', CONSOLE_ERRORS: 'Konsol xətaları', SLOW_ENDPOINTS: 'Yavaş sorğular',
       BACK_BUTTON: 'Geri düyməsi', MOBILE_VIEWPORT: 'Mobil görünüş', SESSION_EXPIRY: 'Sessiyanın bitməsi' },
