@@ -1,6 +1,6 @@
 # R08 — Two or three different sites from one Pətək, each with its own settings
 
-**Status:** Planned (Faza 10) · **ADRs:** 0010
+**Status:** Implemented (Faza 10) · **ADRs:** 0010
 
 ## Requirement
 
@@ -19,11 +19,12 @@ tool (R11) and a sellable product (R15).
 - **Target profile** `targets/<name>.yaml` as a domain model (`TargetSpec` in `features/campaign`, YAML DTO in
   infrastructure): `url`, `api_url`, `production_hosts`, `mail {source, domain}`, `test_api {token: ${ENV}}`,
   `sign_in` chain, `accounts` (secret references), pointer to the existing `target_profile` (selectors, flows).
-- `PETEK_TARGET` names the default profile; `PETEK_TARGETS_DIR` the folder. `RunTargets` builds a container per
-  profile (today it copies the config with another URL); the "only `PETEK_TARGET`" block in `PanelRunsAdapter` is
-  lifted; the oracle, mailbox and policy follow the profile.
+- `PETEK_TARGET` names the default profile (a name or a URL); `PETEK_TARGETS_DIR` the folder. `RunTargets` leases a
+  container per profile (`TargetProfileConfig.forTarget`: the profile's URL, test API, token, production hosts and
+  mail over the panel's configuration, sharing the panel's database); the oracle, mailbox and policy follow the
+  profile. The panel runs any site that has a profile; MCP `list_targets` lists them.
 - Secrets in profiles are `${ENV}` references resolved from `.env`; the panel writes secrets to `.env`, never to the
-  database (rule 10).
+  database (rule 10). Accounts carry non-secret login `fields` (R07).
 - Capability probe per target records what it supports; evidence tiers say what each verdict rests on.
 
 ## Modules touched
@@ -31,10 +32,13 @@ tool (R11) and a sellable product (R15).
 `campaign` (domain model + YAML), `app/config`, `app/di` (`RunTargets`, container per target), `app/panel`
 (target list, run/explore selection), `oracle`, `mail`, `dashboard` (target selector view).
 
-## Verification (planned)
+## Verification
 
-- Profile parsing and validation tests; two fake targets in one panel (fake KadroHR + a plain login-only fake site);
-  a run on the second site never carries the first site's token (`PanelRunsTest`).
+- `campaign`: `YamlTargetSpecSourceTest` (parsing, validation with lines, secret references, accounts and fields,
+  the repository's KadroHR profile).
+- `app`: `ConfigLoaderTest` (`PETEK_TARGET` naming a profile, a broken profile reported with its file and line),
+  `PanelRunsTest` (a site with a profile runs with its settings; any other address is refused), `OwnerAccountsTest`.
+- Open: an e2e run against a second fake site in the same panel (Faza 13).
 
 ## Open items
 

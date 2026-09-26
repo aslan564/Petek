@@ -1,6 +1,6 @@
 # R06 — Target safety: never harm production, write only to test data, oracle only on `is_test`
 
-**Status:** Implemented · **Plan:** Faza 0, 5 · **ADRs:** 0007
+**Status:** Implemented · **Plan:** Faza 0, 5, 15 · **ADRs:** 0007, 0012
 
 ## Requirement
 
@@ -23,8 +23,8 @@ destroying a customer's data.
   the owner's `allowWrites` and a `TestTargetCheck` that confirms test data through the API.
 - **Teardown.** Every run ends with teardown (also when aborted or interrupted); `petek teardown --run` repeats it;
   `--keep-data` is explicit and for debugging.
-- **Panel runs.** Until per-target profiles exist (R08), a run goes only to the configured site, so another site never
-  receives this site's token or flows.
+- **Panel runs.** A run goes to the configured site or to a site with its own target profile (R08), which brings its
+  own test API, token, production hosts and mail; another site never receives this site's token or flows.
 - **Only the site that was given (rule 12, the owner's decision of 2026-09-26).** No invented screens, pages or
   results, no stand-in site. `TargetReachability` (`app/diagnostics`; `HttpTargetReachability` over `HttpProbe`,
   `AppContainer.reachability`, `TargetReachability.ALWAYS` in tests with a fake browser) looks at the target before

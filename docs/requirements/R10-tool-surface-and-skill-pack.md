@@ -1,8 +1,8 @@
 # R10 — Any host AI drives Pətək (MCP, `--json`, skill pack); root cause happens in the host's repository
 
-**Status:** Skill pack, MCP server and `--json` done 2026-09-26 (`petek init`; `petek mcp` stdio server with 25 tools
-over `PanelBackend`, read-only unless `--allow-writes`; `--json` on `doctor`, `init`, `plan`, `run`, `report`,
-`teardown`); `FindingBundle` as one object and `petek dev` planned (Faza 11–12) · **ADRs:** 0009
+**Status:** Implemented 2026-09-26 (`petek init`; `petek mcp` stdio server with 25 tools over `PanelBackend`,
+read-only unless `--allow-writes`; `--json` on `doctor`, `init`, `plan`, `run`, `report`, `teardown`, `findings`;
+`FindingBundle` through `petek findings`; `petek dev`); `capacity`, `probe` and `smoke` still print text · **ADRs:** 0009
 
 ## Requirement
 
@@ -39,8 +39,10 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     (`ok`, `checks`), `init` (`changes`), `plan` (`identities`), `run` (`runs`, `exitCode`), `report` (`html`,
     `markdown`), `teardown` (`removed`, `failures`); a failure prints `{"error": ...}` and keeps the exit code.
     `capacity`, `probe`, `smoke` still print text (their JSON follows with the CI mode of Faza 12).
-- **`FindingBundle`** (reporting domain): finding + step + request/response + screenshot path + A/B/C + evidence tier —
-  the one object a host AI reads to root-cause in its repository. Pətək never reads the target's source itself.
+- **`FindingBundle`** (reporting domain, `BuildFindingBundlesUseCase`): finding + step + request/response +
+  screenshot path + A/B/C + evidence tier — the one object a host AI reads to root-cause in its repository
+  (`petek findings <run_id|latest> [--finding <id>] [--json]`, MCP `get_findings`). Pətək never reads the target's
+  source itself.
 - **Skill pack (Faza 12, done).** `petek init [--target] [--ai ...] [--force] [--dir]` (`app/init/ProjectInitializer`)
   writes `.env` from the repository's `.env.example` (copied into the app's resources by the build; never rewritten
   once present), `.petek/petek.yaml` (profile: target, health URL, mail source, scenario directory) and
