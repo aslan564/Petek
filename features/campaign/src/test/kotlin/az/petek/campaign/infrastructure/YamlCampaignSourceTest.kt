@@ -478,9 +478,9 @@ class YamlCampaignSourceTest {
 
         @Test
         fun `actor grammar errors carry the actor line`() {
-            val issue = issue(withSteps("steps:\n  - id: s\n    actor: boss[IT]\n    do: x"), "invalid actor")
+            val issue = issue(withSteps("steps:\n  - id: s\n    actor: 9boss[IT]\n    do: x"), "invalid actor")
             issue.line shouldBe 10
-            issue.message shouldContain "unknown role 'boss'"
+            issue.message shouldContain "'9boss' is not a role name"
         }
 
         @Test
@@ -588,7 +588,7 @@ class YamlCampaignSourceTest {
 
         @Test
         fun `all mapping problems are reported together`() {
-            issues(withSteps("steps:\n  - actor: boss\n    run: {}\n    parallel: maybe\n  - foo: 1")) shouldHaveSize 5
+            issues(withSteps("steps:\n  - actor: 9boss\n    run: {}\n    parallel: maybe\n  - foo: 1")) shouldHaveSize 5
         }
 
         @Test

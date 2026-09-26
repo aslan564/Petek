@@ -11,6 +11,9 @@ package az.petek.explorer.application
 
 import az.petek.campaign.domain.Budget
 import az.petek.campaign.domain.RoleQuota
+import az.petek.campaign.domain.Tenant
+import az.petek.core.model.RegistrationMode
+import az.petek.core.model.Role
 import az.petek.explorer.domain.ExplorationId
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -42,11 +45,53 @@ data class ScenarioSettings(
     val maxLatency: Duration = 5_000.milliseconds,
     val forbiddenStatus: Int = 403,
     val oracleResources: Set<String> = setOf("announcements", "tickets"),
+    /** Whether the drafts are for a site with companies (the frame above) or without ([forSiteWithoutCompanies]). */
+    val tenant: Tenant = Tenant.COMPANY,
+    /** Without companies: the gate of each role's testers (`self`, `login`, `guest`); a role not listed signs up. */
+    val gates: Map<Role, RegistrationMode> = emptyMap(),
 ) {
     init {
-        require(team.admin == 1) { "a generated campaign has exactly one admin, who owns the company" }
-        require(team.manager >= 0 && team.employee >= 0) { "role counts must not be negative" }
-        require(departments.isNotEmpty()) { "a generated campaign needs at least one department" }
+        if (tenant == Tenant.COMPANY) {
+            require(team.admin == 1) { "a generated campaign has exactly one admin, who owns the company" }
+            require(team.manager >= 0 && team.employee >= 0) { "role counts must not be negative" }
+            require(departments.isNotEmpty()) { "a generated campaign needs at least one department" }
+        } else {
+            require(team.total > 0) { "a generated campaign needs at least one tester" }
+        }
+    }
+
+    /** The gate of [role]'s testers on a site without companies. */
+    fun gateOf(role: Role): RegistrationMode = gates[role] ?: RegistrationMode.SELF
+
+    /**
+     * The frame for a site without companies: every role the explorer saw signed in gets [perRole] testers (two, so a
+     * race has its pair) who sign up on their own; a site seen only anonymously gets [perRole] visitors. No departments,
+     * no company setup (Faza 13).
+     */
+    fun forSiteWithoutCompanies(
+        seenRoles: Collection<String>,
+        perRole: Int = PER_ROLE,
+    ): ScenarioSettings {
+        val signedIn =
+            seenRoles
+                .filter { it != VISITOR.key }
+                .mapNotNull(Role::fromKey)
+                .distinct()
+                .sortedBy { it.key }
+        val roles = signedIn.ifEmpty { listOf(VISITOR) }
+        return copy(
+            team = RoleQuota.of(roles.associateWith { perRole }),
+            departments = emptyList(),
+            tenant = Tenant.NONE,
+            gates = if (signedIn.isEmpty()) mapOf(VISITOR to RegistrationMode.GUEST) else emptyMap(),
+        )
+    }
+
+    companion object {
+        const val PER_ROLE = 2
+
+        /** The role of a site's visitors: what the explorer saw without an account (`anonymous`). */
+        val VISITOR: Role = checkNotNull(Role.fromKey("anonymous"))
     }
 }
 
@@ -58,6 +103,8 @@ data class ScenarioRequest(
     /** The target implements the `/test/...` API of docs/TARGET_CONTRACT.md: use it for ids and oracle checks. */
     val testApi: Boolean = false,
     val name: String? = null,
+    /** `none`: the site has no companies; the draft signs its testers up (or lets them visit) instead of seeding one. */
+    val tenant: Tenant = Tenant.COMPANY,
 ) {
     init {
         require(maxIdeas in 1..MAX_IDEAS) { "maxIdeas must be in 1..$MAX_IDEAS, was $maxIdeas" }

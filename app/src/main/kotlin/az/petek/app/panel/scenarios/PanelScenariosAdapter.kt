@@ -95,6 +95,7 @@ internal class PanelScenariosAdapter(
                             source.explorationId,
                             source.grounding?.ifBlank { null },
                             testApi = explorer.testApi(source.target),
+                            tenant = explorer.tenant(source.target),
                         ),
                         explorer.observerFor(source.explorationId),
                     )

@@ -43,7 +43,6 @@ import az.petek.identity.application.PlanIdentitiesUseCase
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityRegistryGenerator
 import az.petek.identity.domain.IdentityRepository
-import az.petek.identity.domain.IdentitySpec
 import az.petek.identity.domain.IdentityStatus
 import az.petek.oracle.domain.JsonFieldSelector
 import az.petek.oracle.domain.TargetOracle
@@ -196,18 +195,11 @@ class DefaultCampaignRunner(
     private suspend fun planIdentities(run: RunState) {
         val quotas = run.campaign.settings
         val spec =
-            IdentitySpec(
-                testers = quotas.testers,
-                seed = quotas.seed,
-                names = quotas.names,
-                admins = quotas.roles.admin,
-                managers = quotas.roles.manager,
-                employees = quotas.roles.employee,
-                departments = quotas.departments,
-                inviteCount = quotas.registration.invite,
-                companyCodeCount = quotas.registration.companyCode,
-                mailDomain = settings.mailDomain,
-                mailbox = settings.mailbox,
+            CampaignIdentities.spec(
+                quotas,
+                settings.mailDomain,
+                settings.mailbox,
+                settings.accounts(quotas.target),
             )
         val plan = identityPlanner.execute(run.runId, RunTags.forRun(run.runId), spec)
         run.identities = plan.identities.sortedBy { it.agentId }

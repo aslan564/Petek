@@ -17,6 +17,7 @@ import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
+import az.petek.campaign.domain.Tenant
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.core.model.Role
 import az.petek.core.testing.FakeHarnessClock
@@ -77,6 +78,23 @@ class GenerateScenarioUseCaseTest {
         val file = dir.resolve("draft-${System.nanoTime()}.yaml")
         Files.writeString(file, yaml)
         return YamlCampaignSource().load(file)
+    }
+
+    @Test
+    fun `a draft for a site without companies signs its testers up, names the roles it saw and seeds nothing`() {
+        val composed = useCase().compose(Models.kadro(), request().copy(tenant = Tenant.NONE))
+
+        val campaign = composed.campaign
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+        campaign.settings.tenant shouldBe Tenant.NONE
+        campaign.settings.departments.shouldBeEmpty()
+        campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly listOf("register_and_login")
+        campaign.allSteps.none { (it.action as? StepAction.Run)?.function in setOf("register_owner", "seed_company") } shouldBe true
+        campaign.settings.registration.self shouldBe campaign.settings.testers
+        val reloaded = reload(composed.yaml)
+        reloaded.settings.tenant shouldBe Tenant.NONE
+        reloaded.settings.roles shouldBe campaign.settings.roles
+        validator.validate(reloaded, runFunctions).shouldBeEmpty()
     }
 
     @Test

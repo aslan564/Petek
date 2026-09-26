@@ -104,11 +104,20 @@ class DefaultActorExpressionParserTest {
     }
 
     @Test
-    fun `an unknown role is rejected with the raw text and line`() {
-        val issue = failure("boss[IT]", line = 12)
+    fun `a text that cannot name a role is rejected with the raw text and line`() {
+        val issue = failure("9boss[IT]", line = 12)
         issue.line shouldBe 12
-        issue.message shouldContain "invalid actor 'boss[IT]'"
-        issue.message shouldContain "unknown role 'boss'"
+        issue.message shouldContain "invalid actor '9boss[IT]'"
+        issue.message shouldContain "'9boss' is not a role name"
+    }
+
+    @Test
+    fun `a campaign may name its own roles`() {
+        parser.parse("editor[n=2] | reader[reg=guest]").selectors shouldContainExactly
+            listOf(
+                ActorSelector(checkNotNull(Role.fromKey("editor")), nth = 2),
+                ActorSelector(checkNotNull(Role.fromKey("reader")), registration = RegistrationMode.GUEST),
+            )
     }
 
     @Test
@@ -170,9 +179,9 @@ class DefaultActorExpressionParserTest {
     }
 
     @Test
-    fun `reg accepts only invite and company_code`() {
-        failure("employee[reg=owner]").message shouldContain "reg must be invite or company_code"
-        failure("employee[reg=email]").message shouldContain "reg must be invite or company_code"
+    fun `reg accepts only the joining modes and the gates`() {
+        failure("employee[reg=owner]").message shouldContain "reg must be invite, company_code, self, login or guest"
+        failure("employee[reg=email]").message shouldContain "reg must be invite, company_code, self, login or guest"
     }
 
     @Test
@@ -204,6 +213,6 @@ class DefaultActorExpressionParserTest {
 
     @Test
     fun `the line is optional`() {
-        failure("boss", line = null).line shouldBe null
+        failure("9boss", line = null).line shouldBe null
     }
 }

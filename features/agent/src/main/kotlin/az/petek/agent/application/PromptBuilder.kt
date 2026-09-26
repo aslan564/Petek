@@ -13,6 +13,7 @@ import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.Colleague
 import az.petek.agent.domain.DecisionProtocol
 import az.petek.browser.domain.PageSnapshot
+import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
 import az.petek.core.model.WorkingLanguage
 import az.petek.identity.domain.Identity
@@ -67,7 +68,7 @@ class PromptBuilder(
             appendLine()
             appendIdentity(runtime.identity)
             appendLine()
-            appendCompany(runtime)
+            if (runtime.identity.registration.isCompanyMode) appendCompany(runtime) else appendSite(runtime)
         }.trimEnd()
 
     fun user(
@@ -97,6 +98,27 @@ class PromptBuilder(
         appendLine("- Password: secret and never shown to you; type {self.password} wherever it is needed.")
         appendLine("- Tester id: ${identity.agentId}")
     }
+
+    /**
+     * A site without companies (`tenant: none`): no company, no roster. Other testers use the same site with their
+     * own accounts; a step that needs another tester's name or e-mail carries it in its task.
+     */
+    private fun StringBuilder.appendSite(runtime: AgentRuntime) {
+        appendLine("Test context:")
+        appendLine("- All accounts on the site under test used by this run are test accounts.")
+        val others = runtime.roster.count { it.agentId != runtime.identity.agentId }
+        if (others > 0) {
+            appendLine("- $others other testers use the same site at the same time, each with their own account; never use theirs.")
+        }
+        appendLine("- ${gateDescription(runtime.identity)}")
+    }
+
+    private fun gateDescription(identity: Identity): String =
+        when (identity.registration) {
+            RegistrationMode.LOGIN -> "You sign in with an existing account (your e-mail above and {self.password})."
+            RegistrationMode.GUEST -> "You are a visitor without an account; do not sign up or sign in unless the task says so."
+            else -> "You sign up for your own account (your e-mail above and {self.password}) when the task needs one."
+        }
 
     private fun StringBuilder.appendCompany(runtime: AgentRuntime) {
         val roster = runtime.roster.ifEmpty { listOf(Colleague.of(runtime.identity)) }
@@ -157,6 +179,7 @@ class PromptBuilder(
             Role.ADMIN -> "admin (company owner)"
             Role.MANAGER -> "manager of the ${department ?: "unassigned"} department"
             Role.EMPLOYEE -> "employee in the ${department ?: "unassigned"} department"
+            else -> role.key + (department?.let { " in $it" } ?: "")
         }
 
     companion object {

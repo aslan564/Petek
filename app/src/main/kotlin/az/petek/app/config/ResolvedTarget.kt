@@ -77,6 +77,8 @@ object TargetProfileConfig {
             mailSource = mailSource,
             mailDomain = inbox?.substringAfter('@') ?: spec.mail.domain ?: base.mailDomain,
             mailInbox = inbox,
+            oracle = base.oracle && spec.oracle,
+            oraclePaths = spec.oraclePaths.ifEmpty { base.oraclePaths },
         )
     }
 }

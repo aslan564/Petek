@@ -133,11 +133,30 @@ internal object ContractFlows {
             ),
         )
 
+    /** A sign-up without a company: name, e-mail and password; a site asking for more overrides the flow. */
+    private val signUp =
+        Flow(
+            listOf(
+                Goto("register"),
+                formShown("register.email", "The sign-up page shows no form ({url})."),
+                Fill("register.name", "{self.name}"),
+                Fill("register.email", "{self.email}"),
+                Fill("register.password", "{self.password}"),
+                Click("register.submit"),
+                accepted("sign-up"),
+                AccountCreated,
+                signIn,
+                AssertIdentity(USER_NAME),
+                SaveSession,
+            ),
+        )
+
     val ALL: Map<String, Flow> =
         linkedMapOf(
             FlowNames.REGISTER_OWNER to registerOwner,
             FlowNames.JOIN_BY_INVITE to joinByInvite,
             FlowNames.JOIN_BY_CODE to joinByCode,
+            FlowNames.SIGN_UP to signUp,
             FlowNames.LOGIN to Flow(listOf(signInFromLoginPage, SaveSession)),
             FlowNames.VERIFY_IDENTITY to Flow(listOf(AssertIdentity(USER_NAME))),
         )

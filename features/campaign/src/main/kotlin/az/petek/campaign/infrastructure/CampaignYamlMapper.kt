@@ -29,8 +29,10 @@ import az.petek.campaign.domain.SourceLines
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TargetProfile
+import az.petek.campaign.domain.Tenant
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.campaign.domain.expandApiPrefix
+import az.petek.core.model.Role
 import com.charleskorn.kaml.YamlList
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
@@ -91,9 +93,10 @@ internal class CampaignYamlMapper(
             val testers = fields.int("testers", required = true)
             val seed = fields.long("seed", required = true)
             val names = fields.textList("names") ?: emptyList()
-            val roles = roles(fields)
-            val departments = fields.textList("departments", required = true)
-            val registration = registration(fields, roles)
+            val tenant = tenant(fields)
+            val roles = if (tenant == Tenant.NONE) ownRoles(fields) else roles(fields)
+            val departments = fields.textList("departments", required = tenant == Tenant.COMPANY) ?: emptyList()
+            val registration = if (tenant == Tenant.NONE) gates(fields, testers) else registration(fields, roles)
             val budget = budget(fields)
             val onFail = onFail(fields) ?: OnFail.CONTINUE
             val name = fields.text("name") ?: defaultName
@@ -104,12 +107,60 @@ internal class CampaignYamlMapper(
                 seed = seed ?: return null,
                 names = names,
                 roles = roles ?: return null,
-                departments = departments ?: return null,
+                departments = departments,
                 registration = registration ?: return null,
                 budget = budget ?: return null,
                 onFail = onFail,
                 name = name,
                 pacing = pacing,
+                tenant = tenant,
+            )
+        }
+
+        private fun tenant(fields: YamlFields): Tenant {
+            val raw = fields.text("tenant") ?: return Tenant.COMPANY
+            return Tenant.fromKey(raw)
+                ?: reader.problem(fields.pathOf("tenant"), "'${fields.pathOf("tenant")}' must be company or none, was '$raw'")
+                ?: Tenant.COMPANY
+        }
+
+        /** `tenant: none`: the campaign names its own roles (`roles: {editor: 2, reader: 3}`), in the order written. */
+        private fun ownRoles(fields: YamlFields): RoleQuota? {
+            val node = fields.required("roles") ?: return null
+            val path = fields.pathOf("roles")
+            val written =
+                (node as? YamlMap)
+                    ?.entries
+                    ?.keys
+                    ?.map { it.content }
+                    .orEmpty()
+            written.filterNot(Role::isValidKey).forEach {
+                reader.problem(
+                    childPath(path, it),
+                    "'$it' in $path is not a role name (lowercase letters, digits, '_' and '-', starting with a letter)",
+                )
+            }
+            val valid = written.filter(Role::isValidKey)
+            val roles = reader.map(node, path, valid.toSet()) ?: return null
+            val counts = linkedMapOf<Role, Int>()
+            valid.forEach { key -> counts[Role.fromKey(key) ?: return null] = roles.int(key, required = true) ?: return null }
+            if (counts.isEmpty()) return reader.problem(path, "$path must name at least one role, e.g. {user: 3}")
+            return RoleQuota.of(counts)
+        }
+
+        /** `tenant: none`: how testers pass the gate (`self`, `login`, `guest`); omitted, everyone signs up. */
+        private fun gates(
+            fields: YamlFields,
+            testers: Int?,
+        ): RegistrationQuota? {
+            if (!fields.has("registration")) return RegistrationQuota.selfSignUp(testers ?: return null)
+            val gates = fields.map("registration", GATE_KEYS) ?: return null
+            return RegistrationQuota(
+                invite = 0,
+                companyCode = 0,
+                self = gates.int("self", required = false) ?: 0,
+                login = gates.int("login", required = false) ?: 0,
+                guest = gates.int("guest", required = false) ?: 0,
             )
         }
 
@@ -563,7 +614,9 @@ internal class CampaignYamlMapper(
                 "budget",
                 "on_fail",
                 "pacing",
+                "tenant",
             )
+        val GATE_KEYS = linkedSetOf("self", "login", "guest")
         val ROLE_KEYS = linkedSetOf("admin", "manager", "employee")
         val REGISTRATION_KEYS = linkedSetOf("invite", "company_code")
         val BUDGET_KEYS = linkedSetOf("max_steps_per_agent", "max_minutes")

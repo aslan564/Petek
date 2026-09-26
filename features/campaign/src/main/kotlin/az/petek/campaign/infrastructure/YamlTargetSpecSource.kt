@@ -15,6 +15,7 @@ import az.petek.campaign.domain.SignInMethod
 import az.petek.campaign.domain.TargetMail
 import az.petek.campaign.domain.TargetSpec
 import az.petek.campaign.domain.TargetSpecException
+import az.petek.campaign.domain.Tenant
 import az.petek.campaign.domain.ValidationIssue
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlException
@@ -36,11 +37,12 @@ import java.nio.file.Path
  *   api_url: https://api.staging.kadrohr.com
  *   production_hosts: [kadrohr.com, www.kadrohr.com]
  *   mail: {source: test-api, domain: test.kadrohr.com}
- *   test_api: {token: '${PETEK_TEST_TOKEN_KADROHR}'}
+ *   test_api: {token: '${PETEK_TEST_TOKEN_KADROHR}'}   # or {mode: none}; paths: {otp: /qa/otp/{phone}, ...}
  *   sign_in: [test_company, own_accounts, self_register, anonymous]
  *   accounts:
  *     - {role: admin, email: owner@example.com, password: '${PETEK_ACC_KADROHR_ADMIN}'}
  *   profile: scenarios/kadrohr.yaml
+ *   tenant: company        # or none: a site without companies (drafts sign testers up instead of seeding one)
  * ```
  *
  * A secret written out instead of a `${VARIABLE}` reference is refused. Stateless; [load] does blocking I/O.
@@ -114,12 +116,55 @@ class YamlTargetSpecSource {
                 .map { it.trim().lowercase() }
                 .toSet()
         val mail = mail(fields)
-        val token = fields.map("test_api", setOf("token"))?.let { secret(reader, it, "token") }
+        val testApi = fields.map("test_api", setOf("token", "mode", "paths"))
+        val token = testApi?.let { secret(reader, it, "token") }
+        val oracle =
+            when (val mode = testApi?.text("mode")?.trim()?.lowercase()) {
+                null, "test_api", "test-api" -> true
+                "none" -> false
+                else -> reader.problem(testApi.pathOf("mode"), "test_api.mode is test_api or none, was '$mode'") ?: true
+            }
+        val oraclePaths =
+            testApi
+                ?.map("paths", ORACLE_PATH_KEYS)
+                ?.let { paths ->
+                    ORACLE_PATH_KEYS
+                        .mapNotNull { key ->
+                            paths.text(key)?.let {
+                                key to
+                                    it.trim()
+                            }
+                        }.toMap()
+                }.orEmpty()
+        oraclePaths.forEach { (key, path) ->
+            if (!path.startsWith(
+                    "/",
+                )
+            ) {
+                reader.problem(fields.pathOf("test_api"), "test_api.paths.$key must be a path on the site, starting with '/'")
+            }
+        }
         val signIn = signIn(reader, fields)
         val accounts = accounts(reader, fields)
         val profile = fields.text("profile")
+        val tenant =
+            fields.text("tenant")?.let { raw ->
+                Tenant.fromKey(raw) ?: reader.problem(fields.pathOf("tenant"), "tenant is company or none, was '$raw'")
+            }
         if (name == null || url == null || !TargetSpec.NAME.matches(name)) return null
-        return TargetSpec(name, url, apiUrl, hosts, mail, token, signIn ?: SignInMethod.DEFAULT_CHAIN, accounts, profile)
+        return TargetSpec(
+            name,
+            url,
+            apiUrl,
+            hosts,
+            mail,
+            token,
+            signIn ?: SignInMethod.DEFAULT_CHAIN,
+            accounts,
+            profile,
+            oracle,
+            oraclePaths,
+        )
     }
 
     private fun url(
@@ -197,6 +242,8 @@ class YamlTargetSpecSource {
 
     private companion object {
         const val ROOT_PATH = ""
-        val TARGET_KEYS = setOf("name", "url", "api_url", "production_hosts", "mail", "test_api", "sign_in", "accounts", "profile")
+        val ORACLE_PATH_KEYS = setOf("otp", "company_by_owner", "company", "seed_company")
+        val TARGET_KEYS =
+            setOf("name", "url", "api_url", "production_hosts", "mail", "test_api", "sign_in", "accounts", "profile", "tenant")
     }
 }

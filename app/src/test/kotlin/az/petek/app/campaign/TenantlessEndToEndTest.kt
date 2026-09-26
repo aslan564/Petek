@@ -1,0 +1,108 @@
+/*
+ * Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
+ * Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
+ *
+ * Licensed under the Business Source License 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. See the LICENSE file in the repository root. Change Date: 2030-09-25;
+ * Change License: Apache License, Version 2.0. The Licensed Work is provided "AS IS", without warranty.
+ */
+
+package az.petek.app.campaign
+
+import az.petek.app.config.ConfigLoader
+import az.petek.app.config.IdentitySecretSource
+import az.petek.app.di.AppContainer
+import az.petek.app.di.AppOverrides
+import az.petek.app.testing.CliHarness.Companion.done
+import az.petek.app.testing.scriptedLlm
+import az.petek.core.model.RegistrationMode
+import az.petek.evidence.domain.Verdict
+import az.petek.faketarget.notes.FakeNotesServer
+import az.petek.orchestration.domain.RunOptions
+import az.petek.orchestration.domain.RunOutcome
+import az.petek.orchestration.infrastructure.NoOpMonitorView
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
+import java.nio.file.Path
+
+/**
+ * Faza 13's proof: a campaign with `tenant: none` (its own roles, `self` and `guest` gates, no departments) runs end
+ * to end in real Chromium against the second fake site, a notes application without companies or a test API. The
+ * testers sign up through the default `sign_up` flow, the visitor stays anonymous, and the oracle check is
+ * "N/A (no oracle)" instead of a failure.
+ */
+@Tag("e2e")
+class TenantlessEndToEndTest {
+    @TempDir
+    lateinit var dir: Path
+
+    private val site = FakeNotesServer().start()
+
+    @AfterEach
+    fun stop() = site.close()
+
+    @Test
+    fun `a site without companies is tested with its own roles, self sign-up and a visitor, without an oracle`() =
+        runBlocking<Unit> {
+            val env =
+                dir.resolve("notes.env").also {
+                    Files.writeString(
+                        it,
+                        """
+                        PETEK_TARGET=${site.baseUrl}
+                        PETEK_ORACLE=none
+                        PETEK_MAILPIT_URL=http://127.0.0.1:9
+                        PETEK_IDENTITY_SECRET=tenantless-e2e-secret
+                        PETEK_BROWSER_HEADLESS=true
+                        PETEK_EVIDENCE_DIR=evidence
+                        """.trimIndent() + "\n",
+                    )
+                }
+            val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the test names its secret") }).load(env)
+            val campaignFile = dir.resolve("notes.yaml").also { Files.writeString(it, CAMPAIGN) }
+            AppContainer(config, AppOverrides(llm = scriptedLlm { done() }, monitor = NoOpMonitorView)).use { container ->
+                val campaign = container.campaigns.execute(campaignFile, container.knownRunFunctions)
+
+                val summary = container.campaignRunner(headless = true).run(campaign, RunOptions())
+
+                summary.outcome shouldBe RunOutcome.PASSED
+                site.accounts shouldBe 2
+                val identities = container.identities.findByRun(summary.runId)
+                identities.map { it.registration } shouldContainExactlyInAnyOrder
+                    listOf(RegistrationMode.SELF, RegistrationMode.SELF, RegistrationMode.GUEST)
+                identities.map { it.department }.toSet() shouldBe setOf(null)
+                val assertions = container.evidenceQuery.assertions(summary.runId)
+                assertions.filter { it.type == "oracle" }.map { it.verdict } shouldBe List(2) { Verdict.NOT_APPLICABLE }
+            }
+        }
+
+    private companion object {
+        val CAMPAIGN =
+            """
+            campaign:
+              name: notes
+              tenant: none
+              testers: 3
+              seed: 11
+              roles: {writer: 2, reader: 1}
+              registration: {self: 2, guest: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 3}
+            setup:
+              - id: gates
+                actor: [writer[*], reader]
+                run: register_and_login
+            steps:
+              - id: who-am-i
+                actor: writer[*]
+                run: verify_identity
+                assert:
+                  - oracle: {path: /test/notes/latest, field: author, equals: "{self.email}"}
+            """.trimIndent() + "\n"
+    }
+}

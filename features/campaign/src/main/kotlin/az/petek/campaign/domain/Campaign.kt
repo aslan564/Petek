@@ -43,6 +43,8 @@ data class CampaignSettings(
     val name: String = "campaign",
     /** How the actors of a step are started (`campaign.pacing`); by default all at once. */
     val pacing: Pacing = Pacing.NONE,
+    /** Whether the site has companies (`campaign.tenant`); KadroHR-shaped campaigns keep the default. */
+    val tenant: Tenant = Tenant.COMPANY,
 )
 
 /**
@@ -64,38 +66,98 @@ data class Pacing(
     }
 }
 
+/**
+ * How many testers play each role. [admin], [manager] and [employee] are the roles of a site with companies
+ * (`tenant: company`); [others] holds the roles a campaign names itself (`editor: 2`), which a site without companies
+ * uses instead.
+ */
 data class RoleQuota(
     val admin: Int,
     val manager: Int,
     val employee: Int,
+    val others: Map<Role, Int> = emptyMap(),
 ) {
-    val total: Int get() = admin + manager + employee
+    val total: Int get() = admin + manager + employee + others.values.sum()
+
+    /** Every role with its count, company roles first (also when zero), then [others] in their order. */
+    val counts: Map<Role, Int>
+        get() = linkedMapOf(Role.ADMIN to admin, Role.MANAGER to manager, Role.EMPLOYEE to employee) + others
+
+    /** Roles with at least one tester. */
+    val roles: List<Role> get() = counts.filterValues { it > 0 }.keys.toList()
 
     fun count(role: Role): Int =
         when (role) {
             Role.ADMIN -> admin
             Role.MANAGER -> manager
             Role.EMPLOYEE -> employee
+            else -> others[role] ?: 0
         }
+
+    companion object {
+        /** A quota of campaign-named roles only, for a site without companies. */
+        fun of(counts: Map<Role, Int>): RoleQuota =
+            RoleQuota(
+                admin = counts[Role.ADMIN] ?: 0,
+                manager = counts[Role.MANAGER] ?: 0,
+                employee = counts[Role.EMPLOYEE] ?: 0,
+                others = counts.filterKeys { !it.isCompanyRole },
+            )
+    }
 }
 
 /**
- * How non-admin testers join the company. `invite + companyCode` must equal managers + employees, and `invite` must
- * be at least the number of managers: the target's company-code form has no role field, so whoever joins with the code
- * becomes an employee, and managers therefore always join by invitation. The remaining invitations and every company
- * code go to employees. The YAML may omit it; the loader then splits evenly (invite gets the extra one), but never
- * invites fewer testers than there are managers.
+ * Whether the site organises its users in companies (KadroHR: an admin creates one, the others join it) or not (a
+ * shop, a blog, a plain sign-in application). Decides the setup steps, the registration modes, the prompt's company
+ * context and what the teardown removes.
+ */
+enum class Tenant(
+    val key: String,
+) {
+    COMPANY("company"),
+    NONE("none"),
+    ;
+
+    companion object {
+        fun fromKey(key: String): Tenant? = entries.firstOrNull { it.key == key.trim().lowercase() }
+    }
+}
+
+/**
+ * How testers get onto the site. With companies ([Tenant.COMPANY]) the non-admins join the admin's company:
+ * `invite + companyCode` must equal managers + employees, and `invite` must be at least the number of managers: the
+ * target's company-code form has no role field, so whoever joins with the code becomes an employee, and managers
+ * therefore always join by invitation. The remaining invitations and every company code go to employees. The YAML may
+ * omit it; the loader then splits evenly (invite gets the extra one), but never invites fewer testers than there are
+ * managers.
+ *
+ * Without companies ([Tenant.NONE]) every tester passes its own gate: [self] sign up on their own, [login] sign in with
+ * an account the owner gave for their role, [guest] stay visitors; they add up to the testers.
  */
 data class RegistrationQuota(
     val invite: Int,
     val companyCode: Int,
+    val self: Int = 0,
+    val login: Int = 0,
+    val guest: Int = 0,
 ) {
     fun count(mode: RegistrationMode): Int =
         when (mode) {
-            RegistrationMode.OWNER -> 0
             RegistrationMode.INVITE -> invite
             RegistrationMode.COMPANY_CODE -> companyCode
+            RegistrationMode.SELF -> self
+            RegistrationMode.LOGIN -> login
+            RegistrationMode.GUEST -> guest
+            else -> 0
         }
+
+    /** Testers passing a gate of a site without companies. */
+    val gates: Int get() = self + login + guest
+
+    companion object {
+        /** Every one of [testers] signs up on their own: the default of a site without companies. */
+        fun selfSignUp(testers: Int): RegistrationQuota = RegistrationQuota(0, 0, self = testers)
+    }
 }
 
 data class Budget(

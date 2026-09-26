@@ -19,6 +19,7 @@ import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TemplateRenderer
+import az.petek.campaign.domain.Tenant
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.core.model.Role
 import az.petek.explorer.domain.ActionKind
@@ -121,6 +122,11 @@ internal class ScenarioComposer(
 
     fun setupSteps(): List<ScenarioStep> {
         val functions = settings.setup
+        if (settings.tenant == Tenant.NONE) {
+            // No company to create: every tester passes its own gate (sign-up, owner's account or visit).
+            val everybody = settings.team.roles.joinToString(" | ") { "${it.key}[*]" }
+            return listOf(step("gates", StepPhase.SETUP, everybody, StepAction.Run(functions.join)))
+        }
         return buildList {
             add(step("owner_signup", StepPhase.SETUP, "admin", StepAction.Run(functions.registerOwner)))
             add(step("seed", StepPhase.SETUP, "admin", StepAction.Run(functions.seedCompany)))
@@ -233,7 +239,9 @@ internal class ScenarioComposer(
         val name = site(action.name)
         val seen = action.allowedRoles.sorted().joinToString()
         val role =
-            campaignRoles(action.allowedRoles).firstOrNull { settings.team.count(it) >= 2 && it != Role.ADMIN }
+            campaignRoles(action.allowedRoles).firstOrNull {
+                settings.team.count(it) >= 2 && (it != Role.ADMIN || settings.tenant == Tenant.NONE)
+            }
                 ?: return Outcome.Skipped("a race needs two testers of a role that was offered '$name' (seen: $seen)")
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
         val id = stepId(action, "race")
@@ -442,16 +450,18 @@ internal class ScenarioComposer(
 
     private fun campaignRoles(names: Collection<String>): List<Role> {
         val roles = names.mapNotNull(Role::fromKey).toSet()
+        if (settings.tenant == Tenant.NONE) return settings.team.roles.filter { it in roles }
         return PREFERENCE.filter { it in roles }
     }
 
-    private fun single(role: Role): String = if (role == Role.ADMIN) "admin" else "${role.key}[n=1]"
+    /** The company's admin is one person; any other role (every role of a site without companies) is picked by index. */
+    private fun single(role: Role): String = if (role == Role.ADMIN && settings.tenant == Tenant.COMPANY) "admin" else "${role.key}[n=1]"
 
-    private fun everyone(role: Role): String = if (role == Role.ADMIN) "admin" else "${role.key}[*]"
+    private fun everyone(role: Role): String = if (role == Role.ADMIN && settings.tenant == Tenant.COMPANY) "admin" else "${role.key}[*]"
 
     private fun noRole(action: ActionModel): Outcome =
         Outcome.Skipped(
-            "no campaign role (admin, manager, employee) was seen using '${site(action.name)}' " +
+            "no campaign role (${settings.team.roles.joinToString { it.key }}) was seen using '${site(action.name)}' " +
                 "(seen: ${action.allowedRoles.sorted().joinToString().ifEmpty { "nobody" }})",
         )
 

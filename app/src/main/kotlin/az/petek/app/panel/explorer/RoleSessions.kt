@@ -202,7 +202,7 @@ internal class TestCompanyRoleSessions(
         }
         val opened = LinkedHashMap<String, BrowserSession>()
         try {
-            active.entries.sortedBy { it.key.ordinal }.forEach { (role, identity) ->
+            active.entries.sortedBy { it.key }.forEach { (role, identity) ->
                 opened[role.key] =
                     sessions.open(
                         SessionOptions(

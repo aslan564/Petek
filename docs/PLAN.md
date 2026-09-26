@@ -829,20 +829,26 @@ həmin repoda `SKILL.md`-ni oxuyub `explore_site` çağırır; GitHub Action fak
 Məqsəd: HR SaaS forması nüvədən çıxsın; sayt haqqında heç nə bilməyəndə də dəyərli test alınsın. Ən riskli refaktor,
 ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
 
-- [ ] `Roles.kt` enum-ları sərbəst sətirə: rollar və qeydiyyat rejimləri kampaniya/hədəf profili tərəfindən müəyyən
+- [x] `Roles.kt` enum-ları sərbəst sətirə: rollar və qeydiyyat rejimləri kampaniya/hədəf profili tərəfindən müəyyən
   olunur; `admin/manager/employee` KadroHR profilinin dəyərləridir.
-- [ ] Şirkət/departament/`seed_company`/dəvət-şirkət kodu məntiqi "tenant" plugin-inə (`features/tenant` və ya
+  **Vəziyyət:** `Role`/`RegistrationMode` açıq value class-lardır (sabitlər KadroHR dəyərləridir); yeni qapılar `self`, `login`, `guest`.
+- [x] Şirkət/departament/`seed_company`/dəvət-şirkət kodu məntiqi "tenant" plugin-inə (`features/tenant` və ya
   `campaign` daxilində isteğe bağlı bölmə): profil `tenant: none | company` deyir; `PromptBuilder` "Company context"
   blokunu yalnız tenant varsa qoşur; teardown resurs üzrə ümumiləşir.
-- [ ] Oracle adapteri konfiqurasiya ilə: `/test/...` yolları və resurslar profildə (`ScenarioSettings.oracleResources`
+  **Vəziyyət:** `campaign.tenant` və hədəf profilinin `tenant`-ı; şirkətsiz saytda şirkət run-ları rədd olunur, prompt
+  qısa test konteksti alır; teardown artıq run-ın qeyd etdiyi resurslar üzrədir (şirkətsiz run heç nə qeyd etmir).
+- [x] Oracle adapteri konfiqurasiya ilə: `/test/...` yolları və resurslar profildə (`ScenarioSettings.oracleResources`
   başlanğıcdır); `none` rejimi birinci dərəcəli.
+  **Vəziyyət:** `PETEK_ORACLE=none`, profildə `test_api: {mode: none}` və `test_api.paths` (`OraclePaths`); nəticə "N/A (no oracle)".
 - [ ] Kor test naxışları (`TestPatterns` genişlənir; site model boş olsa da işləyir): forma validasiyası (boş/uzun/yanlış
   giriş), ikiqat submit (idempotentlik), birbaşa URL ilə icazə (rol A-nın səhifəsi rol B ilə), yarış (iki agent eyni
   obyekt), sessiya bitməsi, geri düyməsi, qırıq linklər, konsol/şəbəkə xətaları, yavaş endpoint-lər, mobil viewport.
   Hər naxış hansı sübut səviyyəsini verə bildiyini bildirir.
-- [ ] Kəşfiyyatçı draftları şirkətsiz setup ilə (yalnız login və ya anonim); seed yolları və açar sözlər profildə.
-- [ ] KadroHR default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → `targets/kadrohr.yaml`.
-- [ ] Testlər: tenant-sız kampaniya e2e ikinci fake saytda; Konsist "core/domain HR anlayışı bilmir" qaydası.
+- [x] Kəşfiyyatçı draftları şirkətsiz setup ilə (yalnız login və ya anonim); seed yolları və açar sözlər profildə.
+  **Vəziyyət:** `ScenarioSettings.forSiteWithoutCompanies`: görülən rollar, hər birinə 2 tester, qapı `self` (yalnız anonim görülübsə `guest`).
+- [x] KadroHR default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → `targets/kadrohr.yaml`.
+- [x] Testlər: tenant-sız kampaniya e2e ikinci fake saytda; Konsist "core/domain HR anlayışı bilmir" qaydası.
+  **Vəziyyət:** `FakeNotesServer` (şirkətsiz qeydlər tətbiqi, test API-siz), `TenantlessEndToEndTest` (real Chromium).
 
 Hazır sayılır: ikinci fake sayt (şirkət anlayışı olmayan, adi login-li tətbiq) `petek explore` → draft → `run` →
 hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.

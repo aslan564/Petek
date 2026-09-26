@@ -34,6 +34,7 @@ class OwnerAccountsTest {
     private val config by lazy {
         PetekConfig(
             target = URI("https://stage.shop.example"),
+            productionHosts = setOf("kadrohr.com"),
             identitySecret = Secret("owner-accounts-test-secret-123"),
             evidenceDir = dir.resolve("evidence"),
         )

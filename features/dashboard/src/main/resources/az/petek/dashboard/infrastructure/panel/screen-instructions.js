@@ -234,7 +234,7 @@
     ui = { fields: {} };
     ui.flow = h('div', 'flow');
 
-    const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.kadrohr.az', autocomplete: 'off', spellcheck: 'false' } });
+    const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false' } });
     target.value = form.target;
     target.addEventListener('input', () => { form.target = target.value; save(); renderFlow(); });
     const text = h('textarea', { class: 'textarea', attrs: { rows: 8, placeholder: 'Məsələn: Admin elan yaradır, bütün işçilər onu 10 saniyə ərzində real vaxtda görməlidir. Tapşırıq yaratma və menecerin təsdiqi axınını da yoxla. Ödəniş bölməsinə toxunma.' } });

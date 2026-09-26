@@ -11,6 +11,7 @@ package az.petek.oracle.infrastructure
 
 import az.petek.core.security.Secret
 import az.petek.oracle.domain.OracleException
+import az.petek.oracle.domain.OraclePaths
 import az.petek.oracle.domain.OracleResponse
 import az.petek.oracle.domain.OracleSafetyException
 import az.petek.oracle.domain.SeedCompanyRequest
@@ -70,6 +71,8 @@ class HttpTargetOracle(
     testToken: Secret?,
     client: HttpClient? = null,
     requestTimeout: Duration = 15.seconds,
+    /** Where the test API answers; the contract's paths unless the target profile names others. */
+    private val paths: OraclePaths = OraclePaths.CONTRACT,
 ) : TargetOracle,
     AutoCloseable {
     /** The token as sent; null when none is configured. Validated before the HTTP client exists, so nothing leaks. */
@@ -104,14 +107,14 @@ class HttpTargetOracle(
     override suspend fun latestOtp(phone: String): String? {
         require(phone.isNotBlank()) { "phone must not be blank" }
         val action = "latest OTP for $phone"
-        val otp = lookup(action, "/test/otp/${UrlEncoding.component(phone.trim())}") ?: return null
+        val otp = lookup(action, paths.otp.replace("{phone}", UrlEncoding.component(phone.trim()))) ?: return null
         return otp.asObject(action).text("code") ?: throw protocolError(action, "the answer has no code")
     }
 
     override suspend fun companyByOwner(ownerEmail: String): TestCompany? {
         require(ownerEmail.isNotBlank()) { "ownerEmail must not be blank" }
         val action = "company of owner $ownerEmail"
-        val answer = lookup(action, "/test/companies?owner=${UrlEncoding.component(ownerEmail.trim())}") ?: return null
+        val answer = lookup(action, paths.companyByOwner.replace("{owner}", UrlEncoding.component(ownerEmail.trim()))) ?: return null
         // The contract answers one object; a list (one company per owner anyway) is accepted as well.
         val company = if (answer is JsonArray) answer.firstOrNull() ?: return null else answer
         return company.asObject(action).toTestCompany(action)
@@ -126,7 +129,7 @@ class HttpTargetOracle(
         requireCompanyId(request.companyId)
         val action = "seed company ${request.companyId}"
         val body = json.encodeToString(SeedCompanyBody.serializer(), SeedCompanyBody.of(request))
-        val reply = send(HttpMethod.Post, "/test/companies/seed", body)
+        val reply = send(HttpMethod.Post, paths.seedCompany, body)
         if (reply.status !in SUCCESS) throw statusError(action, reply)
         val answer =
             parseOrNull(reply.body)?.asObject(action) ?: throw protocolError(action, "the answer is not JSON: ${snippet(reply.body)}")
@@ -214,7 +217,7 @@ class HttpTargetOracle(
         return "$base/${UrlEncoding.repair(trimmed).trimStart('/')}"
     }
 
-    private fun companyPath(companyId: String) = "/test/companies/${UrlEncoding.component(companyId)}"
+    private fun companyPath(companyId: String) = paths.company.replace("{id}", UrlEncoding.component(companyId))
 
     private fun parseOrNull(body: String): JsonElement? =
         if (body.isBlank()) {

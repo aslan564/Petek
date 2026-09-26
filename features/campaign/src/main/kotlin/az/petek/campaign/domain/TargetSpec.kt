@@ -31,6 +31,12 @@ data class TargetSpec(
     val accounts: List<OwnAccount> = emptyList(),
     /** A campaign file (optionally `#target_profile`) whose `target_profile` holds this site's selectors and flows. */
     val profile: String? = null,
+    /** `test_api.mode: none`: the site has no test API; oracle checks are "N/A (no oracle)" and nothing is seeded. */
+    val oracle: Boolean = true,
+    /** `test_api.paths`: where the site's test API answers the oracle (keys `otp`, `company_by_owner`, `company`, `seed_company`). */
+    val oraclePaths: Map<String, String> = emptyMap(),
+    /** `tenant: company | none`; null lets Pətək decide (companies when the site's test API can seed one). */
+    val tenant: Tenant? = null,
 ) {
     init {
         require(NAME.matches(name)) { "a target name is lower-case letters, digits and '-', was '$name'" }

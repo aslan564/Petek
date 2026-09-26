@@ -18,9 +18,11 @@ import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.TemplateRenderer
+import az.petek.campaign.domain.Tenant
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.core.error.PetekException
 import az.petek.core.ids.IdGenerator
+import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
 import az.petek.explorer.domain.CoveredIdea
 import az.petek.explorer.domain.ExplorationEvent
@@ -99,13 +101,14 @@ class GenerateScenarioUseCase(
         request: ScenarioRequest,
     ): ComposedScenario {
         val ideas = patterns.ideas(model, request.instructions).take(request.maxIdeas)
+        val settings = frameFor(model, request)
         val composer = ScenarioComposer(model, settings, request.testApi, templates, actorParser)
         val setup = composer.setupSteps()
         val (covered, skipped) = composer.compose(ideas)
         val name = request.name ?: "explorer-${Slugs.of(model.target.host.orEmpty()).ifEmpty { "site" }}-v${model.version}"
         val draft =
             Campaign(
-                settings = campaignSettings(model, name),
+                settings = campaignSettings(model, name, settings),
                 target = TargetProfile(emptyMap(), emptyMap(), composer.idSources.toMap()),
                 setup = setup,
                 steps = composer.mainSteps,
@@ -123,11 +126,49 @@ class GenerateScenarioUseCase(
         return ComposedScenario(campaign, written.yaml, covered, skipped)
     }
 
+    /** The configured frame, or for a site without companies one made of the roles the explorer saw. */
+    private fun frameFor(
+        model: SiteModel,
+        request: ScenarioRequest,
+    ): ScenarioSettings =
+        if (request.tenant == Tenant.NONE && settings.tenant == Tenant.COMPANY) {
+            settings.forSiteWithoutCompanies(model.actions.flatMap { it.allowedRoles })
+        } else {
+            settings
+        }
+
     private fun campaignSettings(
         model: SiteModel,
         name: String,
+        settings: ScenarioSettings,
     ): CampaignSettings {
         val team = settings.team
+        if (settings.tenant == Tenant.NONE) {
+            val perGate =
+                team.counts.entries
+                    .groupBy({ settings.gateOf(it.key) }, { it.value })
+                    .mapValues { it.value.sum() }
+            return CampaignSettings(
+                target = model.target,
+                testers = team.total,
+                seed = settings.seed,
+                names = emptyList(),
+                roles = team,
+                departments = emptyList(),
+                registration =
+                    RegistrationQuota(
+                        invite = 0,
+                        companyCode = 0,
+                        self = perGate[RegistrationMode.SELF] ?: 0,
+                        login = perGate[RegistrationMode.LOGIN] ?: 0,
+                        guest = perGate[RegistrationMode.GUEST] ?: 0,
+                    ),
+                budget = settings.budget,
+                onFail = OnFail.CONTINUE,
+                name = name,
+                tenant = Tenant.NONE,
+            )
+        }
         val invite = team.manager + team.employee / 2
         return CampaignSettings(
             target = model.target,

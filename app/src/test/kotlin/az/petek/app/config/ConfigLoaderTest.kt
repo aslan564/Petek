@@ -50,19 +50,22 @@ class ConfigLoaderTest {
 
     private val target = "PETEK_TARGET" to "https://staging.kadrohr.com"
 
+    /** No host is production by default; these tests name KadroHR's. */
+    private val hosts = "PETEK_PRODUCTION_HOSTS" to "kadrohr.com,www.kadrohr.com"
+
     @Test
     fun `only the target is required and every other key has the documented default`() {
         val config = load(target)
 
         config.target shouldBe URI("https://staging.kadrohr.com")
-        config.productionHosts shouldBe setOf("kadrohr.com", "www.kadrohr.com")
+        config.productionHosts shouldBe emptySet()
         config.allowProduction shouldBe false
         config.testToken.shouldBeNull()
         config.testApiUrl.shouldBeNull()
         config.testApiBase shouldBe config.target
         config.mailSource shouldBe MailSource.MAILPIT
         config.mailpitUrl shouldBe URI("http://localhost:8025")
-        config.mailDomain shouldBe "test.kadrohr.com"
+        config.mailDomain shouldBe "petek.test"
         config.llmProvider shouldBe LlmProviderKey.CLAUDE_CLI
         config.llmProviderReason shouldContain "no AI provider found"
         config.llmModel.shouldBeNull()
@@ -180,7 +183,7 @@ class ConfigLoaderTest {
                 "PETEK_MAILPIT_URL must be an absolute http(s) URL",
                 "PETEK_TEST_API_URL must be an absolute http(s) URL",
                 "PETEK_MAIL_SOURCE must be one of mailpit, test-api, imap, manual, was 'pop3'",
-                "PETEK_MAIL_DOMAIN must be a bare domain such as test.kadrohr.com",
+                "PETEK_MAIL_DOMAIN must be a bare domain such as test.example.com",
                 "PETEK_LLM_PROVIDER must be auto or one of claude-cli, anthropic-api, codex-cli, gemini-cli, opencode-cli, openai-compat, was 'gpt'",
                 "PETEK_LLM_CONCURRENCY must be a whole number between 1 and 64, was '0'",
                 "PETEK_BROWSER_HEADLESS must be true or false",
@@ -259,12 +262,12 @@ class ConfigLoaderTest {
 
     @Test
     fun `the test API address is judged by the production-host policy like the target`() {
-        problems(target, "PETEK_TEST_API_URL" to "https://kadrohr.com") shouldContainExactlyInAnyOrder
+        problems(target, hosts, "PETEK_TEST_API_URL" to "https://kadrohr.com") shouldContainExactlyInAnyOrder
             listOf(
                 "PETEK_TEST_API_URL: Target 'kadrohr.com' is a production host (listed in PETEK_PRODUCTION_HOSTS). " +
                     "Use a staging target, or set PETEK_ALLOW_PRODUCTION=true in .env to test it deliberately.",
             )
-        load(target, "PETEK_TEST_API_URL" to "https://kadrohr.com", "PETEK_ALLOW_PRODUCTION" to "true").testApiBase shouldBe
+        load(target, hosts, "PETEK_TEST_API_URL" to "https://kadrohr.com", "PETEK_ALLOW_PRODUCTION" to "true").testApiBase shouldBe
             URI("https://kadrohr.com")
         load(target, "PETEK_TEST_API_URL" to "https://api.staging.kadrohr.com").testApiBase shouldBe URI("https://api.staging.kadrohr.com")
     }
@@ -333,7 +336,7 @@ class ConfigLoaderTest {
         config.testToken shouldBe Secret("shop-token-123")
         config.mailSource shouldBe MailSource.TEST_API
         config.mailDomain shouldBe "qa.shop.example"
-        config.productionHosts shouldBe setOf("kadrohr.com", "www.kadrohr.com", "shop.example")
+        config.productionHosts shouldBe setOf("shop.example")
         config.targets.map { it.spec.name } shouldBe listOf("blog", "shop")
         config.profileFor(URI("https://blog.example/path"))?.testToken shouldBe null
         TargetProfileConfig.forTarget(config, URI("https://blog.example")).target shouldBe URI("https://blog.example")
@@ -404,8 +407,8 @@ class ConfigLoaderTest {
 
     @Test
     fun `the target policy refuses production hosts unless allowed`() {
-        val refusing = load("PETEK_TARGET" to "https://kadrohr.com")
-        val allowing = load("PETEK_TARGET" to "https://kadrohr.com", "PETEK_ALLOW_PRODUCTION" to "true")
+        val refusing = load("PETEK_TARGET" to "https://kadrohr.com", hosts)
+        val allowing = load("PETEK_TARGET" to "https://kadrohr.com", hosts, "PETEK_ALLOW_PRODUCTION" to "true")
 
         refusing.targetPolicy.verify(refusing.target).shouldBeInstanceOf<TargetVerdict.Refused>()
         allowing.targetPolicy.verify(allowing.target) shouldBe TargetVerdict.Allowed
@@ -413,7 +416,7 @@ class ConfigLoaderTest {
 
     @Test
     fun `a production target spelled with capitals or a trailing dot is still refused`() {
-        val config = load("PETEK_TARGET" to "HTTPS://KadroHR.com./app")
+        val config = load("PETEK_TARGET" to "HTTPS://KadroHR.com./app", hosts)
 
         config.target shouldBe URI("https://kadrohr.com/app")
         config.targetPolicy.verify(config.target).shouldBeInstanceOf<TargetVerdict.Refused>()

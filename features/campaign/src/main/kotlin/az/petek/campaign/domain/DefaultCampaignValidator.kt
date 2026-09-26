@@ -19,7 +19,8 @@ import kotlin.time.Duration
 /**
  * Checks every rule listed on [CampaignValidator] and the following, reporting all issues at once (never just the first):
  *
- * - settings: `testers > 0`, role and registration quotas are non-negative and add up, `registration.invite` covers
+ * - settings: with `tenant: none` the roles are the campaign's own and the gates (`self`, `login`, `guest`) add up to
+ *   the testers, departments are optional; with companies, `testers > 0`, role and registration quotas are non-negative and add up, `registration.invite` covers
  *   every manager (managers always join by invitation: a company-code sign-up makes an employee), departments are
  *   non-empty, unique and addressable by the actor grammar, names are unique, the budget is positive, the target is
  *   an absolute http(s) URL without credentials (messages mask them);
@@ -86,8 +87,13 @@ class DefaultCampaignValidator(
             checkTarget(settings.target)
             if (settings.testers <= 0) report("campaign.testers", "campaign.testers must be positive, was ${settings.testers}")
             checkRoles()
-            checkRegistration()
-            checkDepartments()
+            if (settings.tenant == Tenant.COMPANY) {
+                checkRegistration()
+                checkDepartments()
+            } else {
+                checkGates()
+                if (settings.departments.isNotEmpty()) checkDepartments()
+            }
             checkNames()
             if (settings.budget.maxStepsPerAgent <= 0) {
                 report(
@@ -116,14 +122,43 @@ class DefaultCampaignValidator(
 
         private fun checkRoles() {
             val roles = settings.roles
-            Role.entries.filter { roles.count(it) < 0 }.forEach {
-                report("campaign.roles.${it.key}", "campaign.roles.${it.key} must not be negative, was ${roles.count(it)}")
+            roles.counts.filterValues { it < 0 }.forEach { (role, count) ->
+                report("campaign.roles.${role.key}", "campaign.roles.${role.key} must not be negative, was $count")
             }
-            if (settings.testers > 0 && roles.total != settings.testers) {
+            if (settings.tenant == Tenant.COMPANY && roles.others.isNotEmpty()) {
                 report(
                     "campaign.roles",
-                    "roles add up to ${roles.total} (admin ${roles.admin} + manager ${roles.manager} + " +
-                        "employee ${roles.employee}) but campaign.testers is ${settings.testers}",
+                    "campaign.roles may only be admin, manager and employee on a site with companies " +
+                        "(found ${roles.others.keys.joinToString(", ")}); set campaign.tenant: none for a site with its own roles",
+                )
+            }
+            if (settings.testers > 0 && roles.total != settings.testers) {
+                val parts = roles.counts.filter { (role, count) -> count != 0 || (role.isCompanyRole && settings.tenant == Tenant.COMPANY) }
+                report(
+                    "campaign.roles",
+                    "roles add up to ${roles.total} (${parts.entries.joinToString(" + ") { "${it.key.key} ${it.value}" }}) " +
+                        "but campaign.testers is ${settings.testers}",
+                )
+            }
+        }
+
+        /** `tenant: none`: the gates are non-negative and every tester passes exactly one. */
+        private fun checkGates() {
+            val registration = settings.registration
+            RegistrationMode.GATES.filter { registration.count(it) < 0 }.forEach {
+                report(
+                    "campaign.registration.${it.key}",
+                    "campaign.registration.${it.key} must not be negative, was ${registration.count(it)}",
+                )
+            }
+            if (registration.invite != 0 || registration.companyCode != 0) {
+                report("campaign.registration", "invite and company_code need companies; with tenant: none use self, login and guest")
+            }
+            if (settings.testers > 0 && registration.gates != settings.testers) {
+                report(
+                    "campaign.registration",
+                    "registration adds up to ${registration.gates} (self ${registration.self} + login ${registration.login} + " +
+                        "guest ${registration.guest}) but campaign.testers is ${settings.testers}",
                 )
             }
         }
@@ -390,7 +425,9 @@ class DefaultCampaignValidator(
                 action.args.forEach { (key, value) ->
                     checkTemplate(value, "$path.run.args.$key", "$name, run argument '$key'", beforeScope, step.line)
                 }
-                if (action.function in ADMIN_ONLY_RUN_FUNCTIONS && step.actors.selectors.any { it.role != Role.ADMIN }) {
+                if (action.function in ADMIN_ONLY_RUN_FUNCTIONS && settings.tenant == Tenant.NONE) {
+                    report("run", "$name: run ${action.function} creates a company, but campaign.tenant is none")
+                } else if (action.function in ADMIN_ONLY_RUN_FUNCTIONS && step.actors.selectors.any { it.role != Role.ADMIN }) {
                     report(
                         "actor",
                         "$name: run ${action.function} may only be performed by the admin (the company owner), " +
@@ -606,6 +643,14 @@ class DefaultCampaignValidator(
         private fun maxSelectorMatches(selector: ActorSelector): Int {
             val role = selector.role
             if (selector.department != null && (role == Role.ADMIN || selector.department !in settings.departments)) return 0
+            if (settings.tenant == Tenant.NONE) {
+                val bound =
+                    minOf(
+                        settings.roles.count(role).coerceAtLeast(0),
+                        selector.registration?.let(settings.registration::count) ?: Int.MAX_VALUE,
+                    )
+                return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
+            }
             var bound = settings.roles.count(role).coerceAtLeast(0)
             selector.registration?.let { mode -> bound = minOf(bound, joinersOf(role, mode)) }
             return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
@@ -635,8 +680,12 @@ class DefaultCampaignValidator(
                         when (mode) {
                             RegistrationMode.INVITE -> registration.invite - managers
                             RegistrationMode.COMPANY_CODE -> registration.companyCode
-                            RegistrationMode.OWNER -> 0
+                            else -> 0
                         }
+                    }
+
+                    else -> {
+                        0
                     }
                 }
             return bound.coerceAtLeast(0)

@@ -119,6 +119,7 @@ class ConfigLoader(
             val dbPath = if (text(Keys.DB) != null) path(Keys.DB, default = null) else evidenceDir?.resolve(PetekConfig.DEFAULT_DB_FILE)
             val identitySecret = identitySecret()
             val telemetry = telemetry()
+            val oracle = oracle()
             if (problems.isNotEmpty()) throw ConfigException(problems.toList())
             val loaded =
                 PetekConfig(
@@ -153,6 +154,7 @@ class ConfigLoader(
                     targetsDir = path(Keys.TARGETS_DIR, DEFAULT_TARGETS_DIR),
                     correlationHeader = flag(Keys.CORRELATION_HEADER, default = false),
                     traceLog = if (text(Keys.TRACE_LOG) != null) path(Keys.TRACE_LOG, default = null) else null,
+                    oracle = oracle,
                 )
             // PETEK_TARGET naming a profile takes that profile's settings; a URL keeps the .env ones.
             return if (named != null) TargetProfileConfig.apply(loaded, named) else loaded
@@ -223,7 +225,7 @@ class ConfigLoader(
         private fun mailDomain(): String? {
             val domain = (text(Keys.MAIL_DOMAIN) ?: PetekConfig.DEFAULT_MAIL_DOMAIN).lowercase().removePrefix("@")
             if (!HOST.matches(domain)) {
-                problems += "${Keys.MAIL_DOMAIN} must be a bare domain such as test.kadrohr.com"
+                problems += "${Keys.MAIL_DOMAIN} must be a bare domain such as test.example.com"
                 return null
             }
             return domain
@@ -358,6 +360,14 @@ class ConfigLoader(
             }
         }
 
+        /** `PETEK_ORACLE`: `test-api` (default) asks the test API when a token is set; `none` never does. */
+        private fun oracle(): Boolean =
+            when (val raw = text(Keys.ORACLE)?.lowercase() ?: "test-api") {
+                "test-api", "test_api" -> true
+                "none" -> false
+                else -> true.also { problems += "${Keys.ORACLE} must be test-api or none, was '$raw'" }
+            }
+
         /** `off` (default) or `local`; nothing else, so no typo ever turns counting on. */
         private fun telemetry(): Boolean =
             when (val raw = text(Keys.TELEMETRY)?.lowercase() ?: "off") {
@@ -427,6 +437,7 @@ class ConfigLoader(
         const val EVIDENCE_DIR = "PETEK_EVIDENCE_DIR"
         const val DB = "PETEK_DB"
         const val TELEMETRY = "PETEK_TELEMETRY"
+        const val ORACLE = "PETEK_ORACLE"
     }
 
     private companion object {

@@ -112,8 +112,11 @@ class KadrohrCampaignFileTest {
             flow(name) shouldNotBe TargetProfile.DEFAULT_FLOWS[name]
         }
         flow(FlowNames.VERIFY_IDENTITY) shouldBe TargetProfile.DEFAULT_FLOWS[FlowNames.VERIFY_IDENTITY]
+        // KadroHR has companies: nobody signs up on their own, so the default sign_up flow is not part of its profile.
         val typed =
-            target.flows.values
+            target.flows
+                .filterKeys { it != FlowNames.SIGN_UP }
+                .values
                 .flatMap { allSteps(it.steps) }
                 .filter { "{self.password}" in it.toString() }
         typed.all { it is FlowStep.Fill } shouldBe true

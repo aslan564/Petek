@@ -84,7 +84,9 @@ class DefaultActorExpressionParser : ActorExpressionParser {
         val open = selector.indexOf('[')
         val roleText = if (open < 0) selector else selector.substring(0, open).trim()
         if (roleText.isEmpty()) throw invalid(raw, "'$selector' does not start with a role ($ROLE_NAMES)", line)
-        val role = Role.fromKey(roleText) ?: throw invalid(raw, "unknown role '$roleText' (expected $ROLE_NAMES)", line)
+        val role =
+            Role.fromKey(roleText)
+                ?: throw invalid(raw, "'$roleText' is not a role name (a campaign role such as $ROLE_NAMES)", line)
         if (open < 0) return ActorSelector(role)
         val close = selector.indexOf(']')
         if (close != selector.lastIndex) throw invalid(raw, "unexpected text after ']' in '$selector'", line)
@@ -150,7 +152,7 @@ class DefaultActorExpressionParser : ActorExpressionParser {
         line: Int?,
     ): RegistrationMode =
         RegistrationMode.fromKey(value)?.takeIf { it != RegistrationMode.OWNER }
-            ?: throw invalid(raw, "reg must be invite or company_code, was '$value'", line)
+            ?: throw invalid(raw, "reg must be invite, company_code, self, login or guest, was '$value'", line)
 
     private fun parseIndex(
         value: String,

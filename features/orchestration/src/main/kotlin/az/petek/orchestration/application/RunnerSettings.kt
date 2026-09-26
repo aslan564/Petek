@@ -9,6 +9,8 @@
 
 package az.petek.orchestration.application
 
+import az.petek.identity.domain.GivenAccount
+import java.net.URI
 import java.nio.file.Path
 
 /**
@@ -27,6 +29,8 @@ data class RunnerSettings(
     /** Send `X-Petek-Correlation-Id` with every tester request (`PETEK_CORRELATION_HEADER`, Faza 14). */
     val correlationHeader: Boolean = false,
     val activatingRunFunctions: Set<String> = DEFAULT_ACTIVATING_RUN_FUNCTIONS,
+    /** The owner's accounts for a target (its profile's `accounts`); `login` testers sign in with them (Faza 18). */
+    val accounts: (URI) -> List<GivenAccount> = { emptyList() },
 ) {
     init {
         require(mailDomain.isNotBlank()) { "mailDomain must not be blank" }

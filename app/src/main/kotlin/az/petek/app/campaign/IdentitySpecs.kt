@@ -10,7 +10,9 @@
 package az.petek.app.campaign
 
 import az.petek.campaign.domain.CampaignSettings
+import az.petek.identity.domain.GivenAccount
 import az.petek.identity.domain.IdentitySpec
+import az.petek.orchestration.application.CampaignIdentities
 
 /** Maps campaign quotas to the identity generator's input the same way the runner does, so `plan` shows who runs. */
 object IdentitySpecs {
@@ -18,18 +20,6 @@ object IdentitySpecs {
         settings: CampaignSettings,
         mailDomain: String,
         mailbox: String? = null,
-    ): IdentitySpec =
-        IdentitySpec(
-            testers = settings.testers,
-            seed = settings.seed,
-            names = settings.names,
-            admins = settings.roles.admin,
-            managers = settings.roles.manager,
-            employees = settings.roles.employee,
-            departments = settings.departments,
-            inviteCount = settings.registration.invite,
-            companyCodeCount = settings.registration.companyCode,
-            mailDomain = mailDomain,
-            mailbox = mailbox,
-        )
+        accounts: List<GivenAccount> = emptyList(),
+    ): IdentitySpec = CampaignIdentities.spec(settings, mailDomain, mailbox, accounts)
 }

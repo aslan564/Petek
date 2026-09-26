@@ -14,6 +14,7 @@ import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
+import az.petek.campaign.domain.Tenant
 import kotlin.time.Duration
 
 /** YAML text of a campaign plus the line each step starts at (for validation messages). */
@@ -53,9 +54,17 @@ internal object CampaignYamlWriter {
         out.add("  testers: ${settings.testers}")
         out.add("  seed: ${settings.seed}")
         if (settings.names.isNotEmpty()) out.add("  names: ${list(settings.names)}")
-        out.add("  roles: {admin: ${settings.roles.admin}, manager: ${settings.roles.manager}, employee: ${settings.roles.employee}}")
-        out.add("  departments: ${list(settings.departments)}")
-        out.add("  registration: {invite: ${settings.registration.invite}, company_code: ${settings.registration.companyCode}}")
+        if (settings.tenant == Tenant.NONE) {
+            val registration = settings.registration
+            out.add("  tenant: none")
+            out.add("  roles: {${settings.roles.counts.filterValues { it != 0 }.entries.joinToString { "${it.key.key}: ${it.value}" }}}")
+            if (settings.departments.isNotEmpty()) out.add("  departments: ${list(settings.departments)}")
+            out.add("  registration: {self: ${registration.self}, login: ${registration.login}, guest: ${registration.guest}}")
+        } else {
+            out.add("  roles: {admin: ${settings.roles.admin}, manager: ${settings.roles.manager}, employee: ${settings.roles.employee}}")
+            out.add("  departments: ${list(settings.departments)}")
+            out.add("  registration: {invite: ${settings.registration.invite}, company_code: ${settings.registration.companyCode}}")
+        }
         out.add("  budget: {max_steps_per_agent: ${settings.budget.maxStepsPerAgent}, max_minutes: ${settings.budget.maxMinutes}}")
         out.add("  on_fail: ${settings.onFail.name.lowercase()}")
     }

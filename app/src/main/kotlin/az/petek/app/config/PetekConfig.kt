@@ -89,6 +89,10 @@ data class PetekConfig(
     val correlationHeader: Boolean = false,
     /** `PETEK_TRACE_LOG`: the target's log file, searched for the correlation ids of a finding's step. */
     val traceLog: Path? = null,
+    /** `PETEK_ORACLE=none` (or a profile's `test_api.mode: none`): no test API is asked, even with a token. */
+    val oracle: Boolean = true,
+    /** Where the test API answers the oracle (a profile's `test_api.paths`); empty: docs/TARGET_CONTRACT.md §4. */
+    val oraclePaths: Map<String, String> = emptyMap(),
 ) {
     init {
         require(llmConcurrency >= 1) { "llmConcurrency must be at least 1, was $llmConcurrency" }
@@ -148,9 +152,12 @@ data class PetekConfig(
             }})"
 
     companion object {
-        val DEFAULT_PRODUCTION_HOSTS: Set<String> = setOf("kadrohr.com", "www.kadrohr.com")
+        /** No site is production by default; a site's own hosts come from `PETEK_PRODUCTION_HOSTS` or its target profile. */
+        val DEFAULT_PRODUCTION_HOSTS: Set<String> = emptySet()
         const val DEFAULT_MAILPIT_URL = "http://localhost:8025"
-        const val DEFAULT_MAIL_DOMAIN = "test.kadrohr.com"
+
+        /** A catch-all under the reserved `.test` TLD; a site whose mail must look real names its own domain. */
+        const val DEFAULT_MAIL_DOMAIN = "petek.test"
 
         /** Effort-controllable, so agents can run at `--effort low` (docs: LLM defaults). */
         const val DEFAULT_LLM_MODEL = "claude-sonnet-5"

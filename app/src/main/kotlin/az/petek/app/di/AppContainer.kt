@@ -79,6 +79,7 @@ import az.petek.mail.infrastructure.MailpitMailbox
 import az.petek.mail.infrastructure.TestApiMailbox
 import az.petek.oracle.domain.DefaultJsonFieldSelector
 import az.petek.oracle.domain.JsonFieldSelector
+import az.petek.oracle.domain.OraclePaths
 import az.petek.oracle.domain.TargetOracle
 import az.petek.oracle.infrastructure.HttpTargetOracle
 import az.petek.orchestration.application.CampaignRunner
@@ -211,7 +212,15 @@ class AppContainer(
     // --- target, mail, LLM, browser -----------------------------------------------------------------------------
 
     /** The `/test/...` API client; on `PETEK_TEST_API_URL` when the API is not on the target's origin. */
-    val oracle: TargetOracle by lazy { resources.track(HttpTargetOracle(config.testApiBase, config.testToken)) }
+    val oracle: TargetOracle by lazy {
+        resources.track(
+            HttpTargetOracle(
+                config.testApiBase,
+                config.testToken.takeIf { config.oracle },
+                paths = OraclePaths.of(config.oraclePaths),
+            ),
+        )
+    }
 
     /** Verification mail from Mailpit or from the target's test API, as `PETEK_MAIL_SOURCE` says. */
     val mailbox: Mailbox by lazy {

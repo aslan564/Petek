@@ -29,7 +29,8 @@ import kotlinx.coroutines.delay
  * The contract flows: INVITE follows the link published by `seed_company` (or the invitation e-mail) to the invitation
  * form (name, phone, password); COMPANY_CODE waits for the published company code (up to
  * [RunFunctionSettings.companyCodeTimeout]) and fills the `/join` form (code, name, e-mail, phone, password,
- * department). Both then pass the sign-in journey: e-mail code (one newer code on rejection, then `otp_rejected`),
+ * department). On a site without companies the tester's gate decides: SELF follows `sign_up`, LOGIN signs in with
+ * the owner's account it was given (no sign-up), GUEST only opens the home page. All of them then pass the sign-in journey: e-mail code (one newer code on rejection, then `otp_rejected`),
  * phone code when asked, login when the site lands on the login page.
  *
  * The whole flow is tried up to [RunFunctionSettings.registrationAttempts] times (docs/PLAN.md). Once the site accepted
@@ -64,7 +65,12 @@ internal class RegisterAndLoginRunFunction(
                 "register_and_login is for invited or company-code testers; the owner ${identity.agentId} signs up with register_owner.",
             )
         }
+        if (identity.registration == RegistrationMode.GUEST) {
+            runtime.session.navigate(runtime.target.path(HOME))
+            return succeeded("${identity.agentId} is a visitor (gate guest): nothing to sign up for or sign in to.")
+        }
         val attempts = Attempts()
+        if (identity.registration == RegistrationMode.LOGIN) attempts.accountCreated = true
         var last: ActionOutcome? = null
         for (attempt in 1..settings.registrationAttempts) {
             if (attempt > 1) delay(settings.retryDelay)
@@ -109,24 +115,36 @@ internal class RegisterAndLoginRunFunction(
         }
         flows.completeSignIn(this, progress, loginFirst = signInOnly)
         val shown = progress.identityShown ?: "The session was checked"
-        return succeeded("Joined by ${label(mode)} and signed in. $shown.")
+        return succeeded(
+            if (mode ==
+                RegistrationMode.LOGIN
+            ) {
+                "Signed in with the owner's account. $shown."
+            } else {
+                "Joined by ${label(mode)} and signed in. $shown."
+            },
+        )
     }
 
     private fun joinFlow(mode: RegistrationMode): String =
         when (mode) {
             RegistrationMode.INVITE -> FlowNames.JOIN_BY_INVITE
             RegistrationMode.COMPANY_CODE -> FlowNames.JOIN_BY_CODE
-            RegistrationMode.OWNER -> error("owners are rejected before the first attempt")
+            RegistrationMode.SELF -> FlowNames.SIGN_UP
+            else -> error("${mode.key} testers do not sign up here")
         }
 
     private fun label(mode: RegistrationMode) =
         when (mode) {
             RegistrationMode.INVITE -> "invitation"
             RegistrationMode.COMPANY_CODE -> "company code"
-            RegistrationMode.OWNER -> "owner sign-up"
+            RegistrationMode.SELF -> "sign-up"
+            else -> mode.key
         }
 
     private companion object {
+        const val HOME = "home"
+
         /** Failures a new attempt cannot fix, or must not hide. */
         val FINAL = setOf(FailureReason.MISSING_PREREQUISITE, FailureReason.MAIL_UNAVAILABLE, FailureReason.IDENTITY_MISMATCH)
     }

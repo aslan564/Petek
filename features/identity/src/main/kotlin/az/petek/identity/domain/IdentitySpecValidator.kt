@@ -9,6 +9,8 @@
 
 package az.petek.identity.domain
 
+import az.petek.core.model.RegistrationMode
+
 /**
  * Checks an [IdentitySpec] before anything is generated and reports every problem at once, so the user fixes the
  * campaign in one go. A spec that fails here must not start a run ([IdentityConflictException]).
@@ -29,8 +31,13 @@ internal class IdentitySpecValidator(
         val givenNames = spec.names.map(NameAllocator::normalize)
         val departments = spec.departments.map(NameAllocator::normalize)
         val mailDomain = spec.mailDomain.trim().lowercase()
-        checkCounts(spec, problems)
-        checkDepartments(departments, problems)
+        if (spec.companies) {
+            checkCounts(spec, problems)
+            checkDepartments(departments, problems)
+        } else {
+            checkOwnCounts(spec, problems)
+            if (departments.isNotEmpty()) checkDepartments(departments, problems)
+        }
         checkNames(givenNames, spec.testers, problems)
         checkCatalog(givenNames, spec.testers, problems)
         if (mailDomain.length > MAX_DOMAIN_LENGTH || !DOMAIN.matches(mailDomain)) {
@@ -77,6 +84,37 @@ internal class IdentitySpecValidator(
         if (spec.managers >= 0 && spec.inviteCount in 0 until spec.managers) {
             problems += "invite count ${spec.inviteCount} is less than the ${spec.managers} managers; managers always join " +
                 "by invitation, because a company-code sign-up makes an employee"
+        }
+    }
+
+    /** A site without companies: its own roles and the gates each add up to the testers; `login` has accounts. */
+    private fun checkOwnCounts(
+        spec: IdentitySpec,
+        problems: MutableList<String>,
+    ) {
+        if (spec.testers < 1) problems += "testers must be at least 1, was ${spec.testers}"
+        if (spec.testers > FakePhoneNumbers.CAPACITY) {
+            problems +=
+                "testers must not exceed ${FakePhoneNumbers.CAPACITY}, the number of distinct fake phone numbers, was ${spec.testers}"
+        }
+        (spec.ownRoles.map { it.key.key to it.value } + spec.gates.map { it.key.key to it.value }).forEach { (label, value) ->
+            if (value < 0) problems += "$label must not be negative, was $value"
+        }
+        val roles = spec.ownRoles.values.sum()
+        if (roles != spec.testers) {
+            problems += "roles add up to $roles (${spec.ownRoles.entries.joinToString(" + ") { "${it.value} ${it.key}" }}) " +
+                "but testers is ${spec.testers}"
+        }
+        val gates = spec.gates.values.sum()
+        if (gates != spec.testers) {
+            problems += "gates add up to $gates (${spec.gates.entries.joinToString(" + ") { "${it.value} ${it.key}" }}) " +
+                "but testers is ${spec.testers}"
+        }
+        val login = spec.gates[RegistrationMode.LOGIN] ?: 0
+        val usable = spec.ownRoles.entries.sumOf { (role, count) -> minOf(count, spec.accounts.count { it.role == role }) }
+        if (login > usable) {
+            problems += "$login testers sign in with the owner's accounts, but only $usable accounts match their roles " +
+                "(give more accounts in the target profile or the panel, or let more testers sign up)"
         }
     }
 

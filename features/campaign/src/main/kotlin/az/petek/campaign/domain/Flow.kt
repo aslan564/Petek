@@ -44,13 +44,16 @@ object FlowNames {
     /** `register_and_login` for testers joining with the company code. */
     const val JOIN_BY_CODE = "join_by_code"
 
+    /** `register_and_login` for testers of a site without companies who sign up on their own (`self`). */
+    const val SIGN_UP = "sign_up"
+
     /** `login`, and every sign-in the other run functions still need after their own flow. */
     const val LOGIN = "login"
 
     /** `verify_identity`: proves the session belongs to this tester; must contain an `assert_identity` step. */
     const val VERIFY_IDENTITY = "verify_identity"
 
-    val ALL: Set<String> = linkedSetOf(REGISTER_OWNER, JOIN_BY_INVITE, JOIN_BY_CODE, LOGIN, VERIFY_IDENTITY)
+    val ALL: Set<String> = linkedSetOf(REGISTER_OWNER, JOIN_BY_INVITE, JOIN_BY_CODE, SIGN_UP, LOGIN, VERIFY_IDENTITY)
 }
 
 /** One step of a [Flow]. [key] is its YAML key, as written in campaign files and shown in messages. */

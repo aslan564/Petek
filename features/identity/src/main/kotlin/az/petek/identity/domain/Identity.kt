@@ -60,7 +60,29 @@ data class IdentitySpec(
      * that exact address.
      */
     val mailbox: String? = null,
+    /**
+     * False for a site without companies (`tenant: none`): [ownRoles] and [gates] then replace the admin, manager and
+     * employee counts and the invite and company-code quotas, and nobody is an admin by rule.
+     */
+    val companies: Boolean = true,
+    /** Testers per campaign role on a site without companies, in roster order. */
+    val ownRoles: Map<Role, Int> = emptyMap(),
+    /** Testers per gate ([RegistrationMode.GATES]) on a site without companies. */
+    val gates: Map<RegistrationMode, Int> = emptyMap(),
+    /** The owner's accounts; each [RegistrationMode.LOGIN] tester signs in with one of its role (Faza 18). */
+    val accounts: List<GivenAccount> = emptyList(),
 )
+
+/** An account the owner gave for [role]; a `login` tester uses it instead of signing up. */
+data class GivenAccount(
+    val role: Role,
+    val email: String,
+    val password: Secret,
+    /** The name the site shows for it, when the owner gave one; the identity check compares against it. */
+    val displayName: String? = null,
+) {
+    override fun toString(): String = "GivenAccount(role=$role, email=$email, password=***)"
+}
 
 data class IdentityPlan(
     val runTag: RunTag,

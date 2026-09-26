@@ -49,6 +49,7 @@ class DefaultIdentityRegistryGenerator(
         runTag: RunTag,
     ): IdentityPlan {
         val valid = validator.validate(spec)
+        if (!spec.companies) return withoutCompanies(spec, valid, runTag)
         val seats = seats(spec, valid.departments)
         val names = nameAllocator.allocate(valid.names, spec.testers, spec.seed)
         val registrations = registrationModes(seats, valid.departments, spec)
@@ -64,6 +65,57 @@ class DefaultIdentityRegistryGenerator(
                     role = seat.role,
                     department = seat.department,
                     registration = registrations.getValue(seat.agentId),
+                )
+            }
+        return IdentityPlan(runTag, identities)
+    }
+
+    /**
+     * A site without companies: seats follow the campaign's roles in order (departments, when given, round-robin),
+     * `login` goes to the first testers whose role still has an owner's account (they take its e-mail, password and,
+     * when given, name), then `self` and `guest` in agent order.
+     */
+    private fun withoutCompanies(
+        spec: IdentitySpec,
+        valid: IdentitySpecValidator.Valid,
+        runTag: RunTag,
+    ): IdentityPlan {
+        val roles = spec.ownRoles.flatMap { (role, count) -> List(count.coerceAtLeast(0)) { role } }
+        val seats =
+            roles.mapIndexed { i, role ->
+                Seat(AgentId.of(i + 1), role, valid.departments.takeIf { it.isNotEmpty() }?.let { it[i % it.size] })
+            }
+        val accounts = spec.accounts.groupBy { it.role }.mapValues { it.value.toMutableList() }
+        var logins = spec.gates[RegistrationMode.LOGIN] ?: 0
+        val given = mutableMapOf<AgentId, GivenAccount>()
+        seats.forEach { seat ->
+            if (logins > 0) {
+                accounts[seat.role]?.removeFirstOrNull()?.let {
+                    given[seat.agentId] = it
+                    logins--
+                }
+            }
+        }
+        val rest =
+            ArrayDeque(
+                RegistrationMode.GATES.filter { it != RegistrationMode.LOGIN }.flatMap { gate ->
+                    List(spec.gates[gate] ?: 0) { gate }
+                },
+            )
+        val names = nameAllocator.allocate(valid.names, spec.testers, spec.seed)
+        val phones = phoneNumbers(spec.testers, spec.seed, runTag)
+        val identities =
+            seats.mapIndexed { i, seat ->
+                val account = given[seat.agentId]
+                Identity(
+                    agentId = seat.agentId,
+                    displayName = account?.displayName ?: names[i].displayName,
+                    email = account?.email ?: email(names[i].firstName, runTag, seat.agentId, valid),
+                    password = account?.password ?: passwordDeriver.derive(runTag, seat.agentId),
+                    phone = phones[i],
+                    role = seat.role,
+                    department = seat.department,
+                    registration = if (account != null) RegistrationMode.LOGIN else rest.removeFirst(),
                 )
             }
         return IdentityPlan(runTag, identities)
@@ -92,7 +144,7 @@ class DefaultIdentityRegistryGenerator(
                 when (seat.role) {
                     Role.ADMIN -> seat.agentId to RegistrationMode.OWNER
                     Role.MANAGER -> seat.agentId to RegistrationMode.INVITE
-                    Role.EMPLOYEE -> null
+                    else -> null
                 }
             }
         val employeeInvites = spec.inviteCount - spec.managers

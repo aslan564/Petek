@@ -11,6 +11,7 @@ package az.petek.app.panel.explorer
 
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.PanelTargets
+import az.petek.campaign.domain.Tenant
 import az.petek.core.ids.ArtifactId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.dashboard.domain.ExplorationView
@@ -219,6 +220,16 @@ internal class PanelExplorerAdapter(
     /** Whether drafts for [target] may use the target's test API (ids and oracle checks). */
     fun testApi(target: URI): Boolean = container.oracle.isAvailable && PanelTargets.sameSite(target, container.config.target)
 
+    /**
+     * Whether drafts for [target] are for a site with companies: its profile's `tenant`, else companies when the test
+     * API can seed one (the KadroHR shape), else none (Faza 13).
+     */
+    fun tenant(target: URI): Tenant =
+        container.config
+            .profileFor(target)
+            ?.spec
+            ?.tenant ?: if (testApi(target)) Tenant.COMPANY else Tenant.NONE
+
     // --- the exploration ------------------------------------------------------------------------------------------
 
     private suspend fun explore(run: Current) {
@@ -334,8 +345,10 @@ internal class PanelExplorerAdapter(
                 try {
                     container
                         .scenarioGenerator(DraftSettings.of(run.instructions?.departments.orEmpty()))
-                        .compose(it, ScenarioRequest(id, grounding.ifBlank { null }, testApi = testApi(run.target)))
-                        .yaml
+                        .compose(
+                            it,
+                            ScenarioRequest(id, grounding.ifBlank { null }, testApi = testApi(run.target), tenant = tenant(run.target)),
+                        ).yaml
                 } catch (e: Exception) {
                     logger.warn(e) { "No scenario draft could be composed from exploration $id" }
                     note(run, ExplorationTracker.NOTE, "Ssenari layihəsi hazırlana bilmədi: ${reason(e)}")
