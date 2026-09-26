@@ -81,6 +81,16 @@ jobs:
           tar xzf app/build/distributions/petek-*-linux-x64.tar.gz -C "$RUNNER_TEMP"
           env -u JAVA_HOME PATH=/usr/bin:/bin "$RUNNER_TEMP"/petek-*-linux-x64/bin/petek --help
 
+      - name: The Docker image builds from the bundle and its Chromium starts (doctor's browser row is green)
+        run: |
+          docker/prepare-context.sh app/build/distributions/petek-*-linux-x64.tar.gz amd64
+          PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
+          docker build --build-arg "PLAYWRIGHT_VERSION=${PW}" -f docker/Dockerfile -t petek:ci docker/
+          docker run --rm petek:ci --help > /dev/null
+          docker run --rm -e PETEK_TARGET=http://127.0.0.1:9 -e PETEK_IDENTITY_SECRET=ci-secret-0123456789abcdef petek:ci --json doctor > doctor.json || true
+          cat doctor.json
+          jq -e '.checks[] | select(.name == "Chromium") | select(.status == "OK")' doctor.json > /dev/null
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

@@ -128,6 +128,17 @@ npx petek doctor
 npx petek panel
 ```
 
+**Docker ilə.** `ghcr.io/aslan564/petek:<versiya>` (linux/amd64 və linux/arm64) Linux bundle-ının Playwright-ın rəsmi
+image-i üstündə qurulmuş halıdır: Chromium və kitabxanaları içindədir; layihəni `/work` kimi mount edin (`.env`,
+`scenarios/`; `evidence/` ora yazılır). Panel yalnız loopback-ə bağlanır, ona görə `--network host` lazımdır (Linux);
+CI əmrlərdən və `--json`-dan istifadə edir. Test olunan layihə üçün hazır workflow: `docs/ci/github-actions.yml`.
+
+```bash
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 doctor
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml
+docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.1.0 panel --no-open
+```
+
 **Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir), Mailpit üçün Docker
 və eyni AI.
 

@@ -30,3 +30,6 @@ out/
 
 # Claude Code worktrees
 /.claude/
+
+# Docker build context (filled from a bundle by docker/prepare-context.sh)
+/docker/context/

@@ -1,0 +1,51 @@
+# Pətək in a project's own CI (R15): runs an approved campaign against the staging deployment with the published
+# image and keeps the evidence and report as an artifact. Copy into .github/workflows/ of the project under test and
+# fill the secrets: PETEK_TARGET (the staging URL), PETEK_TEST_TOKEN (the /test/... API token), PETEK_IDENTITY_SECRET
+# (any random string, >= 16 characters) and, for the tester agents' AI, ANTHROPIC_API_KEY.
+#
+# Exit codes: 0 every run PASSED, 1 a run FAILED (findings in the report), 2 nothing could start (configuration,
+# refused target, invalid campaign). The JSON on stdout names the runs and their report paths.
+name: Pətək
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1-5"   # weekday nights against staging
+
+jobs:
+  petek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mailpit:
+        image: axllent/mailpit
+        ports: ["8025:8025", "1025:1025"]
+    env:
+      PETEK_TARGET: ${{ secrets.PETEK_TARGET }}
+      PETEK_TEST_TOKEN: ${{ secrets.PETEK_TEST_TOKEN }}
+      PETEK_IDENTITY_SECRET: ${{ secrets.PETEK_IDENTITY_SECRET }}
+      PETEK_MAILPIT_URL: http://localhost:8025
+      PETEK_LLM_PROVIDER: anthropic-api
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Readiness (target, Chromium, inbox, test API, AI)
+        run: >
+          docker run --rm --network host -v "$PWD:/work"
+          -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
+          ghcr.io/aslan564/petek:0.1.0 --json doctor
+
+      - name: Run the campaign
+        run: >
+          docker run --rm --network host -v "$PWD:/work"
+          -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
+          ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml --testers 10
+
+      - name: Keep the evidence and the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: petek-evidence
+          path: evidence/
+          retention-days: 14

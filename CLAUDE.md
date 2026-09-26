@@ -68,6 +68,7 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     ./gradlew :app:run --args="doctor"
     ./gradlew :app:run --args="init --dir /path/to/site --target https://staging.site"   # müştəri layihəsini hazırlayır (.env, .petek/, skill paketi, MCP qeydi)
     ./gradlew :app:bundle                                  # bu platformun bundle-ı (jlink runtime, JDK-sız): app/build/distributions/
+    docker/prepare-context.sh app/build/distributions/petek-<v>-linux-x64.tar.gz amd64 && docker build -f docker/Dockerfile -t petek docker/   # Docker image (CI də edir)
     node --test launcher/test/*.test.js                    # npx petek başladıcısının testləri (Node 18+)
     ./gradlew :app:run --args="capacity"                   # bu maşın üçün tövsiyə olunan maksimum tester (limit deyil)
     ./gradlew :app:run --args="capacity --measure 5"       # real sessiyalarla ölçərək

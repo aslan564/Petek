@@ -129,6 +129,17 @@ npx petek doctor
 npx petek panel
 ```
 
+**In Docker.** `ghcr.io/aslan564/petek:<version>` (linux/amd64 and linux/arm64) is the Linux bundle on Playwright's
+official image, so Chromium and its libraries are already inside; mount the project as `/work` (`.env`, `scenarios/`,
+and `evidence/` is written back). The panel binds loopback only, so it needs `--network host` (Linux); CI uses the
+commands and `--json`. A ready workflow for the project under test is in `docs/ci/github-actions.yml`.
+
+```bash
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 doctor
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml
+docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.1.0 panel --no-open
+```
+
 **From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain), Docker (for
 Mailpit) and the same AI.
 

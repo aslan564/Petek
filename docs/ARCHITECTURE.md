@@ -33,6 +33,7 @@ ordered by number everywhere.
 | `features/explorer` | Explorer agent (PLAN.md Faza 6–7): learns a site model, records findings, generates campaign drafts, diffs model versions | `ExplorationRepository`, `ExplorationObserver`, `TestTargetCheck` | SQLite repository |
 | `app` | CLI (`init`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`; `--json` on doctor/init/plan/run/report/teardown), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
 | `launcher/` | The `petek` npm package: `npx petek` downloads the release bundle for the machine once (SHA-256 checked) and runs it; no dependencies, tested with `node --test` against a local stand-in release | — | Node 18+ |
+| `docker/` | The image `ghcr.io/aslan564/petek`: the Linux bundle on Playwright's official image (Chromium inside), one build for amd64 and arm64; `prepare-context.sh` lays a bundle out for it | — | Docker buildx |
 | `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
 

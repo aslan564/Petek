@@ -2,7 +2,9 @@ name: Release
 
 # Publishes a GitHub Release with the platform bundles (petek-<version>-<platform>.tar.gz, .zip on Windows: launcher,
 # jars, a jlink runtime and the platform's Playwright driver, so the machine needs no JDK) and the generic distribution
-# (petek-<version>-any-jdk25.zip, runs wherever JDK 25 is on PATH), with a SHA256SUMS file over all of them.
+# (petek-<version>-any-jdk25.zip, runs wherever JDK 25 is on PATH), with a SHA256SUMS file over all of them; then the
+# Docker image ghcr.io/<owner>/petek:<version> (linux/amd64 + linux/arm64, from the two Linux bundles on Playwright's
+# image) and, when NPM_TOKEN is set, the npm launcher.
 # Three ways in: a push to main whose `version` in gradle.properties has no release yet (main only receives develop,
 # so a version bump on main is the release), a tag v<version> pushed to main, or a manual run on main with the
 # version. The tree is built and tested first, so a release is never cut from a red tree; the version must match
@@ -21,6 +23,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 defaults:
   run:
@@ -209,7 +212,36 @@ jobs:
 
             Or, with Node.js installed: `npx petek@${{ needs.version.outputs.version }} doctor` downloads this bundle once and runs it.
 
+            Or in Docker (Chromium included; mount the project as /work):
+            `docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/${{ github.repository_owner }}/petek:${{ needs.version.outputs.version }} doctor`
+
             Chromium is downloaded by Playwright on first use. Checksums: `SHA256SUMS`. Licence: Business Source License 1.1 (see LICENSE).
+
+      - name: Lay out the Linux bundles for the image (one directory per architecture)
+        run: |
+          docker/prepare-context.sh dist/petek-*-linux-x64.tar.gz amd64
+          docker/prepare-context.sh dist/petek-*-linux-arm64.tar.gz arm64
+          echo "playwright=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image for both Linux architectures
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: PLAYWRIGHT_VERSION=${{ env.playwright }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/petek:${{ needs.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/petek:latest
 
       - name: Publish the npm launcher (npx petek), when NPM_TOKEN is set
         if: env.NPM_TOKEN != ''

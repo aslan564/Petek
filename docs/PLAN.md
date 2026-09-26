@@ -749,11 +749,19 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   `bin/petek`-i eyni arqumentlərlə işə salır; `PETEK_VERSION`, `PETEK_DOWNLOAD_BASE`, `PETEK_HOME`; `node --test`
   ilə lokal stand-in release üzərində 3 test, `build.yml`-də işləyir; `release.yml` `NPM_TOKEN` secret-i olanda
   `npm publish` edir, versiya `gradle.properties` ilə eyni olmalıdır — **sahib: npm-də `petek` adını tutub
-  `NPM_TOKEN` secret-ini əlavə etsin**). Qalır: Docker image (Playwright base + bundle, Mailpit companion), mac-x64
-  bundle-ı (runner yoxdur; `any-jdk25` ilə). `:app`-dan `fake-target` runtime asılılığı ayrılır (`petek demo` ayrıca dist).
+  `NPM_TOKEN` secret-ini əlavə etsin**); ~~Docker image~~ hazırdır (Faza 12c: `docker/Dockerfile` — Playwright-ın
+  rəsmi `mcr.microsoft.com/playwright:v<playwright>-noble` image-i üstündə Linux bundle-ı, Chromium daxildə,
+  `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, `/work` mount, `ENTRYPOINT petek`; `docker/prepare-context.sh` bundle-ı
+  `docker/context/<arch>/`-ə açır, buildx `TARGETARCH` ilə bir build-də linux/amd64 + linux/arm64; `release.yml`
+  `ghcr.io/<owner>/petek:<versiya>` və `:latest` push edir; `build.yml` hər develop push-da image-i qurub `--json
+  doctor`-un Chromium sətrinin yaşıl olduğunu `jq` ilə yoxlayır). Panel loopback-ə bağlı qaldığından Docker-da
+  `--network host` lazımdır (Linux); əsas istifadə CI-dır. CI şablonu: `docs/ci/github-actions.yml` (Mailpit servisi,
+  `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə),
+  Mailpit companion compose faylı image üçün. `:app`-dan `fake-target` runtime asılılığı ayrılır (`petek demo` ayrıca dist).
 - [ ] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
-- [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; GitHub Action
-  və GitLab CI şablonları; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.
+- [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; ~~GitHub
+  Action şablonu~~ (`docs/ci/github-actions.yml`, image + `--json run` ilə, çıxış kodları sənədlənib) hazırdır,
+  GitLab CI şablonu qalır; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.
 - [ ] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar), PDF ixracı; hesabat başlığında hədəf, provayder,
   model, sübut səviyyələri.
 - [ ] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.

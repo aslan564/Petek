@@ -1,9 +1,10 @@
 # R15 — Distribution and monetization: installable in any project, runs beside it and in CI; paid editions possible
 
 **Status:** Distribution done 2026-09-26 (a push to `main` releases platform bundles with a jlink runtime and the
-platform's Playwright driver, `petek-<v>-<platform>.tar.gz|zip`, plus the generic `petek-<v>-any-jdk25.zip` and
-`SHA256SUMS`; the bundle runs `doctor` from any directory without a JDK), the rest planned (Faza 12b–c, 14) ·
-**ADRs:** 0009, 0011
+platform's Playwright driver, `petek-<v>-<platform>.tar.gz|zip`, the generic `petek-<v>-any-jdk25.zip`, `SHA256SUMS`,
+the Docker image `ghcr.io/aslan564/petek:<v>` for linux/amd64 and linux/arm64, and the npm launcher `petek` when
+`NPM_TOKEN` is set; `petek init` prepares a project; v0.1.0 is published), the rest planned (CI mode, `petek dev`,
+Faza 14) · **ADRs:** 0009, 0011
 
 ## Requirement
 
@@ -22,9 +23,12 @@ that the open core deliberately leaves to paid editions, without ever carrying t
   (`app/build.gradle.kts` `bundle`: `bin/petek` or `bin/petek.cmd`, `lib/` with Playwright's driver-bundle jar repacked
   for the one platform, `runtime/` from jlink with the modules jdeps finds plus locale, charset, EC and zipfs data, the
   documents; `-Ppetek.platform=` names the platform, the runtime always comes from the building JDK, so the release
-  matrix builds each bundle on its own runner), the generic `any-jdk25` zip from the distribution plugin, a Docker image
-  (Playwright base + bundle, Mailpit companion) and an `npx petek` launcher that only downloads, verifies and starts a
-  bundle. Embedding Playwright, Chromium, SQLite and an AI CLI into a target's Maven/npm build would be heavy and
+  matrix builds each bundle on its own runner), the generic `any-jdk25` zip from the distribution plugin, the Docker
+  image (`docker/Dockerfile`: the Linux bundle on Playwright's official image of the same Playwright version, so
+  Chromium and its libraries are inside and nothing is downloaded at run time; `docker/prepare-context.sh` lays a
+  bundle out per architecture and buildx builds linux/amd64 and linux/arm64 in one go; the project is mounted as
+  `/work`; the panel keeps binding loopback, so it needs `--network host`, and the image's first use is CI with
+  `--json`) and the `npx petek` launcher that only downloads, verifies and starts a bundle. Embedding Playwright, Chromium, SQLite and an AI CLI into a target's Maven/npm build would be heavy and
   fragile; the sidecar keeps the target untouched. The launcher passes `-Dpetek.home` (the bundle's directory) for
   the templates `petek init` will ship.
 - **In the project:** `petek init` writes `.petek/` and `petek.yaml` (target profile) plus the skill pack (R10);
@@ -48,8 +52,10 @@ that the open core deliberately leaves to paid editions, without ever carrying t
   from a site directory), runs `--help` and `doctor` against the real target (Chromium starts from the repacked
   driver); `build.yml` repeats the `--help` start on every push to develop, `release.yml` on every platform before
   publishing.
-- Planned: the Docker image runs the contract demo; `petek init` on empty Node and Spring projects; a GitHub Action on
-  the fake target turns red on an injected failure.
+- Done: `build.yml` builds the image from the Linux bundle on every push to develop and checks with `--json doctor`
+  that Chromium starts inside it; `release.yml` pushes the multi-architecture image to GHCR.
+- Planned: the Docker image runs the contract demo end to end; `petek init` on empty Node and Spring projects; the
+  GitHub Action template (`docs/ci/github-actions.yml`) on the fake target turns red on an injected failure.
 
 ## Open items
 
