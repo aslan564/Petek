@@ -40,6 +40,12 @@ trusted.
 - Logs use MDC (`run_id`, `agent_id`) and never carry secrets.
 
 **Target safety (rules 8)**
+- Site ownership (ADR-0012, `features/ownership`): Pətək writes (runs, registrations, the explorer's role and trial
+  phases) only on a site whose owner published the code `petek verify` prints, as `/.well-known/petek-verification.txt`
+  or as the DNS TXT record `_petek-verification.<host>`. The code is an HMAC of the host under the identity secret; a
+  proof older than 30 days is checked again. Loopback, `*.localhost`, private and link-local addresses are exempt. An
+  unproved site is only read anonymously; `petek run`, the panel and MCP refuse to write to it. Use it only on a
+  pre-production or staging site you own, with test accounts only — never a real user's account.
 - `TargetPolicy` refuses hosts in `PETEK_PRODUCTION_HOSTS` unless `PETEK_ALLOW_PRODUCTION=true`; the refusal names
   both variables. `petek doctor` and the panel apply the same policy to every URL the operator enters.
 - Oracle writes, seeding and teardown work only on companies the test API flags `is_test=true`; the explorer's trial

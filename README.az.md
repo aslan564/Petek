@@ -326,6 +326,10 @@ Tələb-tələb arxitektura: [docs/requirements](docs/requirements).
 
 ## Təhlükəsizlik
 
+- Yazmaq üçün saytın sahibliyi təsdiqlənməlidir (`petek verify`: `/.well-known/petek-verification.txt` faylı və ya
+  `_petek-verification.<host>` DNS TXT qeydi; `localhost` və özəl şəbəkə təsdiqsiz keçir). Təsdiqsiz sayt yalnız
+  oxunur, `petek run` exit 2 ilə imtina edir. Yalnız sahibi olduğunuz pre/stage saytı, yalnız test hesabları; real
+  istifadəçi hesabı heç vaxt.
 - Sirlər (`PETEK_TEST_TOKEN`, API açarları, test parolları) `Secret` dəyərləridir: heç vaxt loglanmır, AI-a
   göndərilmir; agent `{self.password}` yazır, harness əvəz edir.
 - Production hostlar açıq icazə olmadan rədd edilir; oracle yazıları və teardown yalnız `is_test` şirkətlərinə toxunur.

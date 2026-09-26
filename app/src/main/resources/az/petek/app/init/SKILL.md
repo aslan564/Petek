@@ -77,3 +77,7 @@ repository's source. Propose the fix as a change for the owner to review; do not
    blocked, wrong address), tell the owner exactly that and stop. When no site is configured (`petek mcp` answers
    every tool with "Test olunacaq sayt verilməyib"), ask the owner which site to test and wait for the answer before
    doing anything else.
+7. Only a site the owner owns, only test accounts. Pətək writes only on a site whose ownership is proved
+   (`petek verify`: a `/.well-known/petek-verification.txt` file or a `_petek-verification.<host>` DNS TXT record);
+   when it refuses a site as unproved, pass the instructions to the owner and wait. Never hand Pətək a real user's
+   account, and never point it at a production site you were not told to test.

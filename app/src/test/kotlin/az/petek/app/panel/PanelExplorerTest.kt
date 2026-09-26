@@ -18,6 +18,7 @@ import az.petek.app.testing.PanelWaits.exploration
 import az.petek.app.testing.PanelWaits.explored
 import az.petek.browser.domain.SessionOptions
 import az.petek.core.ids.ArtifactId
+import az.petek.core.testing.FakeHarnessClock
 import az.petek.dashboard.domain.ExplorationPhase
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.ModelChangeKind
@@ -27,10 +28,13 @@ import az.petek.dashboard.domain.PanelNotFoundException
 import az.petek.dashboard.domain.PanelRequestException
 import az.petek.dashboard.domain.PhaseState
 import az.petek.explorer.domain.TestTargetVerdict
+import az.petek.ownership.application.SiteOwnership
+import az.petek.ownership.testing.OwnershipTestKit
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -59,12 +63,14 @@ class PanelExplorerTest {
         llm: az.petek.app.testing.PanelLlm =
             az.petek.app.testing
                 .PanelLlm(),
+        ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
     ): PanelHarness =
         PanelHarness(
             dir,
             site = PanelWaits.site(),
             llm = llm,
             allowProduction = allowProduction,
+            ownership = ownership,
             roleSessions =
                 roleSessions?.let { source ->
                     { source }
@@ -275,5 +281,25 @@ class PanelExplorerTest {
                 .single { it.view == "admin" }
                 .recorder.actions
                 .any { it.startsWith("clickSelector [data-testid=\"announcement-submit\"]") } shouldBe true
+        }
+
+    @Test
+    fun `on a site whose ownership is not proved the explorer only reads anonymously and says how to prove it`() =
+        runBlocking<Unit> {
+            val sessions =
+                RoleSessionSource { _, _, _ -> error("no logged-in session may open on an unproved site") }
+            val panel = harness(roleSessions = sessions, ownership = OwnershipTestKit.unowned(FakeHarnessClock()))
+            panel.site.page("/", "Kadro") { link("Qoşul", "/join") }
+            panel.site.page("/join", "Qoşul")
+
+            val view = panel.explored(PanelHarness.instructions(panel.site.base.toString(), allowWrites = true))
+
+            view.visited.shouldNotBeEmpty()
+            view.visited.map { it.visitedAs }.distinct() shouldBe listOf("anonymous")
+            view.activity.map { it.text }.any {
+                it.startsWith("Sahiblik təsdiqlənmədiyi üçün kəşfiyyat yalnız anonim oxuyur") &&
+                    it.contains("/.well-known/petek-verification.txt")
+            } shouldBe true
+            panel.site.sessions.none { it.view == "admin" } shouldBe true
         }
 }

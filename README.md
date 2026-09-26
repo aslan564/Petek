@@ -198,6 +198,14 @@ What your site needs, by depth of testing:
 | Full campaigns: 30 testers, registration, OTP, assertions, real-time checks, teardown | The [target contract](docs/TARGET_CONTRACT.md): a `/test/...` API behind `X-Test-Token`, `is_test` companies, a catch-all inbox (Mailpit) or `GET /test/emails`; `data-testid`s are welcome but optional | Fill `PETEK_TEST_TOKEN`, `PETEK_MAIL_SOURCE`, `PETEK_IDENTITY_SECRET`; `petek doctor` must be all green |
 | A production host | The explicit permission `PETEK_ALLOW_PRODUCTION=true` (hosts in `PETEK_PRODUCTION_HOSTS` are refused otherwise) | Only with a staging that speaks the contract, or read-only |
 
+**Only your own site, only test accounts.** Pətək writes (runs, registrations, the explorer's roles and trial touch)
+only on a site whose ownership is proved: `petek verify` prints a code to publish either as the file
+`/.well-known/petek-verification.txt` or as the DNS TXT record `_petek-verification.<host>` (both containing
+`petek-verification=<code>`), then checks it. `localhost`, loopback and private-network addresses need no proof. An
+unproved site is only read, as an anonymous visitor would read it; `petek run` refuses it with exit code 2 and the
+instructions. Point Pətək at a pre-production or staging copy you own, use test accounts only, and never hand it a real
+user's account (ADR-0012).
+
 Then the loop is the same for every site: `doctor` → `panel` → explore → answer the explorer's questions → send the
 draft to scenarios → approve → run → report → let your AI read the findings' evidence (`FindingBundle`, Faza 11) and
 fix the cause in your code.
@@ -329,6 +337,8 @@ Requirement-by-requirement architecture: [docs/requirements](docs/requirements).
 
 - Secrets (`PETEK_TEST_TOKEN`, API keys, test passwords) are `Secret` values: never logged, never sent to the AI; the
   agent types `{self.password}` and the harness substitutes it.
+- Writes need proved site ownership (`petek verify`: a `/.well-known` file or a DNS TXT record); an unproved site is
+  only read. Use a pre-production or staging site you own and test accounts only, never a real user's account.
 - Production hosts are refused unless explicitly allowed; oracle writes and teardown only touch `is_test` companies.
 - The AI runs with no tools, no MCP servers, no settings and no session persistence; processes are started without a
   shell; the environment is scrubbed.

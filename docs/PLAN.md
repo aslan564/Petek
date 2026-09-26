@@ -411,63 +411,63 @@ Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablan
 
 **Faza 0 — Hədəf və mühit**
 
-- [ ] Staging mühiti ayrı DB ilə qaldırılır, `TEST_MODE` bayrağı əlavə olunur
-- [ ] SMTP → Mailpit, SMS → `/test/otp/{phone}`; rate limit və CAPTCHA allowlist
-- [ ] `is_test` tenant bayrağı; oracle və teardown endpointləri (yuxarıdakı cədvəl)
-- [ ] Əsas UI elementlərinə `data-testid`
-- [ ] Real-time mexanizmi və bildirişin DOM görünüşü sənədləşdirilir
-- [ ] Repo: IntelliJ IDEA, Kotlin/JVM 21, Gradle (Kotlin DSL); `Chromium ilk Playwright.create()-də avtomatik yüklənir`, `.env` (LLM açarı, test token, Mailpit URL)
-- [ ] `docker-compose.yml` ilə Mailpit
+- [ ] Staging mühiti ayrı DB ilə qaldırılır, `TEST_MODE` bayrağı əlavə olunur — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
+- [ ] SMTP → Mailpit, SMS → `/test/otp/{phone}`; rate limit və CAPTCHA allowlist — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
+- [ ] `is_test` tenant bayrağı; oracle və teardown endpointləri (yuxarıdakı cədvəl) — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
+- [ ] Əsas UI elementlərinə `data-testid` — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
+- [x] Real-time mexanizmi və bildirişin DOM görünüşü sənədləşdirilir
+- [x] Repo: IntelliJ IDEA, Kotlin/JVM (indi JDK 25 toolchain), Gradle (Kotlin DSL); `Chromium ilk Playwright.create()-də avtomatik yüklənir`, `.env` (LLM açarı, test token, Mailpit URL)
+- [x] `docker-compose.yml` ilə Mailpit
 
 Hazır sayılır: bir Playwright skripti test email ilə qeydiyyatdan keçir, kodu Mailpit-dən oxuyur, login olur, `DELETE /test/companies/{id}` ilə silir.
 
 **Faza 1 — Konfiqurasiya və kimlik reyestri**
 
-- [ ] `config``/Config.kt`: campaign.yaml → kaml + kotlinx.serialization data class-ları; xətalar sətir nömrəsi ilə
-- [ ] `identity``/Identity.kt`: ad siyahısı, email/parol/telefon generasiyası, seed, rol və departament bölgüsü
-- [ ] SQLite sxemi: `run`, `identity`, `step`, `event`, `artifact`, `finding`; unikallıq məhdudiyyətləri
-- [ ] `petek plan campaign.yaml`: kimlikləri cədvəl kimi çap edir, DB-yə yazır, heç nə icra etmir
+- [x] `config``/Config.kt`: campaign.yaml → kaml + kotlinx.serialization data class-ları; xətalar sətir nömrəsi ilə
+- [x] `identity``/Identity.kt`: ad siyahısı, email/parol/telefon generasiyası, seed, rol və departament bölgüsü
+- [x] SQLite sxemi: `run`, `identity`, `step`, `event`, `artifact`, `finding`; unikallıq məhdudiyyətləri
+- [x] `petek plan campaign.yaml`: kimlikləri cədvəl kimi çap edir, DB-yə yazır, heç nə icra etmir
 
 Hazır sayılır: `plan` iki dəfə çağırılanda eyni 30 kimliyi verir; eyni adı iki dəfə verəndə run başlamır və səbəbi yazır.
 
 **Faza 2 — Tək agent (ən vacib faza)**
 
-- [ ] `adapter/``WebAdapter.kt + BrowserServer.kt`: context yaratma, accessibility snapshot (nömrələnmiş elementlər), screenshot, `storage_state`
-- [ ] `agent/``Tools.kt`: whitelist — `navigate`, `click(id)`, `type(id, text)`, `select(id, option)`, `read_text(selector)`, `wait_text(text, timeout)`, `get_email_code()`, `get_phone_code()`, `done(summary)`, `report_problem(kind, note)`
-- [ ] `agent/``Llm.kt`: tool calling, sistem promptu (rol, məqsəd, qaydalar), token sayğacı
-- [ ] `agent/``AgentLoop.kt`: gör → qərar → et → qeyd; addım limiti; eyni əməliyyatın 3 dəfə təkrarı = dövrə, dayandır
-- [ ] Hər addımda: screenshot + accessibility snapshot + vaxt + LLM gerekçəsi → `step` və `artifact`
-- [ ] `runs/`: `login`, `read_email_code`, `register_and_login`, `seed_company`
+- [x] `adapter/``WebAdapter.kt + BrowserServer.kt`: context yaratma, accessibility snapshot (nömrələnmiş elementlər), screenshot, `storage_state`
+- [x] `agent/``Tools.kt`: whitelist — `navigate`, `click(id)`, `type(id, text)`, `select(id, option)`, `read_text(selector)`, `wait_text(text, timeout)`, `get_email_code()`, `get_phone_code()`, `done(summary)`, `report_problem(kind, note)`
+- [x] `agent/``Llm.kt`: tool calling, sistem promptu (rol, məqsəd, qaydalar), token sayğacı
+- [x] `agent/``AgentLoop.kt`: gör → qərar → et → qeyd; addım limiti; eyni əməliyyatın 3 dəfə təkrarı = dövrə, dayandır
+- [x] Hər addımda: screenshot + accessibility snapshot + vaxt + LLM gerekçəsi → `step` və `artifact`
+- [x] `runs/`: `login`, `read_email_code`, `register_and_login`, `seed_company`
 
 Hazır sayılır: bir agent "qeydiyyatdan keç, kodu təsdiqlə, şirkət yarat" tapşırığını `do` ilə tamamlayır; hər addımın sübutu DB-dədir; eyni iş `run` ilə 10 saniyədən az çəkir.
 
 **Faza 3 — N agent və orkestrator**
 
-- [ ] `orchestrator/Scheduler.kt`: aktor seçici parseri, addımları agent korutinlərinə paylama, `parallel`
-- [ ] Hər agent öz single-thread dispetçeri və öz Playwright instansı ilə ortaq browser server-ə connect() edir; 30 context bir Chromium-da; yaddaş və CPU ölçülür
-- [ ] `orchestrator/Monitor.kt`: vəziyyət lövhəsi (Mordant), N saniyə hərəkətsizlik → `blocked`, agent növbəti addıma keçir
+- [x] `orchestrator/Scheduler.kt`: aktor seçici parseri, addımları agent korutinlərinə paylama, `parallel`
+- [x] Hər agent öz single-thread dispetçeri və öz Playwright instansı ilə ortaq browser server-ə connect() edir; 30 context bir Chromium-da; yaddaş və CPU ölçülür
+- [x] `orchestrator/Monitor.kt`: vəziyyət lövhəsi (Mordant), N saniyə hərəkətsizlik → `blocked`, agent növbəti addıma keçir
 - [ ] Çökən context eyni kimlik və `storage_state` ilə bərpa olunur
-- [ ] `on_fail: continue | abort`
+- [x] `on_fail: continue | abort`
 
 Hazır sayılır: 30 agent eyni anda login olur, hər biri ekranda öz adını oxuyub reyestrlə tutuşdurur (sessiya qarışmasının sübutu); biri süni ilişdiriləndə digərləri dayanmır; 30 agent eyni anda gözləyərkən gecikmə ölçüsü serialaşmır.
 
 **Faza 4 — Ssenari mühərriki və real-time**
 
-- [ ] `scenario/``Schema.kt`: addım açarları, şablonlar (`{last_id}`, `{self.email}`)
-- [ ] `orchestrator/Bus.kt`: `emits` → hadisə + t0; `wait_for` → gözləmə + timeout; alan tərəfdə t1
-- [ ] `scenario/Asserts.kt`: `visible_text`, `not_visible`, `oracle`, `http_status`, `count`, `latency_max`, `only_one_succeeds`
-- [ ] `oracle``/Oracle.kt`: test endpointləri müştərisi
-- [ ] `scenarios/kadrohr.yaml`: setup, elan, ticket axını, icazə, yarış
+- [x] `scenario/``Schema.kt`: addım açarları, şablonlar (`{last_id}`, `{self.email}`)
+- [x] `orchestrator/Bus.kt`: `emits` → hadisə + t0; `wait_for` → gözləmə + timeout; alan tərəfdə t1
+- [x] `scenario/Asserts.kt`: `visible_text`, `not_visible`, `oracle`, `http_status`, `count`, `latency_max`, `only_one_succeeds`
+- [x] `oracle``/Oracle.kt`: test endpointləri müştərisi
+- [x] `scenarios/kadrohr.yaml`: setup, elan, ticket axını, icazə, yarış
 
 Hazır sayılır: elan ssenarisi 29/29 çatır və gecikmələr agent başına yazılır; ticket axınları oracle ilə təsdiqlənir; icazə testi 403 qaytarır; yarış testində yalnız biri qalib gəlir.
 
 **Faza 5 — Hesabat, stabillik, təmizlik**
 
-- [ ] `evidence/Judge.kt`: A/B/C müqayisəsi, tapıntı növləri (backend, çatdırılma/UI, araşdırılmalı)
-- [ ] `evidence/Report.kt`: addım cədvəli, gecikmə paylanması, tapıntılar screenshot və oracle cavabı ilə, agent başına token və xərc
-- [ ] `petek run --repeat 3`: stabillik faizi, flaky addımların işarələnməsi
-- [ ] `petek teardown`: run bitəndə və yarımçıq qalanda test şirkəti silinir
-- [ ] README: quraşdırma, ilk run, ssenari yazma
+- [x] `evidence/Judge.kt`: A/B/C müqayisəsi, tapıntı növləri (backend, çatdırılma/UI, araşdırılmalı)
+- [x] `evidence/Report.kt`: addım cədvəli, gecikmə paylanması, tapıntılar screenshot və oracle cavabı ilə, agent başına token və xərc
+- [x] `petek run --repeat 3`: stabillik faizi, flaky addımların işarələnməsi
+- [x] `petek teardown`: run bitəndə və yarımçıq qalanda test şirkəti silinir
+- [x] README: quraşdırma, ilk run, ssenari yazma
 
 Hazır sayılır: tək əmr → tam run → hesabat; 3 ardıcıl run eyni nəticə; staging-də artıq heç nə qalmır.
 
@@ -871,9 +871,10 @@ hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
 ### Qərar gözləyən suallar (Pətək 2)
 
 - [x] **Lisenziya:** BSL 1.1 (Kodcraft / Aslan Aslanov), 2030-09-25-də Apache 2.0 — qərar 2026-09-25 (ADR-0011).
-- [ ] **MCP:** Kotlin MCP SDK (yeni kitabxana, qayda 11) və ya SDK-sız nazik stdio JSON-RPC? Tövsiyə: SDK, əgər
-  Kotlin 2.4/JDK 25 ilə uyğundursa; deyilsə nazik implementasiya.
-- [ ] **IMAP kitabxanası:** Jakarta Mail (Angus) və ya Ktor üzərində minimal IMAP? Tövsiyə: Jakarta Mail (Angus).
+- [x] **MCP:** Kotlin MCP SDK (yeni kitabxana, qayda 11) və ya SDK-sız nazik stdio JSON-RPC? Tövsiyə: SDK, əgər
+  Kotlin 2.4/JDK 25 ilə uyğundursa; deyilsə nazik implementasiya. **Qərar:** SDK-sız nazik JSON-RPC (Faza 11, R10).
+- [x] **IMAP kitabxanası:** Jakarta Mail (Angus) və ya Ktor üzərində minimal IMAP? Tövsiyə: Jakarta Mail (Angus).
+  **Qərar (sahib, 2026-09-26):** Jakarta Mail (Angus).
 - [ ] **Sürü beyni üçün minimum:** OpenAI-uyğun + generic CLI kifayətdirmi, yoxsa Gemini/OpenAI native SDK-ları da?
   Tövsiyə: hələlik kifayətdir.
 - [ ] **Rol adları:** skill fayllarında ingiliscə, UI-da Azərbaycanca? Tövsiyə: bəli.
@@ -893,17 +894,17 @@ Məqsəd: Pətək yalnız sahibliyi təsdiqlənmiş sayta yazır (run, kəşfiyy
 yalnız oxuyur. Beləliklə heç kim Pətəki başqasının saytına yönəldib orada hesab aça bilmir. Teardown bu qapıdan keçmir:
 o yalnız run-ın öz test datasını tokenlə qorunan test API-dən silir, onu bağlamaq saytda zibil qoyardı.
 
-- [ ] `features/ownership`: domain (`OwnershipToken`, `OwnershipChallenge`, `OwnershipRecord`, `OwnershipStatus`,
+- [x] `features/ownership`: domain (`OwnershipToken`, `OwnershipChallenge`, `OwnershipRecord`, `OwnershipStatus`,
   `LocalAddresses`), portlar (`OwnershipLedger`, `OwnershipProbe`, `HostLocality`, `OwnershipTokens`), use-case
   `SiteOwnership` (vəziyyət, yoxlama, tam test tələbi; 30 gündən köhnə təsdiq avtomatik yenidən yoxlanır).
-- [ ] Sübut: `/.well-known/petek-verification.txt` faylı və ya `_petek-verification.<host>` DNS TXT qeydi, içində
+- [x] Sübut: `/.well-known/petek-verification.txt` faylı və ya `_petek-verification.<host>` DNS TXT qeydi, içində
   `petek-verification=<token>`; token host-un identity secret altında HMAC-ıdır (eyni secret-li maşınlar eyni kodu görür).
-- [ ] Təsdiqsiz keçənlər: `localhost`, `*.localhost`, loopback, özəl şəbəkə (10/8, 172.16/12, 192.168/16, fc00::/7) və
+- [x] Təsdiqsiz keçənlər: `localhost`, `*.localhost`, loopback, özəl şəbəkə (10/8, 172.16/12, 192.168/16, fc00::/7) və
   link-local ünvanlar; host-un bütün ünvanları belədirsə.
-- [ ] Qapı: `petek run`, panel run-ı və MCP (exit 2 / hədəf sahəsi altında göstəriş); kəşfiyyat təsdiqsiz saytda yalnız
+- [x] Qapı: `petek run`, panel run-ı və MCP (exit 2 / hədəf sahəsi altında göstəriş); kəşfiyyat təsdiqsiz saytda yalnız
   anonim fazada işləyir və səbəbini deyir.
-- [ ] `petek verify` (kod, iki yol, yoxlama; `--json`), `doctor`-da sahiblik sətri.
-- [ ] Bundle runtime-a `jdk.naming.dns` (JNDI DNS provayderi jdeps-ə görünmür).
+- [x] `petek verify` (kod, iki yol, yoxlama; `--json`), `doctor`-da sahiblik sətri.
+- [x] Bundle runtime-a `jdk.naming.dns` (JNDI DNS provayderi jdeps-ə görünmür).
 - [ ] İstifadə qaydası: README (EN/AZ), `SECURITY.md`, skill paketi — yalnız sahibi olduğunuz pre/stage sayt, yalnız test
   hesabları, real istifadəçi hesabı heç vaxt.
 - [ ] Testlər: domain qaydaları, use-case fake-lərlə, HTTP və DNS sübutu, SQLite reyestri, CLI və panel imtinası.

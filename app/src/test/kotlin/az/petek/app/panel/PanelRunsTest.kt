@@ -20,6 +20,7 @@ import az.petek.app.testing.PanelWaits
 import az.petek.app.testing.PanelWaits.ended
 import az.petek.app.testing.PanelWaits.exploration
 import az.petek.core.ids.RunId
+import az.petek.core.testing.FakeHarnessClock
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelInstructions
@@ -36,6 +37,7 @@ import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
+import az.petek.ownership.testing.OwnershipTestKit
 import az.petek.scenarios.domain.ScenarioVersionId
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
@@ -401,5 +403,28 @@ class PanelRunsTest {
             stability.steps.map { Triple(it.scenarioStep, it.runs, it.passed) } shouldContainExactly
                 listOf(Triple("signup", 2, 2), Triple("look", 2, 2))
             panel.backend.stability("grp_unknown").shouldBeNull()
+        }
+
+    @Test
+    fun `a site whose ownership is not proved is refused under the target field with the proof to publish and no tester starts`() =
+        runBlocking<Unit> {
+            val runs = FakeBrowserEngine()
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    runs = runs,
+                    scenarios = mapOf("tiny.yaml" to tinyCampaign()),
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val refused = shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }
+
+            refused.problems.single().field shouldBe PanelInstructions.TARGET
+            refused.problems.single().message shouldContain "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır"
+            refused.problems.single().message shouldContain "/.well-known/petek-verification.txt"
+            runs.options.shouldBeEmpty()
+            panel.backend.runs().shouldBeEmpty()
         }
 }
