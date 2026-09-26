@@ -53,6 +53,9 @@ tasks.withType<Test>().configureEach {
     testLogging {
         events("failed", "skipped")
         exceptionFormat = TestExceptionFormat.FULL
+        // On CI the test reports are hard to reach, so the tests' own output (the panel's logs, the harness's
+        // warnings) goes to the job log; locally the report files are next to the build.
+        showStandardStreams = providers.environmentVariable("CI").isPresent
     }
 }
 

@@ -34,6 +34,7 @@ import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
@@ -649,8 +650,11 @@ class PlaywrightBrowserSessionTest {
             val session = sessions.open(SessionOptions("queued", site.baseUrl))
             session.navigate("/form")
             // UNDISPATCHED hands each call to the session thread in this order: the wait runs, the snapshot queues.
-            val waiting = async(start = CoroutineStart.UNDISPATCHED) { session.waitForText("heç vaxt", 500.milliseconds) }
+            // The wait is long and the close comes after a pause, so on a slow machine the session thread has
+            // picked up the wait (it must be running, not queued) and has not finished it when the close arrives.
+            val waiting = async(start = CoroutineStart.UNDISPATCHED) { session.waitForText("heç vaxt", 10.seconds) }
             val queued = async(start = CoroutineStart.UNDISPATCHED) { runCatching { session.snapshot() } }
+            delay(300.milliseconds)
 
             session.close()
 

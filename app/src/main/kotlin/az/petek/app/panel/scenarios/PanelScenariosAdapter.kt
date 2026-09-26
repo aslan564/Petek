@@ -40,6 +40,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -48,6 +49,7 @@ import java.nio.file.Path
 import kotlin.io.path.extension
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
+import kotlin.time.Duration.Companion.milliseconds
 
 private val logger = KotlinLogging.logger {}
 
@@ -265,16 +267,42 @@ internal class PanelScenariosAdapter(
     private suspend fun importOwnerFile(file: Path): ScenarioVersion {
         val result = catalog.importFile(file, note = "scenarios/${file.name} faylından")
         if (!result.created) return result.version
-        val first = catalog.history(result.version.name).size == 1
-        if (!first) {
-            logger.info { "scenarios/${file.name} changed: ${result.version.label} is a draft for review" }
+        val history = catalog.history(result.version.name)
+        if (history.size != 1) {
+            logger.info {
+                "scenarios/${file.name} changed: ${result.version.label} is a draft for review (history ${history.map { it.label }})"
+            }
             return result.version
         }
-        logger.info { "scenarios/${file.name} imported and approved as ${result.version.label}" }
-        return catalog.approve(result.version.id)
+        val approved = approveFirst(file, result.version)
+        logger.info { "scenarios/${file.name} imported and approved as ${approved.label}" }
+        return approved
+    }
+
+    /**
+     * The approval of a first version is retried once: it is the start-up's only write racing with the rest of the
+     * panel coming up, and a version left as a draft here would mean "no scenario runs" for the owner.
+     */
+    private suspend fun approveFirst(
+        file: Path,
+        version: ScenarioVersion,
+    ): ScenarioVersion {
+        repeat(APPROVE_ATTEMPTS - 1) { attempt ->
+            try {
+                return catalog.approve(version.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.warn(e) { "scenarios/${file.name}: approving ${version.label} failed (attempt ${attempt + 1}); retrying" }
+                delay(APPROVE_RETRY_DELAY)
+            }
+        }
+        return catalog.approve(version.id)
     }
 
     private companion object {
         val YAML = setOf("yaml", "yml")
+        const val APPROVE_ATTEMPTS = 2
+        val APPROVE_RETRY_DELAY = 500.milliseconds
     }
 }
