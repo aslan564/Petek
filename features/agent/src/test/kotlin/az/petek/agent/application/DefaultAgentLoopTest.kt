@@ -539,6 +539,37 @@ class DefaultAgentLoopTest {
         }
 
     @Test
+    fun `an empty page is given time to draw before the model sees it`() =
+        runTest {
+            val full = browser.snapshotProvider
+            var reads = 0
+            browser.snapshotProvider = {
+                reads++
+                if (reads <= 3) PageSnapshot(url = browser.url, title = "", elements = emptyList(), visibleText = "") else full()
+            }
+            val llm = scripted(decision("done", """"summary": "ok""""))
+
+            execute(llm).status shouldBe ActionStatus.SUCCEEDED
+
+            reads shouldBe 4
+            llm.userTurn(0) shouldContain "Xoş gəlmisiniz"
+        }
+
+    @Test
+    fun `a page that stays empty is shown to the model as it is`() =
+        runTest {
+            browser.snapshotProvider = { PageSnapshot(url = browser.url, title = "", elements = emptyList(), visibleText = "") }
+            val llm = scripted(decision("done", """"summary": "boş""""))
+
+            val before = testScheduler.currentTime
+            execute(llm).status shouldBe ActionStatus.SUCCEEDED
+
+            (testScheduler.currentTime - before).milliseconds shouldBe DefaultAgentLoop.PAGE_SETTLE_TIMEOUT
+            llm.userTurn(0) shouldContain "Elements:"
+            llm.userTurn(0) shouldNotContain "Xoş gəlmisiniz"
+        }
+
+    @Test
     fun `read_text and wait_text report what they observed without failing the task`() =
         runTest {
             browser.selectorTexts["#status"] = "  In progress\n"

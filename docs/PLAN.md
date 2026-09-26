@@ -607,6 +607,22 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
   (48 s): 4 səhifənin hamısı məzmunla çəkildi, sayt modelində 4 form və 35 əməliyyat (giriş: e-poçt, şifrə, şirkət
   kodu; qeydiyyat: 7 sahə), 15 ideya, 9 sual Azərbaycan dilində. Rollarla gəzinti və sınaq toxunuşu test API tokeni
   olmadan atlanır — real KadroHR üçün növbəti addım sahibin staging-i və `docs/KADROHR_READINESS.md` P0 maddələridir.
+- **Real kadrohr.com, 5 tester (`scenarios/kadrohr-anonymous.yaml`, token və test poçtu olmadan):** 3 dəq 07 san,
+  102 addım (93 keçdi), $0.86. Ana səhifə və səhv login hər 5 agentdə düzgün ("Email və ya şifrə yanlışdır");
+  şirkət sahibinin qeydiyyatı (a01) formun 8 sahəsini doldurub `/register/verify` "Email-inizi yoxlayın" ekranına
+  çatdı — kod oxunmadığı üçün burada bitir. **Saytda tapıntı:** naməlum şirkət kodu (`PETEK-DEMO`) ilə işçi
+  qeydiyyatı 3 agentdə eyni cavabı aldı — login xətası "Email və ya şifrə yanlışdır", "şirkət kodu tapılmadı" yox
+  (a03/0028, a04, a05). **Pətəkdə düzəlişlər:** (1) testerin ilk screenshot-u SPA-nın boş qabığı idi — agent dövrü
+  də indi məzmun görünənə qədər gözləyir (`DefaultAgentLoop.settledSnapshot`, 4 s / 250 ms); (2) xəta modalı açıq
+  ikən arxadakı düyməyə klik 15 s timeout verirdi (4 agent) — agentlər sonra OK-ni basıb davam etdilər, bu
+  davranışı promptda "əvvəl dialoqu bağla" qaydası ilə qısaltmaq açıq maddədir; (3) a02 `/register/employee`-yə
+  keçəndən sonra köhnə (login) snapshot-u gördü və "form login formu ilə eynidir" dedi — URL dəyişəndən sonra
+  yenidən çəkmə (stale snapshot) açıq maddədir.
+- **Dil (sahibin qərarı, 2026-09-26):** AI-ın sahib üçün yazdığı heç bir mətn Azərbaycan dilinə məcbur edilmir.
+  `PETEK_LANGUAGE` (default `auto` = sahibin öz təlimatının/ssenarisinin dili, yoxdursa səhifənin dili; ya da ad,
+  məsələn `English`) `WorkingLanguage` (core domain) kimi kəşfiyyatçının promptuna (`PageAnalysisProtocol.system`),
+  testerlərin xülasə qaydasına (`PromptBuilder`) və triaja (`TriageOptions.language`) gedir. Panelin öz etiketləri
+  hələlik Azərbaycancadır (lokalizasiya ayrıca).
 - **CI siyasəti (sahibin qərarı, 2026-09-26):** Actions heç bir push-da işləmir — `build.yml` və `release.yml`
   yalnız `workflow_dispatch`. Səbəb: dəqiqə limiti və "hər şey bitməmiş deploy yoxdur". Hər commit-in qapısı lokal
   `./gradlew spotlessApply build`; buraxılış əl ilə (CLAUDE.md-də addımlar). Bunun üçün GitHub-da default branch

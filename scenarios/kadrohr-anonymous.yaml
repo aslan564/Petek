@@ -1,0 +1,45 @@
+# Real kadrohr.com without its test mode: what testers can do on the live site with no test API token and no test
+# inbox. Anonymous pages, the sign-in form with wrong credentials, the "join with company code" form with an unknown
+# code, and one owner registration up to the verification e-mail (the code cannot be read here, so the step ends
+# there). Nothing needs teardown except the pending registration, which KadroHR discards unverified.
+# Run: petek --env-file .env.kadrohr run scenarios/kadrohr-anonymous.yaml --testers 5
+campaign:
+  name: kadrohr-anonymous
+  target: https://kadrohr.com             # a production host: PETEK_ALLOW_PRODUCTION=true (owner decision 2026-09-25)
+  testers: 5
+  seed: 7
+  names: [Əli, Vəli, Sahil, Cəmil, Amil]
+  roles: {admin: 1, manager: 0, employee: 4}
+  departments: [IT]
+  registration: {invite: 0, company_code: 4}
+  budget: {max_steps_per_agent: 25, max_minutes: 20}
+  on_fail: continue
+  pacing: {start_stagger_ms: 1500}        # per-IP limits on kadrohr.com: the actors of a step start 1.5 s apart
+
+target_profile:
+  local_storage:
+    "kadro:domain_dialog_dismissed": "1"  # no "Use your own server?" dialog on the first visit
+    "kadro:lang": az
+  dismiss:
+    - 'role=button[name="Qəbul edirəm"]'  # the GDPR consent gate, whenever it blocks a page
+
+setup: []
+
+steps:
+  - id: home
+    actor: employee[*]
+    do: "Ana səhifəni aç, oxu və saytın nə təklif etdiyini, hansı düymə və keçidlərin olduğunu bir neçə cümlə ilə yaz"
+
+  - id: wrong_login
+    actor: employee[*]
+    do: "Daxil olma səhifəsinə keç. Öz e-poçtun, parolun və 'PETEK' şirkət kodu ilə daxil olmağa çalış (bu hesab yoxdur). Saytın göstərdiyi xəta mesajını dəqiq yaz və uğursuz sayma: xətanın görünməsi bu testin məqsədidir"
+    assert:
+      - visible_text: {text: "Daxil ol", within_s: 10}
+
+  - id: join_unknown_code
+    actor: employee[*]
+    do: "'Şirkət kodu ilə qoşul' səhifəsini tap, formu öz adın, soyadın, e-poçtun və parolunla doldur, şirkət kodu kimi 'PETEK-DEMO' yaz və göndər. Saytın cavabını (xəta və ya növbəti ekran) dəqiq yaz"
+
+  - id: owner_register
+    actor: admin
+    do: "Qeydiyyat səhifəsini aç və şirkət qeydiyyatı formunu doldur: ad, soyad, e-poçt, parol iki dəfə, şirkət adı 'Pətək Test MMC', ölkə Azərbaycan, iş rejimi hibrid. Göndər. Sayt e-poçtu təsdiqləməyi istəyirsə, bu, gözlənilən nəticədir: done ilə success=true qaytar və ekranda yazılanı dəqiq təsvir et. Kod və ya keçid gözləmə"

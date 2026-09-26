@@ -51,6 +51,7 @@ import kotlinx.serialization.json.contentOrNull
 import java.net.URI
 import java.net.URISyntaxException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val logger = KotlinLogging.logger {}
@@ -152,10 +153,30 @@ class DefaultAgentLoop(
                 failed(FailureReason.TIMEOUT, "Task not finished within ${step.timeout} ($decisions decisions made)."),
             )
 
+        /**
+         * The page as the model sees it. A single-page application answers `load` with an empty shell and draws the
+         * page afterwards (kadrohr.com, 2026-09-26): an empty snapshot is retried every [PAGE_SETTLE_POLL] for at most
+         * [PAGE_SETTLE_TIMEOUT], so the model's first decision and the step's first screenshot show the page, not the
+         * shell. A page that stays empty is shown as it is; the model then reports what it sees.
+         */
+        private suspend fun settledSnapshot(): PageSnapshot {
+            var snapshot = runtime.session.snapshot()
+            if (snapshot.hasContent) return snapshot
+            withTimeoutOrNull(PAGE_SETTLE_TIMEOUT) {
+                do {
+                    delay(PAGE_SETTLE_POLL)
+                    snapshot = runtime.session.snapshot()
+                } while (!snapshot.hasContent)
+            }
+            return snapshot
+        }
+
+        private val PageSnapshot.hasContent: Boolean get() = elements.isNotEmpty() || visibleText.isNotBlank()
+
         private suspend fun nextTurn(): Turn {
             val snapshot =
                 try {
-                    runtime.session.snapshot()
+                    settledSnapshot()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -634,6 +655,10 @@ class DefaultAgentLoop(
 
         /** How often `get_phone_code` asks the test API before telling the model there is no code. */
         const val PHONE_CODE_ATTEMPTS = 5
+
+        /** How long an empty page (a single-page application's shell) is given to draw before the model sees it. */
+        val PAGE_SETTLE_TIMEOUT: Duration = 4.seconds
+        val PAGE_SETTLE_POLL: Duration = 250.milliseconds
 
         /** Pause between two `get_phone_code` lookups: the site may publish the code a moment after asking for it. */
         val PHONE_CODE_RETRY_DELAY: Duration = 1.seconds
