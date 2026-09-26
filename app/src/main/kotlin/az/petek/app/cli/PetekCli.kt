@@ -32,7 +32,7 @@ class PetekCli(
     }
 
     /**
-     * A wrong command line (unknown command, missing argument, `--agents 0`, no command at all) ran nothing, so it is
+     * A wrong command line (unknown command, missing argument, `--testers 0`, no command at all) ran nothing, so it is
      * [ExitCodes.CONFIG_OR_ABORTED] like an invalid configuration, never Clikt's default 1, which scripts would read
      * as a FAILED run. Help and the commands' own results keep their codes.
      */

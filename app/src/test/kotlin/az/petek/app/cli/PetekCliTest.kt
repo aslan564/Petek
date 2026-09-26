@@ -34,7 +34,7 @@ class PetekCliTest {
             cli.execute(listOf("--verbose")) shouldBe ExitCodes.CONFIG_OR_ABORTED
             cli.execute(listOf("no-such-command")) shouldBe ExitCodes.CONFIG_OR_ABORTED
             cli.execute(listOf("run")) shouldBe ExitCodes.CONFIG_OR_ABORTED
-            cli.execute(listOf("run", "tiny.yaml", "--agents", "0")) shouldBe ExitCodes.CONFIG_OR_ABORTED
+            cli.execute(listOf("run", "tiny.yaml", "--testers", "0")) shouldBe ExitCodes.CONFIG_OR_ABORTED
             cli.execute(listOf("plan", "tiny.yaml", "--no-such-option")) shouldBe ExitCodes.CONFIG_OR_ABORTED
         }
 

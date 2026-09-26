@@ -18,7 +18,7 @@ import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.ActorResolver
 
 /**
- * `petek run --agents N` and the panel's tester count: resizes a campaign to N testers while keeping its shape, fewer
+ * `petek run --testers N` and the panel's tester count: resizes a campaign to N testers while keeping its shape, fewer
  * for a quick trial or more for load. The admin stays (there is exactly one), and the other seats are shared out in the
  * campaign's manager/employee and invite/company-code ratios by largest remainder, so `30 → 12` keeps about one manager
  * per five employees and an even invite/code split, and `30 → 60` doubles both. A role or registration mode the campaign
@@ -30,7 +30,7 @@ import az.petek.orchestration.domain.ActorResolver
  * so the command can warn before the run starts.
  */
 object CampaignScaler {
-    /** `petek run --agents N`: [resize], with the new size in the campaign's name so reports tell the runs apart. */
+    /** `petek run --testers N`: [resize], with the new size in the campaign's name so reports tell the runs apart. */
     fun scale(
         campaign: Campaign,
         agents: Int,
@@ -136,7 +136,7 @@ object CampaignScaler {
     }
 }
 
-/** `--agents` cannot be applied to this campaign. */
+/** `--testers` cannot be applied to this campaign. */
 class ScalingException(
     message: String,
 ) : PetekException(message)

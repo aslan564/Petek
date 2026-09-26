@@ -36,6 +36,7 @@ class PetekCommand(
             TeardownCommand(),
             SmokeCommand(),
             DoctorCommand(),
+            CapacityCommand(),
             ProbeCommand(),
             PanelCommand(),
         )

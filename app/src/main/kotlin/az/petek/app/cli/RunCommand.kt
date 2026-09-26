@@ -45,8 +45,10 @@ class RunCommand : PetekSubcommand("run") {
     private val keepData by option("--keep-data", help = "keep the test company on the target (debugging)").flag()
     private val headful by option("--headful", help = "show the browser windows").flag()
     private val agents by option(
+        "--testers",
         "--agents",
         help = "use N testers instead of the campaign's count, fewer or more (1 admin, role and registration ratios kept)",
+        metavar = "N",
     ).int().restrictTo(min = 1)
 
     override fun help(context: Context): String = "Run a campaign with its tester agents and write the report."
@@ -88,13 +90,13 @@ class RunCommand : PetekSubcommand("run") {
         val scaled = CampaignScaler.scale(campaign, agents)
         val issues = DefaultCampaignValidator(container.templateRenderer).validate(scaled, container.knownRunFunctions)
         if (issues.isNotEmpty()) {
-            throw CampaignValidationException(issues + ValidationIssue(null, "--agents $agents does not fit this campaign"))
+            throw CampaignValidationException(issues + ValidationIssue(null, "--testers $agents does not fit this campaign"))
         }
         val spec = IdentitySpecs.of(scaled.settings, container.config.mailDomain)
         val preview = container.identityGenerator.generate(spec, RunTags.forPlan(scaled.sourceHash, scaled.settings.seed))
         CampaignScaler.uncoveredSteps(scaled, preview.identities, DefaultActorResolver()).forEach { step ->
             echo(
-                "Warning: with --agents $agents no tester matches '${step.actors.raw}', so step '${step.id}' (line ${step.line}) " +
+                "Warning: with --testers $agents no tester matches '${step.actors.raw}', so step '${step.id}' (line ${step.line}) " +
                     "will be skipped.",
                 err = true,
             )

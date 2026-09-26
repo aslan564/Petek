@@ -178,12 +178,12 @@ class RunCommandTest {
         }
 
     @Test
-    fun `--agents runs a smaller version of the campaign`() =
+    fun `--testers runs a smaller version of the campaign`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write("tiny.yaml", tinyCampaign(testers = 6))
 
-            val result = cli.run("run", "tiny.yaml", "--agents", "3")
+            val result = cli.run("run", "tiny.yaml", "--testers", "3")
 
             result.statusCode shouldBe 0
             result.stdout shouldContain "Running 'tiny (3 testers, scaled from 6)' with 3 agents"
@@ -192,7 +192,7 @@ class RunCommandTest {
         }
 
     @Test
-    fun `--agents warns about steps nobody can run anymore`() =
+    fun `--testers warns about steps nobody can run anymore`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write(
@@ -216,24 +216,36 @@ class RunCommandTest {
                 """,
             )
 
-            val result = cli.run("run", "depts.yaml", "--agents", "3")
+            val result = cli.run("run", "depts.yaml", "--testers", "3")
 
             result.statusCode shouldBe 0
-            result.stderr shouldContain "no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
+            result.stderr shouldContain "Warning: with --testers 3 no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
         }
 
     @Test
-    fun `--agents above the campaign's testers runs a bigger version of it`() =
+    fun `--testers above the campaign's testers runs a bigger version of it`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write("tiny.yaml", tinyCampaign())
 
-            val result = cli.run("run", "tiny.yaml", "--agents", "5")
+            val result = cli.run("run", "tiny.yaml", "--testers", "5")
 
             result.statusCode shouldBe 0
             result.stdout shouldContain "Running 'tiny (5 testers, scaled from 2)' with 5 agents"
             val latest = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
             cli.evidence { it.identities.findByRun(latest.runId) } shouldHaveSize 5
+        }
+
+    @Test
+    fun `--agents is still accepted as the old name of --testers`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            val result = cli.run("run", "tiny.yaml", "--agents", "2")
+
+            result.statusCode shouldBe 0
+            result.stdout shouldContain "Running 'tiny (2 testers, scaled from 4)' with 2 agents"
         }
 
     @Test
