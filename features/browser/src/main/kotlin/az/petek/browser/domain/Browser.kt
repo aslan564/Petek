@@ -276,6 +276,12 @@ data class BrowserEngineConfig(
     val topology: BrowserTopology = BrowserTopology.SHARED_SERVER,
     val slowMo: Duration = Duration.ZERO,
     val contextsPerBrowser: Int = DEFAULT_CONTEXTS_PER_BROWSER,
+    /**
+     * Accept TLS certificates the browser does not trust (a staging site with a self-signed certificate, a corporate
+     * proxy that re-signs traffic). Off by default: a target with a broken certificate is a finding, not noise, unless
+     * the owner says otherwise.
+     */
+    val ignoreTlsErrors: Boolean = false,
 ) {
     init {
         require(contextsPerBrowser >= 1) { "contextsPerBrowser must be at least 1, was $contextsPerBrowser" }

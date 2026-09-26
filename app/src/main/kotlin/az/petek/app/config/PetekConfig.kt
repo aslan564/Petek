@@ -51,6 +51,8 @@ data class PetekConfig(
     val anthropicApiKey: Secret? = null,
     val browserHeadless: Boolean = true,
     val browserTopology: BrowserTopology = BrowserTopology.SHARED_SERVER,
+    /** Accept TLS certificates the browser does not trust (self-signed staging, re-signing proxy). Off by default. */
+    val browserIgnoreTlsErrors: Boolean = false,
     val evidenceDir: Path,
     val dbPath: Path = evidenceDir.resolve(DEFAULT_DB_FILE),
 ) {
@@ -83,7 +85,8 @@ data class PetekConfig(
             "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, " +
             "identitySecret=***, llmProvider=${llmProvider.key}, llmModel=$llmModel, claudeBin=$claudeBin, " +
             "llmConcurrency=$llmConcurrency, anthropicApiKey=${setOrUnset(anthropicApiKey)}, " +
-            "browserHeadless=$browserHeadless, browserTopology=$browserTopology, evidenceDir=$evidenceDir, dbPath=$dbPath)"
+            "browserHeadless=$browserHeadless, browserTopology=$browserTopology, browserIgnoreTlsErrors=$browserIgnoreTlsErrors, " +
+            "evidenceDir=$evidenceDir, dbPath=$dbPath)"
 
     companion object {
         val DEFAULT_PRODUCTION_HOSTS: Set<String> = setOf("kadrohr.com", "www.kadrohr.com")

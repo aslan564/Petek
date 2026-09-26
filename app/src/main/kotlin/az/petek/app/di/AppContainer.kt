@@ -219,7 +219,7 @@ class AppContainer(
     val browserEngine: BrowserEngine by lazy { overrides.browser ?: PlaywrightBrowserEngine(clock).also { ownsBrowserEngine.set(true) } }
 
     fun browserConfig(headless: Boolean = config.browserHeadless): BrowserEngineConfig =
-        BrowserEngineConfig(headless = headless, topology = config.browserTopology)
+        BrowserEngineConfig(headless = headless, topology = config.browserTopology, ignoreTlsErrors = config.browserIgnoreTlsErrors)
 
     // --- agents, verification, orchestration, reporting ---------------------------------------------------------
 

@@ -158,6 +158,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `ANTHROPIC_API_KEY` | — | `anthropic-api` üçün |
 | `PETEK_BROWSER_HEADLESS` | `true` | `run --headful` bunu üstələyir |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | və ya `per-session` |
+| `PETEK_BROWSER_IGNORE_TLS_ERRORS` | `false` | etibarsız sertifikatları qəbul et (self-signed staging, trafiki yenidən imzalayan proxy); `doctor` açıq olduğunu göstərir |
 | `PETEK_EVIDENCE_DIR` / `PETEK_DB` | `evidence` / `evidence/petek.db` | Sübut, hesabat, log və bazanın yeri |
 
 ## Ssenarilər

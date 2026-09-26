@@ -77,6 +77,7 @@ class ConfigLoader(
                 problems += "${Keys.ANTHROPIC_API_KEY} is required when ${Keys.LLM_PROVIDER} is ${LlmProviderId.ANTHROPIC_API.key}"
             }
             val headless = flag(Keys.BROWSER_HEADLESS, default = true)
+            val ignoreTlsErrors = flag(Keys.BROWSER_IGNORE_TLS_ERRORS, default = false)
             val topology = topology()
             val evidenceDir = path(Keys.EVIDENCE_DIR, PetekConfig.DEFAULT_EVIDENCE_DIR)
             val dbPath = if (text(Keys.DB) != null) path(Keys.DB, default = null) else evidenceDir?.resolve(PetekConfig.DEFAULT_DB_FILE)
@@ -99,6 +100,7 @@ class ConfigLoader(
                 anthropicApiKey = apiKey,
                 browserHeadless = headless,
                 browserTopology = checkNotNull(topology),
+                browserIgnoreTlsErrors = ignoreTlsErrors,
                 evidenceDir = checkNotNull(evidenceDir),
                 dbPath = checkNotNull(dbPath),
             )
@@ -258,6 +260,7 @@ class ConfigLoader(
         const val ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
         const val BROWSER_HEADLESS = "PETEK_BROWSER_HEADLESS"
         const val BROWSER_TOPOLOGY = "PETEK_BROWSER_TOPOLOGY"
+        const val BROWSER_IGNORE_TLS_ERRORS = "PETEK_BROWSER_IGNORE_TLS_ERRORS"
         const val EVIDENCE_DIR = "PETEK_EVIDENCE_DIR"
         const val DB = "PETEK_DB"
     }

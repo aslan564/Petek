@@ -140,7 +140,7 @@ class PlaywrightBrowserEngine internal constructor(
     }
 
     private fun startPerSession(config: BrowserEngineConfig): RunningEngine =
-        RunningEngine(clock, settings, ownBrowser = BrowserConnector.OwnBrowser(config.headless, config.slowMo))
+        RunningEngine(clock, settings, ownBrowser = BrowserConnector.OwnBrowser(config.headless, config.slowMo, config.ignoreTlsErrors))
 
     /** Starts one browser server and registers the JVM shutdown hook that kills it. */
     private suspend fun launchServer(config: BrowserEngineConfig): LaunchedServer {
@@ -154,7 +154,11 @@ class PlaywrightBrowserEngine internal constructor(
             }
         val hook = Thread({ server.stop() }, "petek-browser-server-shutdown")
         Runtime.getRuntime().addShutdownHook(hook)
-        return LaunchedServer(server, BrowserConnector.SharedServer(server.wsEndpoint, config.slowMo), hook)
+        return LaunchedServer(
+            server,
+            BrowserConnector.SharedServer(server.wsEndpoint, config.slowMo, ignoreTlsErrors = config.ignoreTlsErrors),
+            hook,
+        )
     }
 
     /**

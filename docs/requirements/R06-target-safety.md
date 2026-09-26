@@ -25,6 +25,9 @@ destroying a customer's data.
   `--keep-data` is explicit and for debugging.
 - **Panel runs.** Until per-target profiles exist (R08), a run goes only to the configured site, so another site never
   receives this site's token or flows.
+- **TLS.** The browser verifies certificates like a user's would; a target with a broken certificate is a finding.
+  `PETEK_BROWSER_IGNORE_TLS_ERRORS=true` accepts untrusted certificates for a self-signed staging or a network whose
+  proxy re-signs traffic; it is off by default and `petek doctor` names it in the configuration row when it is on.
 
 ## Modules and key types
 

@@ -228,7 +228,12 @@ class Doctor(
                 }
 
         fun configurationValid(config: PetekConfig): CheckResult =
-            CheckResult(CONFIGURATION, CheckStatus.OK, "target ${PetekConfig.masked(config.target)}, evidence ${config.evidenceDir}")
+            CheckResult(
+                CONFIGURATION,
+                CheckStatus.OK,
+                "target ${PetekConfig.masked(config.target)}, evidence ${config.evidenceDir}" +
+                    if (config.browserIgnoreTlsErrors) "; TLS certificate errors are ignored (PETEK_BROWSER_IGNORE_TLS_ERRORS)" else "",
+            )
 
         private val PING =
             LlmRequest(

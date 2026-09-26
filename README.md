@@ -159,6 +159,7 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `ANTHROPIC_API_KEY` | — | For `anthropic-api` |
 | `PETEK_BROWSER_HEADLESS` | `true` | `--headful` on `run` overrides it |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | or `per-session` |
+| `PETEK_BROWSER_IGNORE_TLS_ERRORS` | `false` | accept untrusted certificates (self-signed staging, re-signing proxy); `doctor` shows when it is on |
 | `PETEK_EVIDENCE_DIR` / `PETEK_DB` | `evidence` / `evidence/petek.db` | Where evidence, reports, logs and the database live |
 
 ## Scenarios

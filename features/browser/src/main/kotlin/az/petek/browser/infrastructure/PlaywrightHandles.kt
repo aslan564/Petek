@@ -70,7 +70,7 @@ internal class PlaywrightHandles private constructor(
             val playwright = Playwright.create()
             try {
                 val browser = connector.connect(playwright)
-                val context = browser.newContext(contextOptions(options))
+                val context = browser.newContext(contextOptions(options, connector.ignoreTlsErrors))
                 context.setDefaultTimeout(options.defaultTimeout.toPlaywrightTimeout())
                 LocalStorageSeed.script(options)?.let(context::addInitScript)
                 val page = context.newPage()
@@ -102,13 +102,17 @@ internal class PlaywrightHandles private constructor(
             }
         }
 
-        private fun contextOptions(options: SessionOptions): Browser.NewContextOptions =
+        private fun contextOptions(
+            options: SessionOptions,
+            ignoreTlsErrors: Boolean,
+        ): Browser.NewContextOptions =
             Browser
                 .NewContextOptions()
                 .setBaseURL(options.baseUrl.toString())
                 .setViewportSize(options.viewport.width, options.viewport.height)
                 .setLocale(LOCALE)
                 .setTimezoneId(TIMEZONE)
+                .setIgnoreHTTPSErrors(ignoreTlsErrors)
                 .apply { options.storageState?.let { setStorageStatePath(it) } }
 
         /** Registered at page creation; Playwright invokes the handlers on the session thread as well. */

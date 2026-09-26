@@ -67,6 +67,7 @@ class ConfigLoaderTest {
         config.anthropicApiKey.shouldBeNull()
         config.browserHeadless shouldBe true
         config.browserTopology shouldBe BrowserTopology.SHARED_SERVER
+        config.browserIgnoreTlsErrors shouldBe false
         config.evidenceDir shouldBe dir.resolve("evidence")
         config.dbPath shouldBe dir.resolve("evidence/petek.db")
         config.logDirectory shouldBe dir.resolve("evidence/logs")
@@ -92,6 +93,7 @@ class ConfigLoaderTest {
                 "ANTHROPIC_API_KEY" to "sk-ant-test",
                 "PETEK_BROWSER_HEADLESS" to "false",
                 "PETEK_BROWSER_TOPOLOGY" to "per-session",
+                "PETEK_BROWSER_IGNORE_TLS_ERRORS" to "true",
                 "PETEK_EVIDENCE_DIR" to "out/evidence",
                 "PETEK_DB" to "/var/tmp/petek.db",
             )
@@ -112,6 +114,7 @@ class ConfigLoaderTest {
         config.anthropicApiKey shouldBe Secret("sk-ant-test")
         config.browserHeadless shouldBe false
         config.browserTopology shouldBe BrowserTopology.PER_SESSION
+        config.browserIgnoreTlsErrors shouldBe true
         config.evidenceDir shouldBe dir.resolve("out/evidence")
         config.dbPath shouldBe Path.of("/var/tmp/petek.db")
         fileSecretReads.get() shouldBe 0

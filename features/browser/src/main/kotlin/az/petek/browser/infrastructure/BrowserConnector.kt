@@ -20,6 +20,9 @@ import kotlin.time.DurationUnit
 internal sealed interface BrowserConnector {
     fun connect(playwright: Playwright): Browser
 
+    /** [BrowserEngineConfig.ignoreTlsErrors] of the engine, applied to every context opened through this connector. */
+    val ignoreTlsErrors: Boolean
+
     /**
      * SHARED_SERVER: a Playwright-protocol connection to the run's browser server. Contexts created through the
      * connection belong to it and are removed by the server when the connection closes.
@@ -28,6 +31,7 @@ internal sealed interface BrowserConnector {
         private val wsEndpoint: String,
         private val slowMo: Duration,
         private val connectTimeout: Duration = 30.seconds,
+        override val ignoreTlsErrors: Boolean = false,
     ) : BrowserConnector {
         override fun connect(playwright: Playwright): Browser =
             playwright.chromium().connect(
@@ -45,6 +49,7 @@ internal sealed interface BrowserConnector {
     class OwnBrowser(
         private val headless: Boolean,
         private val slowMo: Duration,
+        override val ignoreTlsErrors: Boolean = false,
     ) : BrowserConnector {
         override fun connect(playwright: Playwright): Browser =
             playwright.chromium().launch(
