@@ -69,12 +69,14 @@ data class ScenarioSettings(
 
     /**
      * The frame for a site without companies: every role the explorer saw signed in gets [perRole] testers (two, so a
-     * race has its pair) who sign up on their own; a site seen only anonymously gets [perRole] visitors. No departments,
+     * race has its pair) who sign up on their own ([signUp] false: sign in with the owner's accounts); a site seen only
+     * anonymously gets [perRole] visitors. No departments,
      * no company setup (Faza 13).
      */
     fun forSiteWithoutCompanies(
         seenRoles: Collection<String>,
         perRole: Int = PER_ROLE,
+        signUp: Boolean = true,
     ): ScenarioSettings {
         val signedIn =
             seenRoles
@@ -83,11 +85,13 @@ data class ScenarioSettings(
                 .distinct()
                 .sortedBy { it.key }
         val roles = signedIn.ifEmpty { listOf(VISITOR) }
+        // A site with a sign-in but no sign-up is entered with the owner's accounts (the `login` gate).
+        val gate = if (signUp) RegistrationMode.SELF else RegistrationMode.LOGIN
         return copy(
             team = RoleQuota.of(roles.associateWith { perRole }),
             departments = emptyList(),
             tenant = Tenant.NONE,
-            gates = if (signedIn.isEmpty()) mapOf(VISITOR to RegistrationMode.GUEST) else emptyMap(),
+            gates = if (signedIn.isEmpty()) mapOf(VISITOR to RegistrationMode.GUEST) else signedIn.associateWith { gate },
         )
     }
 

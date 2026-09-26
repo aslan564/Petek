@@ -125,7 +125,12 @@
     const m = v.model;
     const actions = m.pages.reduce((n, p) => n + p.actions.length, 0);
     const forms = m.pages.reduce((n, p) => n + p.forms.length, 0);
-    ui.modelSub.textContent = 'v' + m.version + ' · ' + m.pages.length + ' səhifə · ' + forms + ' form · ' + actions + ' əməliyyat';
+    ui.modelSub.textContent = 'v' + m.version + ' · ' + m.pages.length + ' səhifə · ' + forms + ' form · ' + actions + ' əməliyyat' +
+      (m.kind ? ' · ' + m.kind : '');
+    P.fill(ui.gate, (m.gate || []).length
+      ? h('div', 'gate', m.kindReason ? h('div', { class: 'help', text: 'Saytın növü: ' + m.kind + ' (' + m.kindReason + ')' }) : null,
+        (m.gate || []).map((line) => h('div', { class: 'help', text: line })))
+      : null);
     if (!m.pages.length) { P.fill(ui.model, h('div', { class: 'empty-inline', text: 'Model hələ boşdur.' })); return; }
     P.fill(ui.model, h('div', 'tree', m.pages.map((page, i) => {
       const body = h('div', 'page-body', h('div', { class: 'purpose', text: page.purpose }));
@@ -310,8 +315,9 @@
     const model = P.card('Sayt modeli', { icon: 'layers', flush: true, sub: '' });
     ui.modelSub = model.titles.querySelector('.sub');
     model.actions.append(h('div', 'legend', h('span', null, provenance('OBSERVED'), 'saytda görünüb'), h('span', null, provenance('INFERRED'), 'nəticə çıxarılıb')));
+    ui.gate = h('div');
     ui.model = h('div');
-    model.body.append(ui.model);
+    model.body.append(ui.gate, ui.model);
 
     const realtime = P.card('Real-time', { icon: 'zap', sub: 'Sayt canlı yeniləməni necə edir' });
     ui.realtime = h('div', 'stack');

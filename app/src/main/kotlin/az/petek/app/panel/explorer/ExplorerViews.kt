@@ -25,8 +25,10 @@ import az.petek.explorer.domain.ActionModel
 import az.petek.explorer.domain.ExplorationFinding
 import az.petek.explorer.domain.FieldModel
 import az.petek.explorer.domain.FormModel
+import az.petek.explorer.domain.GateMaps
 import az.petek.explorer.domain.PageModel
 import az.petek.explorer.domain.Severity
+import az.petek.explorer.domain.SiteKinds
 import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.SiteModelDiff
 import az.petek.explorer.domain.TestPatternLibrary
@@ -54,6 +56,9 @@ internal object ExplorerViews {
                         pages = observation.pages.map { patterns[it] ?: it }.sorted(),
                     )
                 },
+            kind = if (model.pages.isEmpty()) null else ExplorerTexts.kind(SiteKinds.of(model).kind),
+            kindReason = if (model.pages.isEmpty()) null else SiteKinds.of(model).reason,
+            gate = if (model.pages.isEmpty()) emptyList() else ExplorerTexts.gate(GateMaps.of(model)),
         )
     }
 

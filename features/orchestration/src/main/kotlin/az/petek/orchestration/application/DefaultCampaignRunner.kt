@@ -31,7 +31,6 @@ import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
 import az.petek.core.model.RegistrationMode
-import az.petek.core.model.Role
 import az.petek.core.time.HarnessClock
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.EvidenceRecorder
@@ -336,7 +335,7 @@ class DefaultCampaignRunner(
             val detail = "$reason: ${e::class.simpleName}: ${e.message}"
             evidence.system(run, agentId, "open_session", StepStatus.ERROR, detail, tally = Tally.FAIL)
             markFailed(run, agentId, reason)
-            if (identity.role == Role.ADMIN) run.abort("the admin's browser session could not be opened")
+            if (identity.registration == RegistrationMode.OWNER) run.abort("the admin's browser session could not be opened")
         }
     }
 
@@ -398,7 +397,11 @@ class DefaultCampaignRunner(
                 markFailed(run, agentId, failureKey)
                 board.update(agentId, AgentState.FAILED, step.id, "failed setup: $failureKey")
                 board.message("$agentId failed setup step '${step.id}' ($failureKey) and is excluded from later steps")
-                if (actor.identity.role == Role.ADMIN) run.abort("the admin failed setup step '${step.id}' ($failureKey)")
+                if (actor.identity.registration ==
+                    RegistrationMode.OWNER
+                ) {
+                    run.abort("the admin failed setup step '${step.id}' ($failureKey)")
+                }
             } else if (activates(step) && run.status(agentId) != IdentityStatus.ACTIVE) {
                 run.setStatus(agentId, IdentityStatus.ACTIVE)
                 identities.updateStatus(run.runId, agentId, IdentityStatus.ACTIVE)

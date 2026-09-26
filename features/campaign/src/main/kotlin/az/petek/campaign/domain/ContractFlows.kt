@@ -13,11 +13,13 @@ import az.petek.campaign.domain.FlowFailureReason.LOGIN_FAILED
 import az.petek.campaign.domain.FlowFailureReason.REGISTRATION_FAILED
 import az.petek.campaign.domain.FlowStep.AccountCreated
 import az.petek.campaign.domain.FlowStep.AssertIdentity
+import az.petek.campaign.domain.FlowStep.Check
 import az.petek.campaign.domain.FlowStep.Click
 import az.petek.campaign.domain.FlowStep.EmailCode
 import az.petek.campaign.domain.FlowStep.EmailLink
 import az.petek.campaign.domain.FlowStep.Fill
 import az.petek.campaign.domain.FlowStep.Goto
+import az.petek.campaign.domain.FlowStep.IfVisible
 import az.petek.campaign.domain.FlowStep.Journey
 import az.petek.campaign.domain.FlowStep.PhoneCode
 import az.petek.campaign.domain.FlowStep.SaveSession
@@ -133,15 +135,21 @@ internal object ContractFlows {
             ),
         )
 
-    /** A sign-up without a company: name, e-mail and password; a site asking for more overrides the flow. */
+    /**
+     * A sign-up without a company: e-mail and password, and the name, phone, password confirmation and terms box when
+     * the form shows them (the explorer maps a site's own fields onto these keys, Faza 17-18).
+     */
     private val signUp =
         Flow(
             listOf(
                 Goto("register"),
                 formShown("register.email", "The sign-up page shows no form ({url})."),
-                Fill("register.name", "{self.name}"),
+                IfVisible("register.name", listOf(Fill("register.name", "{self.name}"))),
                 Fill("register.email", "{self.email}"),
+                IfVisible("register.phone", listOf(Fill("register.phone", "{self.phone}"))),
                 Fill("register.password", "{self.password}"),
+                IfVisible("register.confirm_password", listOf(Fill("register.confirm_password", "{self.password}"))),
+                IfVisible("register.terms", listOf(Check("register.terms"))),
                 Click("register.submit"),
                 accepted("sign-up"),
                 AccountCreated,

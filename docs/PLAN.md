@@ -960,8 +960,10 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 17 — Kəşfiyyatçı: saytın növü, öz hesabı, Keçid 0 → 1
 
-- [ ] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-da təyin olunur, sayt modelinə yazılır.
-- [ ] Qapının xəritəsi: qeydiyyat, login, qonaq girişi, OTP növü, şifrəni unutdum, CAPTCHA, dəvət; dürüst dayanma səbəbləri.
+- [x] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-da təyin olunur, sayt modelinə yazılır.
+  **Vəziyyət:** `SiteKinds` kodla, anonim səhifələrin söz və formasından, səbəbi ilə; paneldə və draft başlığında görünür.
+- [x] Qapının xəritəsi: qeydiyyat, login, qonaq girişi, OTP növü, şifrəni unutdum, CAPTCHA, dəvət; dürüst dayanma səbəbləri.
+  **Vəziyyət:** `GateMaps` (sahələr profil açarlarına xəritələnir), `GateBlocker` (CAPTCHA, qapı yox, yalnız dəvət, qeydiyyat yox) paneldə sahibin dilində; ikinci fake saytda real Chromium testi.
 - [x] Kəşfiyyatçının öz hesabı: təlimatda verilibsə o, yoxdursa `self_register` (Faza 10 zənciri); testerlərlə paylaşılmır.
   **Vəziyyət:** profildə `role: explorer` hesabı varsa kəşfiyyatçı yalnız onu işlədir; testerlərə heç vaxt verilmir.
 - [ ] Keçid 1 default-dur; admin hesabında yalnız adında Pətək işarəsi olan obyektlər, sonda silinir.
@@ -970,7 +972,8 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 - [x] Ssenaridə hər testerin qapısı: `register`, `login` (təlimatdakı test hesabları, parol `Secret`) və ya `guest`.
   **Vəziyyət:** `registration: {self, login, guest}` (`tenant: none`); `login` testeri hədəf profilinin hesabını (rolu, `name`) alır, `explorer` rollu hesab heç vaxt testerə verilmir; real Chromium e2e.
-- [ ] Qapı bir dəfə öyrənilir, qalan testerlər onu kodla keçir; qapı baryeri keçməyəni missiyaya buraxmır.
+- [x] Qapı bir dəfə öyrənilir, qalan testerlər onu kodla keçir; qapı baryeri keçməyəni missiyaya buraxmır.
+  **Vəziyyət:** kəşfiyyatçının qapı xəritəsi draftın `target_profile`-na (yollar, selektorlar) yazılır, testerlər standart `sign_up`/`login` axını ilə kodla keçir; qapını keçməyən tester sonrakı addımlardan çıxarılır (şirkətli saytda yalnız sahibin uğursuzluğu run-ı dayandırır).
 - [ ] Həmkar siyahısı promptdan götürülür; başqa testerə aid dəyər kartda yer tutucu ilə gəlir.
 - [ ] İcazə ilə hesab dəyişdirmə, yalnız testini bitirənlər arasında; sübutda hər addımın hesabı.
 - [ ] Kəşfiyyatçı run boyu davam edir; tapdıqları növbəti run-ın ssenarisini genişləndirir.

@@ -89,6 +89,8 @@ data class TargetProfile(
                 "register.phone" to tid("register-phone"),
                 "register.password" to tid("register-password"),
                 "register.company" to tid("register-company"),
+                "register.confirm_password" to tid("register-confirm-password"),
+                "register.terms" to tid("register-terms"),
                 "register.submit" to tid("register-submit"),
                 "verify.code" to tid("verify-code"),
                 "verify.submit" to tid("verify-submit"),

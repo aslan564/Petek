@@ -12,6 +12,10 @@ package az.petek.app.panel.explorer
 import az.petek.explorer.domain.ActionKind
 import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.FindingKind
+import az.petek.explorer.domain.GateBlocker
+import az.petek.explorer.domain.GateMap
+import az.petek.explorer.domain.OtpKind
+import az.petek.explorer.domain.SiteKind
 import az.petek.explorer.domain.TestIdea
 import az.petek.explorer.domain.TestPattern
 
@@ -92,6 +96,59 @@ internal object ExplorerTexts {
         when {
             note.startsWith(TRIAL_ALLOWED) -> "Sınaq toxunuşuna icazə verildi: " + note.removePrefix(TRIAL_ALLOWED)
             else -> note
+        }
+
+    /** The site's kind in the owner's words (Faza 17). */
+    fun kind(kind: SiteKind): String =
+        when (kind) {
+            SiteKind.SHOP -> "Mağaza"
+            SiteKind.NEWS -> "Xəbər saytı"
+            SiteKind.SHOWCASE -> "Vitrin"
+            SiteKind.SIGN_IN_SYSTEM -> "Giriş sistemi"
+            SiteKind.OTHER -> "Digər"
+        }
+
+    /** The gate in the owner's words, blockers last and said plainly (`LINK_ONLY_SWARM.md` §7 "Dürüst dayanma"). */
+    fun gate(gate: GateMap): List<String> =
+        buildList {
+            add("Qeydiyyat: " + (gate.register?.path ?: "tapılmadı") + "; giriş: " + (gate.login?.path ?: "tapılmadı"))
+            add(if (gate.guest) "Qonaq (hesabsız) səhifələri görür." else "Hesabsız heç nə görünmür.")
+            add(
+                "Təsdiq: " +
+                    when (gate.otp) {
+                        OtpKind.EMAIL_CODE -> "e-poçt kodu"
+                        OtpKind.EMAIL_LINK -> "e-poçt linki"
+                        OtpKind.SMS -> "SMS kodu"
+                        OtpKind.NOT_SEEN -> "qeydiyyatdan əvvəl görünmür"
+                    } + if (gate.forgotPassword) "; şifrəni unutdum var." else ".",
+            )
+            gate.register?.unmapped?.takeIf { it.isNotEmpty() }?.let {
+                add(
+                    "Pətəkin hələ doldura bilmədiyi qeydiyyat sahələri: ${it.joinToString()}",
+                )
+            }
+            gate.blockers.forEach { blocker ->
+                add(
+                    when (blocker) {
+                        GateBlocker.CAPTCHA -> {
+                            "Qapını CAPTCHA bağlayır: testerlər özü qeydiyyatdan keçə bilməz; hesab verin və ya stage-də " +
+                                "CAPTCHA-nı test IP-si üçün söndürün."
+                        }
+
+                        GateBlocker.NO_GATE -> {
+                            "Qeydiyyat və giriş tapılmadı: testerlər yalnız qonaq kimi gəzə bilər."
+                        }
+
+                        GateBlocker.INVITE_ONLY -> {
+                            "Qeydiyyat dəvət və ya kod istəyir: hesab verin və ya dəvət yolunu təlimatda yazın."
+                        }
+
+                        GateBlocker.NO_SIGN_UP -> {
+                            "Qeydiyyat yoxdur, yalnız giriş var: testerlər sizin test hesablarınızla girəcək."
+                        }
+                    },
+                )
+            }
         }
 
     /** One line per test idea, written for the owner; [actionName] is the site's own label of the action. */

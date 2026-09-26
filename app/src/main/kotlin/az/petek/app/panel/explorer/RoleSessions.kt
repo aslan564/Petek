@@ -26,8 +26,10 @@ import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TargetProfile
+import az.petek.campaign.domain.Tenant
 import az.petek.core.ids.RunId
 import az.petek.core.model.RegistrationMode
+import az.petek.core.model.Role
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.identity.domain.IdentityStatus
@@ -158,7 +160,8 @@ internal class TestCompanyRoleSessions(
         progress: (String) -> Unit,
     ): RoleSessions {
         val profile = profiles.profile()
-        val campaign = campaign(request, profile.profile, ownerOnly = true)
+        val companies = tenantOf(request) == Tenant.COMPANY
+        val campaign = if (companies) campaign(request, profile.profile, ownerOnly = true) else selfSignUp(profile.profile)
         progress(
             "Kəşfiyyatçı öz hesabını açır (qeydiyyat axını: ${profile.origin}); kod ${container.config.mailSource.key} poçtundan oxunur…",
         )
@@ -256,6 +259,59 @@ internal class TestCompanyRoleSessions(
                 null
             }
         }
+    }
+
+    /**
+     * Whether the site has companies: its profile's `tenant`, else companies when the test API is there to confirm the
+     * test company (the contract shape), else none (Faza 13).
+     */
+    private fun tenantOf(request: RoleSessionRequest): Tenant =
+        container.config
+            .profileFor(request.target)
+            ?.spec
+            ?.tenant ?: if (container.oracle.isAvailable) Tenant.COMPANY else Tenant.NONE
+
+    /** A site without companies: the explorer alone signs up through the profile's `sign_up` flow, as role `explorer`. */
+    private fun selfSignUp(profile: TargetProfile): Campaign {
+        val explorer = checkNotNull(Role.fromKey(EXPLORER))
+        val campaign =
+            Campaign(
+                settings =
+                    CampaignSettings(
+                        target = container.config.target,
+                        testers = 1,
+                        seed = SEED,
+                        names = emptyList(),
+                        roles = RoleQuota.of(mapOf(explorer to 1)),
+                        departments = emptyList(),
+                        registration = RegistrationQuota.selfSignUp(1),
+                        budget = Budget(maxStepsPerAgent = MAX_STEPS, maxMinutes = MAX_MINUTES),
+                        onFail = OnFail.ABORT,
+                        name = NAME,
+                        tenant = Tenant.NONE,
+                    ),
+                target = profile,
+                setup =
+                    listOf(
+                        ScenarioStep(
+                            "sign_up",
+                            StepPhase.SETUP,
+                            DefaultActorExpressionParser().parse(EXPLORER),
+                            StepAction.Run(REGISTER_AND_LOGIN),
+                            null,
+                            null,
+                            false,
+                            emptyList(),
+                            null,
+                            1,
+                        ),
+                    ),
+                steps = emptyList(),
+                sourceHash = SOURCE_HASH,
+            )
+        val issues = DefaultCampaignValidator(container.templateRenderer).validate(campaign, container.knownRunFunctions)
+        check(issues.isEmpty()) { "the explorer's sign-up campaign is invalid: $issues" }
+        return campaign
     }
 
     /** Admin, one manager and one employee (by invitation and with the company code), all by run functions over [profile]. */
@@ -385,6 +441,7 @@ internal class TestCompanyRoleSessions(
         private const val REGISTER_OWNER = "register_owner"
         private const val SEED_COMPANY = "seed_company"
         private const val REGISTER_AND_LOGIN = "register_and_login"
+        private const val EXPLORER = AppContainer.EXPLORER_ROLE
 
         /** Identifies the setup-only campaign in run records; it is written in code, not loaded from a file. */
         private const val SOURCE_HASH = "explorer-role-sessions-v1"

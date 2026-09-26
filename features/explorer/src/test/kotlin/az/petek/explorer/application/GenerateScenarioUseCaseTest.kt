@@ -100,7 +100,9 @@ class GenerateScenarioUseCaseTest {
         campaign.settings.departments.shouldBeEmpty()
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly listOf("register_and_login")
         campaign.allSteps.none { (it.action as? StepAction.Run)?.function in setOf("register_owner", "seed_company") } shouldBe true
-        campaign.settings.registration.self shouldBe campaign.settings.testers
+        // The kadro model shows a sign-in but no sign-up form: its testers take the owner's accounts.
+        campaign.settings.registration.login shouldBe campaign.settings.testers
+        composed.yaml shouldContain "gate blocker: no_sign_up"
         val reloaded = reload(composed.yaml)
         reloaded.settings.tenant shouldBe Tenant.NONE
         reloaded.settings.roles shouldBe campaign.settings.roles

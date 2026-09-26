@@ -103,6 +103,12 @@ data class SiteModelView(
     val version: Int,
     val pages: List<PageNodeView>,
     val realtime: List<RealtimeView>,
+    /** The site's kind in the owner's words, e.g. `Giriş sistemi` (Faza 17); null before any page was seen. */
+    val kind: String? = null,
+    /** Why the explorer decided [kind]. */
+    val kindReason: String? = null,
+    /** The gate in the owner's words: sign-up, sign-in, visitors, verification and what blocks it (Faza 17). */
+    val gate: List<String> = emptyList(),
 )
 
 data class PageNodeView(

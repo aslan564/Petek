@@ -504,6 +504,9 @@ internal object PanelJson {
                     }
                 }
             }
+            put("kind", view.model.kind)
+            put("kindReason", view.model.kindReason)
+            strings("gate", view.model.gate)
             putJsonArray("realtime") {
                 view.model.realtime.forEach { realtime ->
                     addJsonObject {
