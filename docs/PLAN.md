@@ -738,7 +738,7 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
 - [x] Öz hesabların (bring-your-own accounts): panelin "Təlimat" ekranında hədəf üzrə rol → e-poçt/parol (və ya hazır
   `storage_state` faylı); `Secret` ilə gəzir, LLM `{self.password}` görür (qayda 10); panel sirləri `.env`-ə yazır,
   bazaya yox.
-  **Vəziyyət:** "Təlimat" ekranında "Hesablar" kartı: parol `.env`-ə `PETEK_ACC_<SAYT>_<ROL>` kimi (`rw-------`), hesab `targets/<sayt>.yaml`-a `${VAR}` referansı ilə; bazaya heç nə düşmür. `storage_state` faylı profildə verilir.
+  **Vəziyyət:** "Təlimat" ekranında "Hesablar" kartı: parol `.env`-ə `PETEK_ACC_<SAYT>_<ROL>` kimi (`rw-------`), hesab `targets/<sayt>.yaml`-a `${VAR}` referansı ilə; bazaya heç nə düşmür. `storage_state` faylı profildə verilir. Login formu e-poçt və paroldan artıq sahə istəyirsə (şirkət kodu), hesabın `fields:` hissəsi (`{company_code: ...}`, sir deyil) profilin öz `login` axınını doldurur — kəşfiyyatçı testerlərin axınını oynayır (`ExplorerLoginFlow`); forma qalırsa səbəbi (boş məcburi sahənin adı və ya saytın xəta mətni) fəaliyyətdə yazılır (2026-09-26, tester hesabatı).
 - [x] Saxlanan sessiyalar: hər (hədəf, kimlik) üçün `storage_state` `<evidence>/sessions/` altında; növbəti kəşfiyyat
   yenidən qeydiyyat etmir, sessiya köhnəlibsə `login` axınına düşür.
   **Vəziyyət:** sahibin hesabları üçün `<evidence>/sessions/<sayt>/<rol>.json` (`rw-------`), köhnəlibsə login formu.

@@ -122,8 +122,13 @@ internal class OwnAccountRoleSessions(
         val failures = mutableListOf<String>()
         for (account in accounts.distinctBy { it.role }) {
             try {
-                val session = signIn(request, site, account, profile, sessions, progress)
-                if (session != null) opened[account.role] = session else failures += "${account.role}: daxil ola bilmədi"
+                val attempt = signIn(request, site, account, profile, sessions, progress)
+                val session = attempt.session
+                if (session == null) {
+                    failures += "${account.role}: ${attempt.reason}"
+                } else {
+                    opened[account.role] = session
+                }
             } catch (e: CancellationException) {
                 withContext(NonCancellable) { opened.values.forEach { runCatching { it.close() } } }
                 throw e
@@ -148,46 +153,116 @@ internal class OwnAccountRoleSessions(
         profile: TargetProfile,
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
-    ): BrowserSession? {
+    ): Attempt {
         val label = "explorer-${account.role}"
         account.storageState?.let { file ->
             progress("${account.role}: verilmiş sessiya faylı ilə daxil olunur.")
-            return sessions.open(SessionOptions(label, request.target, storageState = Path.of(file)))
+            return Attempt(sessions.open(SessionOptions(label, request.target, storageState = Path.of(file))))
         }
         val saved = savedSession(site, account.role)
         if (Files.isRegularFile(saved)) {
             val session = sessions.open(SessionOptions(label, request.target, storageState = saved))
             if (signedIn(session, profile)) {
                 progress("${account.role}: saxlanmış sessiya işləyir, yenidən giriş edilmədi.")
-                return session
+                return Attempt(session)
             }
             progress("${account.role}: saxlanmış sessiya köhnəlib, login formu ilə daxil olunur.")
             session.close()
         }
-        val email = account.email ?: return null
-        val password = account.password ?: return null
+        if (account.email == null || account.password == null) return Attempt(null, "hesabda e-poçt və ya parol yoxdur")
         val session = sessions.open(SessionOptions(label, request.target))
         try {
-            session.navigate(profile.path("login"))
-            session.fillSelector(profile.selector("login.email"), email)
-            session.fillSelector(profile.selector("login.password"), password.reveal())
-            session.clickSelector(profile.selector("login.submit"))
-            session.waitForSelector(profile.selector("login.email"), 1.seconds)
+            // The profile's own login flow, as the testers run it, so a form with a company code or a consent box signs
+            // in too; a flow only a tester's run can play falls back to the form's main fields.
+            val played = ExplorerLoginFlow(profile).play(session, account)
+            if (played is ExplorerLoginFlow.Outcome.Unsupported) {
+                progress("${account.role}: login axını kəşfiyyatçı üçün oynanmır (${played.reason}); formun əsas sahələri doldurulur.")
+            }
+            if (played is ExplorerLoginFlow.Outcome.Unsupported || played == ExplorerLoginFlow.Outcome.ContractDefault) {
+                plainForm(session, profile, account)
+            }
             val signedIn = waitUntilSignedIn(session, profile)
             if (!signedIn) {
+                val flowStep = (played as? ExplorerLoginFlow.Outcome.Failed)?.let { "login axını dayandı: ${it.reason}" }
+                val why = listOfNotNull(stuckReason(session, profile, site), flowStep).joinToString("; ")
                 session.close()
-                return null
+                return Attempt(null, why)
             }
             Files.createDirectories(saved.parent)
             session.saveStorageState(saved)
             runCatching { Files.setPosixFilePermissions(saved, PosixFilePermissions.fromString("rw-------")) }
             progress("${account.role}: sahibin hesabı ilə daxil olundu; sessiya növbəti kəşfiyyat üçün saxlandı.")
-            return session
+            return Attempt(session)
         } catch (e: Exception) {
             withContext(NonCancellable) { runCatching { session.close() } }
             throw e
         }
     }
+
+    /** One account's sign-in: the session, or null with the reason the owner reads. */
+    private class Attempt(
+        val session: BrowserSession?,
+        val reason: String = "daxil ola bilmədi",
+    )
+
+    /** The login form's main fields, and every account field the profile names a `login.<name>` selector for. */
+    private suspend fun plainForm(
+        session: BrowserSession,
+        profile: TargetProfile,
+        account: ResolvedAccount,
+    ) {
+        session.navigate(profile.path("login"))
+        session.fillSelector(profile.selector("login.email"), checkNotNull(account.email))
+        session.fillSelector(profile.selector("login.password"), checkNotNull(account.password).reveal())
+        account.fields.forEach { (name, value) -> selectorOrNull(profile, "login.$name")?.let { session.fillSelector(it, value) } }
+        session.clickSelector(profile.selector("login.submit"))
+        session.waitForSelector(profile.selector("login.email"), 1.seconds)
+    }
+
+    /**
+     * Why the login form is still shown: required fields left empty or invalid (the form's own `:invalid` state), else
+     * the site's error text, so the owner learns what to add instead of a silent walk without an account.
+     */
+    private suspend fun stuckReason(
+        session: BrowserSession,
+        profile: TargetProfile,
+        site: String,
+    ): String {
+        val invalid = runCatching { session.count(INVALID_FIELDS) }.getOrDefault(0)
+        val firstInvalid =
+            if (invalid == 0) {
+                null
+            } else {
+                FIELD_LABELS.firstNotNullOfOrNull { attribute ->
+                    runCatching { session.readAttribute(INVALID_FIELDS, attribute) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+                }
+            }
+        val siteSays =
+            selectorOrNull(profile, "login.error")
+                ?.let { runCatching { session.readText(it) }.getOrNull() }
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        return when {
+            invalid > 0 -> {
+                val which = firstInvalid?.let { " (məsələn `$it`)" }.orEmpty()
+                "login formunda $invalid məcburi sahə boş və ya yanlış qaldı$which; onların dəyərini hədəf profilində " +
+                    "(targets/$site.yaml) hesabın `fields:` hissəsinə yazın, lazım olsa profilin `login` axınına da əlavə edin"
+            }
+
+            siteSays != null -> {
+                "sayt girişi qəbul etmədi: $siteSays"
+            }
+
+            else -> {
+                "login formu qaldı: sayt girişi qəbul etmədi"
+            }
+        }
+    }
+
+    private fun selectorOrNull(
+        profile: TargetProfile,
+        key: String,
+    ): String? = if (profile.isSelectorKey(key)) profile.resolveSelector(key) else null
 
     /** Signed in: the site no longer shows its login form after a moment (the form stays up when the login failed). */
     private suspend fun waitUntilSignedIn(
@@ -238,6 +313,12 @@ internal class OwnAccountRoleSessions(
     companion object {
         const val SESSIONS_DIRECTORY = "sessions"
         private val POLL = kotlin.time.Duration.parse("250ms")
+
+        /** The login form's fields the browser itself holds invalid (a required field left empty, a bad format). */
+        internal const val INVALID_FIELDS = "form input:invalid, form select:invalid, form textarea:invalid"
+
+        /** How an invalid field is named to the owner: the first of these attributes it has. */
+        private val FIELD_LABELS = listOf("name", "id", "placeholder", "aria-label")
     }
 }
 

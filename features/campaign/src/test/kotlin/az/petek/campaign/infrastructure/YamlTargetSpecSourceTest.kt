@@ -119,6 +119,45 @@ class YamlTargetSpecSourceTest {
     }
 
     @Test
+    fun `an account's other login values are read as its fields, and a bad field name is refused`() {
+        val spec =
+            source.load(
+                file(
+                    "hr.yaml",
+                    """
+                    target:
+                      name: hr
+                      url: https://staging.hr.example
+                      accounts:
+                        - role: admin
+                          email: owner@example.com
+                          password: '${'$'}{PETEK_ACC_ADMIN}'
+                          fields: {company_code: ACME-42, workspace: main}
+                    """,
+                ),
+            )
+
+        spec.accounts.single().fields shouldBe mapOf("company_code" to "ACME-42", "workspace" to "main")
+
+        val error =
+            shouldThrow<TargetSpecException> {
+                source.load(
+                    file(
+                        "bad-fields.yaml",
+                        """
+                        target:
+                          name: bad
+                          url: https://staging.hr.example
+                          accounts:
+                            - {role: admin, email: a@b.az, password: '${'$'}{PETEK_ACC_ADMIN}', fields: {Company-Code: X}}
+                        """,
+                    ),
+                )
+            }
+        error.issues.map { it.toString() }.any { it.startsWith("line 5:") && it.contains("Company-Code") } shouldBe true
+    }
+
+    @Test
     fun `every profile of a directory is loaded by name, and two with one name are refused`() {
         file("b.yaml", "target: {name: beta, url: 'https://b.example'}")
         file("a.yml", "target: {name: alpha, url: 'https://a.example'}")

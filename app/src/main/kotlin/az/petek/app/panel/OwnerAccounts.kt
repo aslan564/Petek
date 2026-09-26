@@ -66,10 +66,10 @@ internal class OwnerAccounts(
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val site = siteName(target)
         val variable = variable(site, role)
-        writeProfile(site, target, role, email, variable)
+        val fields = writeProfile(site, target, role, email, variable)
         EnvFileWriter.set(envFile, variable, request.password)
         added.removeIf { it.first == site && it.second.role == role }
-        added += site to ResolvedAccount(role, email, Secret(request.password), null)
+        added += site to ResolvedAccount(role, email, Secret(request.password), null, fields = fields)
         return views()
     }
 
@@ -89,14 +89,17 @@ internal class OwnerAccounts(
         role: String,
     ): String = "PETEK_ACC_" + (site + "_" + role).uppercase().replace(Regex("[^A-Z0-9]+"), "_")
 
-    /** Adds the account line to `targets/<site>.yaml`, or creates a minimal profile for the site. */
+    /**
+     * Adds the account line to `targets/<site>.yaml`, or creates a minimal profile for the site; returns the account's
+     * `fields` as the profile now holds them (kept from the line it replaces).
+     */
     private fun writeProfile(
         site: String,
         target: URI,
         role: String,
         email: String,
         variable: String,
-    ) {
+    ): Map<String, String> {
         Files.createDirectories(targetsDir)
         val file = profileFile(site) ?: targetsDir.resolve("$site.yaml")
         val before = if (Files.exists(file)) Files.readString(file) else null
@@ -104,12 +107,14 @@ internal class OwnerAccounts(
         // The profile is patched as text to keep the owner's comments; it must still load, with the account in it,
         // or the owner's file is put back as it was and nothing is added.
         val loaded = runCatching { YamlTargetSpecSource().load(file) }.getOrNull()
-        if (loaded == null || loaded.accounts.none { it.role == role && it.email == email }) {
+        val account = loaded?.accounts?.firstOrNull { it.role == role && it.email == email }
+        if (account == null) {
             if (before == null) Files.deleteIfExists(file) else Files.writeString(file, before)
             throw PanelRequestException(
                 listOf(FieldProblem(ROLE_FIELD, "${file.fileName} profilinə hesab əlavə edilə bilmədi; faylı əl ilə yoxlayın.")),
             )
         }
+        return account.fields
     }
 
     private fun patchProfile(
@@ -120,20 +125,27 @@ internal class OwnerAccounts(
         email: String,
         variable: String,
     ) {
-        val entry = "    - {role: $role, email: '$email', password: '\${$variable}'}"
+        val entry = "    - {role: $role, email: '$email', password: '\${$variable}'"
         if (!Files.exists(file)) {
             val url = URI(target.scheme, null, target.host, target.port, null, null, null)
             val header = "# Written by the Pətək panel (\"Hesablar\"); passwords stay in .env."
-            Files.writeString(file, "$header\ntarget:\n  name: $site\n  url: $url\n  accounts:\n$entry\n")
+            Files.writeString(file, "$header\ntarget:\n  name: $site\n  url: $url\n  accounts:\n$entry}\n")
             return
         }
         val lines = Files.readAllLines(file).toMutableList()
         val existing = lines.indexOfFirst { it.trimStart().startsWith("- {role: $role,") }
         if (existing >= 0) {
-            lines[existing] = entry
+            // The login form's other values the owner wrote on that line (`fields: {company_code: ...}`) stay.
+            val kept =
+                FIELDS
+                    .find(lines[existing])
+                    ?.value
+                    ?.let { ", $it" }
+                    .orEmpty()
+            lines[existing] = "$entry$kept}"
         } else {
             val header = lines.indexOfFirst { it.trimEnd() == "  accounts:" }
-            if (header >= 0) lines.add(header + 1, entry) else lines += listOf("  accounts:", entry)
+            if (header >= 0) lines.add(header + 1, "$entry}") else lines += listOf("  accounts:", "$entry}")
         }
         Files.writeString(file, lines.joinToString("\n", postfix = "\n"))
     }
@@ -159,5 +171,8 @@ internal class OwnerAccounts(
         private const val MAX_NAME = 60
         private val ROLE = Regex("[a-z0-9_-]{1,32}")
         private val EMAIL = Regex("[^\\s@'\"{}]+@[^\\s@'\"{}]+\\.[^\\s@'\"{}]+")
+
+        /** An inline `fields: {...}` map on an account line (its values carry no braces). */
+        private val FIELDS = Regex("fields:\\s*\\{[^{}]*}")
     }
 }

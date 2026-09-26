@@ -231,7 +231,8 @@ class YamlTargetSpecSource {
         val items = reader.list(fields["accounts"], fields.pathOf("accounts")) ?: return emptyList()
         return items.mapNotNull { item ->
             val account =
-                reader.map(item.node, item.path, setOf("role", "email", "password", "storage_state", "name")) ?: return@mapNotNull null
+                reader.map(item.node, item.path, setOf("role", "email", "password", "storage_state", "name", "fields"))
+                    ?: return@mapNotNull null
             val role = account.text("role", required = true) ?: return@mapNotNull null
             val email = account.text("email")
             val password = secret(reader, account, "password")
@@ -239,11 +240,20 @@ class YamlTargetSpecSource {
             if (!((email != null && password != null) || storageState != null)) {
                 return@mapNotNull reader.problem(item.path, "an account needs an e-mail with a password reference, or a storage_state file")
             }
-            OwnAccount(role, email, password, storageState, account.text("name")?.trim()?.ifEmpty { null })
+            val fields = reader.textMap(account["fields"], account.pathOf("fields")).orEmpty()
+            val badNames = fields.keys.filterNot { ACCOUNT_FIELD.matches(it) }
+            if (badNames.isNotEmpty()) {
+                return@mapNotNull reader.problem(
+                    account.pathOf("fields"),
+                    "field names are lower-case words joined by '_': ${badNames.joinToString()}",
+                )
+            }
+            OwnAccount(role, email, password, storageState, account.text("name")?.trim()?.ifEmpty { null }, fields)
         }
     }
 
     private companion object {
+        val ACCOUNT_FIELD = Regex("[a-z][a-z0-9_]*")
         const val ROOT_PATH = ""
         val ORACLE_PATH_KEYS = setOf("otp", "company_by_owner", "company", "seed_company")
         val TARGET_KEYS =

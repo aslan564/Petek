@@ -103,6 +103,8 @@ enum class SignInMethod(
 /**
  * An account the owner gave for [role]: an e-mail and a password reference, or a saved browser session
  * ([storageState], a Playwright `storage_state` file) for sites whose login a script cannot pass (SSO, CAPTCHA).
+ * [fields] are the other values the site's login form asks for (a company code, a workspace): not secrets, since they
+ * are typed into the page, and available to the login flow as `{self.<name>}`, `{shared.<name>}` and `{vars.<name>}`.
  */
 data class OwnAccount(
     val role: String,
@@ -111,14 +113,18 @@ data class OwnAccount(
     val storageState: String? = null,
     /** The name the site shows for the account; a tester signing in with it checks its identity against it. */
     val name: String? = null,
+    val fields: Map<String, String> = emptyMap(),
 ) {
     init {
         require(role.isNotBlank()) { "an account names its role" }
+        require(fields.keys.all { FIELD_NAME.matches(it) }) { "account field names are lower-case words joined by '_'" }
         require((email != null && password != null) || storageState != null) {
             "an account needs an e-mail with a password reference, or a storage_state file"
         }
     }
 }
+
+private val FIELD_NAME = Regex("[a-z][a-z0-9_]*")
 
 /** A target profile that cannot be used; lists every problem with its line. */
 class TargetSpecException(

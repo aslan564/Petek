@@ -79,6 +79,29 @@ class OwnerAccountsTest {
     }
 
     @Test
+    fun `giving a role again keeps the login fields the owner wrote on its line`() {
+        Files.createDirectories(targets)
+        Files.writeString(
+            targets.resolve("stage-shop-example.yaml"),
+            """
+            target:
+              name: stage-shop-example
+              url: https://stage.shop.example
+              accounts:
+                - {role: admin, email: 'a@shop.example', password: '${'$'}{PETEK_OLD}', fields: {company_code: ACME-42}}
+            """.trimIndent(),
+        )
+        val accounts = OwnerAccounts(config, env, targets)
+
+        accounts.add(AccountRequest("https://stage.shop.example", "admin", "b@shop.example", "two"))
+
+        val spec = YamlTargetSpecSource().load(targets.resolve("stage-shop-example.yaml"))
+        spec.accounts.single().email shouldBe "b@shop.example"
+        spec.accounts.single().fields shouldBe mapOf("company_code" to "ACME-42")
+        accounts.accountsFor(URI("https://stage.shop.example")).first().fields shouldBe mapOf("company_code" to "ACME-42")
+    }
+
+    @Test
     fun `a bad role, e-mail or password is refused by field and nothing is written`() {
         val accounts = OwnerAccounts(config, env, targets)
 

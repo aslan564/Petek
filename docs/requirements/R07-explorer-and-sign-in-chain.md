@@ -1,6 +1,6 @@
 # R07 — The explorer learns an unknown site, drafts scenarios and gets in by the best available means
 
-**Status:** Partial (exploration, drafts, triage implemented; sign-in chain planned) · **Plan:** Faza 6, 7, 10 · **ADRs:** 0009, 0010
+**Status:** Implemented for the explorer (exploration, drafts, triage, sign-in chain); the testers' own gate is Faza 18 · **Plan:** Faza 6, 7, 10 · **ADRs:** 0009, 0010
 
 ## Requirement
 
@@ -34,27 +34,49 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 ## Architecture (Faza 10, ADR-0010)
 
-- `SignInStrategy` port and an ordered chain: `test_company` → `own_accounts` → `self_register` → `anonymous`; every
-  attempt and fallback becomes an event and a report line; the explorer and the testers share it.
-- Owner accounts entered in the panel, stored as `.env` references (secrets never in the database); saved
-  `storage_state` per (target, identity) reused across explorations.
-- Mail sources `imap` and `manual` (the panel asks the owner for a code).
-- Capability probe before exploration; evidence tiers on findings.
+- `SignInChain` (app): the methods of the site's target profile (`sign_in`, default `test_company` → `own_accounts` →
+  `self_register` → `anonymous`) are tried in order until one yields logged-in sessions; every attempt and fallback
+  is a line of the exploration's activity.
+- `OwnAccountRoleSessions`: the owner's accounts from the panel ("Hesablar", password to `.env` as
+  `PETEK_ACC_<SITE>_<ROLE>`, the account with its `${VAR}` reference to `targets/<site>.yaml`; the database never
+  sees it) or from the target profile. A given `storage_state` file is used as is; a session saved by an earlier
+  exploration (`<evidence>/sessions/<site>/<role>.json`, `rw-------`) is reused while it is still signed in.
+- Signing in plays the profile's own `login` flow (`ExplorerLoginFlow`), the one the testers run, so a login form that
+  asks for more than an e-mail and a password (a company code, a workspace, a consent box) works: an account's
+  `fields:` (non-secret values, e.g. `{company_code: ACME-42}`) fill its `{self.<name>}`, `{shared.<name>}` and
+  `{vars.<name>}` templates. Page steps are played (`goto`, `fill`, `select`, `check`, `click`, `click_if_visible`,
+  `wait_for`, `expect_url`, `if_visible`, `assert_identity`); a flow that needs a tester's run (an e-mail or phone
+  code, `read`, a journey) or a value the account lacks falls back to the form's main fields plus every field the
+  profile names a `login.<name>` selector for. When the form stays, the owner reads why: how many required fields the
+  browser holds invalid and the first one's name, else the site's own `login.error` text — never a bare "could not
+  sign in".
+- `SelfRegisterRoleSessions`: the explorer registers its own account through the site's registration flow, only with
+  the owner's permission for writes and only on the configured site.
+- Mail sources `test-api`, `mailpit`, `imap` and `manual` (the panel asks the owner for a code).
+- Capability probe (`petek probe`); evidence tiers on findings.
 
 ## Modules and key types
 
 `explorer`: `ExploreSiteUseCase`, `CrawlPass`, `TrialToucher`, `PageAnalyst`, `SiteModel`, `SiteModelAccumulator`,
 `TestPatterns`, `GenerateScenarioUseCase`, `ScenarioComposer`, `CampaignYamlWriter`, `SqliteExplorationRepository`.
-`app/panel/explorer`: `PanelExplorerAdapter`, `TestCompanyRoleSessions`, `CatalogSetupProfiles`, `AnswerBook`.
+`app/panel/explorer`: `PanelExplorerAdapter`, `SignInChain`, `TestCompanyRoleSessions`, `OwnAccountRoleSessions`,
+`SelfRegisterRoleSessions`, `ExplorerLoginFlow`, `CatalogSetupProfiles`, `AnswerBook`. `app/panel`: `OwnerAccounts`.
+`campaign`: `TargetSpec`, `OwnAccount` (`fields`), `YamlTargetSpecSource`.
 `scenarios`: `TriageRunUseCase`, `ScenarioCatalog`.
 
 ## Verification
 
 - `explorer`: `ExploreSiteUseCaseTest`, crawl/heuristics/classifier tests, `ExplorerFakeTargetIntegrationTest`.
 - `app`: `TestCompanyRoleSessionsTest` (refusals, sessions, profile from the catalog, teardown on cancel),
+  `SignInChainTest` (order and fallbacks, saved sessions, the profile's login flow with account fields, the reason a
+  login form stays), `ExplorerLoginFlowTest`, `OwnerAccountsTest` (a re-given account keeps its `fields`),
   `PanelExplorerTest`, `AnswerBookTest`, `ExplorationTrackerTest`.
+- `campaign`: `YamlTargetSpecSourceTest` (accounts, `fields` and their names).
 - `scenarios`: `TriageRunUseCaseTest`.
 
 ## Open items
 
-- No credentials of its own, no self sign-up, no fallback yet (Faza 10). Drafts write no flows into `target_profile`.
+- The panel's "Hesablar" card takes an e-mail and a password; an account's `fields` are written in
+  `targets/<site>.yaml` (the panel keeps them when the account is given again).
+- The testers still pass the campaign's own gate; a gate per tester is Faza 18. Drafts write no flows into
+  `target_profile`.

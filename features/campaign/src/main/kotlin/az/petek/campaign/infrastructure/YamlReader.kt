@@ -67,6 +67,18 @@ internal class YamlReader(
         return YamlFields(this, plain, path)
     }
 
+    /** A map of free-form names to single values (an account's `fields`); a nested list or map is a problem. */
+    fun textMap(
+        node: YamlNode?,
+        path: String,
+    ): Map<String, String>? {
+        val plain = node.plain() ?: return null
+        if (plain !is YamlMap) return problem(path, "${displayPath(path)} must be a map of names to values")
+        return plain.entries.entries
+            .mapNotNull { (key, value) -> text(value, childPath(path, key.content))?.let { key.content to it } }
+            .toMap()
+    }
+
     /** Items of a list with their paths (`steps[0]`, ...). */
     fun list(
         node: YamlNode?,

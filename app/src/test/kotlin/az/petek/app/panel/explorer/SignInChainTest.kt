@@ -18,6 +18,9 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.testing.FakeBrowserSession
+import az.petek.campaign.domain.Flow
+import az.petek.campaign.domain.FlowNames
+import az.petek.campaign.domain.FlowStep
 import az.petek.campaign.domain.OwnAccount
 import az.petek.campaign.domain.SecretRef
 import az.petek.campaign.domain.SignInMethod
@@ -38,6 +41,7 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration.Companion.milliseconds
 
 class SignInChainTest {
     @TempDir
@@ -67,6 +71,8 @@ class SignInChainTest {
                 }
             }
         }
+
+    private val companyCode = mapOf("company_code" to "ACME-42")
 
     private fun request(panel: PanelHarness) = RoleSessionRequest(panel.config.target, allowWrites = false, departments = emptyList())
 
@@ -164,6 +170,83 @@ class SignInChainTest {
             second.sessions.keys shouldContainExactly listOf("admin")
             sessions.single().first.storageState shouldBe saved
             progress.last() shouldContain "saxlanmış sessiya işləyir"
+        }
+
+    @Test
+    fun `an owner account signs in through the profile's own login flow with the account's fields`() =
+        runBlocking<Unit> {
+            val panel =
+                harness {
+                    ResolvedTarget(
+                        TargetSpec("site", it),
+                        null,
+                        listOf(ResolvedAccount("admin", "owner@example.com", Secret("admin-password"), null, fields = companyCode)),
+                    )
+                }
+            val login =
+                listOf(
+                    FlowStep.Goto("login"),
+                    FlowStep.Fill("login.email", "{self.email}"),
+                    FlowStep.Fill("login.password", "{self.password}"),
+                    FlowStep.Fill("login.company_code", "{shared.company_code}"),
+                    FlowStep.Click("login.submit"),
+                    FlowStep.SaveSession,
+                )
+            val profile =
+                TargetProfile.DEFAULT.copy(
+                    selectors = mapOf("login.company_code" to "#companyCode"),
+                    flows = TargetProfile.DEFAULT_FLOWS + (FlowNames.LOGIN to Flow(login)),
+                )
+            val own = OwnAccountRoleSessions(panel.panel.container, { SetupProfile(profile, "site") })
+
+            val opened = own.open(request(panel), factory) { progress += it }
+
+            opened.sessions.keys shouldContainExactly listOf("admin")
+            sessions.single().second.actions shouldContain "fillSelector #companyCode=ACME-42"
+            progress.last() shouldContain "sahibin hesabı ilə daxil olundu"
+        }
+
+    @Test
+    fun `when the login form stays, the owner reads which field was left empty or what the site said`() =
+        runBlocking<Unit> {
+            val panel =
+                harness {
+                    ResolvedTarget(
+                        TargetSpec("site", it),
+                        null,
+                        listOf(ResolvedAccount("admin", "owner@example.com", Secret("admin-password"), null)),
+                    )
+                }
+            val stays = CopyOnWriteArrayList<FakeBrowserSession>()
+
+            /** Pages that keep the login form after it is sent, as a site that refuses the login does. */
+            fun staysOnLogin(page: FakeBrowserSession.() -> Unit) =
+                BrowserSessionFactory { options -> FakeBrowserSession(options.label).apply(page).also { stays += it } }
+            val own =
+                OwnAccountRoleSessions(
+                    panel.panel.container,
+                    { SetupProfile(TargetProfile.DEFAULT, "contract") },
+                    loginTimeout = 300.milliseconds,
+                )
+
+            val empty =
+                own.open(
+                    request(panel),
+                    staysOnLogin {
+                        counts[OwnAccountRoleSessions.INVALID_FIELDS] = 1
+                        attributes[OwnAccountRoleSessions.INVALID_FIELDS to "name"] = "company_code"
+                    },
+                ) { progress += it }
+            val refused =
+                own.open(request(panel), staysOnLogin { selectorTexts["[data-testid=\"login-error\"]"] = "Şifrə yanlışdır" }) {
+                    progress += it
+                }
+
+            empty.sessions.keys.shouldBeEmpty()
+            empty.note.orEmpty() shouldContain "1 məcburi sahə boş və ya yanlış qaldı (məsələn `company_code`)"
+            empty.note.orEmpty() shouldContain "targets/site.yaml"
+            refused.note shouldBe "admin: sayt girişi qəbul etmədi: Şifrə yanlışdır"
+            stays.all { it.closed } shouldBe true
         }
 
     @Test
