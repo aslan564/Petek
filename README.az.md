@@ -17,8 +17,7 @@ English: [README.md](README.md).
 - **Sizin istənilən saytınız.** İlk hədəf KadroHR-dır (HR SaaS). Saytlar data kimi təsvir olunur (`target_profile`) və
   yol xəritəsi mühərriki hədəfdən tam asılı olmayan edir.
 
-Müəllif: **Aslan Aslanov** · © 2026 **Kodcraft** · [Business Source License 1.1](LICENSE) ilə lisenziyalanır
-(2030-09-25-də Apache 2.0-a çevrilir).
+Müəllif: **Aslan Aslanov** · © 2026 **Kodcraft** · [Apache License 2.0](LICENSE) ilə açıq mənbədir.
 
 ---
 
@@ -417,11 +416,9 @@ ilə, versiya ilə başladılır və bundle-ları, image-i, npm başladıcısın
 
 ## Lisenziya, ticarət nişanı və müəllif hüququ
 
-Müəllif hüququ © 2026 **Kodcraft**. Müəllif: **Aslan Aslanov**. Bütün hüquqlar qorunur.
+Müəllif hüququ © 2026 **Kodcraft**. Müəllif: **Aslan Aslanov**.
 
-Pətək **Business Source License 1.1** ([LICENSE](LICENSE)) ilə lisenziyalanır. Onu istifadə edə, kopyalaya, dəyişə
-və yaya bilərsiniz, öz sahib olduğunuz və ya idarə etdiyiniz proqramı test etmək üçün production-da işlədə
-bilərsiniz, amma Pətəki və ya dəyəri əsasən ondan gələn məhsulu üçüncü tərəflərə hosted, idarə olunan və ya daxilə
-qoyulmuş xidmət kimi təklif edə bilməzsiniz. **2030-09-25**-də lisenziya **Apache License, Version 2.0**-a çevrilir.
-Hər mənbə faylı Spotless-in məcbur etdiyi başlığı daşıyır. "Pətək" Kodcraft-ın ticarət nişanıdır ([NOTICE](NOTICE)).
-Kommersiya lisenziyası üçün: aslanovaslan165@gmail.com.
+Pətək **Apache License, Version 2.0** ([LICENSE](LICENSE)) ilə açıq mənbədir: onu istifadə edə, kopyalaya, dəyişə və
+yaya bilərsiniz, kommersiya məqsədi ilə də, bir şərtlə ki lisenziyanı və qeydləri ([NOTICE](NOTICE)) saxlayasınız. Hər
+mənbə faylı Spotless-in məcbur etdiyi başlığı daşıyır. "Pətək" Kodcraft-ın ticarət nişanıdır, lisenziya onun adına və
+loqosuna hüquq vermir (6-cı bölmə). Töhfələr xoş gəlir: [CONTRIBUTING.md](CONTRIBUTING.md).

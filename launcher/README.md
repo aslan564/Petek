@@ -23,5 +23,5 @@ your plan, or an Anthropic API key.
 
 Intel Macs: no bundle is built yet; download `petek-<version>-any-jdk25.zip` from the releases page (needs JDK 25).
 
-Licence: Business Source License 1.1 (see `LICENSE`; Apache 2.0 from 2030-09-25). Documentation, configuration
+Licence: Apache License 2.0 (see `LICENSE`). Documentation, configuration
 keys and the target contract: the [repository](https://github.com/aslan564/Petek).

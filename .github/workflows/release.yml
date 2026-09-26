@@ -207,7 +207,7 @@ jobs:
             Or in Docker (Chromium included; mount the project as /work):
             `docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/${{ github.repository_owner }}/petek:${{ needs.version.outputs.version }} doctor`
 
-            Chromium is downloaded by Playwright on first use. Checksums: `SHA256SUMS`. Licence: Business Source License 1.1 (see LICENSE).
+            Chromium is downloaded by Playwright on first use. Checksums: `SHA256SUMS`. Licence: Apache License 2.0 (see LICENSE).
 
       - name: Lay out the Linux bundles for the image (one directory per architecture)
         run: |

@@ -21,7 +21,7 @@ Status: **Implemented** (in `develop`, covered by tests), **Partial** (core exis
 | [R11](R11-universal-target-model.md) | Tenant-optional core, free-form roles, blind test patterns for unknown sites | Planned | core, campaign, explorer | 0010 | Faza 13 |
 | [R12](R12-security.md) | Secrets never leak; AI contained; panel local; supply chain pinned | Implemented | core, llm, browser, dashboard | 0004, 0007 | all |
 | [R13](R13-code-quality-and-architecture-protection.md) | Architecture and quality enforced by the build, not by discipline | Implemented | build-logic, e2e | 0001 | Faza 8 |
-| [R14](R14-licensing-and-intellectual-property.md) | The work is protected: BSL 1.1, headers on every file, trademark, edition boundary | Implemented | build-logic, all | 0011 | Faza 8 |
+| [R14](R14-licensing-and-intellectual-property.md) | Open source under Apache 2.0: headers on every file, DCO sign-off, trademark, protected branches | Implemented | build-logic, all | 0013, 0011 | Faza 8 |
 | [R15](R15-distribution-and-monetization.md) | Installable in any project, runs beside it and in CI; paid editions possible | Planned | app, build-logic | 0009, 0011 | Faza 12, 14 |
 | [R16](R16-link-only-swarm.md) | A link in, a tested site out: verified ownership, explorer, gates, isolated cards, two-layer report | Planned | ownership, explorer, orchestration, agent, mail, reporting, app | 0012 | Faza 15–22 |
 

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
-# Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
-# Licensed under the Business Source License 1.1; see LICENSE (Change Date 2030-09-25, then Apache 2.0).
+# Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov.
+# Licensed under the Apache License, Version 2.0; see LICENSE.
 #
 # The Pətək image (R15, Faza 12c): the platform bundle (launcher, jars, its own Java runtime, the platform's
 # Playwright driver) on Playwright's official image, which already carries the matching Chromium and every system

@@ -1,13 +1,15 @@
 # Contributing to Pətək
 
-Pətək is © 2026 Kodcraft (author: Aslan Aslanov) and licensed under the Business Source License 1.1. Contributions are
+Pətək is © 2026 Kodcraft (author: Aslan Aslanov) and open source under the Apache License 2.0. Contributions are
 welcome under the terms below; the same rules apply to people and to AI coding agents (see `CLAUDE.md`).
 
 ## Terms
 
-- By submitting a contribution you confirm that you wrote it (or have the right to submit it) and you license it to
-  Kodcraft under the project licence, including the right to relicense it under the Change License (Apache 2.0) on the
-  Change Date and to offer it under commercial terms. This keeps the project relicensable as one work.
+- A contribution is licensed under the Apache License 2.0, like the rest of the project (section 5 of the License:
+  what you submit is under the same terms).
+- Every commit carries a Developer Certificate of Origin sign-off (`git commit -s` adds
+  `Signed-off-by: Your Name <you@example.com>`): with it you certify that you wrote the change or have the right to
+  submit it under the project licence (https://developercertificate.org). Pull requests without it are not merged.
 - Every source file carries the project header. `./gradlew spotlessApply` adds it; the build fails without it. Do not
   add other copyright lines; authorship is recorded in git.
 
@@ -26,7 +28,10 @@ welcome under the terms below; the same rules apply to people and to AI coding a
    unit tests, ktlint, licence headers, Konsist architecture tests, coverage). Run `./gradlew e2eTest` (the panel end
    to end in real Chromium, the e2e module, the 30-session isolation proof) when you touch the browser, the agent
    loop, flows or the panel.
-4. Open a pull request against `develop` using the template. CI must be green. The owner reviews and merges.
+4. Open a pull request against `develop` (the default branch) using the template. Anyone may open one; only the
+   maintainers the owner adds can merge into `develop`, and only the owner updates `main` when releasing. Both branches
+   are protected: no direct pushes from others, no force pushes, no deletion, open review conversations block a merge.
+   Actions run only by hand, so the local `./gradlew spotlessApply build` is the gate a maintainer re-runs before merging.
 
 ## Rules the build enforces
 

@@ -17,8 +17,7 @@ Azərbaycanca: [README.az.md](README.az.md).
 - **Any site of yours.** The first target is KadroHR (an HR SaaS). Sites are described as data (`target_profile`),
   and the roadmap makes the engine target-agnostic.
 
-Author: **Aslan Aslanov** · © 2026 **Kodcraft** · Licensed under the [Business Source License 1.1](LICENSE)
-(converts to Apache 2.0 on 2030-09-25).
+Author: **Aslan Aslanov** · © 2026 **Kodcraft** · Open source under the [Apache License 2.0](LICENSE).
 
 ---
 
@@ -420,11 +419,9 @@ branch; `petek-mvp` and `petek-mvp-o6tpsw` are kept as the MVP history. CI never
 
 ## Licence, trademark and copyright
 
-Copyright © 2026 **Kodcraft**. Author: **Aslan Aslanov**. All rights reserved.
+Copyright © 2026 **Kodcraft**. Author: **Aslan Aslanov**.
 
-Pətək is licensed under the **Business Source License 1.1** ([LICENSE](LICENSE)). You may use, copy, modify and
-redistribute it, and make production use of it to test software you own or operate, but you may not offer Pətək or a
-product whose value derives substantially from it as a hosted, managed or embedded service to third parties. On
-**2030-09-25** the licence converts to the **Apache License, Version 2.0**. Every source file carries the header that
-Spotless enforces. "Pətək" is a trademark of Kodcraft ([NOTICE](NOTICE)). For commercial licensing:
-aslanovaslan165@gmail.com.
+Pətək is open source under the **Apache License, Version 2.0** ([LICENSE](LICENSE)): you may use, copy, modify and
+redistribute it, commercially too, as long as you keep the licence and the notices ([NOTICE](NOTICE)). Every source
+file carries the header that Spotless enforces. "Pətək" is a trademark of Kodcraft; the licence grants no right to its
+name or logo (section 6). Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

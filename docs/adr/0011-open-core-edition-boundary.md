@@ -1,6 +1,6 @@
 # ADR-0011: Open-core edition boundary, workspace identity and opt-in telemetry
 
-**Status:** Accepted (licence chosen 2026-09-25: BSL 1.1, Licensor Kodcraft, Author Aslan Aslanov, Change Date
+**Status:** Accepted; the licence part is superseded by ADR-0013 (Apache 2.0 from 2026-09-26). (Licence first chosen 2026-09-25: BSL 1.1, Licensor Kodcraft, Author Aslan Aslanov, Change Date
 2030-09-25 → Apache 2.0; `LICENSE`, `NOTICE` and enforced file headers are in `develop`)
 **Date:** 2026-09-25
 **Deciders:** Aslan Aslanov (owner, Kodcraft)

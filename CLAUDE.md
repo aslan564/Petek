@@ -10,8 +10,8 @@ Tam plan: `docs/PLAN.md`. Arxitektura və modul xəritəsi: `docs/ARCHITECTURE.m
 Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.
 
 ## Sahib, lisenziya və branch-lar
-Müəllif hüququ © 2026 Kodcraft, müəllif Aslan Aslanov; lisenziya Business Source License 1.1 (`LICENSE`, `NOTICE`;
-2030-09-25-də Apache 2.0). Hər mənbə faylı (`.kt`, `.kts`, `.js`, `.css`, `.html`) `build-logic/.../PetekLicense.kt`-dəki
+Müəllif hüququ © 2026 Kodcraft, müəllif Aslan Aslanov; layihə açıq mənbədir, lisenziya Apache License 2.0 (`LICENSE`,
+`NOTICE`; töhfələr DCO imzası ilə, `CONTRIBUTING.md`). Hər mənbə faylı (`.kt`, `.kts`, `.js`, `.css`, `.html`) `build-logic/.../PetekLicense.kt`-dəki
 başlığı daşıyır — `spotlessApply` qoyur, `spotlessCheck` (build-in içində) yoxlayır; başqa copyright sətri əlavə etmə.
 `main` buraxılış branch-ıdır (yalnız `develop`-dan gəlir); `develop` inteqrasiya branch-ıdır; `petek-mvp` və
 `petek-mvp-o6tpsw` MVP tarixçəsidir, dəyişdirilmir. **GitHub Actions heç bir push-da işləmir** (sahibin qərarı:
