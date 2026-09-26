@@ -19,7 +19,10 @@ import com.charleskorn.kaml.EmptyYamlDocumentException
 import com.charleskorn.kaml.MalformedYamlException
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlException
+import com.charleskorn.kaml.YamlList
+import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
+import com.charleskorn.kaml.YamlTaggedNode
 import java.io.IOException
 import java.net.URI
 import java.nio.ByteBuffer
@@ -50,7 +53,28 @@ class YamlCampaignSource(
     override fun load(path: Path): Campaign {
         val bytes = read(path)
         val root = parse(decode(bytes, path))
+        requireShallow(root)
         return CampaignYamlMapper(defaultName(path), targetOverride, actorParser).map(root, sha256(bytes))
+    }
+
+    /**
+     * Refuses a document nested deeper than [MAX_NESTING] levels before the recursive mapper walks it. The walk here is
+     * iterative, so the answer is the same whatever the stack depth: text a model wrote cannot make loading depend on
+     * whether the JIT happened to shrink the parser's frames enough to survive (real campaigns nest about 8 levels).
+     */
+    private fun requireShallow(root: YamlNode) {
+        val pending = ArrayDeque<Pair<YamlNode, Int>>()
+        pending.addLast(root to 1)
+        while (pending.isNotEmpty()) {
+            val (node, depth) = pending.removeLast()
+            if (depth > MAX_NESTING) fail(node.location.line, "the YAML is nested too deeply (more than $MAX_NESTING levels)")
+            when (node) {
+                is YamlMap -> node.entries.values.forEach { pending.addLast(it to depth + 1) }
+                is YamlList -> node.items.forEach { pending.addLast(it to depth + 1) }
+                is YamlTaggedNode -> pending.addLast(node.innerNode to depth)
+                else -> Unit
+            }
+        }
     }
 
     private fun read(path: Path): ByteArray =
@@ -118,6 +142,9 @@ class YamlCampaignSource(
 
     private companion object {
         const val BYTE_ORDER_MARK = "\uFEFF"
+
+        /** Deepest nesting a campaign may have; the real ones stay under 10. */
+        const val MAX_NESTING = 64
 
         fun sha256(bytes: ByteArray): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
 

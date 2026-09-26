@@ -592,6 +592,22 @@ class YamlCampaignSourceTest {
         }
 
         @Test
+        fun `a document nested deeper than 64 levels is one issue, whatever the stack depth`() {
+            val deep = "x: " + "[".repeat(65) + "]".repeat(65)
+
+            val all = issues(deep)
+
+            all.single().message shouldContain "nested too deeply (more than 64 levels)"
+        }
+
+        @Test
+        fun `nesting within the limit reaches the schema checks`() {
+            val nested = "x: " + "[".repeat(60) + "]".repeat(60)
+
+            issues(nested).none { "nested too deeply" in it.message } shouldBe true
+        }
+
+        @Test
         fun `a YAML syntax error carries its line`() {
             val issue = issues("campaign:\n  testers: 3\n  roles: {admin: 1\nsteps: []").single()
             issue.message shouldContain "YAML syntax error"
