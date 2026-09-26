@@ -863,7 +863,24 @@ internal class StepExecutor(
             lastId = lastId,
             self = identity?.let(::selfFields).orEmpty(),
             eventIds = latestEventIds(),
+            testers = testers,
         )
+
+    /**
+     * `{tester.<role>.<n>.<field>}` (Faza 18): every tester of the run by role and 1-based agent order, with only the
+     * fields a card may name. Computed once; the identities do not change during a run.
+     */
+    private val testers: Map<String, Map<String, String>> by lazy {
+        run.identities
+            .sortedBy { it.agentId }
+            .groupBy { it.role }
+            .flatMap { (role, members) ->
+                members.mapIndexed { i, identity ->
+                    "${role.key}.${i + 1}" to
+                        mapOf("name" to identity.displayName, "email" to identity.email)
+                }
+            }.toMap()
+    }
 
     /** `{event.<name>.id}`: the object id of the newest event of every name the campaign emits. */
     private fun latestEventIds(): Map<String, String> =

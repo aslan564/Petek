@@ -26,23 +26,18 @@ import az.petek.identity.domain.Identity
  * Secrets never appear: the password is described as the `{self.password}` placeholder, and the user turn is
  * passed through [redact] because page snapshots and observations may echo what was typed.
  *
- * The company roster in the system prompt is bounded by [rosterLimit], so the prompt of every agent stays the same
- * size whether the run has 30 testers or 500. When the run is larger, the people an agent most likely deals with
- * are listed (itself, the admin, its department's managers and colleagues, then the other managers) and the rest are
- * counted; the list itself is in agent-id order.
+ * No other tester appears in the prompt (Faza 18, `LINK_ONLY_SWARM.md` §3): the system prompt is the same size for 30
+ * testers or 500, and a tester cannot leak what it does not know.
  */
 class PromptBuilder(
     private val protocol: DecisionProtocol,
     /** How many of the most recent turns are replayed to the model. */
     private val historyLimit: Int = DEFAULT_HISTORY_LIMIT,
-    /** How many people of the roster the system prompt lists at most. */
-    private val rosterLimit: Int = DEFAULT_ROSTER_LIMIT,
     /** What summaries and reported problems are written in ([WorkingLanguage.AUTO]: the task's own language). */
     private val language: WorkingLanguage = WorkingLanguage.AUTO,
 ) {
     init {
         require(historyLimit >= 1) { "historyLimit must be at least 1, was $historyLimit" }
-        require(rosterLimit >= 1) { "rosterLimit must be at least 1, was $rosterLimit" }
     }
 
     /** What the user turn of one decision is made of. */
@@ -120,44 +115,18 @@ class PromptBuilder(
             else -> "You sign up for your own account (your e-mail above and {self.password}) when the task needs one."
         }
 
+    /**
+     * The company the tester works in, without the people in it (Faza 18): testers do not know each other's names,
+     * e-mails or roles. A step that needs another tester's name or e-mail carries it in its task
+     * (`{tester.<role>.<n>.email}`), written in by the harness without saying whose it is.
+     */
     private fun StringBuilder.appendCompany(runtime: AgentRuntime) {
-        val roster = runtime.roster.ifEmpty { listOf(Colleague.of(runtime.identity)) }
-        val departments = roster.mapNotNull { it.department }.distinct()
+        val departments = runtime.roster.mapNotNull { it.department }.distinct()
         appendLine("Company context:")
-        appendLine("- You and your colleagues below work in the same company on the site under test; all accounts are test accounts.")
+        appendLine("- You work in a company on the site under test; all accounts are test accounts.")
         if (departments.isNotEmpty()) appendLine("- Departments: ${departments.joinToString(", ")}")
         appendLine("- The company code, once known, can be typed as {shared.company_code}.")
-        appendLine("- People (name - role - e-mail):")
-        val listed = mostRelevant(roster, runtime.identity)
-        listed.forEach { person ->
-            val you = if (person.agentId == runtime.identity.agentId) " (you)" else ""
-            appendLine("  - ${person.displayName} - ${roleDescription(person.role, person.department)} - ${person.email}$you")
-        }
-        val unlisted = roster.size - listed.size
-        if (unlisted > 0) appendLine("  - … and $unlisted more colleagues, not listed here")
-    }
-
-    /** At most [rosterLimit] people, the ones [self] most likely deals with first, listed in agent-id order. */
-    private fun mostRelevant(
-        roster: List<Colleague>,
-        self: Identity,
-    ): List<Colleague> {
-        if (roster.size <= rosterLimit) return roster
-        val department = self.department
-
-        fun rank(person: Colleague): Int =
-            when {
-                person.agentId == self.agentId -> 0
-                person.role == Role.ADMIN -> 1
-                department != null && person.department == department && person.role == Role.MANAGER -> 2
-                department != null && person.department == department -> 3
-                person.role == Role.MANAGER -> 4
-                else -> 5
-            }
-        return roster
-            .sortedWith(compareBy<Colleague>(::rank).thenBy { it.agentId })
-            .take(rosterLimit)
-            .sortedBy { it.agentId }
+        appendLine("- Other testers use the same site at the same time with their own accounts; never use theirs.")
     }
 
     private fun StringBuilder.appendHistory(history: List<ActionHistoryEntry>) {
@@ -184,9 +153,6 @@ class PromptBuilder(
 
     companion object {
         const val DEFAULT_HISTORY_LIMIT = 12
-
-        /** Lists everyone of a 30-tester campaign; larger runs list the 40 most relevant people. */
-        const val DEFAULT_ROSTER_LIMIT = 40
 
         private const val INTRO =
             "You are a QA tester. You test a web application by operating a real browser through a fixed set of tools, " +

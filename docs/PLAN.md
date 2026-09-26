@@ -975,8 +975,10 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   **Vəziyyət:** `registration: {self, login, guest}` (`tenant: none`); `login` testeri hədəf profilinin hesabını (rolu, `name`) alır, `explorer` rollu hesab heç vaxt testerə verilmir; real Chromium e2e.
 - [x] Qapı bir dəfə öyrənilir, qalan testerlər onu kodla keçir; qapı baryeri keçməyəni missiyaya buraxmır.
   **Vəziyyət:** kəşfiyyatçının qapı xəritəsi draftın `target_profile`-na (yollar, selektorlar) yazılır, testerlər standart `sign_up`/`login` axını ilə kodla keçir; qapını keçməyən tester sonrakı addımlardan çıxarılır (şirkətli saytda yalnız sahibin uğursuzluğu run-ı dayandırır).
-- [ ] Həmkar siyahısı promptdan götürülür; başqa testerə aid dəyər kartda yer tutucu ilə gəlir.
-- [ ] İcazə ilə hesab dəyişdirmə, yalnız testini bitirənlər arasında; sübutda hər addımın hesabı.
+- [x] Həmkar siyahısı promptdan götürülür; başqa testerə aid dəyər kartda yer tutucu ilə gəlir.
+  **Vəziyyət:** promptda heç bir başqa tester yoxdur (ölçüsü 5 və 500 testerdə eynidir); kart `{tester.<rol>.<n>.name|email}` ilə yazır, harness dəyəri son anda qoyur, kimin olduğunu demir; parol/telefon heç vaxt.
+- [x] İcazə ilə hesab dəyişdirmə, yalnız testini bitirənlər arasında; sübutda hər addımın hesabı.
+  **Vəziyyət:** `petek run --swap-accounts`: əsas addımlardan sonra uğurla bitirən testerlər hesabları halqa ilə ötürür; köhnə brauzer bağlanır, hesab saxlanmış sessiyası ilə təzə brauzerdə və təzə agentlə `<addım>@swap` kimi yenidən keçir; `swap_accounts` sübutu kimin hansı hesabı tutduğunu yazır.
 - [ ] Kəşfiyyatçı run boyu davam edir; tapdıqları növbəti run-ın ssenarisini genişləndirir.
 
 ### Faza 19 — Xırda xəta kartları

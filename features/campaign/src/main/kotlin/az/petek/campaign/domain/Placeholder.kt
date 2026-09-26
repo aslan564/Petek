@@ -35,6 +35,23 @@ sealed interface Placeholder {
         override val name: String = "event.$event.id"
     }
 
+    /**
+     * `{tester.<role>.<n>.<field>}`: a field of the [index]-th tester (1-based, agent order) of [role], e.g.
+     * `{tester.manager.1.email}` for the invitation a card must send (Faza 18). Testers never learn about each other
+     * from their prompt; a card that needs another tester's name or e-mail names it this way, and the harness writes
+     * the value in at the last moment without saying whose it is. Only [TESTER_FIELDS], never secrets.
+     */
+    data class Tester(
+        val role: String,
+        val index: Int,
+        val field: String,
+    ) : Placeholder {
+        override val name: String = "tester.$role.$index.$field"
+
+        /** The key of the tester in [TemplateContext.testers]: `<role>.<n>`. */
+        val key: String get() = "$role.$index"
+    }
+
     companion object {
         /** A placeholder is `{` + a name matching this pattern + `}`; any other brace text is literal. */
         val NAME_PATTERN: Regex = Regex("[a-z_][a-z0-9_.]*")
@@ -54,7 +71,11 @@ sealed interface Placeholder {
         /** `{api}`: [TargetProfile.apiPrefix], replaced in campaign paths when the file is loaded (see [expandApiPrefix]). */
         const val API_PREFIX: String = "{api}"
 
+        /** What a card may say about another tester: how to address them, nothing more. */
+        val TESTER_FIELDS: Set<String> = linkedSetOf("name", "email")
+
         private const val LAST_ID = "last_id"
+        private const val TESTER_PREFIX = "tester."
         private const val SELF_PREFIX = "self."
         private const val EVENT_PREFIX = "event."
         private const val EVENT_SUFFIX = ".id"
@@ -70,6 +91,16 @@ sealed interface Placeholder {
                     Self(name.removePrefix(SELF_PREFIX))
                 }
 
+                name.startsWith(TESTER_PREFIX) -> {
+                    val parts = name.removePrefix(TESTER_PREFIX).split('.')
+                    val index = parts.getOrNull(1)?.toIntOrNull()
+                    if (parts.size == 3 && parts[0].isNotEmpty() && index != null && index >= 1 && parts[2].isNotEmpty()) {
+                        Tester(parts[0], index, parts[2])
+                    } else {
+                        null
+                    }
+                }
+
                 name.startsWith(EVENT_PREFIX) &&
                     name.endsWith(EVENT_SUFFIX) &&
                     name.length > EVENT_PREFIX.length + EVENT_SUFFIX.length -> {
@@ -83,7 +114,9 @@ sealed interface Placeholder {
 
         /** Human-readable list of the forms a campaign may use, for error messages. */
         val SUPPORTED_FORMS: String =
-            (listOf("{$LAST_ID}") + CAMPAIGN_SELF_FIELDS.map { "{$SELF_PREFIX$it}" } + "{event.<event>.id}")
-                .joinToString(", ")
+            (
+                listOf("{$LAST_ID}") + CAMPAIGN_SELF_FIELDS.map { "{$SELF_PREFIX$it}" } + "{event.<event>.id}" +
+                    "{tester.<role>.<n>.name|email}"
+            ).joinToString(", ")
     }
 }

@@ -182,6 +182,13 @@ data class RunOptions(
     val keepData: Boolean = false,
     /** Seconds without progress before an agent is marked `blocked` and moves on. */
     val inactivityTimeout: Duration = Duration.parse("120s"),
+    /**
+     * The person running the test allowed the account swap (Faza 18, `--swap-accounts`): once the main steps are done,
+     * the testers that finished without failing hand their accounts on in a ring, and the main steps run once more,
+     * each account in a fresh browser with a fresh agent that has not used it before, so the site is seen from new
+     * eyes. An account is only ever in one browser at a time; the evidence records which tester holds which account.
+     */
+    val swapAccounts: Boolean = false,
 )
 
 enum class RunOutcome { PASSED, FAILED, ABORTED }

@@ -197,6 +197,7 @@ class DefaultCampaignRunner(
                 if (waves.size <= 1) {
                     startAgents(run, board, run.identities)
                     runSteps(run, board, tasks)
+                    if (run.options.swapAccounts) swapAccounts(run, board, tasks)
                 } else {
                     runWaves(run, board, tasks, waves)
                 }
@@ -257,6 +258,47 @@ class DefaultCampaignRunner(
         }
     }
 
+    /**
+     * The account swap ([RunOptions.swapAccounts], Faza 18): the testers that finished the main steps without failing
+     * pass their accounts on in a ring (tester *i* takes the account of tester *i + 1*). Each old browser is closed first,
+     * so an account is never in two browsers; each account then opens in a new browser with its saved storage state
+     * and a new agent, and the main steps run once more as `<step>@swap`. A swap needs at least two finished testers.
+     */
+    private suspend fun swapAccounts(
+        run: RunState,
+        board: AgentBoard,
+        tasks: TaskBoard,
+    ) {
+        if (run.aborted) return
+        val finished = run.activeIdentities().filter { run.status(it.agentId) != IdentityStatus.FAILED }
+        if (finished.size < 2) {
+            evidence.system(run, null, "swap_accounts", StepStatus.SKIPPED, "fewer than two testers finished; no account to swap")
+            return
+        }
+        val factory = run.factory ?: return
+        finished.forEach { identity ->
+            run.sessions.remove(identity.agentId)?.let { session ->
+                safely(run, "closing the session of ${identity.agentId}") { session.close() }
+            }
+            run.agents.remove(identity.agentId)
+        }
+        val colleagues = run.identities.map(Colleague::of)
+        finished.forEachIndexed { index, tester ->
+            val account = finished[(index + 1) % finished.size]
+            evidence.system(
+                run,
+                account.agentId,
+                "swap_accounts",
+                StepStatus.PASSED,
+                "tester ${tester.agentId} continues with the account of ${account.agentId} (${account.role.key}) in a new browser",
+            )
+            openAgent(run, factory, account, colleagues, restoreSession = true)
+        }
+        board.message("accounts swapped among ${finished.size} testers; the main steps run again")
+        val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
+        runSteps(run, board, tasks, again)
+    }
+
     private suspend fun startAgents(
         run: RunState,
         board: AgentBoard,
@@ -287,6 +329,7 @@ class DefaultCampaignRunner(
         identity: Identity,
         colleagues: List<Colleague>,
         proxy: BrowserProxy? = null,
+        restoreSession: Boolean = false,
     ) {
         val agentId = identity.agentId
         try {
@@ -299,11 +342,12 @@ class DefaultCampaignRunner(
                     proxy = proxy,
                 )
             val stored = storageStatePath(run.runId, agentId)
+            val signedIn = options.copy(storageState = stored.takeIf(Files::isRegularFile))
             val session =
                 RestoringBrowserSession(
-                    initial = factory.open(options),
+                    initial = factory.open(if (restoreSession) signedIn else options),
                     // Same identity, and still signed in when it had signed in: its saved storage state (rule 7).
-                    reopen = { factory.open(options.copy(storageState = stored.takeIf(Files::isRegularFile))) },
+                    reopen = { factory.open(signedIn) },
                     onRestored = { count, reason, url ->
                         val back = url?.let { ", back on $it" }.orEmpty()
                         evidence.system(
@@ -350,9 +394,10 @@ class DefaultCampaignRunner(
         run: RunState,
         board: AgentBoard,
         tasks: TaskBoard,
+        steps: List<ScenarioStep> = run.campaign.allSteps,
     ) {
         val executor = StepExecutor(run, services(board, tasks))
-        for (step in run.campaign.allSteps) {
+        for (step in steps) {
             if (run.aborted) break
             // Announced again only when an agent that failed meanwhile changes who runs the remaining steps.
             tasks.announce(RunPlans.of(run, actors))
@@ -574,5 +619,8 @@ class DefaultCampaignRunner(
     companion object {
         /** `action` of the SYSTEM step that carries a session's detected real-time transports. */
         const val NETWORK_OBSERVATION = "network_observation"
+
+        /** Suffix of the scenario steps run again after the account swap. */
+        const val SWAP_SUFFIX = "@swap"
     }
 }

@@ -13,6 +13,7 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.browser.domain.BrowserProxy
 import az.petek.evidence.domain.StepStatus
+import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.testing.RunnerFixture
 import az.petek.orchestration.testing.VirtualClock
@@ -135,6 +136,38 @@ class RunnerWavesTest {
                         )
                 }
             record.detail.orEmpty() shouldStartWith "rate_limited: The site answered 429 Too Many Requests"
+        }
+
+    @Test
+    fun `with the swap allowed, finished testers hand their accounts on in a ring and the main steps run again`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base = campaign(managers = 0, employees = 2, steps = listOf(step("look", employees())))
+
+            val summary = f.runner().run(base, RunOptions(swapAccounts = true))
+
+            summary.outcome shouldBe RunOutcome.PASSED
+            f.evidence.stepList
+                .filter { it.action == "swap_accounts" }
+                .map { it.detail } shouldContainExactly
+                listOf(
+                    "tester a01 continues with the account of a02 (employee) in a new browser",
+                    "tester a02 continues with the account of a03 (employee) in a new browser",
+                    "tester a03 continues with the account of a01 (admin) in a new browser",
+                )
+            f.evidence.stepList
+                .filter {
+                    it.scenarioStep == "look@swap" &&
+                        it.action.startsWith(
+                            "do",
+                        )
+                }.map { it.agentId?.value }
+                .toSet() shouldBe
+                setOf("a02", "a03")
+            // Every account is in exactly one browser at a time: the old ones were closed before the new ones opened.
+            f.browser.opened.count { it.label == "a02" } shouldBe 2
+            f.browser.sessions.values
+                .count { !it.closed } shouldBe 0
         }
 
     private fun settings(proxies: List<BrowserProxy>) =

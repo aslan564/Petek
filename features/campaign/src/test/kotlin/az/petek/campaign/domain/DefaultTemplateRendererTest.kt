@@ -32,6 +32,7 @@ class DefaultTemplateRendererTest {
                     "phone" to "+994501234567",
                 ),
             eventIds = mapOf("announcement_created" to "17", "ticket_created" to "99"),
+            testers = mapOf("manager.1" to mapOf("name" to "Sahil Quliyev", "email" to "sahil.k7x2.a02@test.kadrohr.com")),
         )
 
     @Test
@@ -49,6 +50,15 @@ class DefaultTemplateRendererTest {
     fun `event ids are looked up by event name`() {
         renderer.render("/api/tickets/{event.ticket_created.id}/approve?a={event.announcement_created.id}", context) shouldBe
             "/api/tickets/99/approve?a=17"
+    }
+
+    @Test
+    fun `another tester's name and e-mail come by role and number, and nothing else of them`() {
+        renderer.render("Dəvət et: {tester.manager.1.name} <{tester.manager.1.email}>", context) shouldBe
+            "Dəvət et: Sahil Quliyev <sahil.k7x2.a02@test.kadrohr.com>"
+        shouldThrow<TemplateException> { renderer.render("{tester.manager.2.email}", context) }.message shouldContain
+            "there is no tester 2 of role 'manager'"
+        shouldThrow<TemplateException> { renderer.render("{tester.manager.1.password}", context) }
     }
 
     @Test

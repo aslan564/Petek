@@ -34,7 +34,7 @@ import kotlin.time.Duration
  * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
  *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
- * - templates use only [Placeholder.SUPPORTED_FORMS]. In `do`/`run` text and a step's own id source, `{last_id}` and
+ * - templates use only [Placeholder.SUPPORTED_FORMS]; `{tester.<role>.<n>.<field>}` names a tester the quotas have. In `do`/`run` text and a step's own id source, `{last_id}` and
  *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts;
  * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
  *
@@ -629,6 +629,24 @@ class DefaultCampaignValidator(
                         in scope.events -> null
                         in emittedAnywhere -> "{$name} refers to '${placeholder.event}', which is not emitted by ${scope.description}"
                         else -> "{$name} refers to '${placeholder.event}', which no step emits"
+                    }
+                }
+
+                is Placeholder.Tester -> {
+                    val role = Role.fromKey(placeholder.role)
+                    when {
+                        placeholder.field !in Placeholder.TESTER_FIELDS -> {
+                            "{$name} may only name another tester's ${Placeholder.TESTER_FIELDS.joinToString(" or ")}"
+                        }
+
+                        role == null || settings.roles.count(role) < placeholder.index -> {
+                            "{$name} names tester ${placeholder.index} of role '${placeholder.role}', but the campaign has " +
+                                "${role?.let(settings.roles::count) ?: 0} of that role"
+                        }
+
+                        else -> {
+                            null
+                        }
                     }
                 }
             }

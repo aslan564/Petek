@@ -11,12 +11,15 @@ package az.petek.campaign.domain
 
 /**
  * Values available to `{placeholder}` templates in steps and assertions.
- * `{last_id}`, `{self.email}`, `{self.name}`, `{self.agent_id}`, `{self.department}`, `{self.role}`, `{event.<name>.id}`.
+ * `{last_id}`, `{self.email}`, `{self.name}`, `{self.agent_id}`, `{self.department}`, `{self.role}`, `{event.<name>.id}`,
+ * `{tester.<role>.<n>.name|email}`.
  */
 data class TemplateContext(
     val lastId: String?,
     val self: Map<String, String>,
     val eventIds: Map<String, String>,
+    /** Other testers by `<role>.<n>` (1-based, agent order): only [Placeholder.TESTER_FIELDS]. */
+    val testers: Map<String, Map<String, String>> = emptyMap(),
 )
 
 /** Pure template rendering. Unknown or unresolvable placeholders fail loudly instead of producing wrong URLs. */

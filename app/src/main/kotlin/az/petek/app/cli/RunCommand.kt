@@ -50,6 +50,10 @@ class RunCommand : PetekSubcommand("run") {
     private val repeat by option("--repeat", help = "run the campaign N times and report stability").int().restrictTo(min = 1).default(1)
     private val keepData by option("--keep-data", help = "keep the test company on the target (debugging)").flag()
     private val headful by option("--headful", help = "show the browser windows").flag()
+    private val swapAccounts by option(
+        "--swap-accounts",
+        help = "after the main steps, let the testers that finished hand their accounts on and run the main steps again",
+    ).flag()
     private val ci by option(
         "--ci",
         help =
@@ -90,7 +94,7 @@ class RunCommand : PetekSubcommand("run") {
             val summaries =
                 try {
                     if (repeat == 1) {
-                        listOf(runner.run(campaign, RunOptions(keepData = keepData)))
+                        listOf(runner.run(campaign, RunOptions(keepData = keepData, swapAccounts = swapAccounts)))
                     } else {
                         container.repeatRunner(runner).repeat(campaign, repeat, keepData)
                     }

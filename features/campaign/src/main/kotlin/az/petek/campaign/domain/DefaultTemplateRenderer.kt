@@ -39,10 +39,28 @@ class DefaultTemplateRenderer : TemplateRenderer {
         context: TemplateContext,
     ): String? =
         when (val placeholder = Placeholder.parse(name)) {
-            Placeholder.LastId -> context.lastId
-            is Placeholder.Self -> context.self[placeholder.field]
-            is Placeholder.EventId -> context.eventIds[placeholder.event]
-            null -> null
+            Placeholder.LastId -> {
+                context.lastId
+            }
+
+            is Placeholder.Self -> {
+                context.self[placeholder.field]
+            }
+
+            is Placeholder.EventId -> {
+                context.eventIds[placeholder.event]
+            }
+
+            is Placeholder.Tester -> {
+                context.testers[placeholder.key]?.get(placeholder.field)?.takeIf {
+                    placeholder.field in
+                        Placeholder.TESTER_FIELDS
+                }
+            }
+
+            null -> {
+                null
+            }
         }?.takeUnless { it.isBlank() }
 
     private fun problem(
@@ -63,8 +81,13 @@ class DefaultTemplateRenderer : TemplateRenderer {
                 "Placeholder {$name} cannot be resolved: event '${placeholder.event}' has not been emitted yet"
             }
 
+            is Placeholder.Tester -> {
+                "Placeholder {$name} cannot be resolved: there is no tester ${placeholder.index} of role '${placeholder.role}' " +
+                    "with a '${placeholder.field}' (fields: ${Placeholder.TESTER_FIELDS.joinToString()})"
+            }
+
             null -> {
-                "Unknown placeholder {$name}; supported forms: {last_id}, {self.<field>}, {event.<event>.id}"
+                "Unknown placeholder {$name}; supported forms: {last_id}, {self.<field>}, {event.<event>.id}, {tester.<role>.<n>.<field>}"
             }
         }
 
