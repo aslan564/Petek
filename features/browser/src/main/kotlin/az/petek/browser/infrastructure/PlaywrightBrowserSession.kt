@@ -28,6 +28,7 @@ import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.PlaywrightException
+import com.microsoft.playwright.Route
 import com.microsoft.playwright.TimeoutError
 import com.microsoft.playwright.options.RequestOptions
 import com.microsoft.playwright.options.SelectOption
@@ -46,6 +47,7 @@ import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.function.Consumer
 import kotlin.io.path.exists
 import kotlin.time.Duration
 
@@ -97,6 +99,11 @@ internal class PlaywrightBrowserSession private constructor(
     /** Text this session typed into secret fields; masked in everything read back later. Session thread only. */
     private val typedSecrets = LinkedHashSet<String>()
 
+    /** The saved state's sessionStorage not put back yet, by origin ([SessionStorageState]). Session thread only. */
+    private val pendingSessionStorage: MutableMap<String, List<List<String>>> by lazy(LazyThreadSafetyMode.NONE) {
+        options.storageState?.let { SessionStorageState.read(it).toMutableMap() } ?: mutableMapOf()
+    }
+
     override val label: String get() = options.label
 
     /** Name of the thread every Playwright call of this session runs on. */
@@ -104,7 +111,41 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun navigate(pathOrUrl: String) {
         requireWebAddress(pathOrUrl)
-        perform("navigate to $pathOrUrl") { page.navigate(pathOrUrl) }
+        perform("navigate to $pathOrUrl") {
+            restoreSessionStorage(pathOrUrl)
+            page.navigate(pathOrUrl)
+        }
+    }
+
+    /**
+     * Puts the saved state's sessionStorage of [pathOrUrl]'s origin back into this tab before the site's first page there
+     * loads: an empty page of that origin, answered by the session itself (the site never sees the request), receives
+     * the entries, and the real navigation follows in the same tab. Once per origin. Session thread only.
+     */
+    private fun restoreSessionStorage(pathOrUrl: String) {
+        if (pendingSessionStorage.isEmpty()) return
+        val target = runCatching { options.baseUrl.resolve(pathOrUrl.trim()) }.getOrNull() ?: return
+        if (target.scheme?.lowercase() !in WEB_SCHEMES || target.host == null) return
+        val origin = LocalStorageSeed.originOf(target)
+        val entries = pendingSessionStorage.remove(origin) ?: return
+        val blank = "$origin/"
+        val answer =
+            Consumer<Route> { route ->
+                route.fulfill(
+                    Route
+                        .FulfillOptions()
+                        .setStatus(HTTP_OK)
+                        .setContentType("text/html")
+                        .setBody(SessionStorageState.BLANK_PAGE),
+                )
+            }
+        page.route(blank, answer)
+        try {
+            page.navigate(blank)
+            page.evaluate(SessionStorageState.RESTORE, entries)
+        } finally {
+            page.unroute(blank, answer)
+        }
     }
 
     override suspend fun snapshot(): PageSnapshot =
@@ -230,10 +271,28 @@ internal class PlaywrightBrowserSession private constructor(
                 Files.createDirectories(directory)
                 restrictToOwner(directory, OWNER_ONLY_DIRECTORY)
             }
+            // Entries not put back yet (no page of their origin opened) stay; what the tabs hold now wins. Read before
+            // Playwright writes, since [path] may be the very file this session was opened with.
+            val notRestored = pendingSessionStorage.toMap()
             handles.context.storageState(BrowserContext.StorageStateOptions().setPath(path))
+            SessionStorageState.write(path, notRestored + capturedSessionStorage())
             restrictToOwner(path, OWNER_ONLY_FILE)
         }
     }
+
+    /** Every open tab's sessionStorage by origin. Session thread only. */
+    private fun capturedSessionStorage(): Map<String, List<List<String>>> =
+        handles.context
+            .pages()
+            .mapNotNull { tab ->
+                val found = runCatching { tab.evaluate(SessionStorageState.CAPTURE) }.getOrNull() as? Map<*, *> ?: return@mapNotNull null
+                val origin = found["origin"] as? String ?: return@mapNotNull null
+                val entries =
+                    (found["entries"] as? List<*>).orEmpty().mapNotNull { pair ->
+                        (pair as? List<*>)?.takeIf { it.size == 2 }?.map { it.toString() }
+                    }
+                origin to entries
+            }.toMap()
 
     private fun restrictToOwner(
         path: Path,
@@ -525,6 +584,7 @@ internal class PlaywrightBrowserSession private constructor(
 
         private val URL_SCHEME = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*):")
         private val WEB_SCHEMES = setOf("http", "https")
+        private const val HTTP_OK = 200
         private const val BLANK_PAGE = "about:blank"
 
         /** Playwright's message when the document an evaluation ran in was replaced by a navigation. */

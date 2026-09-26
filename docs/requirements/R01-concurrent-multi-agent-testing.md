@@ -49,7 +49,7 @@ Nobody but the orchestrator sees more than one tester. What holds, and where the
 | `{last_id}` is the actor's own emitted object, the object it waited for, or the state before the step began — never a colleague's id from the same step | `StepExecutor.lastIdBeforeStep` |
 | Evidence `agent_id`, event emitters and receipts come from harness state, never from the model | `StepEvidence`, `HarnessEvidence`, `StepExecutor.emit` |
 | Evidence writes are serialized (one SQLite writer thread, atomic artifact files) | `SqliteDatabase`, `FileSystemArtifactStore` |
-| Saved storage states (live cookies) are `rw-------` in a `rwx------` directory, one file per (run, agent) | `PlaywrightBrowserSession.saveStorageState` |
+| Saved storage states (live cookies, localStorage and the tabs' sessionStorage) are `rw-------` in a `rwx------` directory, one file per (run, agent) | `PlaywrightBrowserSession.saveStorageState`, `SessionStorageState` |
 | Mail and OTP are looked up by the agent's own e-mail and phone only | `DefaultAgentLoop`, `FlowTemplates` |
 
 Known trade-off: in `SHARED_SERVER` topology up to 20 contexts share one Chromium process tree (shared fate and CPU

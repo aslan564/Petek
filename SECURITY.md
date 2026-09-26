@@ -69,7 +69,8 @@ trusted.
 - An agent's runtime knows its colleagues as `Colleague` (name, role, e-mail) — never their password or phone. Values
   the testers share (`company_code`, invite links) are write-once; `{last_id}` never resolves to an object a colleague
   created concurrently; only the admin may create or seed the company (campaign validator).
-- Saved storage states (live cookies) are written `rw-------` into a `rwx------` directory, one file per run and agent.
+- Saved storage states (live cookies, localStorage and the tabs' sessionStorage, which may hold a site's login token)
+  are written `rw-------` into a `rwx------` directory, one file per run and agent.
 - Injected page scripts (`features/browser/src/main/resources/**/*.js`) blank secret field values before serialising
   DOM snapshots.
 - Proven at scale: `TesterIsolationAtScaleTest` (1 000 testers through the real orchestrator on every build, 5 000 in

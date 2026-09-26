@@ -33,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A small local website for the real-browser tests (no internet): forms, a cookie login, SSE, polling, a WebSocket
@@ -43,11 +44,20 @@ internal class TestSite : AutoCloseable {
     /** Ticket ids already approved; each test uses its own id. */
     private val approved = ConcurrentHashMap.newKeySet<String>()
 
+    /** How often the site's home page was asked for. */
+    val homeRequests = AtomicInteger()
+
     private val server =
         embeddedServer(CIO, host = "127.0.0.1", port = 0) {
             install(SSE)
             routing {
+                get("/") {
+                    homeRequests.incrementAndGet()
+                    call.respondText(HOME_PAGE, ContentType.Text.Html)
+                }
                 get("/form") { call.respondText(FORM_PAGE, ContentType.Text.Html) }
+                get("/session-login") { call.respondText(SESSION_LOGIN_PAGE, ContentType.Text.Html) }
+                get("/session-me") { call.respondText(SESSION_ME_PAGE, ContentType.Text.Html) }
                 get("/health") { call.respondText(HEALTH_PAGE, ContentType.Text.Html) }
                 get("/api/broken") { call.respondText("boom", status = HttpStatusCode.InternalServerError) }
                 get("/dynamic") { call.respondText(DYNAMIC_PAGE, ContentType.Text.Html) }
@@ -129,6 +139,33 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        const val HOME_PAGE = "<!doctype html><html><head><title>Ana səhifə</title></head><body><p>Ana səhifə</p></body></html>"
+
+        /** A single-page application's login: the user is kept in sessionStorage only. */
+        const val SESSION_LOGIN_PAGE =
+            """
+            <!doctype html><html><head><title>Giriş</title></head><body>
+            <p id="done"></p>
+            <script>
+              sessionStorage.setItem('user', new URLSearchParams(location.search).get('user') || '');
+              document.getElementById('done').textContent = 'Yadda saxlandı';
+            </script>
+            </body></html>
+            """
+
+        /** Greets the user of sessionStorage; logging out clears it. */
+        const val SESSION_ME_PAGE =
+            """
+            <!doctype html><html><head><title>Profil</title></head><body>
+            <p id="who"></p>
+            <button id="logout" onclick="sessionStorage.clear(); location.reload()">Çıxış</button>
+            <script>
+              const user = sessionStorage.getItem('user');
+              document.getElementById('who').textContent = user ? 'Salam, ' + user : 'Anonim';
+            </script>
+            </body></html>
+            """
+
         /** A page that logs an error, calls a failing endpoint, links in and out of the site and is too wide for a phone. */
         const val HEALTH_PAGE =
             """

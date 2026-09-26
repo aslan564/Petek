@@ -483,6 +483,37 @@ class PlaywrightBrowserSessionTest {
     }
 
     @Test
+    fun `a saved storage state brings a tab's sessionStorage back once, without asking the site`(
+        @TempDir dir: Path,
+    ) = runBlocking<Unit> {
+        val state = dir.resolve("spa.json")
+        val first = sessions.open(SessionOptions("first", site.baseUrl))
+        try {
+            first.navigate("/session-login?user=ali")
+            first.waitForText("Yadda saxlandı", 3.seconds).found shouldBe true
+            first.saveStorageState(state)
+        } finally {
+            first.close()
+        }
+        val origin = LocalStorageSeed.originOf(site.baseUrl)
+        SessionStorageState.read(state) shouldBe mapOf(origin to listOf(listOf("user", "ali")))
+        val home = site.homeRequests.get()
+
+        val second = sessions.open(SessionOptions("second", site.baseUrl, storageState = state))
+        try {
+            second.navigate("/session-me")
+            second.readText("#who") shouldBe "Salam, ali"
+            second.clickSelector("#logout")
+            second.waitForText("Anonim", 3.seconds).found shouldBe true
+            second.navigate("/session-me")
+            second.readText("#who") shouldBe "Anonim"
+        } finally {
+            second.close()
+        }
+        site.homeRequests.get() shouldBe home
+    }
+
+    @Test
     fun `a missing storage state file is reported before anything is started`(
         @TempDir dir: Path,
     ) = runBlocking<Unit> {

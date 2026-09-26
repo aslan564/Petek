@@ -82,7 +82,10 @@ data class SessionOptions(
     /** Owner label used for thread names and logs, e.g. `a07`. */
     val label: String,
     val baseUrl: URI,
-    /** Restore cookies/storage saved after an earlier login. */
+    /**
+     * Restore cookies and storage saved after an earlier login ([BrowserSession.saveStorageState]): cookies and
+     * localStorage at once, sessionStorage into the session's tab when it first opens a page of that origin.
+     */
     val storageState: Path? = null,
     val viewport: Viewport = Viewport(),
     val defaultTimeout: Duration = Duration.parse("15s"),
@@ -268,6 +271,10 @@ interface BrowserSession {
 
     suspend fun domSnapshot(): String
 
+    /**
+     * Saves the session's cookies, localStorage and the open tabs' sessionStorage to [path] (Playwright's storage state
+     * format; sessionStorage as `origins[].sessionStorage`), readable by its owner only.
+     */
     suspend fun saveStorageState(path: Path)
 
     /**

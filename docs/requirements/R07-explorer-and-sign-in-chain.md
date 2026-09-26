@@ -40,7 +40,10 @@ must be able to register, read the OTP, and fall back to provided credentials if
 - `OwnAccountRoleSessions`: the owner's accounts from the panel ("Hesablar", password to `.env` as
   `PETEK_ACC_<SITE>_<ROLE>`, the account with its `${VAR}` reference to `targets/<site>.yaml`; the database never
   sees it) or from the target profile. A given `storage_state` file is used as is; a session saved by an earlier
-  exploration (`<evidence>/sessions/<site>/<role>.json`, `rw-------`) is reused while it is still signed in.
+  exploration (`<evidence>/sessions/<site>/<role>.json`, `rw-------`) is reused while it is still signed in. A saved
+  state carries sessionStorage too (`origins[].sessionStorage`, put back into the tab once when it first opens a page
+  of that origin), so a single-page application that keeps its login there stays signed in; a token the site keeps
+  only in memory cannot be saved by any browser state.
 - Signing in plays the profile's own `login` flow (`ExplorerLoginFlow`), the one the testers run, so a login form that
   asks for more than an e-mail and a password (a company code, a workspace, a consent box) works: an account's
   `fields:` (non-secret values, e.g. `{company_code: ACME-42}`) fill its `{self.<name>}`, `{shared.<name>}` and

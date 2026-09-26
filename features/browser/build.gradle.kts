@@ -17,6 +17,7 @@ plugins {
 dependencies {
     api(project(":core:domain"))
     implementation(libs.playwright)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlin.logging)
     testImplementation(testFixtures(project(":core:domain")))
     testImplementation(libs.ktor.server.core)
