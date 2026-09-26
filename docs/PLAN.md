@@ -591,7 +591,10 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
   `PETEK_BROWSER_IGNORE_TLS_ERRORS` seçimi əlavə olundu (default söndürülü; bu maşında CA NSS-ə import edildi);
   (2) kadrohr.com SPA-dır, `load`-dan sonra boş qabıq gəlir, kəşfiyyatçı 7 səhifədən 5-ini boş çəkirdi və analitik
   "səhifə xarabdır?" soruşurdu — indi məzmun görünənə qədər gözləyir (`pageSettleTimeout` 4 s, 250 ms addımla);
-  (3) analitikin bəzi sualları türkcə gəlirdi — dil qaydası prompt-a yazıldı.
+  (3) analitikin bəzi sualları türkcə gəlirdi — dil qaydası prompt-a yazıldı. Düzəlişdən sonra təkrar kəşfiyyat
+  (48 s): 4 səhifənin hamısı məzmunla çəkildi, sayt modelində 4 form və 35 əməliyyat (giriş: e-poçt, şifrə, şirkət
+  kodu; qeydiyyat: 7 sahə), 15 ideya, 9 sual Azərbaycan dilində. Rollarla gəzinti və sınaq toxunuşu test API tokeni
+  olmadan atlanır — real KadroHR üçün növbəti addım sahibin staging-i və `docs/KADROHR_READINESS.md` P0 maddələridir.
 - Qeyd (dəyişmədi): hesabatın "Keçən addımlar" sayı hər alt-hərəkəti sayır (10 tester üçün 315), CLI xülasəsi isə
   orkestratorun tapşırıq sayını (33). İkisi də doğrudur, amma eyni ad daşıyır — panel/hesabat işində birləşdirilməli.
 
