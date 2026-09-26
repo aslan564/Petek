@@ -44,14 +44,16 @@ class LogFileTraceSourceTest {
     @Test
     fun `credentials in a log line never reach the report`() =
         runBlocking<Unit> {
+            // A fake token assembled at run time, so secret scanners do not take the fixture for a real one.
+            val jwt = listOf("eyJ" + "hbGciOiJub25lIn0", "eyJ" + "zdWIiOiJ0ZXN0In0", "ZmFrZS1zaWduYXR1cmU").joinToString(".")
             val line =
                 source(
                     "cor_x Authorization: Bearer abc.def.ghi Cookie: sid=s3cr3t; theme=dark " +
                         "{\"password\":\"hunter22\",\"user\":\"eli\"} X-Test-Token: dev-token-123 " +
-                        "jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlc2ln",
+                        "jwt=$jwt",
                 ).lines("cor_x").single()
 
-            listOf("abc.def.ghi", "s3cr3t", "hunter22", "dev-token-123", "eyJhbGciOiJIUzI1NiJ9").forEach { line shouldNotContain it }
+            listOf("abc.def.ghi", "s3cr3t", "hunter22", "dev-token-123", jwt.substringBefore('.')).forEach { line shouldNotContain it }
             line.startsWith("cor_x") shouldBe true
         }
 }
