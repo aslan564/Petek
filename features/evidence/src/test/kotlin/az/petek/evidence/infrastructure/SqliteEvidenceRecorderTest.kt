@@ -15,6 +15,7 @@ import az.petek.core.ids.StepId
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceSource
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
@@ -126,7 +127,7 @@ class SqliteEvidenceRecorderTest {
     @Test
     fun `findings round-trip, with and without a step, agent or A-B-C values`() =
         withStore(dir) { store, _ ->
-            val full = finding("fnd_1")
+            val full = finding("fnd_1").copy(evidenceTier = EvidenceTier.ORACLE_CONFIRMED)
             val runLevel =
                 finding("fnd_2").copy(
                     stepId = null,
@@ -136,6 +137,7 @@ class SqliteEvidenceRecorderTest {
                     b = null,
                     c = null,
                     artifactIds = emptyList(),
+                    evidenceTier = EvidenceTier.LLM_JUDGED,
                 )
 
             store.finding(full)

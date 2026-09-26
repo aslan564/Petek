@@ -244,8 +244,8 @@ class OnlyOneSucceedsTest {
                     .evaluateOnlyOneSucceeds(withOracle(), listOf(racer(2, request(303)), racer(3, request(409))), input)
 
             result.verdict shouldBe Verdict.PASSED
-            result.note shouldBe "oracle: not checked: no test API"
-            result.observed!! shouldContain "; oracle: not checked"
+            result.note shouldBe "oracle: N/A (no oracle)"
+            result.observed!! shouldContain "; oracle: N/A (no oracle)"
             result.oracleEvidence.shouldBeNull()
         }
 

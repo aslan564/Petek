@@ -112,7 +112,7 @@ class DefaultAssertionEvaluator(
     ): RaceVerdict.OracleCheck {
         val unrendered = AssertionText.asOracle(condition)
         if (!oracle.isAvailable) {
-            return RaceVerdict.OracleCheck(Verdict.SKIPPED, AssertionText.describe(unrendered), null, "not checked: no test API", null)
+            return RaceVerdict.OracleCheck(Verdict.NOT_APPLICABLE, AssertionText.describe(unrendered), null, NO_ORACLE, null)
         }
         return try {
             val rendered = unrendered.rendered(input)
@@ -305,7 +305,7 @@ class DefaultAssertionEvaluator(
         input: AssertionInput,
     ): AssertionResult {
         if (!oracle.isAvailable) {
-            return result(spec, Verdict.SKIPPED, expected = describeBestEffort(spec, input), observed = null, note = "no test API")
+            return result(spec, Verdict.NOT_APPLICABLE, expected = describeBestEffort(spec, input), observed = null, note = NO_ORACLE)
         }
         val rendered = spec.rendered(input)
         TargetPath.problem(rendered.path)?.let { return unsafePath(spec, rendered, rendered.path, it) }
@@ -485,6 +485,9 @@ class DefaultAssertionEvaluator(
         }
 
     private companion object {
+        /** The note of an oracle check on a target without a test API (Faza 10). */
+        const val NO_ORACLE = "N/A (no oracle)"
+
         /**
          * Shortest window handed to the browser. An adapter may round a timeout down to whole milliseconds and
          * Playwright reads 0 ms as "no timeout", so a sub-millisecond remainder becomes a single check, never a wait.

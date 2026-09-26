@@ -13,6 +13,7 @@ import az.petek.core.ids.AgentId
 import az.petek.core.ids.IdGenerator
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.EvidenceSource
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
@@ -93,7 +94,7 @@ class ThreeSourceJudge(
         key: GroupKey,
         group: List<AssertionRecord>,
     ): FindingRecord? {
-        val evidence = group.filter { it.verdict != Verdict.SKIPPED }
+        val evidence = group.filter { it.verdict != Verdict.SKIPPED && it.verdict != Verdict.NOT_APPLICABLE }
         val a = observe(SOURCE_A, evidence.filter { it.source == EvidenceSource.SENDER })
         val b = observe(SOURCE_B, evidence.filter { it.source == EvidenceSource.RECEIVER || it.source == EvidenceSource.HARNESS })
         val c = observe(SOURCE_C, evidence.filter { it.source == EvidenceSource.ORACLE })
@@ -111,6 +112,7 @@ class ThreeSourceJudge(
             c = c?.value,
             note = noteWithDetails(verdict.note, failed.mapNotNull { it.note }),
             artifactIds = evidence.flatMap { it.artifactIds }.distinct(),
+            evidenceTier = if (c != null) EvidenceTier.ORACLE_CONFIRMED else EvidenceTier.UI_NETWORK,
         )
     }
 
@@ -152,6 +154,8 @@ class ThreeSourceJudge(
             c = if (noMail) NO_EMAIL_SENT else null,
             note = stepNote(key, noMail),
             artifactIds = emptyList(),
+            // A `do` step failed because the model said so; a deterministic step failed on what the harness saw.
+            evidenceTier = if (step.kind == StepKind.DO && !noMail && !refused) EvidenceTier.LLM_JUDGED else EvidenceTier.UI_NETWORK,
         )
     }
 

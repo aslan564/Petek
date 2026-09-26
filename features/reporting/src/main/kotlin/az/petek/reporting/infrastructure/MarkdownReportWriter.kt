@@ -69,7 +69,8 @@ class MarkdownReportWriter : ReportWriter {
                 listOf("Keçməyən addımlar", s.stepsFailed.toString()),
                 listOf(
                     "Assertlər",
-                    "${s.assertionsPassed} keçdi · ${s.assertionsFailed} keçmədi · ${s.assertionsSkipped} ötürüldü",
+                    "${s.assertionsPassed} keçdi · ${s.assertionsFailed} keçmədi · ${s.assertionsSkipped} ötürüldü" +
+                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else ""),
                 ),
                 listOf("Tapıntılar", model.findings.size.toString()),
                 listOf("Agentlər", s.agents.toString()),
@@ -106,6 +107,7 @@ class MarkdownReportWriter : ReportWriter {
                 listOf("A: göndərən", md(finding.a ?: NONE)),
                 listOf("B: alan", md(finding.b ?: NONE)),
                 listOf("C: oracle", md(finding.c ?: NONE)),
+                listOf("Sübut səviyyəsi", ReportFormat.evidenceTier(finding.evidenceTier)),
             ),
         )
         paragraph("Qeyd: ${md(finding.note)}")

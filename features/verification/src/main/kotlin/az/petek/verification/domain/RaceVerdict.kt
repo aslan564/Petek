@@ -95,6 +95,7 @@ internal object RaceVerdict {
 
     private fun oracleObserved(check: OracleCheck): String =
         when {
+            check.verdict == Verdict.NOT_APPLICABLE -> "N/A (no oracle)"
             check.verdict == Verdict.SKIPPED -> "not checked"
             else -> check.observed ?: "-"
         }

@@ -130,6 +130,7 @@ internal class SqliteEvidenceRecorder(
                 it[note] = record.note
                 it[artifactIds] = record.artifactIds
                 it[workspaceId] = record.workspaceId.value
+                it[evidenceTier] = record.evidenceTier.name
             }
         }
     }

@@ -254,10 +254,10 @@ class RecordingVerifyStepUseCaseTest {
                     )
 
             val record = records.single()
-            record.verdict shouldBe Verdict.SKIPPED
-            record.note shouldBe "no test API"
+            record.verdict shouldBe Verdict.NOT_APPLICABLE
+            record.note shouldBe "N/A (no oracle)"
             artifact(record.artifactIds.single()).type shouldBe ArtifactType.LOG
-            content(record.artifactIds.single()) shouldContain "oracle SKIPPED (ORACLE)"
+            content(record.artifactIds.single()) shouldContain "oracle NOT_APPLICABLE (ORACLE)"
         }
 
     @Test
@@ -329,7 +329,8 @@ class RecordingVerifyStepUseCaseTest {
             val withoutSession = useCase().verifyActor(specs, assertionInput(session = null, agentId = AgentId("a02")))
             val skipped = useCase(target = FakeTargetOracle(isAvailable = false)).verifyActor(specs, assertionInput(session))
 
-            (withSession + withoutSession + skipped).map { it.verdict }.toSet() shouldBe Verdict.entries.toSet()
+            (withSession + withoutSession + skipped).map { it.verdict }.toSet() shouldBe
+                setOf(Verdict.PASSED, Verdict.FAILED, Verdict.NOT_APPLICABLE)
             assertEveryVerdictIsBacked(withSession + withoutSession + skipped)
             evidence.assertionList shouldHaveSize specs.size * 3
         }

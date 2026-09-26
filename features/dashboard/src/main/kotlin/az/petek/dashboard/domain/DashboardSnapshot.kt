@@ -15,6 +15,7 @@ import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.AgentState
@@ -137,6 +138,8 @@ data class FindingView(
     val c: String?,
     val note: String,
     val artifactIds: List<ArtifactId>,
+    /** How strong the proof is: `ORACLE_CONFIRMED`, `UI_NETWORK` or `LLM_JUDGED` (Faza 10). */
+    val evidenceTier: EvidenceTier = EvidenceTier.UI_NETWORK,
 )
 
 /** A card with the agent's own recent history (newest first, at most [DashboardState.AGENT_TIMELINE_LIMIT]). */

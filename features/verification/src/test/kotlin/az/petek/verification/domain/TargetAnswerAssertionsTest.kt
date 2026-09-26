@@ -64,9 +64,9 @@ class TargetAnswerAssertionsTest {
         runTest {
             val result = evaluateOne(Oracle("/test/tickets/{last_id}", "status", "open", null), FakeTargetOracle(isAvailable = false))
 
-            result.verdict shouldBe Verdict.SKIPPED
+            result.verdict shouldBe Verdict.NOT_APPLICABLE
             result.source shouldBe EvidenceSource.ORACLE
-            result.note shouldBe "no test API"
+            result.note shouldBe "N/A (no oracle)"
             result.rawEvidence.shouldBeNull()
             result.expected shouldBe "GET /test/tickets/42 field `status` = \"open\""
         }

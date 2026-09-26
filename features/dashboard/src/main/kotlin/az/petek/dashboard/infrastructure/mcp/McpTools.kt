@@ -437,6 +437,7 @@ internal class McpTools(
                     put("b", it.b)
                     put("c", it.c)
                     put("note", it.note)
+                    put("evidenceTier", it.evidenceTier.name)
                     putJsonArray("artifactIds") { it.artifactIds.forEach { id -> add(id.value) } }
                 }
             },

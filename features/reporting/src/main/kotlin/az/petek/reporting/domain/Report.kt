@@ -123,6 +123,8 @@ data class ReportSummary(
     val realtimeTransports: List<String>,
     /** Prompt tokens served from the provider's cache; most of a run's prompt when the provider caches, so shown too. */
     val cacheReadTokens: Long = 0,
+    /** Oracle checks on a target without a test API: "N/A (no oracle)", a supported mode, not a skip. */
+    val assertionsNotApplicable: Int = 0,
 )
 
 data class ReportModel(

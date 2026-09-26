@@ -737,7 +737,7 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün; sürüdə yalnız xəbərdarlıqla).
 - [ ] İmkan yoxlaması (`capability probe`, `diagnostics`): kəşfiyyatdan əvvəl hədəfin nəyi dəstəklədiyi — test API,
   poçt mənbəyi, real-time nəqliyyat, CAPTCHA/rate limit əlamətləri — `TargetCapabilities` kimi bazaya və hesabata.
-- [ ] Sübut səviyyəsi hər tapıntıda: `ORACLE_CONFIRMED` / `UI_NETWORK` / `LLM_JUDGED` (`FindingRecord.evidenceTier`);
+- [x] Sübut səviyyəsi hər tapıntıda: `ORACLE_CONFIRMED` / `UI_NETWORK` / `LLM_JUDGED` (`FindingRecord.evidenceTier`);
   hesabat və panel göstərir; oracle olmayan hədəfdə `oracle` assert-ləri "SKIPPED" yox, "N/A (no oracle)" olur.
 - [ ] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).

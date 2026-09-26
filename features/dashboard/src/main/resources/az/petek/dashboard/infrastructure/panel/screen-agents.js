@@ -275,6 +275,7 @@
   function findingEl(f) {
     const head = h('div', 'finding-head', h('span', { class: 'fclass', text: L.findingClass[f.findingClass] || f.findingClass }), h('span', { class: 'entry-step', text: f.step }));
     if (f.agentId) head.append(agentLink(f.agentId));
+    if (f.evidenceTier) head.append(h('span', { class: 'tier tier-' + f.evidenceTier, text: L.evidenceTier[f.evidenceTier] || f.evidenceTier }));
     const box = h('article', 'finding fc-' + f.findingClass, head, h('div', 'sources', ...source('A', f.a), ...source('B', f.b), ...source('C', f.c)), h('div', { class: 'note', text: f.note }));
     if (f.artifacts.length) {
       box.append(h('div', 'proofs', f.artifacts.map((id, i) => h('a', { text: 'Sübut ' + (i + 1) + ' ↗', attrs: { href: artifactUrl(id), target: '_blank', rel: 'noopener' } }))));

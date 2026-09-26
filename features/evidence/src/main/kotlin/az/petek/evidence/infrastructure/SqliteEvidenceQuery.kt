@@ -17,6 +17,7 @@ import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceQuery
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
@@ -177,6 +178,7 @@ private fun ResultRow.toFindingRecord() =
         note = this[FindingTable.note],
         artifactIds = this[FindingTable.artifactIds],
         workspaceId = WorkspaceId(this[FindingTable.workspaceId]),
+        evidenceTier = EvidenceTier.entries.firstOrNull { it.name == this[FindingTable.evidenceTier] } ?: EvidenceTier.UI_NETWORK,
     )
 
 private fun ResultRow.toUsageRecord() =

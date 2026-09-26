@@ -20,6 +20,7 @@ import az.petek.core.ids.StepId
 import az.petek.core.ids.WorkspaceId
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceSource
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
@@ -197,6 +198,7 @@ internal object FindingTable : Table("finding") {
     val note = text("note")
     val artifactIds = artifactIds("artifact_ids")
     val workspaceId = text("workspace_id").default(WorkspaceId.LOCAL.value)
+    val evidenceTier = text("evidence_tier").default(EvidenceTier.UI_NETWORK.name)
 
     override val primaryKey = PrimaryKey(seq)
 

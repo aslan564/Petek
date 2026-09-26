@@ -9,6 +9,7 @@
 
 package az.petek.reporting.infrastructure
 
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
@@ -47,6 +48,14 @@ internal object ReportFormat {
             FindingClass.INVESTIGATE -> "Araşdırılmalı"
             FindingClass.FLAKY -> "Qeyri-sabit (flaky)"
             FindingClass.AGENT_FAILURE -> "Agent xətası"
+        }
+
+    /** The strength of a finding's proof as the owner reads it (Faza 10). */
+    fun evidenceTier(value: EvidenceTier): String =
+        when (value) {
+            EvidenceTier.ORACLE_CONFIRMED -> "Oracle təsdiqlədi"
+            EvidenceTier.UI_NETWORK -> "Ekran / şəbəkə sübutu"
+            EvidenceTier.LLM_JUDGED -> "Model hökmü (screenshot ilə yoxlayın)"
         }
 
     fun runResult(value: RunResult): String =

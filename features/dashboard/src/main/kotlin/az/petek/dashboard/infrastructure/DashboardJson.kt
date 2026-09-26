@@ -129,6 +129,7 @@ internal object DashboardJson {
             c = c,
             note = note,
             artifacts = artifactIds.map { it.value },
+            evidenceTier = evidenceTier.name,
         )
 
     const val REPORT_URL = "/report/"
@@ -227,6 +228,7 @@ internal data class FindingJson(
     val c: String?,
     val note: String,
     val artifacts: List<String>,
+    val evidenceTier: String = "UI_NETWORK",
 )
 
 @Serializable

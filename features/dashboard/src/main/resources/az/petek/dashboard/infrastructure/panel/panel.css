@@ -281,6 +281,11 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .toast.error svg { color: var(--red); }
 .toast.ok svg { color: var(--green); }
 
+/* ---------- evidence tier of a finding ---------- */
+.tier { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.tier-ORACLE_CONFIRMED { color: var(--green); }
+.tier-LLM_JUDGED { color: var(--amber); }
+
 /* ---------- manual codes ("Kodu daxil et") ---------- */
 .manual-codes { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 90; width: min(520px, calc(100vw - 32px)); padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--border)); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 8px; }
 .manual-codes .title { font-weight: 750; }

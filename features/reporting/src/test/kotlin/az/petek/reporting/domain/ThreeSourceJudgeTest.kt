@@ -20,11 +20,13 @@ import az.petek.evidence.domain.EvidenceSource.HARNESS
 import az.petek.evidence.domain.EvidenceSource.ORACLE
 import az.petek.evidence.domain.EvidenceSource.RECEIVER
 import az.petek.evidence.domain.EvidenceSource.SENDER
+import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.Verdict
 import az.petek.evidence.domain.Verdict.FAILED
 import az.petek.evidence.domain.Verdict.PASSED
 import az.petek.evidence.domain.Verdict.SKIPPED
@@ -169,6 +171,40 @@ class ThreeSourceJudgeTest {
             finding.findingClass shouldBe FindingClass.BACKEND
             finding.a shouldBe "announcement created -> created #42"
             finding.c shouldBe "status = published -> draft"
+            finding.evidenceTier shouldBe EvidenceTier.ORACLE_CONFIRMED
+        }
+
+        @Test
+        fun `a finding without the oracle rests on the screen, and a model's give-up on the model`() {
+            val onScreen =
+                judge
+                    .findings(
+                        run,
+                        listOf(
+                            assertion("announce", "a01", SENDER, PASSED, "announcement created", "created #42"),
+                            assertion("read", "a02", RECEIVER, FAILED, "visible_text Sabah", "(none)"),
+                        ),
+                    ).single()
+            val steps =
+                listOf(
+                    step("announce", "a01", StepStatus.FAILED, StepKind.DO, detail = "gave_up: the button never appeared"),
+                    step("join", "a08", StepStatus.FAILED, StepKind.RUN, detail = "otp_rejected: code refused"),
+                )
+
+            onScreen.evidenceTier shouldBe EvidenceTier.UI_NETWORK
+            judge.findings(run, emptyList(), steps).map { it.evidenceTier } shouldContainExactly
+                listOf(EvidenceTier.LLM_JUDGED, EvidenceTier.UI_NETWORK)
+        }
+
+        @Test
+        fun `an oracle check on a target without a test API is not applicable and counts as absent`() {
+            val assertions =
+                listOf(
+                    assertion("announce", "a01", SENDER, PASSED, "announcement created", "created #42"),
+                    assertion("announce", "a01", ORACLE, Verdict.NOT_APPLICABLE, "status = published", null, type = "oracle"),
+                )
+
+            judge.findings(run, assertions).shouldBeEmpty()
         }
 
         @Test

@@ -220,7 +220,18 @@ internal class PanelRunsAdapter(
             .filter { it.artifactId in cited }
             .forEach { evidenceShown[it.artifactId] = it }
         return findings.map {
-            FindingView(it.findingId, it.findingClass, it.scenarioStep, it.agentId, it.a, it.b, it.c, it.note, it.artifactIds)
+            FindingView(
+                it.findingId,
+                it.findingClass,
+                it.scenarioStep,
+                it.agentId,
+                it.a,
+                it.b,
+                it.c,
+                it.note,
+                it.artifactIds,
+                it.evidenceTier,
+            )
         }
     }
 

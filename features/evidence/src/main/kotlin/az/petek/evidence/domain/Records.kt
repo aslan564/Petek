@@ -130,7 +130,11 @@ data class ArtifactRecord(
 /** Source of truth for the three-source comparison: A sender log, B receiver screen, C target oracle. */
 enum class EvidenceSource { SENDER, RECEIVER, ORACLE, HARNESS }
 
-enum class Verdict { PASSED, FAILED, SKIPPED }
+/**
+ * [NOT_APPLICABLE] is an oracle check on a target without a test API: not a skipped test but a supported mode
+ * ("N/A (no oracle)", Faza 10); the other sources still judge the step.
+ */
+enum class Verdict { PASSED, FAILED, SKIPPED, NOT_APPLICABLE }
 
 data class AssertionRecord(
     val stepId: StepId,
@@ -149,6 +153,13 @@ data class AssertionRecord(
 
 enum class FindingClass { BACKEND, DELIVERY_UI, INVESTIGATE, FLAKY, AGENT_FAILURE }
 
+/**
+ * How strong a finding's proof is (Faza 10), shown next to every finding: the target's own test API confirmed it
+ * ([ORACLE_CONFIRMED]); the harness saw it on screen or on the network ([UI_NETWORK]); or it rests on a model's reading
+ * of the page ([LLM_JUDGED], e.g. a tester that gave up), which a person should check against the screenshot.
+ */
+enum class EvidenceTier { ORACLE_CONFIRMED, UI_NETWORK, LLM_JUDGED }
+
 data class FindingRecord(
     val findingId: FindingId,
     val runId: RunId,
@@ -163,6 +174,7 @@ data class FindingRecord(
     val note: String,
     val artifactIds: List<ArtifactId>,
     val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
+    val evidenceTier: EvidenceTier = EvidenceTier.UI_NETWORK,
 )
 
 /** Token and cost accounting per agent (LLM usage is reported, never estimated by the LLM). */

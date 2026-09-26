@@ -132,7 +132,8 @@ class HtmlReportWriter : ReportWriter {
                     "Assertlər",
                     "${s.assertionsPassed} / ${s.assertionsFailed} / ${s.assertionsSkipped}",
                     null,
-                    "keçdi / keçmədi / ötürüldü",
+                    "keçdi / keçmədi / ötürüldü" +
+                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else ""),
                 )
                 tile("Tapıntılar", model.findings.size.toString(), if (model.findings.isNotEmpty()) "bad" else "ok")
                 tile("Agentlər", s.agents.toString())
@@ -163,6 +164,8 @@ class HtmlReportWriter : ReportWriter {
                 +" $number. ${finding.scenarioStep} · "
                 val agent = finding.agentId?.value
                 +ReportFormat.agent(agent, ReportFormat.agentName(model, agent))
+                +" "
+                pill(ReportFormat.evidenceTier(finding.evidenceTier), "tier")
             }
             div("abc") {
                 source("A · göndərən", finding.a)

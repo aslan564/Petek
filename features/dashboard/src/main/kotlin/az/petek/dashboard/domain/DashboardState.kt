@@ -409,7 +409,7 @@ class DashboardState private constructor(
                     when (record.verdict) {
                         Verdict.PASSED -> tally.copy(assertionsPassed = tally.assertionsPassed + 1)
                         Verdict.FAILED -> tally.copy(assertionsFailed = tally.assertionsFailed + 1)
-                        Verdict.SKIPPED -> tally.copy(assertionsSkipped = tally.assertionsSkipped + 1)
+                        Verdict.SKIPPED, Verdict.NOT_APPLICABLE -> tally.copy(assertionsSkipped = tally.assertionsSkipped + 1)
                     },
             )
         val agentId = record.agentId
@@ -427,7 +427,7 @@ class DashboardState private constructor(
                 when (record.verdict) {
                     Verdict.PASSED -> TimelineStatus.OK
                     Verdict.FAILED -> TimelineStatus.FAIL
-                    Verdict.SKIPPED -> TimelineStatus.INFO
+                    Verdict.SKIPPED, Verdict.NOT_APPLICABLE -> TimelineStatus.INFO
                 },
             text = text,
             scenarioStep = record.scenarioStep,
