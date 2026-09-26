@@ -35,6 +35,8 @@ class PetekCommand(
             PlanCommand(),
             RunCommand(),
             ReportCommand(),
+            FindingsCommand(),
+            DevCommand(),
             TeardownCommand(),
             SmokeCommand(),
             DoctorCommand(),

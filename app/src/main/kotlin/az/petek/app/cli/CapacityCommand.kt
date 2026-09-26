@@ -19,6 +19,10 @@ import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.restrictTo
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * `petek capacity [--measure N] [--url <url>]`: how many testers this machine can run at once, as advice and never
@@ -44,7 +48,7 @@ class CapacityCommand : PetekSubcommand("capacity") {
                 measure?.let { sessions ->
                     val page = url ?: container.config.target
                     TargetGuard.requireAllowed(container.config.targetPolicy, page)
-                    echo("Measuring $sessions real browser sessions on ${PetekConfig.masked(page)}…")
+                    if (!json) echo("Measuring $sessions real browser sessions on ${PetekConfig.masked(page)}…")
                     RecommendCapacityUseCase.Measurement(sessions = sessions, url = page)
                 }
             val advice =
@@ -52,6 +56,23 @@ class CapacityCommand : PetekSubcommand("capacity") {
                     hostProbe = SystemHostResourceProbe(),
                     costProbe = BrowserSessionCostProbe(container.browserEngine, browserConfig),
                 ).execute(contextsPerBrowser = browserConfig.contextsPerBrowser, measurement = measurement)
+            if (json) {
+                emitJson(
+                    buildJsonObject {
+                        put("maxTesters", advice.maxTesters)
+                        put("limitingFactor", advice.limitingFactor.name)
+                        put("memoryBound", advice.memoryBound)
+                        put("cpuBound", advice.cpuBound)
+                        put("bytesPerSession", advice.perSession.bytesPerSession)
+                        put("bytesPerBrowser", advice.perSession.bytesPerBrowser)
+                        put("measured", advice.perSession.measured)
+                        put("cpuCores", advice.host.cpuCores)
+                        put("memoryAvailableBytes", advice.host.availableMemoryBytes)
+                        putJsonArray("notes") { advice.notes.forEach { add(it) } }
+                    },
+                )
+                return@withContainer ExitCodes.OK
+            }
             echo("Recommended maximum: ${advice.maxTesters} testers at once (limited by ${advice.limitingFactor.name.lowercase()}).")
             echo(TextTable.render(listOf("Figure", "Value"), rows(advice)))
             echo("")

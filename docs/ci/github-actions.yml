@@ -4,7 +4,9 @@
 # (any random string, >= 16 characters) and, for the tester agents' AI, ANTHROPIC_API_KEY.
 #
 # Exit codes: 0 every run PASSED, 1 a run FAILED (findings in the report), 2 nothing could start (configuration,
-# refused target, invalid campaign). The JSON on stdout names the runs and their report paths.
+# refused target, invalid campaign). The JSON on stdout names the runs and their report, JUnit XML and SARIF paths.
+# `--ci` also writes the Markdown report into the job summary (GITHUB_STEP_SUMMARY). The site must be one whose
+# ownership is proved (`petek verify`), or a local/private address.
 name: Pətək
 
 on:
@@ -40,7 +42,19 @@ jobs:
         run: >
           docker run --rm --network host -v "$PWD:/work"
           -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
-          ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml --testers 10
+          -e GITHUB_STEP_SUMMARY -v "$GITHUB_STEP_SUMMARY:$GITHUB_STEP_SUMMARY"
+          ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml --testers 10 --ci
+
+      - name: Test results (JUnit XML)
+        if: always()
+        run: find evidence -name junit.xml -print
+
+      - name: Findings in code scanning (SARIF)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: evidence
+          category: petek
 
       - name: Keep the evidence and the report
         if: always()

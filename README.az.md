@@ -102,6 +102,11 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 ## Sürətli başlanğıc
 
+**Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.my-site.com` (`.env`,
+`.petek/`, skill paketi və AI-nızın MCP qeydi), `npx petek verify` (staging saytın sizin olduğunu təsdiqləyir), sonra
+`npx petek dev`: tətbiqin health ünvanını (`.petek/petek.yaml`-da `health_url`) gözləyir və paneli yanında açır. AI
+layihənizin artıq istifadə etdiyidir (`PETEK_LLM_PROVIDER=auto`).
+
 **Buraxılışdan (build də, JDK də lazım deyil).** [Releases](https://github.com/aslan564/Petek/releases) səhifəsindən
 maşınınıza uyğun bundle-ı endirin: `petek-<versiya>-linux-x64.tar.gz`, `-linux-arm64.tar.gz`, `-mac-arm64.tar.gz` və ya
 `-win-x64.zip` (hər biri öz Java runtime-ını və Chromium driver-ini daşıyır; `SHA256SUMS` yoxlama cəmləridir), başqa
@@ -287,6 +292,16 @@ modeli, tapıntılar, cavablanacaq suallar), **Ssenarilər** (versiyalar, YAML, 
 **Orkestrator** (addım zolaqları × agentlər matrisi, zaman xətti), **Agentlər** (screenshot-lu canlı lövhə),
 **Hesabatlar** (tarixçə, xərc, stabillik). GET olmayan sorğular hər başlanğıcda yaranan `X-Petek-Token` tələb edir;
 yad `Host`/`Origin` başlıqları rədd edilir.
+
+## Hesabatlar, CI və AI-nız üçün tapıntılar
+
+Hər run `evidence/<run>/report/`-a yazır: `index.html` və `report.md` (detal qatı: hər addım, sübutu, gecikmə, xərc),
+`summary.html` (müştəri qatı: qısa cümlələrlə bir səhifə, üç rəf — *saytda düzəldilməli*, *Pətək bacarmadı*, *bir insan
+baxmalıdır*), `share.html` (screenshot-lar içində tək fayl; AI provayderi, model və sübut səviyyələri ilə, göndərmək
+üçün), `junit.xml` (addımlar test kimi) və `findings.sarif` (tapıntılar code scanning üçün). `petek run --ci` JUnit və
+SARIF yollarını çap edir, Markdown hesabatı GitHub job summary-yə əlavə edir; şablonlar: `docs/ci/github-actions.yml`,
+`docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (və MCP `get_finding_bundle`) kodlaşdıran AI-nıza hər
+tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu ilə verir ki, səbəbi kodunuzda axtarsın.
 
 ## MCP serveri və `--json`
 

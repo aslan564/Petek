@@ -103,6 +103,11 @@ A run (`petek run scenarios/<campaign>.yaml`):
 
 ## Quick start
 
+**In five minutes, next to your app.** With Node.js: `npx petek init --target https://staging.my-site.com` (writes
+`.env`, `.petek/`, the skill pack and your AI's MCP entry), `npx petek verify` (proves the staging site is yours), then
+`npx petek dev`: it waits for your app's health URL (`health_url` in `.petek/petek.yaml`) and opens the panel next to
+it. The AI is whatever your project already uses (`PETEK_LLM_PROVIDER=auto`).
+
 **From a release (no build, no JDK).** Download the bundle for your machine from the
 [releases page](https://github.com/aslan564/Petek/releases): `petek-<version>-linux-x64.tar.gz`, `-linux-arm64.tar.gz`,
 `-mac-arm64.tar.gz` or `-win-x64.zip` (each carries its own Java runtime and Chromium driver; `SHA256SUMS` lists the
@@ -285,8 +290,8 @@ Pətək works best when the target offers a **test mode**: a `/test/...` API beh
 companies, seeding, announcements with read receipts, tickets, notifications, optionally mail), `is_test` companies,
 and stable `data-testid`s. [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) specifies it; `testing/fake-target`
 implements it; [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) tracks the real KadroHR. Without a test API,
-page and network checks still work, oracle checks are skipped and teardown is impossible (the roadmap makes this a
-first-class mode with evidence tiers).
+page and network checks still work, oracle checks read "N/A (no oracle)" and teardown is impossible; every finding says
+what its proof rests on (evidence tier: oracle-confirmed, screen/network, or a model's judgement).
 
 ## The web panel
 
@@ -296,6 +301,17 @@ site model, findings, questions to answer), **Ssenarilər** (versions, YAML, dif
 **Orkestrator** (step lanes × agents task matrix, timeline), **Agentlər** (live board with screenshots),
 **Hesabatlar** (history, cost, stability). Non-GET requests need the per-start `X-Petek-Token`; foreign `Host`/`Origin`
 headers are refused.
+
+## Reports, CI and findings for your AI
+
+Every run writes into `evidence/<run>/report/`: `index.html` and `report.md` (the detail layer: every step, its proof,
+latency, cost), `summary.html` (the customer layer: one page of short sentences on three shelves, *to fix on the site*,
+*Pətək could not do it*, *a person should look*), `share.html` (one file with the screenshots inside, the AI provider and
+model, and the evidence tiers, to send around), `junit.xml` (steps as test cases) and `findings.sarif` (findings for code
+scanning). `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
+templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (and MCP
+`get_finding_bundle`) gives your coding AI each finding with its step, request and response, oracle answer and screenshot
+path, so it can look for the cause in your code.
 
 ## MCP server and `--json`
 

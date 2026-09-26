@@ -161,3 +161,24 @@ data class AgentProfile(
             AgentProfile(identity.agentId, identity.displayName, identity.role, identity.department, identity.registration)
     }
 }
+
+/** A finding with what a root-cause search needs: its step and its evidence, text inline (Faza 11). */
+data class FindingBundleView(
+    val finding: FindingView,
+    val target: String,
+    val stepAction: String?,
+    val stepStatus: String?,
+    val stepDetail: String?,
+    val stepStartedAt: Instant?,
+    val stepDurationMs: Long?,
+    val correlationId: String?,
+    val evidence: List<BundleEvidenceView>,
+)
+
+/** One evidence file of a [FindingBundleView]: type, absolute path, and the text of text evidence. */
+data class BundleEvidenceView(
+    val artifactId: String,
+    val type: String,
+    val path: String,
+    val text: String?,
+)

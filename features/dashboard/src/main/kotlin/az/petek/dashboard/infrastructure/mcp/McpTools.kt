@@ -13,6 +13,7 @@ import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.FieldProblem
+import az.petek.dashboard.domain.FindingBundleView
 import az.petek.dashboard.domain.FindingView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelBudget
@@ -40,6 +41,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -313,6 +315,19 @@ internal class McpTools(
                 schema = { string("runId", "run id", required = true) },
             ) { args -> findings(backend.findings(RunId(args.stringArgument("runId")!!))) },
             Tool(
+                name = "get_finding_bundle",
+                description =
+                    "Everything about a run's findings for a root-cause search in this repository: each finding (class, " +
+                        "sources A/B/C, evidence tier), its step (action, status, detail, time, correlation id) and its " +
+                        "evidence (type, absolute path, and the text of HTTP exchanges, oracle answers, mails and logs).",
+                schema = {
+                    string("runId", "run id", required = true)
+                    string("findingId", "one finding's id; all findings when left out")
+                },
+            ) { args ->
+                bundles(backend.findingBundles(RunId(args.stringArgument("runId")!!), args.stringArgument("findingId")))
+            },
+            Tool(
                 name = "get_evidence",
                 description =
                     "An evidence artifact (screenshot, capture) by id: its type and absolute path, for reading with your " +
@@ -432,6 +447,34 @@ internal class McpTools(
                 ),
         )
     }
+
+    private fun bundles(views: List<FindingBundleView>): JsonElement =
+        JsonArray(
+            views.map { bundle ->
+                buildJsonObject {
+                    put("finding", findings(listOf(bundle.finding)).jsonArray.single())
+                    put("target", bundle.target)
+                    putJsonObject("step") {
+                        put("action", bundle.stepAction)
+                        put("status", bundle.stepStatus)
+                        put("detail", bundle.stepDetail)
+                        put("startedAt", bundle.stepStartedAt?.toString())
+                        bundle.stepDurationMs?.let { put("durationMs", it) }
+                        put("correlationId", bundle.correlationId)
+                    }
+                    putJsonArray("evidence") {
+                        bundle.evidence.forEach { evidence ->
+                            addJsonObject {
+                                put("artifactId", evidence.artifactId)
+                                put("type", evidence.type)
+                                put("path", evidence.path)
+                                put("text", evidence.text)
+                            }
+                        }
+                    }
+                }
+            },
+        )
 
     private fun findings(views: List<FindingView>): JsonElement =
         JsonArray(

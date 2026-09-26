@@ -35,7 +35,9 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.util.Locale
 
 /**
@@ -48,6 +50,12 @@ class RunCommand : PetekSubcommand("run") {
     private val repeat by option("--repeat", help = "run the campaign N times and report stability").int().restrictTo(min = 1).default(1)
     private val keepData by option("--keep-data", help = "keep the test company on the target (debugging)").flag()
     private val headful by option("--headful", help = "show the browser windows").flag()
+    private val ci by option(
+        "--ci",
+        help =
+            "CI mode: never interactive, print the JUnit XML, SARIF and HTML report paths, and add the Markdown report to " +
+                "the GitHub Actions job summary when GITHUB_STEP_SUMMARY is set",
+    ).flag()
     private val agents by option(
         "--testers",
         "--agents",
@@ -90,6 +98,7 @@ class RunCommand : PetekSubcommand("run") {
                     container.closeMonitor()
                 }
             if (json) emitJson(summariesJson(summaries)) else summaries.forEach { printSummary(it, config.logDirectory.resolve(LOG_FILE)) }
+            if (ci) ciOutputs(summaries)
             exitCodeOf(summaries)
         }
 
@@ -132,6 +141,29 @@ class RunCommand : PetekSubcommand("run") {
         }
     }
 
+    /** `--ci`: the machine-readable reports of every run, and the job summary on GitHub Actions. */
+    private fun ciOutputs(summaries: List<RunSummary>) {
+        val directories = summaries.mapNotNull { it.reportDirectory?.let(Path::of) }
+        if (!json) {
+            directories.forEach { directory ->
+                echo("  JUnit XML: ${directory.resolve(JUNIT_REPORT)}")
+                echo("  SARIF: ${directory.resolve(SARIF_REPORT)}")
+            }
+        }
+        val stepSummary = session.runtime.environment()[GITHUB_STEP_SUMMARY]?.takeIf { it.isNotBlank() } ?: return
+        directories
+            .map { it.resolve(MARKDOWN_REPORT) }
+            .filter { Files.isRegularFile(it) }
+            .forEach { report ->
+                Files.writeString(
+                    Path.of(stepSummary),
+                    Files.readString(report) + "\n",
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND,
+                )
+            }
+    }
+
     private fun summariesJson(summaries: List<RunSummary>) =
         buildJsonObject {
             put("exitCode", exitCodeOf(summaries))
@@ -145,16 +177,10 @@ class RunCommand : PetekSubcommand("run") {
                         put("stepsFailed", summary.stepsFailed)
                         put("assertionsFailed", summary.assertionsFailed)
                         put("failedAgents", summary.failedAgents)
-                        put(
-                            "report",
-                            summary.reportDirectory?.let {
-                                Path
-                                    .of(it)
-                                    .resolve(HTML_REPORT)
-                                    .toAbsolutePath()
-                                    .toString()
-                            },
-                        )
+                        val directory = summary.reportDirectory?.let { Path.of(it).toAbsolutePath() }
+                        put("report", directory?.resolve(HTML_REPORT)?.toString())
+                        put("junit", directory?.resolve(JUNIT_REPORT)?.toString())
+                        put("sarif", directory?.resolve(SARIF_REPORT)?.toString())
                     }
                 }
             }
@@ -164,6 +190,10 @@ class RunCommand : PetekSubcommand("run") {
 
     companion object {
         const val HTML_REPORT = "index.html"
+        const val JUNIT_REPORT = "junit.xml"
+        const val SARIF_REPORT = "findings.sarif"
+        const val MARKDOWN_REPORT = "report.md"
+        private const val GITHUB_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
         private const val LOG_FILE = "petek.log"
         private const val MILLIS_PER_SECOND = 1000.0
 

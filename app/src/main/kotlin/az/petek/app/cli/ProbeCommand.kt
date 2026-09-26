@@ -19,6 +19,11 @@ import az.petek.app.diagnostics.TestApiProbe
 import com.github.ajalt.clikt.core.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * `petek probe [--url <url>]`: checks a target against docs/TARGET_CONTRACT.md anonymously (see [TargetProbe]),
@@ -53,9 +58,35 @@ class ProbeCommand : PetekSubcommand("probe") {
                     withContext(Dispatchers.IO) {
                         ProbeReportWriter.write(report, container.clock.now().wall, directory, capabilities)
                     }
-                printSummary(report)
-                echo("Capabilities: ${capabilities.summary()}")
-                echo("Report: $file")
+                if (json) {
+                    emitJson(
+                        buildJsonObject {
+                            put("target", PetekConfig.masked(report.target))
+                            put("ready", report.ready)
+                            putJsonArray("pages") {
+                                report.pages.forEach { page ->
+                                    addJsonObject {
+                                        put("key", page.key)
+                                        put("path", page.path)
+                                        put("ready", page.ready)
+                                        put("http", page.http.toString())
+                                        putJsonArray("missing") { page.missing.forEach { add(ProbeReportWriter.testIdOf(it)) } }
+                                        put("captcha", page.captcha)
+                                    }
+                                }
+                            }
+                            put("testApi", capabilities.testApi.name)
+                            put("mailSource", capabilities.mailSource)
+                            putJsonArray("realtime") { capabilities.realtime.forEach { add(it.name) } }
+                            putJsonArray("rateLimited") { capabilities.rateLimited.forEach { add(it) } }
+                            put("report", file.toString())
+                        },
+                    )
+                } else {
+                    printSummary(report)
+                    echo("Capabilities: ${capabilities.summary()}")
+                    echo("Report: $file")
+                }
                 if (report.ready) ExitCodes.OK else ExitCodes.FAILURE
             }
         }

@@ -103,11 +103,16 @@ import az.petek.ownership.infrastructure.DnsProofRecord
 import az.petek.ownership.infrastructure.HttpProofFile
 import az.petek.ownership.infrastructure.InetHostLocality
 import az.petek.ownership.infrastructure.SqliteOwnershipLedger
+import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
 import az.petek.reporting.domain.ThreeSourceJudge
+import az.petek.reporting.infrastructure.CustomerSummaryWriter
 import az.petek.reporting.infrastructure.HtmlReportWriter
+import az.petek.reporting.infrastructure.JUnitReportWriter
 import az.petek.reporting.infrastructure.MarkdownReportWriter
+import az.petek.reporting.infrastructure.SarifReportWriter
+import az.petek.reporting.infrastructure.ShareableHtmlReportWriter
 import az.petek.scenarios.application.ScenarioCatalog
 import az.petek.scenarios.application.TriageOptions
 import az.petek.scenarios.application.TriageResults
@@ -326,7 +331,15 @@ class AppContainer(
             artifacts = artifacts,
             judge = ThreeSourceJudge(ids),
             builder = BuildReportUseCase(runs, evidenceQuery, artifacts, IdentityAgentDirectory(identities)),
-            writers = listOf(MarkdownReportWriter(), HtmlReportWriter()),
+            writers =
+                listOf(
+                    MarkdownReportWriter(),
+                    HtmlReportWriter(),
+                    JUnitReportWriter(),
+                    SarifReportWriter(),
+                    ShareableHtmlReportWriter(config.llmProvider.value, config.llmModelLabel),
+                    CustomerSummaryWriter(english = config.language.value.startsWith("en", ignoreCase = true)),
+                ),
         )
     }
 
@@ -334,6 +347,9 @@ class AppContainer(
     val finalizer: RunFinalizer by lazy {
         UsageFlushingFinalizer(usageMeter, recorder, RunFinalizer { runId -> finalizeRun.finalize(runId) })
     }
+
+    /** Root-cause bundles of a run's findings (Faza 11): `petek findings`, the panel and MCP `get_finding_bundle`. */
+    val findingBundles: BuildFindingBundlesUseCase by lazy { BuildFindingBundlesUseCase(runs, evidenceQuery, artifacts) }
 
     val monitor: MonitorView by lazy { overrides.monitor ?: defaultMonitor() }
 

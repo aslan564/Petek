@@ -768,8 +768,9 @@ Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-c
   `PanelCore` = panelin HTTP serversiz obyekt qrafı (WebPanel ondan istifadə edir).
 - [x] `--json`: `doctor`, `init`, `plan`, `run`, `report`, `teardown` (stdout bir JSON sənəd, loglar stderr,
   uğursuzluq `{"error":...}` + adi çıxış kodu). Qalır: `capacity`, `probe`, `smoke` (CI rejimi ilə birlikdə).
-- [ ] Tapıntı paketi (`FindingBundle`): tapıntı + addım + request/response + screenshot yolu + A/B/C + sübut səviyyəsi —
+- [x] Tapıntı paketi (`FindingBundle`): tapıntı + addım + request/response + screenshot yolu + A/B/C + sübut səviyyəsi —
   kök səbəb araşdırması üçün ev sahibi AI-ın oxuyacağı tək obyekt (`reporting` domain).
+  **Vəziyyət:** `BuildFindingBundlesUseCase` (reporting), `petek findings <run|latest> --json`, MCP `get_finding_bundle`, panel `findingBundles`.
 - [x] Testlər: `McpServerTest` (əl sıxma, alət siyahısı və sxemlər, oxu alətləri, tapılmadı → `isError`, yazma
   rədd/icazə, JSON-RPC xəta kodları), `McpCommandTest` (real montaj, sahibin faylı MCP ilə siyahıda), `--json`
   yoxlamaları doctor/init/teardown testlərində. Qalır: real MCP müştərisi ilə (Claude Code `.mcp.json`)
@@ -809,13 +810,16 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə),
   Mailpit companion compose faylı image üçün. `:app`-ın `fake-target` runtime asılılığı 2026-09-26-da qayda 12 ilə
   silindi (demo yoxdur; fake target yalnız test asılılığıdır).
-- [ ] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
-- [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; ~~GitHub
+- [x] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
+  **Vəziyyət:** `--health` / `.petek/petek.yaml` `health_url` / hədəf; `--wait` (180 s), 2xx gələndə panel; hədəf `.env`-dən.
+- [x] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; ~~GitHub
   Action şablonu~~ (`docs/ci/github-actions.yml`, image + `--json run` ilə, çıxış kodları sənədlənib) hazırdır,
   GitLab CI şablonu qalır; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.
-- [ ] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar), PDF ixracı; hesabat başlığında hədəf, provayder,
+  **Vəziyyət:** `report/junit.xml`, `report/findings.sarif` hər run-da; `--ci` yolları çap edir və `GITHUB_STEP_SUMMARY`-yə Markdown yazır; `docs/ci/gitlab-ci.yml`; `--json` indi `capacity`, `probe`, `smoke`-da da var.
+- [x] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar), PDF ixracı; hesabat başlığında hədəf, provayder,
   model, sübut səviyyələri.
-- [ ] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
+  **Vəziyyət:** `report/share.html` (screenshot-lar `data:` ilə içində, AI provayderi/model, sübut səviyyələri). PDF ixracı yeni kitabxana (məs. OpenPDF) tələb edir — **sahib qərarı** (qayda 11); brauzerdən "Print → PDF" işləyir.
+- [x] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
 
 Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; Claude Code və Codex
 həmin repoda `SKILL.md`-ni oxuyub `explore_site` çağırır; GitHub Action fake target-də yaşıl/qırmızı verir.
@@ -965,8 +969,10 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 20 — İki qatlı, üç rəfli hesabat
 
-- [ ] Müştəri qatı: bir səhifə, saytın dilində qısa cümlələr; detal qatı: addımlar, sübut, hesab və qapı.
-- [ ] Rəflər: sayt xətası, alət boşluğu, ssenari səhvi (triaj artıq var). JUnit XML və SARIF çıxışı.
+- [x] Müştəri qatı: bir səhifə, saytın dilində qısa cümlələr; detal qatı: addımlar, sübut, hesab və qapı.
+  **Vəziyyət:** `report/summary.html` (AZ, `PETEK_LANGUAGE` English olanda EN), detal qatı `index.html`.
+- [x] Rəflər: sayt xətası, alət boşluğu, ssenari səhvi (triaj artıq var). JUnit XML və SARIF çıxışı.
+  **Vəziyyət:** `Shelf` (tapıntı sinfinə görə; dəqiq bölgü panelin triajındadır); JUnit XML və SARIF yuxarıda.
 
 ### Faza 21 — Tutum, dalğalar və ayrı IP
 

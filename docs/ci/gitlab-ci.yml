@@ -1,0 +1,31 @@
+# Pətək in a project's GitLab CI (R15, Faza 12): runs an approved campaign against the staging deployment with the
+# published image. Add to .gitlab-ci.yml (or include it) and set the CI/CD variables PETEK_TARGET (the staging URL),
+# PETEK_TEST_TOKEN (the /test/... API token, masked), PETEK_IDENTITY_SECRET (any random string, >= 16 characters,
+# masked) and, for the tester agents' AI, ANTHROPIC_API_KEY (masked) or another provider's keys (PETEK_LLM_*).
+#
+# Exit codes: 0 every run PASSED, 1 a run FAILED (findings in the report), 2 nothing could start. The JUnit XML shows
+# the steps in the merge request's test report; the HTML reports and the SARIF file stay as artifacts.
+petek:
+  stage: test
+  image:
+    name: ghcr.io/aslan564/petek:0.1.0
+    entrypoint: [""]
+  services:
+    - name: axllent/mailpit
+      alias: mailpit
+  variables:
+    PETEK_MAILPIT_URL: http://mailpit:8025
+    PETEK_LLM_PROVIDER: anthropic-api
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - when: manual
+  script:
+    - petek --json doctor
+    - petek --json run scenarios/my-site.yaml --testers 10 --ci
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - evidence/
+    reports:
+      junit: evidence/**/report/junit.xml

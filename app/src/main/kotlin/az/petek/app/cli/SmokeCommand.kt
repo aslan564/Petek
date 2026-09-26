@@ -12,6 +12,10 @@ package az.petek.app.cli
 import az.petek.app.config.PetekConfig
 import az.petek.app.diagnostics.SmokeCheck
 import com.github.ajalt.clikt.core.Context
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * `petek smoke [--url <url>]`: opens the target (default `PETEK_TARGET`) in Chromium and prints its title, how many
@@ -40,6 +44,19 @@ class SmokeCommand : PetekSubcommand("smoke") {
                 result.network.transports
                     .map { it.name.lowercase() }
                     .sorted()
+            if (json) {
+                emitJson(
+                    buildJsonObject {
+                        put("target", PetekConfig.masked(target))
+                        put("url", result.url)
+                        put("title", result.title)
+                        put("elements", result.elements)
+                        putJsonArray("realtime") { transports.forEach { add(it) } }
+                        put("screenshot", result.screenshot.toString())
+                    },
+                )
+                return@withContainer ExitCodes.OK
+            }
             echo("Opened ${PetekConfig.masked(target)} (now at ${result.url})")
             echo("Title: ${result.title.ifBlank { "(none)" }}")
             echo("Interactive elements in the snapshot: ${result.elements}")

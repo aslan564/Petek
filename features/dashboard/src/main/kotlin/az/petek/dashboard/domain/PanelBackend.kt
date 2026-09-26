@@ -180,6 +180,15 @@ interface PanelRuns {
     suspend fun findings(runId: RunId): List<FindingView>
 
     /**
+     * The root-cause bundle of a run's findings (all, or [findingId]'s): each finding with its step and its evidence,
+     * text evidence inline (Faza 11). Empty for a run without findings.
+     */
+    suspend fun findingBundles(
+        runId: RunId,
+        findingId: String? = null,
+    ): List<FindingBundleView> = emptyList()
+
+    /**
      * Deletes the test data a finished run created on its target (its test companies, through the target's test
      * API, which refuses anything that is not `is_test`). Fails with [PanelNotFoundException] for an unknown run and
      * [PanelConflictException] while the run is going or when it was made against another site.

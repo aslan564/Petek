@@ -22,9 +22,12 @@ import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.core.error.PetekException
 import az.petek.core.ids.ArtifactId
+import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
+import az.petek.dashboard.domain.BundleEvidenceView
 import az.petek.dashboard.domain.FieldProblem
+import az.petek.dashboard.domain.FindingBundleView
 import az.petek.dashboard.domain.FindingView
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelInstructions
@@ -52,6 +55,7 @@ import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunSummary
 import az.petek.reporting.domain.RepeatRunEvidence
+import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.scenarios.application.TriageItem
 import az.petek.scenarios.domain.EvidenceRefType
@@ -231,6 +235,44 @@ internal class PanelRunsAdapter(
                 it.note,
                 it.artifactIds,
                 it.evidenceTier,
+            )
+        }
+    }
+
+    override suspend fun findingBundles(
+        runId: RunId,
+        findingId: String?,
+    ): List<FindingBundleView> {
+        val bundles =
+            try {
+                container.findingBundles.bundles(runId, findingId?.let(::FindingId))
+            } catch (_: RunNotFoundException) {
+                throw PanelNotFoundException("Run tapılmadı.")
+            }
+        return bundles.map { bundle ->
+            val finding = bundle.finding
+            FindingBundleView(
+                finding =
+                    FindingView(
+                        finding.findingId,
+                        finding.findingClass,
+                        finding.scenarioStep,
+                        finding.agentId,
+                        finding.a,
+                        finding.b,
+                        finding.c,
+                        finding.note,
+                        finding.artifactIds,
+                        finding.evidenceTier,
+                    ),
+                target = bundle.target,
+                stepAction = bundle.step?.action,
+                stepStatus = bundle.step?.status?.name,
+                stepDetail = bundle.step?.detail,
+                stepStartedAt = bundle.step?.startedAt,
+                stepDurationMs = bundle.step?.durationMs,
+                correlationId = bundle.step?.correlationId?.value,
+                evidence = bundle.evidence.map { BundleEvidenceView(it.artifactId, it.type.name, it.path, it.text) },
             )
         }
     }

@@ -38,8 +38,8 @@ the same use cases:
 | See what the explorer could not decide, answer it | panel → Naməlumlar | `list_unknowns`, `answer_unknown` |
 | Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan` |
 | Approve or freeze a scenario version (the owner decides) | panel → Təsdiqlə / Dondur | `approve_scenario`, `freeze_scenario` |
-| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N] [--json]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
-| Read the findings with their evidence | `petek report <run_id> [--json]` | `get_findings`, `get_evidence`, `get_triage`, `run_triage` |
+| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N] [--ci] [--json]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
+| Read the findings with their evidence | `petek report <run_id> [--json]`, `petek findings <run_id> --json` (or `latest`) | `get_findings`, `get_finding_bundle`, `get_evidence`, `get_triage`, `run_triage` |
 | Remove the test data a run created | `petek teardown --run <run_id> [--json]` | `teardown` |
 
 Writes (exploration with writes, runs, approvals, teardown) need an MCP session started with `petek mcp --allow-writes`
@@ -61,9 +61,10 @@ are evaluated by Pətək's code.
 Classify each surprise as a system bug, a model gap (the tester misunderstood) or a scenario bug, and propose the
 scenario v2 where the scenario was wrong. Do not overrule an oracle answer with a screenshot.
 
-**Root cause.** For a system bug, take the finding's evidence (step, request and response, screenshot, the A/B/C
-comparison: what the sender did, what receivers saw, what the target's API says) and locate the cause in this
-repository's source. Propose the fix as a change for the owner to review; do not apply it without their approval.
+**Root cause.** For a system bug, take the finding's bundle (`get_finding_bundle` or `petek findings <run> --json`:
+step, request and response, oracle answer, screenshot path, the A/B/C comparison — what the sender did, what receivers
+saw, what the target's API says — and the evidence tier) and locate the cause in this repository's source. A finding
+judged only by a model (`LLM_JUDGED`) needs its screenshot checked first. Propose the fix as a change for the owner to review; do not apply it without their approval.
 
 ## Rules you keep
 
