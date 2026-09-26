@@ -22,9 +22,9 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 
 class OracleTestApiProbeTest {
-    private val path = "/test/companies?owner=petek-probe%40test.kadrohr.com"
+    private val path = "/test/companies?owner=petek-probe%40test.portal.example"
 
-    private fun probe(oracle: TargetOracle) = OracleTestApiProbe(oracle, "test.kadrohr.com")
+    private fun probe(oracle: TargetOracle) = OracleTestApiProbe(oracle, "test.portal.example")
 
     @Test
     fun `a JSON answer of the test API, also 'no such company', means the target has one`() =

@@ -48,7 +48,7 @@ import java.util.Locale
  * start (configuration, refused target, invalid campaign).
  */
 class RunCommand : PetekSubcommand("run") {
-    private val file by argument("campaign", help = "campaign YAML file, e.g. scenarios/kadrohr.yaml").path()
+    private val file by argument("campaign", help = "campaign YAML file, e.g. docs/examples/company-portal.yaml").path()
     private val repeat by option("--repeat", help = "run the campaign N times and report stability").int().restrictTo(min = 1).default(1)
     private val keepData by option("--keep-data", help = "keep the test company on the target (debugging)").flag()
     private val headful by option("--headful", help = "show the browser windows").flag()

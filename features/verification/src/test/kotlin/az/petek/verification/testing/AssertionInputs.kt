@@ -23,7 +23,7 @@ import az.petek.verification.domain.AssertionInput
 val DEFAULT_TEMPLATES =
     TemplateContext(
         lastId = "42",
-        self = mapOf("email" to "a01.k7x2@test.kadrohr.com", "name" to "Aysel Məmmədova", "agent_id" to "a01"),
+        self = mapOf("email" to "a01.k7x2@test.portal.example", "name" to "Aysel Məmmədova", "agent_id" to "a01"),
         eventIds = mapOf("ticket_created" to "t7"),
     )
 

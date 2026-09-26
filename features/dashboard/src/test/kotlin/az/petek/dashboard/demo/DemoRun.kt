@@ -59,7 +59,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 /**
- * A simulated run of the `kadrohr-core` campaign (scenarios/kadrohr.yaml) that drives a [LiveDashboard] exactly the way
+ * A simulated run of the `portal-core` campaign (docs/examples/company-portal.yaml) that drives a [LiveDashboard] exactly the way
  * the app will: through the monitor port, the orchestrator's plan and task reports, and the dashboard decorators around
  * an in-memory evidence store. [pause] lets time pass (a real delay in the demo, a fake clock advance in tests), so the
  * same script serves the manual demo ([play]) and the UI test ([populate]).
@@ -127,7 +127,7 @@ class DemoRun(
         dashboard.planReady(plan())
     }
 
-    /** The orchestrator's plan of this run, the way it resolves kadrohr.yaml for these agents. */
+    /** The orchestrator's plan of this run, the way it resolves the campaign for these agents. */
     fun plan(): RunPlanView =
         RunPlanView(
             runId = runId,
@@ -661,13 +661,13 @@ class DemoRun(
             departments = DEPARTMENTS,
             inviteCount = invite,
             companyCodeCount = agentCount - 1 - invite,
-            mailDomain = "test.kadrohr.az",
+            mailDomain = "test.portal.example",
         )
     }
 
     companion object {
-        const val CAMPAIGN = "kadrohr-core"
-        const val TARGET = "https://staging.kadrohr.az"
+        const val CAMPAIGN = "portal-core"
+        const val TARGET = "https://staging.portal.example"
         const val OWNER_SIGNUP = "owner_signup"
         const val SEED_STEP = "seed"
         const val JOIN = "join"

@@ -224,7 +224,7 @@ internal class PanelExplorerAdapter(
 
     /**
      * Whether drafts for [target] are for a site with companies: its profile's `tenant`, else companies when the test
-     * API can seed one (the KadroHR shape), else none (Faza 13).
+     * API can seed one (the contract's shape), else none (Faza 13).
      */
     fun tenant(target: URI): Tenant =
         container.config

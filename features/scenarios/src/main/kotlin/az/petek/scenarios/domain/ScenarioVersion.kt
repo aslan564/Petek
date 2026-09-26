@@ -87,7 +87,7 @@ data class ScenarioVersion(
 
     val runnable: Boolean get() = status.runnable
 
-    /** Human label, e.g. `kadrohr-core v3`. */
+    /** Human label, e.g. `portal-core v3`. */
     val label: String get() = "$name v$version"
 
     /** File name the scenario is checked and exported under; it also names a scenario whose YAML has no `campaign.name`. */

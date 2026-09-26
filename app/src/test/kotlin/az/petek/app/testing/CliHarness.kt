@@ -125,9 +125,9 @@ class CliHarness(
             "PETEK_MAILPIT_URL" to "http://127.0.0.1:9",
             "PETEK_IDENTITY_SECRET" to "app-test-identity-secret-0123456789",
             "PETEK_EVIDENCE_DIR" to "evidence",
-            // Pətək knows no production host by default; the CLI tests refuse KadroHR's.
-            "PETEK_PRODUCTION_HOSTS" to "kadrohr.com,www.kadrohr.com",
-            "PETEK_MAIL_DOMAIN" to "test.kadrohr.com",
+            // Pətək knows no production host by default; the CLI tests refuse the portal's.
+            "PETEK_PRODUCTION_HOSTS" to "portal.example,www.portal.example",
+            "PETEK_MAIL_DOMAIN" to "test.portal.example",
         )
 
     companion object {

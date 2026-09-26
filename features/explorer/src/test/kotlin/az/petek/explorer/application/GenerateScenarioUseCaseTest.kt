@@ -94,7 +94,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `a draft for a site without companies signs its testers up, names the roles it saw and seeds nothing`() {
-        val composed = useCase().compose(Models.kadro(), request().copy(tenant = Tenant.NONE))
+        val composed = useCase().compose(Models.portal(), request().copy(tenant = Tenant.NONE))
 
         val campaign = composed.campaign
         validator.validate(campaign, runFunctions).shouldBeEmpty()
@@ -102,7 +102,7 @@ class GenerateScenarioUseCaseTest {
         campaign.settings.departments.shouldBeEmpty()
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly listOf("register_and_login")
         campaign.allSteps.none { (it.action as? StepAction.Run)?.function in setOf("register_owner", "seed_company") } shouldBe true
-        // The kadro model shows a sign-in but no sign-up form: its testers take the owner's accounts.
+        // The portal model shows a sign-in but no sign-up form: its testers take the owner's accounts.
         campaign.settings.registration.login shouldBe campaign.settings.testers
         composed.yaml shouldContain "gate blocker: no_sign_up"
         val reloaded = reload(composed.yaml)
@@ -112,8 +112,8 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
-    fun `a draft from the kadro model validates and covers the top ideas with code-checkable steps`() {
-        val composed = useCase().compose(Models.kadro(), request())
+    fun `a draft from the portal model validates and covers the top ideas with code-checkable steps`() {
+        val composed = useCase().compose(Models.portal(), request())
 
         val campaign = composed.campaign
         validator.validate(campaign, runFunctions).shouldBeEmpty()
@@ -138,12 +138,12 @@ class GenerateScenarioUseCaseTest {
             .idea.actionId shouldBe "login-submit"
         composed.skipped.single().reason shouldContain "setup run functions"
         campaign.settings.roles.total shouldBe campaign.settings.testers
-        campaign.settings.name shouldBe "explorer-kadro-test-v1"
+        campaign.settings.name shouldBe "explorer-portal-test-v1"
     }
 
     @Test
     fun `happy path of a create types a marker, checks it on screen and emits the created object with its id source`() {
-        val campaign = useCase().compose(Models.kadro(), request()).campaign
+        val campaign = useCase().compose(Models.portal(), request()).campaign
 
         val announce = campaign.step("announcement-submit-happy")
         announce.actors.raw shouldBe "admin"
@@ -158,7 +158,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `realtime ideas wait for the creation and measure delivery to the roles that saw it live`() {
-        val campaign = useCase().compose(Models.kadro(), request()).campaign
+        val campaign = useCase().compose(Models.portal(), request()).campaign
 
         val realtime = campaign.step("announcement-submit-realtime")
         realtime.actors.raw shouldBe "employee[*] | manager[*]"
@@ -176,7 +176,7 @@ class GenerateScenarioUseCaseTest {
     fun `receivers open the page before the creation and are checked right after it, inside the visible_text window`() {
         // The runner runs steps in order and checks visible_text of a wait_for step against t0 + within: a check that
         // came after other steps would find its window over, and a receiver on another page could never see the item.
-        val composed = useCase().compose(Models.kadro(), request(maxIdeas = 50))
+        val composed = useCase().compose(Models.portal(), request(maxIdeas = 50))
         val ids = composed.campaign.steps.map { it.id }
 
         listOf("announcement-submit", "ticket-submit").forEach { action ->
@@ -201,7 +201,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `permission ideas check the element is hidden and the server refuses, on the created object when needed`() {
-        val campaign = useCase().compose(Models.kadro(), request()).campaign
+        val campaign = useCase().compose(Models.portal(), request()).campaign
 
         val announce = campaign.step("announcement-submit-permission")
         announce.actors.raw shouldBe "employee[n=1]"
@@ -218,7 +218,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `with every idea the draft also has a race, idempotency counting and reasons for what it skipped`() {
-        val composed = useCase().compose(Models.kadro(), request(maxIdeas = 50))
+        val composed = useCase().compose(Models.portal(), request(maxIdeas = 50))
 
         val race = composed.campaign.step("ticket-approve-race")
         race.parallel shouldBe true
@@ -242,7 +242,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `with a test API created ids come from the oracle and the backend is checked too`() {
-        val campaign = useCase().compose(Models.kadro(), request(testApi = true)).campaign
+        val campaign = useCase().compose(Models.portal(), request(testApi = true)).campaign
 
         campaign.target.idSources["announcements_created"] shouldBe IdSource.OracleField("/test/announcements/latest?by={self.email}", "id")
         campaign.step("announcement-submit-happy").assertions.last() shouldBe
@@ -254,7 +254,7 @@ class GenerateScenarioUseCaseTest {
     @Test
     fun `the written YAML is read back by the campaign loader as the same campaign`() {
         listOf(request(), request(maxIdeas = 50), request(maxIdeas = 50, testApi = true)).forEach { scenario ->
-            val composed = useCase().compose(Models.kadro(), scenario)
+            val composed = useCase().compose(Models.portal(), scenario)
 
             val reloaded = reload(composed.yaml)
 
@@ -269,16 +269,16 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `the yaml explains itself in comments`() {
-        val yaml = useCase().compose(Models.kadro(), request()).yaml
+        val yaml = useCase().compose(Models.portal(), request()).yaml
 
-        yaml shouldContain "# Draft generated by the Pətək explorer from site model v1 of https://kadro.test (exp_1)."
+        yaml shouldContain "# Draft generated by the Pətək explorer from site model v1 of https://portal.test (exp_1)."
         yaml shouldContain "# covers PERMISSION of ticket-approve: steps ticket-submit-happy, ticket-approve-permission"
         yaml shouldContain "# skipped HAPPY_PATH of login-submit:"
     }
 
     @Test
     fun `instructions choose which ideas make the draft`() {
-        val composed = useCase().compose(Models.kadro(), request(maxIdeas = 1, instructions = "müraciət göndər"))
+        val composed = useCase().compose(Models.portal(), request(maxIdeas = 1, instructions = "müraciət göndər"))
 
         composed.covered
             .single()
@@ -287,7 +287,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `site texts never become template placeholders or break the YAML`() {
-        val model = Models.kadro()
+        val model = Models.portal()
         val tricky =
             model.copy(
                 actions =
@@ -335,7 +335,7 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `actions on nested object pages and selectors with braces are skipped, and the draft still validates`() {
-        val kadro = Models.kadro()
+        val portal = Models.portal()
         val braced =
             Models.action(
                 "ticket-close",
@@ -345,10 +345,10 @@ class GenerateScenarioUseCaseTest {
                 forbidden = setOf("employee"),
             )
         val model =
-            kadro.copy(
-                pages = kadro.pages + Models.page("/tickets/{id}/comments/{id}", reachableBy = setOf("manager")),
+            portal.copy(
+                pages = portal.pages + Models.page("/tickets/{id}/comments/{id}", reachableBy = setOf("manager")),
                 actions =
-                    kadro.actions +
+                    portal.actions +
                         Models.action(
                             "comment-approve",
                             ActionKind.APPROVE,
@@ -376,11 +376,11 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `a create form on an object page first creates that object and opens its page`() {
-        val kadro = Models.kadro()
+        val portal = Models.portal()
         val model =
-            kadro.copy(
+            portal.copy(
                 actions =
-                    kadro.actions +
+                    portal.actions +
                         Models.action(
                             "comment-add",
                             ActionKind.CREATE,
@@ -406,18 +406,18 @@ class GenerateScenarioUseCaseTest {
 
     @Test
     fun `with a test API only the resources it serves get oracle ids and checks, others are named by their form`() {
-        val kadro = Models.kadro()
+        val portal = Models.portal()
         val model =
-            kadro.copy(
+            portal.copy(
                 pages =
-                    kadro.pages +
+                    portal.pages +
                         Models.page(
                             "/company",
                             Models.form(ActionKind.CREATE, "company-department-submit", "/company/departments", Models.field("name")),
                             reachableBy = setOf("admin"),
                         ),
                 actions =
-                    kadro.actions +
+                    portal.actions +
                         Models.action(
                             "company-department-submit",
                             ActionKind.CREATE,
@@ -443,7 +443,7 @@ class GenerateScenarioUseCaseTest {
     @Test
     fun `a draft that would not validate is refused instead of returned`() {
         val error =
-            shouldThrow<ScenarioGenerationException> { useCase(knownRunFunctions = setOf("login")).compose(Models.kadro(), request()) }
+            shouldThrow<ScenarioGenerationException> { useCase(knownRunFunctions = setOf("login")).compose(Models.portal(), request()) }
 
         error.issues.map { it.message }.any { "unknown run function 'register_owner'" in it } shouldBe true
     }
@@ -451,7 +451,7 @@ class GenerateScenarioUseCaseTest {
     @Test
     fun `execute stores the draft and announces it in the exploration's event log`() =
         runTest {
-            val model: SiteModel = Models.kadro()
+            val model: SiteModel = Models.portal()
             repository.create(
                 ExplorationRecord(
                     ExplorationId("exp_1"),

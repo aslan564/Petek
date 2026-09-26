@@ -32,7 +32,7 @@ import java.nio.file.Path
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** Run functions the agent feature provides; the real kadrohr campaign uses some of them. */
+/** Run functions the agent feature provides; the company portal example uses some of them. */
 val KNOWN_RUN_FUNCTIONS: Set<String> =
     setOf("seed_company", "register_and_login", "register_owner", "login", "read_email_code", "verify_identity")
 
@@ -42,8 +42,11 @@ fun repoFile(relativePath: String): Path =
         .of(requireNotNull(System.getProperty("petek.repoRoot")) { "system property petek.repoRoot is not set" })
         .resolve(relativePath)
 
-/** `scenarios/kadrohr.yaml` in the repository: the campaign for the real KadroHR. */
-fun kadrohrScenario(): Path = repoFile("scenarios/kadrohr.yaml")
+/** `docs/examples/company-portal.yaml` in the repository: the campaign for the company portal. */
+fun companyPortalScenario(): Path = repoFile("docs/examples/company-portal.yaml")
+
+/** `docs/examples/company-portal-anonymous.yaml`: the example for a site without a test API or test inbox. */
+fun companyPortalAnonymousScenario(): Path = repoFile("docs/examples/company-portal-anonymous.yaml")
 
 /** `scenarios/contract-demo.yaml` in the repository: the campaign for the contract site (the fake target). */
 fun contractDemoScenario(): Path = repoFile("scenarios/contract-demo.yaml")
@@ -58,7 +61,7 @@ fun settings(
     departments: List<String> = listOf("IT", "HR"),
     names: List<String> = listOf("Əli", "Vəli"),
     budget: Budget = Budget(maxStepsPerAgent = 60, maxMinutes = 40),
-    target: URI = URI("https://staging.kadrohr.test"),
+    target: URI = URI("https://staging.portal.test"),
 ): CampaignSettings =
     CampaignSettings(
         target = target,

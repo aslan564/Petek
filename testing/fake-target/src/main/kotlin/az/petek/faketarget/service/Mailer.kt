@@ -56,12 +56,12 @@ internal class Mailer(
         return outbox.send(
             to = to,
             subject = "Dəvət",
-            text = "$greeting\n$companyName sizi KadroHR-a dəvət edir.\nQoşulmaq üçün keçid: $link",
+            text = "$greeting\n$companyName sizi Demo Portal-a dəvət edir.\nQoşulmaq üçün keçid: $link",
             html =
                 createHTML().html {
                     body {
                         p { +greeting }
-                        p { +"$companyName sizi KadroHR-a dəvət edir." }
+                        p { +"$companyName sizi Demo Portal-a dəvət edir." }
                         p {
                             +"Qoşulmaq üçün keçid: "
                             a(href = link) { +link }

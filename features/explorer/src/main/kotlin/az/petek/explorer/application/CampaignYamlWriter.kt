@@ -26,7 +26,7 @@ internal data class WrittenCampaign(
 )
 
 /**
- * Writes a [Campaign] in the schema of `scenarios/kadrohr.yaml` (docs/PLAN.md "Ssenari formatı"). Every text is a
+ * Writes a [Campaign] in the schema of `docs/examples/company-portal.yaml` (docs/PLAN.md "Ssenari formatı"). Every text is a
  * double-quoted scalar with YAML escapes, so any site text (quotes, colons, `#`, brackets) stays data. Numbers and
  * booleans are written bare; durations as seconds or milliseconds as the schema expects.
  */

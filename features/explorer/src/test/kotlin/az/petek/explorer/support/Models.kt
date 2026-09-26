@@ -30,9 +30,9 @@ import az.petek.explorer.domain.UrlPatterns
 import java.net.URI
 import java.time.Instant
 
-/** Small builders for site models in tests; defaults describe a KadroHR-like site. */
+/** Small builders for site models in tests; defaults describe a portal-like site. */
 object Models {
-    val TARGET: URI = URI("https://kadro.test")
+    val TARGET: URI = URI("https://portal.test")
     val AT: Instant = Instant.parse("2026-01-01T10:00:00Z")
 
     fun field(
@@ -143,10 +143,10 @@ object Models {
     )
 
     /**
-     * The fake KadroHR as a full model: tickets (employees create, managers approve/reject/assign), announcements
+     * The fake target as a full model: tickets (employees create, managers approve/reject/assign), announcements
      * (only the admin creates, delivered live), sign-in pages.
      */
-    fun kadro(version: Int = 1): SiteModel {
+    fun portal(version: Int = 1): SiteModel {
         val loggedIn = setOf("admin", "manager", "employee")
         val pages =
             listOf(

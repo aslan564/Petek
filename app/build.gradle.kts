@@ -281,7 +281,7 @@ tasks.named<JavaExec>("run") {
     standardInput = System.`in`
 }
 
-// The panel end to end in real Chromium against the in-process fake KadroHR, with screenshots of every screen in
+// The panel end to end in real Chromium against the in-process fake target, with screenshots of every screen in
 // build/panel-screenshots/ (tag "e2e", kept out of the fast build): ./gradlew :app:e2eTest
 tasks.register<Test>("e2eTest") {
     description = "The web panel end to end against the fake target in real Chromium, with screenshots."

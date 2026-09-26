@@ -107,9 +107,9 @@ class CampaignScenarioValidatorTest {
             val unnamed = MINI_YAML.replace("  name: mini\n", "")
 
             validator
-                .check(unnamed, "kadrohr-core.yaml")
+                .check(unnamed, "portal-core.yaml")
                 .validCampaign()
-                .settings.name shouldBe "kadrohr-core"
+                .settings.name shouldBe "portal-core"
         }
 
     @Test

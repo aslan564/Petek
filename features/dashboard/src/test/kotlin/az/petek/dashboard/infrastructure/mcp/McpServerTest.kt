@@ -84,7 +84,7 @@ class McpServerTest {
         val output = ByteArrayOutputStream()
         McpServer(
             served,
-            McpSettings("https://staging.kadrohr.test", dir.resolve("evidence"), allowWrites, "0.1.0-test"),
+            McpSettings("https://staging.portal.test", dir.resolve("evidence"), allowWrites, "0.1.0-test"),
             input,
             output,
         ).serve()
@@ -181,7 +181,7 @@ class McpServerTest {
                 )
 
             val targets = Json.parseToJsonElement(answers["1"]!!.text()).jsonObject
-            targets["target"]!!.jsonPrimitive.content shouldBe "https://staging.kadrohr.test"
+            targets["target"]!!.jsonPrimitive.content shouldBe "https://staging.portal.test"
             targets["allowWrites"]!!.jsonPrimitive.boolean shouldBe false
             answers["1"]!!.result()["isError"]!!.jsonPrimitive.boolean shouldBe false
 

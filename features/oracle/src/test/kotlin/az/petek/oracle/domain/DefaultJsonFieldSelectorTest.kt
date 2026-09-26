@@ -34,7 +34,7 @@ class DefaultJsonFieldSelectorTest {
               "status": "in_progress",
               "count": 3,
               "approved": false,
-              "assignee": {"email": "rena@test.kadrohr.com", "name": "Rəna"},
+              "assignee": {"email": "rena@test.portal.example", "name": "Rəna"},
               "history": [
                 {"from": "open", "to": "in_progress", "by": "a@x.az"},
                 {"from": "in_progress", "to": "approved", "by": "b@x.az"}
@@ -53,7 +53,7 @@ class DefaultJsonFieldSelectorTest {
         "id, t1",
         "count, 3",
         "approved, false",
-        "assignee.email, rena@test.kadrohr.com",
+        "assignee.email, rena@test.portal.example",
         "history[0].to, in_progress",
         "history[1].by, b@x.az",
         "history[-1].to, approved",

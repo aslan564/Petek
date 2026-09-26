@@ -60,7 +60,7 @@ class CdnErrorPageTest {
 
     @Test
     fun `the site's own login wall and a page served through a CDN are the site`() {
-        CdnErrorPage.of(answer(403, "<title>Giriş | KadroHR</title>", "server" to "nginx")) shouldBe null
+        CdnErrorPage.of(answer(403, "<title>Giriş | Demo Portal</title>", "server" to "nginx")) shouldBe null
         CdnErrorPage.of(answer(200, "<title>Kodcraft Lab</title>", "server" to "cloudflare")) shouldBe null
         CdnErrorPage.of(answer(401, "<title>Sign in</title>", "server" to "cloudflare")) shouldBe null
     }

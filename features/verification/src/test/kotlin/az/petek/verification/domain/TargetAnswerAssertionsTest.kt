@@ -54,9 +54,9 @@ class TargetAnswerAssertionsTest {
     private val ticket =
         """
         {"id": "42", "title": "Printer", "department": "IT", "status": "in_progress",
-         "assignee": {"email": "a03.k7x2@test.kadrohr.com"}, "created_by": "a05.k7x2@test.kadrohr.com",
-         "history": [{"from": "open", "to": "in_progress", "by": "a03.k7x2@test.kadrohr.com"}],
-         "watchers": 3, "is_test": true, "audience": ["a01.k7x2@test.kadrohr.com", "a02.k7x2@test.kadrohr.com"]}
+         "assignee": {"email": "a03.k7x2@test.portal.example"}, "created_by": "a05.k7x2@test.portal.example",
+         "history": [{"from": "open", "to": "in_progress", "by": "a03.k7x2@test.portal.example"}],
+         "watchers": 3, "is_test": true, "audience": ["a01.k7x2@test.portal.example", "a02.k7x2@test.portal.example"]}
         """.trimIndent()
 
     // --- oracle ---------------------------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ class TargetAnswerAssertionsTest {
             val results =
                 evaluator().evaluate(
                     listOf(
-                        Oracle("/test/tickets/{last_id}", "assignee.email", "a03.k7x2@test.kadrohr.com", null),
+                        Oracle("/test/tickets/{last_id}", "assignee.email", "a03.k7x2@test.portal.example", null),
                         Oracle("/test/tickets/{last_id}", "history[0].to", "in_progress", null),
                         Oracle("/test/tickets/{last_id}", "created_by", "{self.email}", null),
                     ),
@@ -119,7 +119,7 @@ class TargetAnswerAssertionsTest {
             results[0].verdict shouldBe Verdict.PASSED
             results[1].verdict shouldBe Verdict.PASSED
             results[2].verdict shouldBe Verdict.FAILED
-            results[2].expected shouldBe "GET /test/tickets/42 field `created_by` = \"a01.k7x2@test.kadrohr.com\""
+            results[2].expected shouldBe "GET /test/tickets/42 field `created_by` = \"a01.k7x2@test.portal.example\""
         }
 
     @Test
@@ -149,15 +149,15 @@ class TargetAnswerAssertionsTest {
             val notInTitle = evaluateOne(Oracle("/test/tickets/42", "title", null, "{self.email}"))
 
             inAudience.verdict shouldBe Verdict.PASSED
-            inAudience.expected shouldBe "GET /test/tickets/42 field `audience` contains \"a01.k7x2@test.kadrohr.com\""
+            inAudience.expected shouldBe "GET /test/tickets/42 field `audience` contains \"a01.k7x2@test.portal.example\""
             notInTitle.verdict shouldBe Verdict.FAILED
-            notInTitle.note shouldBe "\"a01.k7x2@test.kadrohr.com\" not found in field `title`"
+            notInTitle.note shouldBe "\"a01.k7x2@test.portal.example\" not found in field `title`"
         }
 
     @Test
     fun `oracle contains without a field searches the raw body`() =
         runTest {
-            val receipts = """{"announcement_id": "42", "receipts": [{"email": "a01.k7x2@test.kadrohr.com", "read_at": "t"}]}"""
+            val receipts = """{"announcement_id": "42", "receipts": [{"email": "a01.k7x2@test.portal.example", "read_at": "t"}]}"""
             oracle.respond("/test/announcements/42/receipts", receipts)
             oracle.respond("/test/announcements/43/receipts", """{"announcement_id": "43", "receipts": []}""")
 
@@ -168,7 +168,7 @@ class TargetAnswerAssertionsTest {
             present.observed shouldBe receipts
             present.rawEvidence shouldBe receipts
             absent.verdict shouldBe Verdict.FAILED
-            absent.note shouldBe "\"a01.k7x2@test.kadrohr.com\" not found in the body"
+            absent.note shouldBe "\"a01.k7x2@test.portal.example\" not found in the body"
         }
 
     @Test
@@ -210,7 +210,7 @@ class TargetAnswerAssertionsTest {
             evaluateOne(Oracle("/test/tickets/42", "assignee", null, null)).apply {
                 verdict shouldBe Verdict.PASSED
                 expected shouldBe "GET /test/tickets/42 field `assignee` exists"
-                observed shouldBe "assignee = {\"email\":\"a03.k7x2@test.kadrohr.com\"}"
+                observed shouldBe "assignee = {\"email\":\"a03.k7x2@test.portal.example\"}"
             }
             evaluateOne(Oracle("/test/tickets/42", "approver", null, null)).apply {
                 verdict shouldBe Verdict.FAILED
@@ -372,8 +372,8 @@ class TargetAnswerAssertionsTest {
             val results =
                 evaluator().evaluate(
                     listOf(
-                        HttpStatus("https://kadrohr.com/api/tickets/{last_id}/approve", "POST", 403),
-                        HttpStatus("//kadrohr.com/api/tickets/{last_id}/approve", "POST", 403),
+                        HttpStatus("https://portal.example/api/tickets/{last_id}/approve", "POST", 403),
+                        HttpStatus("//portal.example/api/tickets/{last_id}/approve", "POST", 403),
                         HttpStatus("/api\\tickets/{last_id}", "GET", 200),
                         HttpStatus("/api/tickets/{last_id} HTTP/1.1", "GET", 200),
                     ),
@@ -399,8 +399,8 @@ class TargetAnswerAssertionsTest {
                         return oracle.get(path)
                     }
                 }
-            val templates = DEFAULT_TEMPLATES.copy(self = DEFAULT_TEMPLATES.self + ("email" to "a01+k7x2@test.kadrohr.com"))
-            oracle.respond("/test/announcements/latest?by=a01%2Bk7x2@test.kadrohr.com", ticket)
+            val templates = DEFAULT_TEMPLATES.copy(self = DEFAULT_TEMPLATES.self + ("email" to "a01+k7x2@test.portal.example"))
+            oracle.respond("/test/announcements/latest?by=a01%2Bk7x2@test.portal.example", ticket)
 
             val results =
                 evaluator(recording).evaluate(
@@ -413,12 +413,12 @@ class TargetAnswerAssertionsTest {
                 )
 
             results[0].verdict shouldBe Verdict.PASSED
-            results[0].expected shouldBe "GET /test/announcements/latest?by=a01%2Bk7x2@test.kadrohr.com field `status` = \"in_progress\""
+            results[0].expected shouldBe "GET /test/announcements/latest?by=a01%2Bk7x2@test.portal.example field `status` = \"in_progress\""
             results[1].verdict shouldBe Verdict.FAILED
             results[1].note!! shouldEndWith "must not contain '.' or '..' segments"
             // Expected values are compared as they are; only the path is encoded.
-            results[2].expected shouldBe "GET /test/tickets/..%2F..%2Fcompanies field `created_by` = \"a01+k7x2@test.kadrohr.com\""
+            results[2].expected shouldBe "GET /test/tickets/..%2F..%2Fcompanies field `created_by` = \"a01+k7x2@test.portal.example\""
             requested shouldContainExactly
-                listOf("/test/announcements/latest?by=a01%2Bk7x2@test.kadrohr.com", "/test/tickets/..%2F..%2Fcompanies")
+                listOf("/test/announcements/latest?by=a01%2Bk7x2@test.portal.example", "/test/tickets/..%2F..%2Fcompanies")
         }
 }

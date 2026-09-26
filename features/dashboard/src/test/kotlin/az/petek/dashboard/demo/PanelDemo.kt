@@ -32,7 +32,7 @@ import kotlinx.coroutines.withContext
 import java.nio.file.Files
 
 /**
- * Serves the whole Pətək panel on http://127.0.0.1:7070 with [DemoPanelBackend]: an exploration walks a KadroHR-like
+ * Serves the whole Pətək panel on http://127.0.0.1:7070 with [DemoPanelBackend]: an exploration walks a portal-like
  * site, a simulated 30-tester run plays on the live board and the orchestrator screen, and scenarios, triage and the
  * run history are filled with realistic data. Every button works against the demo backend.
  *

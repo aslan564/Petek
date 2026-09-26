@@ -54,8 +54,8 @@ class DefaultCampaignRunnerTest {
 
     private fun TestScope.fixture() = RunnerFixture(VirtualClock(testScheduler))
 
-    /** The shape of scenarios/kadrohr.yaml on a 7-tester registry: a01 admin, a02-a03 managers, a04-a07 employees. */
-    private fun kadroCampaign() =
+    /** The shape of docs/examples/company-portal.yaml on a 7-tester registry: a01 admin, a02-a03 managers, a04-a07 employees. */
+    private fun portalCampaign() =
         campaign(
             setup =
                 listOf(
@@ -93,7 +93,7 @@ class DefaultCampaignRunnerTest {
                 ),
         )
 
-    private fun RunnerFixture.scriptKadro() {
+    private fun RunnerFixture.scriptPortal() {
         oracle.companies["c1"] = TestCompany("c1", "Pətək Test MMC", "PTK-1", isTest = true)
         browser.configure = { session ->
             session.visibleTexts += announcement
@@ -124,9 +124,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `a full run executes setup then steps in order and passes`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            val summary = f.runner().run(kadroCampaign())
+            val summary = f.runner().run(portalCampaign())
 
             summary.outcome shouldBe RunOutcome.PASSED
             summary.stepsFailed shouldBe 0
@@ -152,9 +152,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `the run record and the identity registry are persisted for the run`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            val summary = f.runner().run(kadroCampaign())
+            val summary = f.runner().run(portalCampaign())
 
             val record = f.evidence.runList.single()
             record.runId shouldBe summary.runId
@@ -180,9 +180,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `every identity gets its own session and agent runtime`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            val summary = f.runner().run(kadroCampaign())
+            val summary = f.runner().run(portalCampaign())
 
             f.browser.starts.get() shouldBe 1
             f.browser.stops.get() shouldBe 1
@@ -204,9 +204,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `step records carry kinds, statuses and the correlation of each actor`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            f.runner().run(kadroCampaign())
+            f.runner().run(portalCampaign())
 
             f.step("owner_signup", StepKind.DO, "a01").status shouldBe StepStatus.PASSED
             f.step("seed", StepKind.RUN, "a01").action shouldBe "run seed_company"
@@ -227,9 +227,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `emitted events and receipts are recorded with harness times`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            val summary = f.runner().run(kadroCampaign())
+            val summary = f.runner().run(portalCampaign())
 
             f.evidence.eventList.map { it.name to it.objectId } shouldContainExactly
                 listOf("announcement_created" to "a1", "ticket_created" to "t1")
@@ -246,9 +246,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `last_id and self placeholders reach the assertions`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            f.runner().run(kadroCampaign())
+            f.runner().run(portalCampaign())
 
             val oracleChecks = f.evidence.assertionList.filter { it.type == "oracle" }
             oracleChecks.first { it.scenarioStep == "announce" }.expected shouldBe "/test/announcements/a1"
@@ -350,9 +350,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `the detected real-time transports are recorded per agent before sessions close`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            f.runner().run(kadroCampaign())
+            f.runner().run(portalCampaign())
 
             val observations = f.system(DefaultCampaignRunner.NETWORK_OBSERVATION)
             observations.map { it.agentId?.value } shouldBe (1..7).map { AgentId.of(it).value }
@@ -362,9 +362,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `the monitor sees the run start, every step, agent states and the finish`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            val summary = f.runner().run(kadroCampaign())
+            val summary = f.runner().run(portalCampaign())
 
             f.monitor.events.first() shouldBe "runStarted 7"
             f.monitor.events.filter { it.startsWith("step ") } shouldContainExactly
@@ -382,9 +382,9 @@ class DefaultCampaignRunnerTest {
     @Test
     fun `the company created in setup is registered once and torn down at the end`() =
         runTest {
-            val f = fixture().apply { scriptKadro() }
+            val f = fixture().apply { scriptPortal() }
 
-            val summary = f.runner().run(kadroCampaign())
+            val summary = f.runner().run(portalCampaign())
 
             f.oracle.deleted shouldContainExactly listOf("c1")
             f.evidence.resourceList.shouldBeEmpty()

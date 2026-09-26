@@ -20,14 +20,14 @@ class TextTableTest {
         val table =
             TextTable.render(
                 listOf("Agent", "E-mail"),
-                listOf(listOf("a01", "eli.k7x2.a01@test.kadrohr.com"), listOf("a02", "x@y.z")),
+                listOf(listOf("a01", "eli.k7x2.a01@test.portal.example"), listOf("a02", "x@y.z")),
             )
 
         table shouldBe
             """
             Agent  E-mail
-            -----  -----------------------------
-            a01    eli.k7x2.a01@test.kadrohr.com
+            -----  --------------------------------
+            a01    eli.k7x2.a01@test.portal.example
             a02    x@y.z
             """.trimIndent()
     }

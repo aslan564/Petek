@@ -21,30 +21,35 @@ import org.junit.jupiter.api.Test
 import java.net.URI
 
 class TargetGuardTest {
-    private val policy = TargetPolicy(setOf("kadrohr.com"), allowProduction = false)
+    private val policy = TargetPolicy(setOf("portal.example"), allowProduction = false)
 
     @Test
     fun `a staging target is allowed`() {
-        shouldNotThrowAny { TargetGuard.requireAllowed(policy, URI("https://staging.kadrohr.com")) }
+        shouldNotThrowAny { TargetGuard.requireAllowed(policy, URI("https://staging.portal.example")) }
     }
 
     @Test
     fun `a production target is refused with the policy's reason`() {
-        val error = shouldThrow<TargetRefusedException> { TargetGuard.requireAllowed(policy, URI("https://kadrohr.com")) }
+        val error = shouldThrow<TargetRefusedException> { TargetGuard.requireAllowed(policy, URI("https://portal.example")) }
 
         error.message shouldContain "PETEK_ALLOW_PRODUCTION"
     }
 
     @Test
     fun `a production host cannot pass in another spelling`() {
-        listOf("https://kadrohr.com./", "https://KADROHR.COM", "HTTPS://kadrohr.com/app", "https://kadrohr.com.:8443/x?y=1").forEach {
+        listOf(
+            "https://portal.example./",
+            "https://PORTAL.EXAMPLE",
+            "HTTPS://portal.example/app",
+            "https://portal.example.:8443/x?y=1",
+        ).forEach {
             shouldThrow<TargetRefusedException> { TargetGuard.requireAllowed(policy, URI(it)) }.message shouldContain "production host"
         }
     }
 
     @Test
     fun `the same deployment is recognised despite spelling differences`() {
-        TargetGuard.origin(URI("https://Staging.KadroHR.com/")) shouldBe TargetGuard.origin(URI("https://staging.kadrohr.com:443"))
+        TargetGuard.origin(URI("https://Staging.Portal.example/")) shouldBe TargetGuard.origin(URI("https://staging.portal.example:443"))
         TargetGuard.origin(URI("http://localhost:8080")) shouldBe TargetGuard.origin(URI("http://localhost:8080/"))
     }
 
@@ -57,11 +62,11 @@ class TargetGuardTest {
 
     @Test
     fun `a run is only torn down through its own target`() {
-        shouldNotThrowAny { TargetGuard.requireRunTarget("https://staging.kadrohr.com/", URI("https://staging.kadrohr.com")) }
+        shouldNotThrowAny { TargetGuard.requireRunTarget("https://staging.portal.example/", URI("https://staging.portal.example")) }
 
         val error =
             shouldThrow<TargetRefusedException> {
-                TargetGuard.requireRunTarget("https://user:pw@old-staging.test", URI("https://staging.kadrohr.com"))
+                TargetGuard.requireRunTarget("https://user:pw@old-staging.test", URI("https://staging.portal.example"))
             }
 
         error.message shouldContain "https://***@old-staging.test"

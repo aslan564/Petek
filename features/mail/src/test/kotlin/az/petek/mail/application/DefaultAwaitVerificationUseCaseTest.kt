@@ -169,7 +169,7 @@ class DefaultAwaitVerificationUseCaseTest {
     @Test
     fun `mail for another tester is ignored`() =
         runTest {
-            mailbox.fake.deliver(codeMail("other", "111111", to = "veli.k7x2.a08@test.kadrohr.com"))
+            mailbox.fake.deliver(codeMail("other", "111111", to = "veli.k7x2.a08@test.portal.example"))
 
             shouldThrow<MailTimeoutException> { useCase.await(ELI, SINCE, MailPurpose.CODE, timeout = 2.seconds) }
         }
@@ -286,7 +286,7 @@ class DefaultAwaitVerificationUseCaseTest {
     }
 
     private companion object {
-        const val ELI = "eli.k7x2.a07@test.kadrohr.com"
+        const val ELI = "eli.k7x2.a07@test.portal.example"
         val SINCE: Instant = Instant.parse("2026-09-25T10:00:00Z")
 
         fun mail(

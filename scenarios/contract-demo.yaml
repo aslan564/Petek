@@ -3,7 +3,7 @@
 # `do` = natural language for the LLM agent; `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
 campaign:
   name: contract-demo
-  target: https://staging.kadrohr.com     # PETEK_TARGET in .env wins
+  target: https://staging.portal.example     # PETEK_TARGET in .env wins
   testers: 30
   seed: 42
   names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog

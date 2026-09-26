@@ -1,13 +1,13 @@
-# KadroHR campaign for the real site (docs/KADROHR_READINESS.md). KadroHR's sign-up, login and invitation flows differ
-# from docs/TARGET_CONTRACT.md (link verification, company code at login, first and last name, password confirmation,
-# overlays), so target_profile describes them as flows over its real markup; selectors use autocomplete attributes,
-# ids and Playwright role selectors until KadroHR ships data-testids. It needs KadroHR's test mode (P0 of the
-# readiness list): e-mail from the test API (PETEK_MAIL_SOURCE=test-api), company seeding and the oracle through
-# X-Test-Token, is_test companies with high plan limits and no rate limit for the test token.
+# Example campaign for a real site whose flows differ from docs/TARGET_CONTRACT.md: a company portal with link
+# verification, a company code at login, first and last name, password confirmation and first-visit overlays.
+# target_profile describes them as flows over the site's own markup; selectors use autocomplete attributes, ids and
+# Playwright role selectors until the site ships data-testids. It needs the site's test mode (docs/TARGET_CONTRACT.md):
+# e-mail from the test API (PETEK_MAIL_SOURCE=test-api), company seeding and the oracle through X-Test-Token, is_test
+# companies with high plan limits and no rate limit for the test token.
 # The contract demo for the fake target is scenarios/contract-demo.yaml.
 campaign:
-  name: kadrohr-real
-  target: https://kadrohr.com             # PETEK_TARGET in .env wins; a production host needs PETEK_ALLOW_PRODUCTION=true
+  name: portal-real
+  target: https://staging.portal.example  # PETEK_TARGET in .env wins
   testers: 30
   seed: 42
   names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog
@@ -21,8 +21,8 @@ campaign:
 target_profile:
   api_prefix: /api/v1
   local_storage:
-    "kadro:domain_dialog_dismissed": "1"  # no "Use your own server?" dialog on the first visit
-    "kadro:lang": az                       # the labels below are the Azerbaijani UI
+    "portal:domain_dialog_dismissed": "1"  # no "Use your own server?" dialog on the first visit
+    "portal:lang": az                       # the labels below are the Azerbaijani UI
   dismiss:
     - 'role=button[name="Qəbul edirəm"]'  # the GDPR consent gate, whenever it blocks a page
   selectors:
@@ -99,7 +99,7 @@ target_profile:
       - fill: {selector: join.password, value: "{self.password}"}
       - fill: {selector: join.confirm_password, value: "{self.password}"}
       - click: join.submit
-      # KadroHR confirms in a success dialog (register.success) and opens the login page only once it is closed.
+      # The portal confirms in a success dialog (register.success) and opens the login page only once it is closed.
       - wait_for: {text: "Qeydiyyat uğurla tamamlandı", timeout_s: 30, fail: {reason: registration_failed, message: "The employee sign-up was not accepted", error: '[role="dialog"], [role="alert"]'}}
       - account_created
       - click: 'role=dialog >> role=button[name="OK" s]'
@@ -116,7 +116,7 @@ target_profile:
       - wait_for: {selector: session.user_name, timeout_s: 30, fail: {reason: login_failed, message: "Login as {self.email} failed", error: login.error}}
       - save_session
 
-  # Where the harness reads ids of created objects: KadroHR's test API.
+  # Where the harness reads ids of created objects: the portal's test API.
   id_sources:
     announcement_created:
       oracle: {path: "/test/announcements/latest?by={self.email}", field: id}
@@ -142,7 +142,7 @@ steps:
     assert:
       - oracle: {path: "/test/announcements/{last_id}", field: title, equals: "Sabah 10:00 ümumi iclas"}
 
-  # Only the bell badge is live on KadroHR (SSE); the notifications and announcement pages load once. The receipt is
+  # Only the bell badge is live on the portal (SSE); the notifications and announcement pages load once. The receipt is
   # therefore checked in the test API and the text on the page after reading, not as a delivery latency.
   - id: read_announce
     actor: employee[*]

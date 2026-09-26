@@ -28,6 +28,6 @@ dependencies {
     testImplementation(testFixtures(project(":features:browser")))
     testImplementation(testFixtures(project(":features:llm")))
     testImplementation(testFixtures(project(":features:evidence")))
-    // One real-Chromium integration test explores the fake KadroHR (docs/PLAN.md Faza 6).
+    // One real-Chromium integration test explores the fake target (docs/PLAN.md Faza 6).
     testImplementation(project(":testing:fake-target"))
 }

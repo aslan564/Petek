@@ -206,7 +206,7 @@ class PanelRunsTest {
             val panel = harness(runs = runs)
             val scenario = panel.approved()
 
-            listOf("http://127.0.0.2:9/app", "https://kadrohr.com").forEach { other ->
+            listOf("http://127.0.0.2:9/app", "https://portal.example").forEach { other ->
                 val refused =
                     shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario, target = other)) }
                 refused.problems.single().field shouldBe PanelInstructions.TARGET

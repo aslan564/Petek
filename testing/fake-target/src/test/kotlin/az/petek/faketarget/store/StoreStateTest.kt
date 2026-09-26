@@ -21,7 +21,7 @@ class StoreStateTest {
 
     private fun company(code: String) {
         val id = state.nextId("c")
-        state.companies[id] = Company(id, "Firma", code, "$id@test.kadrohr.com", isTest = true, createdAt = Instant.EPOCH)
+        state.companies[id] = Company(id, "Firma", code, "$id@test.portal.example", isTest = true, createdAt = Instant.EPOCH)
     }
 
     @Test

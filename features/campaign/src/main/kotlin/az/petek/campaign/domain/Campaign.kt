@@ -45,7 +45,7 @@ data class CampaignSettings(
     val name: String = "campaign",
     /** How the actors of a step are started (`campaign.pacing`); by default all at once. */
     val pacing: Pacing = Pacing.NONE,
-    /** Whether the site has companies (`campaign.tenant`); KadroHR-shaped campaigns keep the default. */
+    /** Whether the site has companies (`campaign.tenant`); portal-shaped campaigns keep the default. */
     val tenant: Tenant = Tenant.COMPANY,
     /**
      * `campaign.wave_size` (Faza 21): at most this many testers are live at once. The testers are split in agent order
@@ -56,7 +56,7 @@ data class CampaignSettings(
 )
 
 /**
- * How the actors of one step start their action, so that a real site's per-IP rate limits (KadroHR: 50 sign-ins a
+ * How the actors of one step start their action, so that a real site's per-IP rate limits (e.g. 50 sign-ins a
  * minute) are not hit by every tester signing up at the same instant: actor *n* (in agent id order, from 0) starts no
  * earlier than [startStagger] × *n* after the step began, and at most [maxParallelActors] act at once (null: no
  * limit). Steps with `parallel: true` ignore both: a race needs its actors to start together. Steps without an action
@@ -115,7 +115,7 @@ data class RoleQuota(
 }
 
 /**
- * Whether the site organises its users in companies (KadroHR: an admin creates one, the others join it) or not (a
+ * Whether the site organises its users in companies (e.g. an admin creates one, the others join it) or not (a
  * shop, a blog, a plain sign-in application). Decides the setup steps, the registration modes, the prompt's company
  * context and what the teardown removes.
  */

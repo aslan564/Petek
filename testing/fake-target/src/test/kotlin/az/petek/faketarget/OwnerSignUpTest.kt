@@ -38,25 +38,25 @@ class OwnerSignUpTest {
                 browser.submit(
                     "/register",
                     "name" to "Əli Kərimov",
-                    "email" to "Eli.Owner@Test.KadroHR.com",
+                    "email" to "Eli.Owner@Test.Portal.example",
                     "phone" to "+994 50 123-45-67",
                     "password" to "owner-secret-1",
                     "company" to "Pətək Test MMC",
                 )
             register.status shouldBe 303
-            register.location shouldBe "/verify?email=eli.owner%40test.kadrohr.com"
+            register.location shouldBe "/verify?email=eli.owner%40test.portal.example"
 
             val verifyPage = browser.get(register.location!!)
             verifyPage.has("verify-code") shouldBe true
             verifyPage.has("verify-submit") shouldBe true
 
-            val mail = fake.mailsTo("eli.owner@test.kadrohr.com").single()
+            val mail = fake.mailsTo("eli.owner@test.portal.example").single()
             mail.string("Subject") shouldBe "Təsdiq kodu"
-            val code = fake.verificationCode("eli.owner@test.kadrohr.com")
+            val code = fake.verificationCode("eli.owner@test.portal.example")
             fake.message(mail.string("ID")).string("Text") shouldBe "Sizin təsdiq kodunuz: $code"
 
-            val afterEmail = browser.submit("/verify", "email" to "eli.owner@test.kadrohr.com", "code" to code)
-            afterEmail.location shouldBe "/verify/phone?email=eli.owner%40test.kadrohr.com"
+            val afterEmail = browser.submit("/verify", "email" to "eli.owner@test.portal.example", "code" to code)
+            afterEmail.location shouldBe "/verify/phone?email=eli.owner%40test.portal.example"
             afterEmail.setCookies shouldBe emptyList()
 
             val phonePage = browser.get(afterEmail.location!!)
@@ -64,7 +64,7 @@ class OwnerSignUpTest {
             phonePage.has("verify-phone-submit") shouldBe true
             val otp = fake.otp("+994501234567")
 
-            val afterPhone = browser.submit("/verify/phone", "email" to "eli.owner@test.kadrohr.com", "code" to otp)
+            val afterPhone = browser.submit("/verify/phone", "email" to "eli.owner@test.portal.example", "code" to otp)
             afterPhone.status shouldBe 303
             afterPhone.location shouldBe "/"
             val cookie = afterPhone.setCookies.single()
@@ -79,11 +79,11 @@ class OwnerSignUpTest {
             home.text("notification-count") shouldBe "0"
             home.body shouldContain "new EventSource('/events'"
 
-            val company = fake.companyOf("eli.owner@test.kadrohr.com")
+            val company = fake.companyOf("eli.owner@test.portal.example")
             company.string("name") shouldBe "Pətək Test MMC"
             company.string("code") shouldMatch Regex("PTK-\\d{4}")
             company.string("is_test") shouldBe "true"
-            val owner = fake.server.store.user("eli.owner@test.kadrohr.com")!!
+            val owner = fake.server.store.user("eli.owner@test.portal.example")!!
             owner.role shouldBe UserRole.ADMIN
             owner.phone shouldBe "+994501234567"
             owner.emailVerified shouldBe true
@@ -136,7 +136,7 @@ class OwnerSignUpTest {
                 browser.submit(
                     "/register",
                     "name" to "Vəli",
-                    "email" to "v@test.kadrohr.com",
+                    "email" to "v@test.portal.example",
                     "phone" to "+994500000001",
                     "password" to "owner-secret-1",
                     "company" to "X",
@@ -144,8 +144,8 @@ class OwnerSignUpTest {
                 val verified =
                     browser.submit(
                         "/verify",
-                        "email" to "v@test.kadrohr.com",
-                        "code" to noPhone.verificationCode("v@test.kadrohr.com"),
+                        "email" to "v@test.portal.example",
+                        "code" to noPhone.verificationCode("v@test.portal.example"),
                     )
                 verified.location shouldBe "/"
                 verified.setCookies.single() shouldStartWith "fake_session="
@@ -160,16 +160,28 @@ class OwnerSignUpTest {
             browser.submit(
                 "/register",
                 "name" to "Vəli",
-                "email" to "v@test.kadrohr.com",
+                "email" to "v@test.portal.example",
                 "phone" to "+994500000001",
                 "password" to "owner-secret-1",
                 "company" to "X",
             )
-            val code = fake.verificationCode("v@test.kadrohr.com")
-            val wrong = browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to if (code == "111111") "222222" else "111111")
+            val code = fake.verificationCode("v@test.portal.example")
+            val wrong =
+                browser.submit(
+                    "/verify",
+                    "email" to "v@test.portal.example",
+                    "code" to
+                        if (code ==
+                            "111111"
+                        ) {
+                            "222222"
+                        } else {
+                            "111111"
+                        },
+                )
             wrong.status shouldBe 200
             wrong.text("verify-error") shouldBe "Kod yanlışdır."
-            browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to code).location shouldStartWith "/verify/phone"
+            browser.submit("/verify", "email" to "v@test.portal.example", "code" to code).location shouldStartWith "/verify/phone"
         }
 
     @Test
@@ -179,22 +191,23 @@ class OwnerSignUpTest {
             browser.submit(
                 "/register",
                 "name" to "Vəli",
-                "email" to "v@test.kadrohr.com",
+                "email" to "v@test.portal.example",
                 "phone" to "+994500000001",
                 "password" to "owner-secret-1",
                 "company" to "X",
             )
-            val first = fake.verificationCode("v@test.kadrohr.com")
+            val first = fake.verificationCode("v@test.portal.example")
             val wrongCode = if (first == "999999") "999998" else "999999"
-            repeat(4) { browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to wrongCode) }
-            browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to wrongCode).text("verify-error") shouldContain "Çox sayda"
-            browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to first).text("verify-error") shouldContain "Çox sayda"
+            repeat(4) { browser.submit("/verify", "email" to "v@test.portal.example", "code" to wrongCode) }
+            browser.submit("/verify", "email" to "v@test.portal.example", "code" to wrongCode).text("verify-error") shouldContain
+                "Çox sayda"
+            browser.submit("/verify", "email" to "v@test.portal.example", "code" to first).text("verify-error") shouldContain "Çox sayda"
 
-            val resent = browser.submit("/verify/resend", "email" to "v@test.kadrohr.com")
+            val resent = browser.submit("/verify/resend", "email" to "v@test.portal.example")
             resent.text("verify-info") shouldBe "Yeni kod göndərildi."
-            fake.mailsTo("v@test.kadrohr.com").size shouldBe 2
-            val second = fake.verificationCode("v@test.kadrohr.com")
-            browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to second).location shouldStartWith "/verify/phone"
+            fake.mailsTo("v@test.portal.example").size shouldBe 2
+            val second = fake.verificationCode("v@test.portal.example")
+            browser.submit("/verify", "email" to "v@test.portal.example", "code" to second).location shouldStartWith "/verify/phone"
         }
 
     @Test
@@ -204,36 +217,36 @@ class OwnerSignUpTest {
             browser.submit(
                 "/register",
                 "name" to "Vəli",
-                "email" to "v@test.kadrohr.com",
+                "email" to "v@test.portal.example",
                 "phone" to "+994500000001",
                 "password" to "owner-secret-1",
                 "company" to "X",
             )
-            browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to fake.verificationCode("v@test.kadrohr.com"))
+            browser.submit("/verify", "email" to "v@test.portal.example", "code" to fake.verificationCode("v@test.portal.example"))
             val otp = fake.otp("+994500000001")
             val wrong =
                 browser.submit(
                     "/verify/phone",
-                    "email" to "v@test.kadrohr.com",
+                    "email" to "v@test.portal.example",
                     "code" to if (otp == "123456") "654321" else "123456",
                 )
             wrong.text("verify-phone-error") shouldBe "Kod yanlışdır."
 
-            browser.submit("/verify/phone/resend", "email" to "v@test.kadrohr.com").text("verify-phone-info") shouldBe
+            browser.submit("/verify/phone/resend", "email" to "v@test.portal.example").text("verify-phone-info") shouldBe
                 "Yeni SMS kodu göndərildi."
             val fresh = fake.otp("+994500000001")
-            browser.submit("/verify/phone", "email" to "v@test.kadrohr.com", "code" to fresh).location shouldBe "/"
+            browser.submit("/verify/phone", "email" to "v@test.portal.example", "code" to fresh).location shouldBe "/"
         }
 
     @Test
     fun `an e-mail can be registered only once`() =
         runBlocking<Unit> {
-            fake.registerOwner(email = "dup@test.kadrohr.com")
+            fake.registerOwner(email = "dup@test.portal.example")
             val again =
                 fake.browser().submit(
                     "/register",
                     "name" to "Başqa",
-                    "email" to "DUP@test.kadrohr.com",
+                    "email" to "DUP@test.portal.example",
                     "phone" to "+994500000099",
                     "password" to "owner-secret-1",
                     "company" to "Y",
@@ -253,7 +266,7 @@ class OwnerSignUpTest {
             fun fields(
                 phone: String = "+994500000001",
                 password: String = "owner-secret-1",
-                email: String = "v@test.kadrohr.com",
+                email: String = "v@test.portal.example",
                 name: String = "Vəli",
             ) = arrayOf("name" to name, "email" to email, "phone" to phone, "password" to password, "company" to "Firma")
 
@@ -262,7 +275,7 @@ class OwnerSignUpTest {
             browser.submit("/register", *fields(phone = "12")).text("register-error") shouldContain "+994501234567"
             val short = browser.submit("/register", *fields(password = "short"))
             short.text("register-error") shouldBe "Parol ən azı 8 simvol olmalıdır."
-            short.attribute("register-email", "value") shouldBe "v@test.kadrohr.com"
+            short.attribute("register-email", "value") shouldBe "v@test.portal.example"
             short.attribute("register-company", "value") shouldBe "Firma"
             short.attribute("register-password", "value") shouldBe null
             fake.server.store
@@ -279,7 +292,7 @@ class OwnerSignUpTest {
             wrong.status shouldBe 200
             wrong.text("login-error") shouldBe "E-poçt və ya parol yanlışdır."
             wrong.setCookies shouldBe emptyList()
-            browser.submit("/login", "email" to "nobody@test.kadrohr.com", "password" to "x").text("login-error") shouldBe
+            browser.submit("/login", "email" to "nobody@test.portal.example", "password" to "x").text("login-error") shouldBe
                 "E-poçt və ya parol yanlışdır."
 
             val ok = browser.submit("/login", "email" to owner.email.uppercase(), "password" to owner.password)
@@ -294,15 +307,15 @@ class OwnerSignUpTest {
             browser.submit(
                 "/register",
                 "name" to "Vəli",
-                "email" to "v@test.kadrohr.com",
+                "email" to "v@test.portal.example",
                 "phone" to "+994500000001",
                 "password" to "owner-secret-1",
                 "company" to "X",
             )
-            val login = fake.browser().submit("/login", "email" to "v@test.kadrohr.com", "password" to "owner-secret-1")
-            login.location shouldBe "/verify?email=v%40test.kadrohr.com"
+            val login = fake.browser().submit("/login", "email" to "v@test.portal.example", "password" to "owner-secret-1")
+            login.location shouldBe "/verify?email=v%40test.portal.example"
             login.setCookies shouldBe emptyList()
-            fake.mailsTo("v@test.kadrohr.com").size shouldBe 2
+            fake.mailsTo("v@test.portal.example").size shouldBe 2
         }
 
     @Test
@@ -325,7 +338,7 @@ class OwnerSignUpTest {
     @Test
     fun `submitting a finished verification step again goes home with a session and to the login without one`() =
         runBlocking<Unit> {
-            val owner = fake.registerOwner(email = "v@test.kadrohr.com")
+            val owner = fake.registerOwner(email = "v@test.portal.example")
             val email = owner.email
             owner.browser.submit("/verify", "email" to email, "code" to "000000").location shouldBe "/"
             owner.browser.submit("/verify/phone", "email" to email, "code" to "000000").location shouldBe "/"
@@ -348,16 +361,16 @@ class OwnerSignUpTest {
             browser.submit(
                 "/register",
                 "name" to "Vəli",
-                "email" to "v@test.kadrohr.com",
+                "email" to "v@test.portal.example",
                 "phone" to "+994500000001",
                 "password" to "owner-secret-1",
                 "company" to "X",
             )
-            browser.get("/verify/phone?email=v%40test.kadrohr.com").location shouldBe "/verify?email=v%40test.kadrohr.com"
-            browser.submit("/verify/phone", "email" to "v@test.kadrohr.com", "code" to "123456").location shouldBe
-                "/verify?email=v%40test.kadrohr.com"
+            browser.get("/verify/phone?email=v%40test.portal.example").location shouldBe "/verify?email=v%40test.portal.example"
+            browser.submit("/verify/phone", "email" to "v@test.portal.example", "code" to "123456").location shouldBe
+                "/verify?email=v%40test.portal.example"
             browser
-                .submit("/verify/phone", "email" to "nobody@test.kadrohr.com", "code" to "123456")
+                .submit("/verify/phone", "email" to "nobody@test.portal.example", "code" to "123456")
                 .text("verify-phone-error") shouldBe "Bu e-poçt üçün gözləyən təsdiq yoxdur."
         }
 

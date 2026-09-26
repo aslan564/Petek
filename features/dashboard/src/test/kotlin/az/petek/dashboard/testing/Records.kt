@@ -67,8 +67,8 @@ object Records {
 
     fun runRecord(
         runId: RunId = RUN,
-        name: String = "KadroHR elan axını",
-        target: String = "https://staging.kadrohr.test",
+        name: String = "Portal elan axını",
+        target: String = "https://staging.portal.test",
         startedAt: Instant = T0,
         endedAt: Instant? = null,
         result: RunResult = RunResult.RUNNING,
@@ -112,7 +112,7 @@ object Records {
     ) = Identity(
         agentId = a(agent),
         displayName = name,
-        email = "agent$agent.k7x2.${a(agent)}@test.kadrohr.test",
+        email = "agent$agent.k7x2.${a(agent)}@test.portal.test",
         password = Secret("TopSecret-$agent!"),
         phone = "+99450000000$agent",
         role = role,

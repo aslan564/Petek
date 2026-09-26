@@ -246,16 +246,16 @@ class DefaultCampaignValidatorTest {
 
         @Test
         fun `the target must be an absolute http URL with a host`() {
-            issue(with(settings(target = URI("staging.kadrohr.com"))), "campaign.target").line shouldBe 11
-            issue(with(settings(target = URI("ftp://staging.kadrohr.com"))), "campaign.target")
+            issue(with(settings(target = URI("staging.portal.example"))), "campaign.target").line shouldBe 11
+            issue(with(settings(target = URI("ftp://staging.portal.example"))), "campaign.target")
             issue(with(settings(target = URI("https:///path-only"))), "campaign.target")
         }
 
         @Test
         fun `the target must not carry credentials, and messages never show them`() {
-            val issue = issue(with(settings(target = URI("https://bob:hunter2@staging.kadrohr.test/app"))), "must not contain credentials")
+            val issue = issue(with(settings(target = URI("https://bob:hunter2@staging.portal.test/app"))), "must not contain credentials")
             issue.line shouldBe 11
-            issue.message shouldContain "'https://***@staging.kadrohr.test/app'"
+            issue.message shouldContain "'https://***@staging.portal.test/app'"
             issue.message shouldNotContain "hunter2"
 
             val registry = issues(with(settings(target = URI("https://bob:hunter2@bad_host.test"))))

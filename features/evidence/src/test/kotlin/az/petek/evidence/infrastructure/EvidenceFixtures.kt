@@ -71,7 +71,7 @@ object EvidenceFixtures {
         runId = id,
         runTag = RunTag("k7x2"),
         campaignHash = "sha256:abc",
-        campaignName = "KadroHR elan testi",
+        campaignName = "Portal elan testi",
         seed = 42,
         target = "https://staging.example.test",
         startedAt = startedAt,

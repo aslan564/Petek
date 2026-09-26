@@ -27,7 +27,7 @@ class TargetRefusedException(
 object TargetGuard {
     /**
      * Throws [TargetRefusedException] unless [policy] allows [target]. The policy judges the canonical spelling
-     * ([WebUrls.canonical]): `https://KadroHR.com./` is the production host `kadrohr.com`.
+     * ([WebUrls.canonical]): `https://Portal.example./` is the production host `portal.example`.
      */
     fun requireAllowed(
         policy: TargetPolicy,

@@ -75,7 +75,7 @@ internal class PageCapture(
 
     /**
      * Single-page applications answer `load` with an empty shell and render afterwards; a snapshot taken then has no
-     * elements and no text, and the analyst asks whether the page is broken (seen on kadrohr.com, 2026-09-26). Polls
+     * elements and no text, and the analyst asks whether the page is broken (seen on a real single-page application, 2026-09-26). Polls
      * the snapshot every [settlePoll] until it shows an element or visible text, for at most [settleTimeout]. A page
      * that stays empty is captured as it is: that is a finding, not a reason to wait longer.
      */

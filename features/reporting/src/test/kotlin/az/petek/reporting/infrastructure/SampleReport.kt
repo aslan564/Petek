@@ -31,7 +31,7 @@ object SampleReport {
         stepDetail: String? = null,
         note: String = "The target (C) confirms the change but the receiver (B) did not see it: delivery or UI error.",
         agentName: String = "Əli Məmmədov",
-        campaignName: String = "kadrohr-core",
+        campaignName: String = "portal-core",
     ) = ReportModel(
         run = ReportTestData.run(result = RunResult.FAILED, repeatGroup = "grp_1", repeatIndex = 2, campaignName = campaignName),
         summary =

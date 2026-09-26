@@ -85,7 +85,7 @@ class ContractDemoCampaignFileTest {
     fun `settings are read as written`() {
         val settings = campaign.settings
         settings.name shouldBe "contract-demo"
-        settings.target shouldBe URI("https://staging.kadrohr.com")
+        settings.target shouldBe URI("https://staging.portal.example")
         settings.testers shouldBe 30
         settings.seed shouldBe 42L
         settings.names shouldContainExactly listOf("Əli", "Vəli", "Sahil", "Cəmil", "Amil")

@@ -52,11 +52,14 @@ class MailpitApiTest {
 
     /** Owner sign-up sends a verification mail; seeding sends two invitations. */
     private suspend fun threeMails() {
-        val owner = fake.registerOwner(email = "boss@test.kadrohr.com")
+        val owner = fake.registerOwner(email = "boss@test.portal.example")
         fake.seed(
             fake.companyOf(owner.email).string("id"),
             listOf("IT"),
-            listOf(Invite("Ayan@Test.KadroHR.com", "Ayan", "employee", "IT"), Invite("vusal@test.kadrohr.com", "Vüsal", "employee", "IT")),
+            listOf(
+                Invite("Ayan@Test.Portal.example", "Ayan", "employee", "IT"),
+                Invite("vusal@test.portal.example", "Vüsal", "employee", "IT"),
+            ),
         )
     }
 
@@ -103,7 +106,7 @@ class MailpitApiTest {
             newest.string("Read") shouldBe "false"
             val to = newest["To"]!!.jsonArray.single().jsonObject
             to.string("Name") shouldBe "Vüsal"
-            to.string("Address") shouldBe "vusal@test.kadrohr.com"
+            to.string("Address") shouldBe "vusal@test.portal.example"
             newest.string("Snippet") shouldContain "Qoşulmaq üçün keçid: http://"
         }
 
@@ -111,16 +114,16 @@ class MailpitApiTest {
     fun `to-search is case-insensitive and supports quotes, negation and free text`() =
         runBlocking<Unit> {
             threeMails()
-            search("to:\"AYAN@test.kadrohr.com\"").messages().map { it.string("Subject") } shouldContainExactly listOf("Dəvət")
-            search("to:ayan@test.kadrohr.com").messages() shouldHaveSize 1
-            search("to:\"nobody@test.kadrohr.com\"").messages().shouldBeEmpty()
+            search("to:\"AYAN@test.portal.example\"").messages().map { it.string("Subject") } shouldContainExactly listOf("Dəvət")
+            search("to:ayan@test.portal.example").messages() shouldHaveSize 1
+            search("to:\"nobody@test.portal.example\"").messages().shouldBeEmpty()
 
             val invitations = search("subject:Dəvət")
             invitations.number("messages_count") shouldBe 2
             invitations.number("total") shouldBe 3
             search("-subject:Dəvət").messages().single().string("Subject") shouldBe "Təsdiq kodu"
             search("təsdiq to:boss").messages() shouldHaveSize 1
-            search("to:test.kadrohr.com").messages() shouldHaveSize 3
+            search("to:test.portal.example").messages() shouldHaveSize 3
             search("").messages() shouldHaveSize 3
         }
 
@@ -128,10 +131,10 @@ class MailpitApiTest {
     fun `a message has ID, To, Subject, Date, Text and HTML and opening it marks it read`() =
         runBlocking<Unit> {
             threeMails()
-            val summary = search("to:boss@test.kadrohr.com").messages().single()
+            val summary = search("to:boss@test.portal.example").messages().single()
             summary.string("Read") shouldBe "true"
 
-            val invitation = search("to:vusal@test.kadrohr.com").messages().single()
+            val invitation = search("to:vusal@test.portal.example").messages().single()
             invitation.string("Read") shouldBe "false"
             val message = fake.http.get(fake.mailpit("/api/v1/message/${invitation.string("ID")}")).toPage()
             message.status shouldBe 200
@@ -141,7 +144,7 @@ class MailpitApiTest {
             body.string("Subject") shouldBe "Dəvət"
             body.string("Text") shouldContain "/invite/"
             body.string("HTML") shouldContain "<a href="
-            search("to:vusal@test.kadrohr.com").messages().single().string("Read") shouldBe "true"
+            search("to:vusal@test.portal.example").messages().single().string("Read") shouldBe "true"
 
             val latest =
                 fake.http
@@ -171,7 +174,7 @@ class MailpitApiTest {
                 .toPage()
                 .status shouldBe 200
             list().number("unread") shouldBe 3
-            fake.http.put(fake.mailpit("/api/v1/read")) { setBody("""{"Search":"to:ayan@test.kadrohr.com"}""") }
+            fake.http.put(fake.mailpit("/api/v1/read")) { setBody("""{"Search":"to:ayan@test.portal.example"}""") }
             search("is:unread").messages() shouldHaveSize 2
             search("is:read")
                 .messages()
@@ -179,7 +182,7 @@ class MailpitApiTest {
                 .jsonArray
                 .single()
                 .jsonObject
-                .string("Address") shouldBe "ayan@test.kadrohr.com"
+                .string("Address") shouldBe "ayan@test.portal.example"
             fake.http
                 .put(fake.mailpit("/api/v1/read")) { setBody("{broken") }
                 .toPage()
@@ -236,7 +239,7 @@ class MailpitApiTest {
                 .jsonPrimitive.int shouldBe 3
             val inbox = fake.http.get(fake.mailpit("/")).toPage()
             inbox.status shouldBe 200
-            inbox.body shouldContain "vusal@test.kadrohr.com"
+            inbox.body shouldContain "vusal@test.portal.example"
         }
 
     private infix fun Set<String>.shouldContainExactlyInAnyOrderOf(expected: List<String>) {

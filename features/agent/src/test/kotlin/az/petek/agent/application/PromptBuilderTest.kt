@@ -32,7 +32,7 @@ class PromptBuilderTest {
 
     private val snapshot =
         PageSnapshot(
-            url = "https://staging.kadrohr.test/tickets/7",
+            url = "https://staging.portal.test/tickets/7",
             title = "Ticket 7",
             elements =
                 listOf(
@@ -118,7 +118,7 @@ class PromptBuilderTest {
         user shouldContain "Decision 1 of at most 60."
         user shouldContain "Placeholders you can type now: {self.email}, {self.password}"
         user shouldContain "Previous actions: none yet."
-        user shouldContain "URL: https://staging.kadrohr.test/tickets/7"
+        user shouldContain "URL: https://staging.portal.test/tickets/7"
         user shouldContain "[1] button \"In progress\" (testid=ticket-set-in-progress)"
         user shouldContain "Noutbuk işləmir"
     }

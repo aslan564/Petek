@@ -4,7 +4,7 @@
 
 ## Requirement
 
-The owner has several sites, not only KadroHR. One Pətək installation must know them all: each with its own URL, API
+The owner has several sites. One Pətək installation must know them all: each with its own URL, API
 base, test token, mail source, production hosts, sign-in chain and accounts, selectable in the panel and on the CLI,
 without editing `.env` per site.
 
@@ -35,7 +35,7 @@ tool (R11) and a sellable product (R15).
 ## Verification
 
 - `campaign`: `YamlTargetSpecSourceTest` (parsing, validation with lines, secret references, accounts and fields,
-  the repository's KadroHR profile).
+  the example target profile).
 - `app`: `ConfigLoaderTest` (`PETEK_TARGET` naming a profile, a broken profile reported with its file and line),
   `PanelRunsTest` (a site with a profile runs with its settings; any other address is refused), `OwnerAccountsTest`.
 - Open: an e2e run against a second fake site in the same panel (Faza 13).

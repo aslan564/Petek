@@ -37,7 +37,7 @@ import java.time.Instant
 
 /** Builders for the explorer's events and models in the panel's tests. */
 object ExplorerFixtures {
-    val TARGET: URI = URI("https://kadro.test")
+    val TARGET: URI = URI("https://portal.test")
     val EXPLORATION = ExplorationId("exp_1")
     val T0: Instant = Instant.parse("2026-01-01T10:00:00Z")
 
@@ -119,7 +119,7 @@ object ExplorerFixtures {
             FindingId("fnd_1"),
             FindingKind.BROKEN_LINK,
             Severity.MEDIUM,
-            "https://kadro.test/",
+            "https://portal.test/",
             detail,
             "anonymous",
             emptyList(),

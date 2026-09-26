@@ -19,7 +19,7 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 
 /**
- * Resolves a host with the system resolver (hosts file included, so `kadro.test` → `127.0.0.1` counts as local) and
+ * Resolves a host with the system resolver (hosts file included, so `portal.test` → `127.0.0.1` counts as local) and
  * calls it local only when every address is [LocalAddresses.isLocal]: a name with one public address is somebody's
  * public site. A name that does not resolve is not local.
  */

@@ -151,11 +151,11 @@ class ScenarioCatalogTest {
         runTest {
             val unnamed = MINI_YAML.replace("  name: mini\n", "")
 
-            val v1 = catalog().createDraft(unnamed, ScenarioSource.USER, fileName = "kadrohr-core.yaml")
+            val v1 = catalog().createDraft(unnamed, ScenarioSource.USER, fileName = "portal-core.yaml")
             val v2 = catalog().createDraft(unnamed.replace("seed: 7", "seed: 8"), ScenarioSource.USER, parentId = v1.id)
 
-            v1.name shouldBe "kadrohr-core"
-            v2.name shouldBe "kadrohr-core"
+            v1.name shouldBe "portal-core"
+            v2.name shouldBe "portal-core"
             v2.version shouldBe 2
         }
 

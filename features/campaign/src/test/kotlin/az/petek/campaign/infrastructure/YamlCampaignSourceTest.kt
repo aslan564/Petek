@@ -76,7 +76,7 @@ class YamlCampaignSourceTest {
     private val header =
         """
         campaign:
-          target: https://staging.kadrohr.test
+          target: https://staging.portal.test
           testers: 3
           seed: 7
           roles: {admin: 1, manager: 0, employee: 2}
@@ -160,7 +160,7 @@ class YamlCampaignSourceTest {
             load(
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: ${1 + managers + employees}
                   seed: 1
                   roles: {admin: 1, manager: $managers, employee: $employees}
@@ -207,7 +207,7 @@ class YamlCampaignSourceTest {
 
     @Nested
     inner class Target {
-        private val withoutTarget = withSteps("steps: []").replace("  target: https://staging.kadrohr.test\n", "")
+        private val withoutTarget = withSteps("steps: []").replace("  target: https://staging.portal.test\n", "")
 
         @Test
         fun `the override wins over the file`() {
@@ -229,7 +229,7 @@ class YamlCampaignSourceTest {
 
         @Test
         fun `a malformed target is an error on its line`() {
-            val issue = issues(withSteps("steps: []").replace("https://staging.kadrohr.test", "\"http://bad host\"")).single()
+            val issue = issues(withSteps("steps: []").replace("https://staging.portal.test", "\"http://bad host\"")).single()
             issue.line shouldBe 2
             issue.message shouldContain "'campaign.target' is not a valid URL"
         }
@@ -437,7 +437,7 @@ class YamlCampaignSourceTest {
             val yaml =
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: many
                   seed: 7
                   roles: [1, 2]

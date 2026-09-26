@@ -176,7 +176,7 @@ class HttpTargetOracleTest {
         val server = server { StubResponse(body = "{}") }
 
         runBlocking {
-            oracle(server, path = "/").get("/test/tickets/latest?by=eli.k7x2.a07@test.kadrohr.com")
+            oracle(server, path = "/").get("/test/tickets/latest?by=eli.k7x2.a07@test.portal.example")
             oracle(server, path = "/staging/").get("test/tickets/42")
             oracle(server, path = "/staging").get("/test/announcements/a1/receipts")
         }
@@ -186,7 +186,7 @@ class HttpTargetOracleTest {
         server.requests.none { "//" in it.uri } shouldBe true
         server.requests
             .first()
-            .query["by"] shouldBe listOf("eli.k7x2.a07@test.kadrohr.com")
+            .query["by"] shouldBe listOf("eli.k7x2.a07@test.portal.example")
     }
 
     @Test
@@ -263,12 +263,12 @@ class HttpTargetOracleTest {
     fun `companyByOwner url-encodes the e-mail and maps the company`() {
         val server = server { StubResponse(body = COMPANY_C1) }
 
-        val company = runBlocking { oracle(server).companyByOwner("eli+qa@test.kadrohr.com") }
+        val company = runBlocking { oracle(server).companyByOwner("eli+qa@test.portal.example") }
 
         company shouldBe TestCompany(id = "c1", name = "Pətək Test MMC", code = "PTK-4821", isTest = true)
         val request = server.requests.single()
-        request.uri shouldBe "/test/companies?owner=eli%2Bqa%40test.kadrohr.com"
-        request.query["owner"] shouldBe listOf("eli+qa@test.kadrohr.com")
+        request.uri shouldBe "/test/companies?owner=eli%2Bqa%40test.portal.example"
+        request.query["owner"] shouldBe listOf("eli+qa@test.portal.example")
     }
 
     @Test
@@ -276,16 +276,16 @@ class HttpTargetOracleTest {
         val server =
             server { request ->
                 when (request.query["owner"]?.single()) {
-                    "none@test.kadrohr.com" -> StubResponse(404, "")
-                    "empty@test.kadrohr.com" -> StubResponse(body = "[]")
+                    "none@test.portal.example" -> StubResponse(404, "")
+                    "empty@test.portal.example" -> StubResponse(body = "[]")
                     else -> StubResponse(body = "[$COMPANY_C1]")
                 }
             }
         val oracle = oracle(server)
 
         runBlocking {
-            oracle.companyByOwner("none@test.kadrohr.com").shouldBeNull()
-            oracle.companyByOwner("empty@test.kadrohr.com").shouldBeNull()
+            oracle.companyByOwner("none@test.portal.example").shouldBeNull()
+            oracle.companyByOwner("empty@test.portal.example").shouldBeNull()
             oracle.companyByOwner(OWNER)?.id shouldBe "c1"
         }
     }
@@ -345,8 +345,8 @@ class HttpTargetOracleTest {
                     body =
                         """
                         {"company_id": "c1", "code": "PTK-4821", "departments": {"IT": "d1", "HR": 2},
-                         "invites": [{"email": "rena@test.kadrohr.com", "link": "https://staging.kadrohr.com/invite/tok1"},
-                                     {"email": "no-link@test.kadrohr.com", "link": null}], "unknown": true}
+                         "invites": [{"email": "rena@test.portal.example", "link": "https://staging.portal.example/invite/tok1"},
+                                     {"email": "no-link@test.portal.example", "link": null}], "unknown": true}
                         """.trimIndent(),
                 )
             }
@@ -356,8 +356,8 @@ class HttpTargetOracleTest {
                 departments = listOf("IT", "HR"),
                 invites =
                     listOf(
-                        Invitee("rena@test.kadrohr.com", "Rəna Əliyeva", "manager", "IT"),
-                        Invitee("admin2@test.kadrohr.com", "İkinci Admin", "admin", null),
+                        Invitee("rena@test.portal.example", "Rəna Əliyeva", "manager", "IT"),
+                        Invitee("admin2@test.portal.example", "İkinci Admin", "admin", null),
                     ),
             )
 
@@ -368,7 +368,7 @@ class HttpTargetOracleTest {
                 companyId = "c1",
                 companyCode = "PTK-4821",
                 departmentIds = mapOf("IT" to "d1", "HR" to "2"),
-                inviteLinks = mapOf("rena@test.kadrohr.com" to "https://staging.kadrohr.com/invite/tok1"),
+                inviteLinks = mapOf("rena@test.portal.example" to "https://staging.portal.example/invite/tok1"),
             )
         val post = server.requests.single()
         post.method shouldBe "POST"
@@ -378,8 +378,8 @@ class HttpTargetOracleTest {
             Json.parseToJsonElement(
                 """
                 {"company_id": "c1", "departments": ["IT", "HR"], "invites": [
-                  {"email": "rena@test.kadrohr.com", "name": "Rəna Əliyeva", "role": "manager", "department": "IT"},
-                  {"email": "admin2@test.kadrohr.com", "name": "İkinci Admin", "role": "admin"}
+                  {"email": "rena@test.portal.example", "name": "Rəna Əliyeva", "role": "manager", "department": "IT"},
+                  {"email": "admin2@test.portal.example", "name": "İkinci Admin", "role": "admin"}
                 ]}
                 """.trimIndent(),
             )
@@ -535,7 +535,7 @@ class HttpTargetOracleTest {
 
     @Test
     fun `the base URL must be an absolute http URL`() {
-        shouldThrow<IllegalArgumentException> { HttpTargetOracle(URI("ftp://staging.kadrohr.com"), Secret(TOKEN)) }
+        shouldThrow<IllegalArgumentException> { HttpTargetOracle(URI("ftp://staging.portal.example"), Secret(TOKEN)) }
         shouldThrow<IllegalArgumentException> { HttpTargetOracle(URI("/test"), Secret(TOKEN)) }
     }
 
@@ -637,12 +637,12 @@ class HttpTargetOracleTest {
     fun `a plus in a rendered query is a literal plus while a plus in the path is kept`() {
         val server = server { StubResponse(body = "{}") }
 
-        runBlocking { oracle(server).get("/test/otp/+994501234567?by=eli+qa@test.kadrohr.com&phone=+99450#a+b") }
+        runBlocking { oracle(server).get("/test/otp/+994501234567?by=eli+qa@test.portal.example&phone=+99450#a+b") }
 
         val request = server.requests.single()
         request.path shouldBe "/test/otp/+994501234567"
         request.uri shouldContain "by=eli%2Bqa"
-        request.query["by"] shouldBe listOf("eli+qa@test.kadrohr.com")
+        request.query["by"] shouldBe listOf("eli+qa@test.portal.example")
         request.query["phone"] shouldBe listOf("+99450")
     }
 
@@ -655,7 +655,7 @@ class HttpTargetOracleTest {
 
     private companion object {
         const val TOKEN = "s3cr3t-test-token-4f9a"
-        const val OWNER = "eli.k7x2.a01@test.kadrohr.com"
+        const val OWNER = "eli.k7x2.a01@test.portal.example"
         const val COMPANY_C1 = """{"id": "c1", "name": "Pətək Test MMC", "code": "PTK-4821", "is_test": true}"""
     }
 }

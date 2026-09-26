@@ -70,7 +70,7 @@ internal class PanelHarness(
     val config =
         PetekConfig(
             target = site.base,
-            productionHosts = setOf("kadrohr.com"),
+            productionHosts = setOf("portal.example"),
             allowProduction = allowProduction,
             testToken = testToken?.let(::Secret),
             mailpitUrl = URI("http://127.0.0.1:9"),

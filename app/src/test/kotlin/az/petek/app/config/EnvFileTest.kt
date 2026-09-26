@@ -32,14 +32,14 @@ class EnvFileTest {
             EnvFile.parse(
                 """
                 # Target under test
-                PETEK_TARGET=https://staging.kadrohr.com
+                PETEK_TARGET=https://staging.portal.example
 
                    # indented comment
                 PETEK_LLM_CONCURRENCY=6
                 """.trimIndent(),
             )
 
-        values shouldBe mapOf("PETEK_TARGET" to "https://staging.kadrohr.com", "PETEK_LLM_CONCURRENCY" to "6")
+        values shouldBe mapOf("PETEK_TARGET" to "https://staging.portal.example", "PETEK_LLM_CONCURRENCY" to "6")
     }
 
     @Test
@@ -49,7 +49,7 @@ class EnvFileTest {
 
     @Test
     fun `whitespace around keys and unquoted values is dropped`() {
-        EnvFile.parse("  PETEK_MAIL_DOMAIN =  test.kadrohr.com  ") shouldBe mapOf("PETEK_MAIL_DOMAIN" to "test.kadrohr.com")
+        EnvFile.parse("  PETEK_MAIL_DOMAIN =  test.portal.example  ") shouldBe mapOf("PETEK_MAIL_DOMAIN" to "test.portal.example")
     }
 
     @Test

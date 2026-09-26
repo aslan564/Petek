@@ -52,7 +52,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The owner's whole path through the REAL panel page in Chromium, against the in-process fake KadroHR with the
+ * The owner's whole path through the REAL panel page in Chromium, against the in-process fake target with the
  * production object graph (real browsers for the explorer and the testers) and a scripted LLM: explore with the trial
  * touch allowed (a temporary test company gives the role sessions), send the draft to the scenarios, approve it, run it
  * with 6 testers, watch the agents and the orchestrator, open the report list and triage the run. Every screen is
@@ -271,11 +271,11 @@ class PanelEndToEndTest {
         ): String =
             """
             PETEK_TARGET=$target
-            PETEK_PRODUCTION_HOSTS=kadrohr.com,www.kadrohr.com
-            PETEK_ALLOW_PRODUCTION=true
+            PETEK_PRODUCTION_HOSTS=
+            PETEK_ALLOW_PRODUCTION=false
             PETEK_TEST_TOKEN=dev-token
             PETEK_MAILPIT_URL=$mailpit
-            PETEK_MAIL_DOMAIN=test.kadrohr.com
+            PETEK_MAIL_DOMAIN=test.portal.example
             PETEK_IDENTITY_SECRET=local-demo-secret
             PETEK_LLM_PROVIDER=codex-cli
             PETEK_LLM_CONCURRENCY=6

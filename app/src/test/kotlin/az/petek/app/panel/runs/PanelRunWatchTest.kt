@@ -55,7 +55,7 @@ class PanelRunWatchTest {
         Campaign(
             settings =
                 CampaignSettings(
-                    target = URI("https://kadro.test"),
+                    target = URI("https://portal.test"),
                     testers = 2,
                     seed = 1,
                     names = emptyList(),
@@ -86,7 +86,7 @@ class PanelRunWatchTest {
             sourceHash = "abc",
         )
 
-    private fun record(id: String) = RunRecord(RunId(id), RunTag("k7x2"), "abc", "watch", 1, "https://kadro.test", Instant.EPOCH, null)
+    private fun record(id: String) = RunRecord(RunId(id), RunTag("k7x2"), "abc", "watch", 1, "https://portal.test", Instant.EPOCH, null)
 
     private fun identity(
         agent: String,

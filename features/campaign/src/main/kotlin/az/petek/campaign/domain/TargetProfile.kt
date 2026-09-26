@@ -15,7 +15,7 @@ package az.petek.campaign.domain
  * What the harness needs to know about the target site for deterministic `run` steps: page paths, selectors, the flows
  * the run functions execute and how to get past the site's overlays. Defaults follow the `data-testid` contract in
  * docs/TARGET_CONTRACT.md; the campaign YAML's `target_profile:` section overrides them, so any site can be described
- * without code (docs/KADROHR_READINESS.md: the real KadroHR differs from the contract in almost every flow).
+ * without code (docs/TARGET_CONTRACT.md: the company portal differs from the contract in almost every flow).
  */
 data class TargetProfile(
     val paths: Map<String, String>,

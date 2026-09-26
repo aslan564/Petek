@@ -49,7 +49,7 @@ import java.time.Clock
 private val logger = KotlinLogging.logger {}
 
 /**
- * A small KadroHR-like web application implementing docs/TARGET_CONTRACT.md: server-rendered pages with the contract's
+ * A small portal-like web application implementing docs/TARGET_CONTRACT.md: server-rendered pages with the contract's
  * `data-testid`s, sessions, roles, live notifications over SSE, the `/test/...` API and, on a second port, a
  * Mailpit-compatible API serving the e-mails it "sends". State lives in memory ([store]) and dies with the server.
  *

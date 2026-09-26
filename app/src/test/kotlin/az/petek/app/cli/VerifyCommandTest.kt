@@ -98,7 +98,7 @@ class VerifyCommandTest {
             val cli =
                 CliHarness(
                     dir,
-                    mapOf("PETEK_TARGET" to "https://kadrohr.com", "PETEK_PRODUCTION_HOSTS" to "kadrohr.com"),
+                    mapOf("PETEK_TARGET" to "https://portal.example", "PETEK_PRODUCTION_HOSTS" to "portal.example"),
                     ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe),
                 )
 

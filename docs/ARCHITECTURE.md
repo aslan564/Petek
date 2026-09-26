@@ -35,7 +35,7 @@ ordered by number everywhere.
 | `app` | CLI (`init`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`; `--json` on doctor/init/plan/run/report/teardown), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
 | `launcher/` | The `petek` npm package: `npx petek` downloads the release bundle for the machine once (SHA-256 checked) and runs it; no dependencies, tested with `node --test` against a local stand-in release | — | Node 18+ |
 | `docker/` | The image `ghcr.io/aslan564/petek`: the Linux bundle on Playwright's official image (Chromium inside), one build for amd64 and arm64; `prepare-context.sh` lays a bundle out for it | — | Docker buildx |
-| `testing/fake-target` | A small KadroHR-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
+| `testing/fake-target` | A small portal-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
 | `e2e` | Architecture rules (Konsist) and end-to-end runs against the fake target with real Chromium | — | — |
 
 ## Dependency rules
@@ -156,8 +156,8 @@ views may ignore them; the methods have no-op defaults):
 
 ## Target flows
 
-A site's sign-up, login and invitation are data, not code, so Pətək fits any site (docs/KADROHR_READINESS.md: the real
-KadroHR differs from docs/TARGET_CONTRACT.md in almost every flow). `target_profile.flows` in the campaign holds flows
+A site's sign-up, login and invitation are data, not code, so Pətək fits any site (a real site usually differs from
+docs/TARGET_CONTRACT.md in almost every flow; `docs/examples/company-portal.yaml` is such a site). `target_profile.flows` in the campaign holds flows
 by name; the `run` functions execute them through the agent's `FlowRunner`:
 
 | Run function | Flows |
@@ -182,10 +182,10 @@ anything sent to the LLM. `{api}` in campaign paths is replaced by `target_profi
 Test mail can come from Mailpit or from the target's own test API (`TestApiMailbox`; `PETEK_MAIL_SOURCE=mailpit|test-api`,
 chosen in `AppContainer`), and an e-mail link can be picked by the site's own pattern (`set-password\?token=`). The
 `/test/...` API (oracle and test-API mail) is addressed at `PETEK_TEST_API_URL` when it is not on the target's origin
-(KadroHR's `api.` host), else at the target; `petek doctor` checks whichever inbox is configured.
+(e.g. a separate `api.` host), else at the target; `petek doctor` checks whichever inbox is configured.
 
-`scenarios/contract-demo.yaml` is the campaign for the contract site (fake target, e2e); `scenarios/kadrohr.yaml`
-describes the real KadroHR.
+`scenarios/contract-demo.yaml` is the campaign for the contract site (fake target, e2e); `docs/examples/company-portal.yaml`
+describes the company portal.
 
 ## Capacity advice (`petek capacity`)
 
@@ -290,7 +290,7 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
 | How many testers? | Any number: there is no fixed limit (30 was only the first campaign's size). Agent ids grow past `a99`/`a999`, identity names never run out, browsers are sharded by load. `petek capacity` recommends a maximum for the machine, `run` warns above it and still starts. |
 | Browser dialogs? | Accepted (OK / leave page; a prompt gets its default text) and recorded as evidence with type, message and time; the model sees them in its next turn. |
 | How does Pətək fit a site whose flows differ from the contract? | The campaign describes them: `target_profile.flows` (defaults: the contract), selectors by key or literal, `local_storage`, `dismiss`, `api_prefix`, `campaign.pacing`. The run functions execute flows by name; a new site needs YAML, not code. |
-| May kadrohr.com be the target? | Yes, for now: it is the owner's pre-launch site without customers. The target policy stays in place; `.env.example` lists `kadrohr.com` as a production host with `PETEK_ALLOW_PRODUCTION=true` and a reminder to set it to false at launch. |
+| May a production site be the target? | Only with the owner's explicit `PETEK_ALLOW_PRODUCTION=true` for the hosts in `PETEK_PRODUCTION_HOSTS` (none by default), and only once its ownership is proved (ADR-0012); a pre-launch site without customers is the usual case. A staging copy with the test mode stays the recommended target. |
 | Real accounts and a real inbox? | Later (PLAN Faza 8): a "bring your own accounts" mode with a real inbox read over IMAP. |
 
 ## Security

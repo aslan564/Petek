@@ -103,7 +103,7 @@ class TenantlessCampaignTest {
             load(
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: 2
                   seed: 1
                   roles: {admin: 1, manager: 0, employee: 1}

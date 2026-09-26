@@ -49,7 +49,7 @@ class DerivedTaskStatesTest {
     private val plan =
         RunPlanView(
             runId = run,
-            campaignName = "kadrohr",
+            campaignName = "portal",
             steps =
                 listOf(
                     step("announce", listOf(a01), emits = "announcement_created"),

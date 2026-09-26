@@ -20,8 +20,8 @@ class MailSearchQueryTest {
         SentMail(
             id = "id1",
             messageId = "id1@fake",
-            from = MailAddress("KadroHR", "no-reply@fake.kadrohr.local"),
-            to = listOf(MailAddress("Ayan Əliyeva", "ayan@test.kadrohr.com")),
+            from = MailAddress("Demo Portal", "no-reply@fake-target.local"),
+            to = listOf(MailAddress("Ayan Əliyeva", "ayan@test.portal.example")),
             subject = "Dəvət",
             text = "Qoşulmaq üçün keçid: http://127.0.0.1/invite/abc",
             html = "<p>…</p>",
@@ -33,11 +33,11 @@ class MailSearchQueryTest {
 
     @Test
     fun `to matches the address or the name as a case-insensitive substring`() {
-        matches("to:ayan@test.kadrohr.com") shouldBe true
-        matches("to:\"AYAN@TEST.KADROHR.COM\"") shouldBe true
-        matches("to:test.kadrohr.com") shouldBe true
+        matches("to:ayan@test.portal.example") shouldBe true
+        matches("to:\"AYAN@TEST.PORTAL.EXAMPLE\"") shouldBe true
+        matches("to:test.portal.example") shouldBe true
         matches("to:\"Ayan Əliyeva\"") shouldBe true
-        matches("to:other@test.kadrohr.com") shouldBe false
+        matches("to:other@test.portal.example") shouldBe false
     }
 
     @Test

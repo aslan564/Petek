@@ -16,8 +16,8 @@ Azərbaycanca: [README.az.md](README.az.md).
   Pətək never carries the model cost or sees your data twice.
 - **Code decides, not the model.** Time is measured by the harness, assertions are evaluated by code, and an agent can
   only perform actions from a code-owned whitelist. Which AI is used does not change what a verdict is worth.
-- **Any site of yours.** The first target is KadroHR (an HR SaaS). Sites are described as data (`target_profile`),
-  and the roadmap makes the engine target-agnostic.
+- **Any site of yours.** Pətək is built for no particular site: a site is described as data (`target_profile`), and
+  the engine knows no site, company or industry by name.
 
 Author: **Aslan Aslanov** · © 2026 **Kodcraft** · Open source under the [Apache License 2.0](LICENSE).
 
@@ -95,7 +95,7 @@ A run (`petek run scenarios/<campaign>.yaml`):
 | Web panel | Instructions, Explorer, Scenarios (draft → approve → freeze, diff, triage), Orchestrator task matrix, live Agents board with screenshots, Reports and stability |
 | Explorer | Learns a site model (pages, forms, actions, roles, realtime, unknowns) in three phases, asks the owner about unknowns, derives test ideas, drafts a campaign |
 | Triage | Sorts a run's surprises into system bug / model gap / scenario bug and proposes scenario v2 as a reviewable diff |
-| Targets | KadroHR (real, `scenarios/kadrohr.yaml`) and a fake contract site (`testing/fake-target`) for e2e |
+| Targets | Any site you own; examples in `docs/examples/`, and a fake contract site (`testing/fake-target`) for e2e |
 | Mail / OTP | Mailpit catch-all inbox or the target's test API (`PETEK_MAIL_SOURCE`); phone OTP from the test API |
 | AI | Whatever you have (`PETEK_LLM_PROVIDER=auto`): any AI command-line tool (`PETEK_LLM_BIN` + `PETEK_LLM_ARGS`), the Codex, Gemini or OpenCode CLI, the Anthropic API, or any OpenAI-compatible endpoint (OpenAI, Grok, OpenRouter, Ollama, LM Studio, vLLM), behind one `LlmClient` port with retry, concurrency limit, metering and fallback to the next AI found; `doctor` says which one and why |
 | Evidence | SQLite (runs, identities, steps, events, receipts, assertions, findings, usage) + artifact files, every record with an id |
@@ -175,8 +175,8 @@ Command line, end to end:
 
 ```bash
 ./gradlew :app:run --args="capacity"                   # how many testers this machine can take (advice, not a limit)
-./gradlew :app:run --args="plan scenarios/kadrohr.yaml" # the identities a run would create, nothing executed
-./gradlew :app:run --args="run scenarios/kadrohr.yaml --repeat 3"
+./gradlew :app:run --args="plan scenarios/my-site.yaml"      # the identities a run would create, nothing executed
+./gradlew :app:run --args="run scenarios/my-site.yaml --repeat 3"
 ./gradlew :app:run --args="report latest"
 ./gradlew :app:run --args="teardown --run <run_id>"    # remove the test company (also done at the end of every run)
 ```
@@ -229,8 +229,8 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | Key | Default | Meaning |
 |---|---|---|
 | `PETEK_TARGET` | — | The system under test; replaces `campaign.target` of every campaign |
-| `PETEK_TARGETS_DIR` | `targets` | Target profiles, one `targets/<name>.yaml` per site (URL, `api_url`, production hosts, mail, `${VAR}` token and account references, sign-in order, campaign profile); `PETEK_TARGET` may name one, and the panel runs any site that has one (see `targets/kadrohr.yaml`) |
-| `PETEK_PRODUCTION_HOSTS` | `kadrohr.com,www.kadrohr.com` | Hosts refused as a target unless … |
+| `PETEK_TARGETS_DIR` | `targets` | Target profiles, one `targets/<name>.yaml` per site (URL, `api_url`, production hosts, mail, `${VAR}` token and account references, sign-in order, campaign profile); `PETEK_TARGET` may name one, and the panel runs any site that has one (see `docs/examples/target-profile.yaml`) |
+| `PETEK_PRODUCTION_HOSTS` | — (none) | Hosts refused as a target unless … |
 | `PETEK_ALLOW_PRODUCTION` | `false` | … this is `true` (rule 8) |
 | `PETEK_TEST_TOKEN` | — | `X-Test-Token` for the target's `/test/...` API; empty disables oracle checks and teardown |
 | `PETEK_TEST_API_URL` | the target | Base address of the `/test/...` API when it is not on the target's origin |
@@ -238,7 +238,7 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `PETEK_MAIL_INBOX` | — | Your own box (`test@company.az`): each tester registers with `test+<run>-<agent>@company.az`; replaces `PETEK_MAIL_DOMAIN`; a site that refuses `+` is named in the report |
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / the box / — / `true` / `INBOX` | How `imap` reads that box (Jakarta Mail/Angus); the password is a `Secret` |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
-| `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | E-mail domain of the test identities |
+| `PETEK_MAIL_DOMAIN` | `petek.test` | E-mail domain of the test identities |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` picks by settings and keys in the environment, your project's AI marker (`AGENTS.md`, `GEMINI.md`) and the agent CLIs on `PATH`, keeps the others as fallbacks, picks no vendor for you when nothing is found, and `doctor` says why |
 | `PETEK_LLM_MODEL` | the tool's own | The model; empty keeps the one the tool or provider is configured for; required for `anthropic-api` and `openai-compat` |
@@ -289,8 +289,8 @@ steps:
 ```
 
 `target_profile` describes the site itself: paths, selectors, sign-up/login flows, overlays to dismiss, the API
-prefix and where created ids are read from. `scenarios/kadrohr.yaml` describes the real KadroHR entirely this way
-(no code), `scenarios/contract-demo.yaml` the contract site. The full format, actor grammar, templates and
+prefix and where created ids are read from. `docs/examples/company-portal.yaml` describes a site whose flows differ from the contract
+entirely this way (no code), `scenarios/contract-demo.yaml` the contract site. The full format, actor grammar, templates and
 assertion types are in [docs/PLAN.md](docs/PLAN.md) ("Ssenari formatı") and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## The target contract
@@ -298,7 +298,7 @@ assertion types are in [docs/PLAN.md](docs/PLAN.md) ("Ssenari formatı") and [do
 Pətək works best when the target offers a **test mode**: a `/test/...` API behind `X-Test-Token` (OTP codes,
 companies, seeding, announcements with read receipts, tickets, notifications, optionally mail), `is_test` companies,
 and stable `data-testid`s. [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) specifies it; `testing/fake-target`
-implements it; [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) tracks the real KadroHR. Without a test API,
+implements it. Without a test API,
 page and network checks still work, oracle checks read "N/A (no oracle)" and teardown is impossible; every finding says
 what its proof rests on (evidence tier: oracle-confirmed, screen/network, or a model's judgement).
 
@@ -334,7 +334,7 @@ over stdio (hand-rolled JSON-RPC, no extra dependency; `initialize`, `ping`, `to
 `run_triage`, `get_stability`, `teardown`. A session is read-only unless started with `petek mcp --allow-writes`:
 runs, approvals, teardown and exploration with writes are refused otherwise, and the target policy applies as
 everywhere. Every result carries the panel's JSON as text and structured content; a failure is an `isError` result with
-the panel's message. Without `.env` the server uses the local fake KadroHR, like the panel.
+the panel's message. Without `.env` the server uses the local fake target, like the panel.
 
 `petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `plan`, `run`, `report` and
 `teardown` (logs stay on stderr; a failure is `{"error": ...}` with the usual exit code), for scripts and CI.
@@ -402,7 +402,6 @@ Phases 0–7 (MVP, explorer, triage, web panel) are implemented. The "Pətək 2"
 | [docs/requirements](docs/requirements) | One architecture document per requirement with traceability to modules, tests and ADRs |
 | [docs/adr](docs/adr) | Architecture decision records 0001–0011 |
 | [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) | What a target offers in test mode |
-| [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) | The real KadroHR: what is done, what the target still needs |
 | [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | Security policy; how to contribute; the rules AI coding agents follow in this repository |
 
 ## Development

@@ -35,7 +35,7 @@ class ExplorationTrackerTest {
     private val start = HarnessTimestamp(T0, 0)
     private val budget = PanelBudget(maxMinutes = 30, maxStepsPerAgent = 40, maxPages = 40)
 
-    private fun tracker(previous: Int? = null) = ExplorationTracker("https://kadro.test", "Elanları yoxla", budget, start, previous)
+    private fun tracker(previous: Int? = null) = ExplorationTracker("https://portal.test", "Elanları yoxla", budget, start, previous)
 
     private fun at(seconds: Long) = HarnessTimestamp(T0.plusSeconds(seconds), seconds * 1_000_000_000)
 
@@ -194,7 +194,7 @@ class ExplorationTrackerTest {
                 "Kəşfiyyat bitdi: 2 səhifə, 1 əməliyyat, 1 form, 1 tapıntı",
                 "other",
                 "Sınaq toxunuşuna icazə verildi: company c1 is_test=true",
-                "Kəşfiyyat başladı: kadro.test · Anonim gəzinti, Rollarla gəzinti, Sınaq toxunuşu",
+                "Kəşfiyyat başladı: portal.test · Anonim gəzinti, Rollarla gəzinti, Sınaq toxunuşu",
             )
     }
 
@@ -264,7 +264,7 @@ class ExplorationTrackerTest {
         val view = tracker.view(at(1))
         view.visited shouldHaveSize ExplorationTracker.VISITED_LIMIT
         view.activity shouldHaveSize ExplorationTracker.ACTIVITY_LIMIT
-        view.visited.first().url shouldBe "https://kadro.test/p${ExplorationTracker.VISITED_LIMIT + 19}"
+        view.visited.first().url shouldBe "https://portal.test/p${ExplorationTracker.VISITED_LIMIT + 19}"
     }
 
     @Test

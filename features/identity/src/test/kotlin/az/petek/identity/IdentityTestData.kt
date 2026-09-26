@@ -19,7 +19,7 @@ import az.petek.identity.domain.IdentitySpec
 import az.petek.identity.domain.NameCatalog
 
 /**
- * The KadroHR campaign's identity settings (scenarios/kadrohr.yaml) and helpers to vary them. By default half of the
+ * The company portal example's identity settings (docs/examples/company-portal.yaml) and helpers to vary them. By default half of the
  * non-admins (the odd one included) are invited, but never fewer than the managers, who always join by invitation.
  */
 object IdentityTestData {
@@ -27,7 +27,7 @@ object IdentityTestData {
     val OTHER_RUN_TAG = RunTag("m3q9")
     val DEPARTMENTS = listOf("IT", "HR", "Satış", "Maliyyə", "Əməliyyat")
     val GIVEN_NAMES = listOf("Əli", "Vəli", "Sahil", "Cəmil", "Amil")
-    const val MAIL_DOMAIN = "test.kadrohr.com"
+    const val MAIL_DOMAIN = "test.portal.example"
 
     fun spec(
         testers: Int = 30,

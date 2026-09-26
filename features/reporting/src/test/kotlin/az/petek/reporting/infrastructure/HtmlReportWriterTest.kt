@@ -52,7 +52,7 @@ class HtmlReportWriterTest {
 
         html shouldStartWith "<!DOCTYPE html>\n<html lang=\"az\">"
         html shouldContain "<meta charset=\"utf-8\">"
-        html shouldContain "<title>Pətək hesabatı: kadrohr-core</title>"
+        html shouldContain "<title>Pətək hesabatı: portal-core</title>"
         html shouldContain "@media (prefers-color-scheme: dark)"
         html shouldContain "color-scheme: light dark"
         html shouldNotContain "<script"

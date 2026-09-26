@@ -21,8 +21,8 @@ class TargetPathTest {
     @Test
     fun `ids and e-mails stay readable while structure characters are encoded`() {
         TargetPath.encode("42") shouldBe "42"
-        TargetPath.encode("eli.k7x2.a07@test.kadrohr.com") shouldBe "eli.k7x2.a07@test.kadrohr.com"
-        TargetPath.encode("a01+x@test.kadrohr.com") shouldBe "a01%2Bx@test.kadrohr.com"
+        TargetPath.encode("eli.k7x2.a07@test.portal.example") shouldBe "eli.k7x2.a07@test.portal.example"
+        TargetPath.encode("a01+x@test.portal.example") shouldBe "a01%2Bx@test.portal.example"
         TargetPath.encode("42/../x?y=1#z") shouldBe "42%2F..%2Fx%3Fy%3D1%23z"
         TargetPath.encode("a&b c\\d%") shouldBe "a%26b%20c%5Cd%25"
     }
@@ -48,7 +48,7 @@ class TargetPathTest {
         listOf(
             "/",
             "/api/tickets/42/approve",
-            "/test/announcements/latest?by=eli.k7x2.a07@test.kadrohr.com",
+            "/test/announcements/latest?by=eli.k7x2.a07@test.portal.example",
             "/test/tickets/..%2Fx",
             "/files/report.v2/..x",
             "/test/x?next=/../y",
@@ -59,8 +59,8 @@ class TargetPathTest {
     fun `paths that could leave the target or climb out of their route are refused`() {
         listOf(
             "api/tickets/42",
-            "https://kadrohr.com/api/tickets/42",
-            "//kadrohr.com/api/tickets/42",
+            "https://portal.example/api/tickets/42",
+            "//portal.example/api/tickets/42",
             "/api\\tickets",
             "/api/tickets/42 HTTP/1.1",
             "/api/tickets/42\r\nX-Injected: 1",

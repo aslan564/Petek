@@ -35,8 +35,8 @@ must be able to register, read the OTP, and fall back to provided credentials if
 - Unknowns are questions; answers live in `AnswerBook` and ground later explorations and drafts.
 - `PageCapture` waits for a page that loaded empty to render (single-page applications draw after `load`; polled for
   `pageSettleTimeout`, 4 s by default) before it snapshots, so the analyst judges the page, not the empty shell. The
-  analyst writes in the page's language and, without a clue, in Azerbaijani. Both from the first real exploration
-  of kadrohr.com (2026-09-26).
+  analyst writes in the page's language and, without a clue, in Azerbaijani. Both from the first exploration of a real
+  single-page application (2026-09-26).
 - Triage (`features/scenarios`) classifies surprises and proposes scenario v2 as a diff.
 
 ## Architecture (Faza 10, ADR-0010)

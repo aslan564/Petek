@@ -28,7 +28,7 @@ class AnswerBookTest {
     @TempDir
     lateinit var dir: Path
 
-    private val site = URI("https://kadro.test/login")
+    private val site = URI("https://portal.test/login")
     private val at = Instant.parse("2026-01-01T10:00:00Z")
 
     private fun book() = AnswerBook(dir.resolve("explorer").resolve(AnswerBook.FILE_NAME))
@@ -38,11 +38,11 @@ class AnswerBookTest {
         val book = book()
         book.record(site, "exp_1", "u1", "Şirkət kodu haradan alınır?", "Admin paneldə", at)
 
-        val grounding = book.grounding(URI("https://kadro.test/"), "Elanları yoxla", 4_000)
+        val grounding = book.grounding(URI("https://portal.test/"), "Elanları yoxla", 4_000)
 
         grounding shouldBe "Elanları yoxla\n\n${AnswerBook.HEADING}\n- Sual: Şirkət kodu haradan alınır?\n  Cavab: Admin paneldə"
         book.grounding(URI("https://other.test"), "Elanları yoxla", 4_000) shouldBe "Elanları yoxla"
-        book.grounding(URI("http://kadro.test"), "", 4_000) shouldBe "" // another scheme is another site
+        book.grounding(URI("http://portal.test"), "", 4_000) shouldBe "" // another scheme is another site
     }
 
     @Test

@@ -26,7 +26,7 @@ class DefaultTemplateRendererTest {
             lastId = "42",
             self =
                 mapOf(
-                    "email" to "eli.k7x2.a07@test.kadrohr.com",
+                    "email" to "eli.k7x2.a07@test.portal.example",
                     "name" to "Əli Kərimov",
                     "agent_id" to "a07",
                     "department" to "IT",
@@ -34,7 +34,7 @@ class DefaultTemplateRendererTest {
                     "phone" to "+994501234567",
                 ),
             eventIds = mapOf("announcement_created" to "17", "ticket_created" to "99"),
-            testers = mapOf("manager.1" to mapOf("name" to "Sahil Quliyev", "email" to "sahil.k7x2.a02@test.kadrohr.com")),
+            testers = mapOf("manager.1" to mapOf("name" to "Sahil Quliyev", "email" to "sahil.k7x2.a02@test.portal.example")),
         )
 
     @Test
@@ -45,7 +45,7 @@ class DefaultTemplateRendererTest {
     @Test
     fun `self fields come from the tester identity`() {
         renderer.render("{self.name} <{self.email}> {self.agent_id} {self.department} {self.role} {self.phone}", context) shouldBe
-            "Əli Kərimov <eli.k7x2.a07@test.kadrohr.com> a07 IT employee +994501234567"
+            "Əli Kərimov <eli.k7x2.a07@test.portal.example> a07 IT employee +994501234567"
     }
 
     @Test
@@ -57,7 +57,7 @@ class DefaultTemplateRendererTest {
     @Test
     fun `another tester's name and e-mail come by role and number, and nothing else of them`() {
         renderer.render("Dəvət et: {tester.manager.1.name} <{tester.manager.1.email}>", context) shouldBe
-            "Dəvət et: Sahil Quliyev <sahil.k7x2.a02@test.kadrohr.com>"
+            "Dəvət et: Sahil Quliyev <sahil.k7x2.a02@test.portal.example>"
         shouldThrow<TemplateException> { renderer.render("{tester.manager.2.email}", context) }.message shouldContain
             "there is no tester 2 of role 'manager'"
         shouldThrow<TemplateException> { renderer.render("{tester.manager.1.password}", context) }

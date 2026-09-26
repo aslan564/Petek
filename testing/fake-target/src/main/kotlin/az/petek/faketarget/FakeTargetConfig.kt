@@ -22,7 +22,7 @@ data class FakeTargetConfig(
     /** Expected `X-Test-Token` for `/test/...`; a missing or different token gets `401`. */
     val testToken: String = "dev-token",
     /** A company whose owner e-mail ends with `@<testMailDomain>` is `is_test`; only those may be seeded or deleted. */
-    val testMailDomain: String = "test.kadrohr.com",
+    val testMailDomain: String = "test.portal.example",
     /** When true, e-mail verification is followed by the phone OTP step (`/verify/phone`, code via `/test/otp/{phone}`). */
     val requirePhoneOtp: Boolean = true,
     /** Delay between creating an announcement and fanning out its notifications (simulates a slow queue). */
@@ -34,7 +34,7 @@ data class FakeTargetConfig(
     init {
         require(testToken.isNotBlank()) { "testToken must not be blank" }
         require(testMailDomain.isNotBlank() && '@' !in testMailDomain) {
-            "testMailDomain must be a bare domain such as test.kadrohr.com"
+            "testMailDomain must be a bare domain such as test.portal.example"
         }
         require(!notificationDelay.isNegative()) { "notificationDelay must not be negative" }
         require(raceWindow.isPositive()) { "raceWindow must be positive" }

@@ -69,7 +69,7 @@ class BuildFindingBundlesUseCaseTest {
 
             val bundle = useCase.bundles(run.runId, FindingId("fnd_1")).single()
 
-            bundle.target shouldBe "https://staging.kadrohr.test"
+            bundle.target shouldBe "https://staging.portal.test"
             bundle.step?.stepId shouldBe StepId("stp_read_announce_a17")
             bundle.evidence.map { it.type } shouldBe listOf(ArtifactType.SCREENSHOT, ArtifactType.ORACLE)
             bundle.evidence[0].text shouldBe null

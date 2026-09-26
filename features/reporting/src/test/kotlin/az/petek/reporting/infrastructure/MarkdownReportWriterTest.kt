@@ -46,9 +46,9 @@ class MarkdownReportWriterTest {
     fun `the header and summary carry the run and its key numbers`() {
         val md = writer.render(SampleReport.model())
 
-        md shouldStartWith "# Pətək hesabatı: kadrohr-core\n"
+        md shouldStartWith "# Pətək hesabatı: portal-core\n"
         md shouldContain "| Run | run_test |"
-        md shouldContain "| Hədəf | https://staging.kadrohr.test |"
+        md shouldContain "| Hədəf | https://staging.portal.test |"
         md shouldContain "| Başladı | 2026-01-01 10:00:00 UTC |"
         md shouldContain "| Nəticə | keçmədi |"
         md shouldContain "| Təkrar qrupu | grp_1 (#2) |"

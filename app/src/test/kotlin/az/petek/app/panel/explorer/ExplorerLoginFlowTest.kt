@@ -41,7 +41,7 @@ class ExplorerLoginFlowTest {
     private val submit = "[data-testid=\"login-submit\"]"
     private val userName = "[data-testid=\"current-user-name\"]"
 
-    /** A login form that also asks for the company's code, as KadroHR's does. */
+    /** A login form that also asks for the company's code, as many company portals do. */
     private val companyLogin =
         listOf(
             Goto("login"),

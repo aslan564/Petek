@@ -54,7 +54,7 @@ import kotlin.time.Duration.Companion.seconds
 private val logger = KotlinLogging.logger {}
 
 /**
- * [Mailbox] over the target's own test API (docs/KADROHR_READINESS.md, P0 item 2): in test mode the target keeps the
+ * [Mailbox] over the target's own test API (docs/TARGET_CONTRACT.md, P0 item 2): in test mode the target keeps the
  * e-mail it would send to the test domain and returns it, so no Mailpit is needed. Construct it with the test API's
  * base address (a path in it is kept) and `PETEK_TEST_TOKEN`; the app selects it with `PETEK_MAIL_SOURCE=test-api`.
  *

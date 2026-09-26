@@ -24,7 +24,7 @@ class FakeTargetConfigTest {
     fun `defaults describe a correct target`() {
         val config = FakeTargetConfig()
         config.testToken shouldBe "dev-token"
-        config.testMailDomain shouldBe "test.kadrohr.com"
+        config.testMailDomain shouldBe "test.portal.example"
         config.requirePhoneOtp shouldBe true
         config.notificationDelay shouldBe 0.seconds
         config.bugs shouldBe emptySet()
@@ -33,7 +33,7 @@ class FakeTargetConfigTest {
     @Test
     fun `invalid settings are refused`() {
         shouldThrow<IllegalArgumentException> { FakeTargetConfig(testToken = " ") }
-        shouldThrow<IllegalArgumentException> { FakeTargetConfig(testMailDomain = "@test.kadrohr.com") }
+        shouldThrow<IllegalArgumentException> { FakeTargetConfig(testMailDomain = "@test.portal.example") }
         shouldThrow<IllegalArgumentException> { FakeTargetConfig(notificationDelay = (-1).milliseconds) }
         shouldThrow<IllegalArgumentException> { FakeTargetConfig(raceWindow = 0.seconds) }
     }

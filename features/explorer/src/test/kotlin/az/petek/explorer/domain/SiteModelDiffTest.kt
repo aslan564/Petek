@@ -20,9 +20,9 @@ import org.junit.jupiter.api.Test
 class SiteModelDiffTest {
     @Test
     fun `identical models have an empty diff even when the LLM worded purposes and names differently`() {
-        val before = Models.kadro(version = 1)
+        val before = Models.portal(version = 1)
         val after =
-            Models.kadro(version = 2).let { model ->
+            Models.portal(version = 2).let { model ->
                 model.copy(
                     pages = model.pages.map { it.copy(purpose = "reworded", loadMs = 999, linkCount = 42) },
                     actions =
@@ -47,9 +47,9 @@ class SiteModelDiffTest {
 
     @Test
     fun `added and removed pages and actions are listed`() {
-        val before = Models.kadro(1)
+        val before = Models.portal(1)
         val after =
-            Models.kadro(2).let { model ->
+            Models.portal(2).let { model ->
                 model.copy(
                     pages =
                         model.pages.filter { it.urlPattern != "/announcements" } +
@@ -75,7 +75,7 @@ class SiteModelDiffTest {
 
     @Test
     fun `changed forms show added, removed and changed fields`() {
-        val before = Models.kadro(1)
+        val before = Models.portal(1)
         val tickets = before.pageByPattern("/tickets")!!
         val form = tickets.forms.single()
         val changedForm =
@@ -123,9 +123,9 @@ class SiteModelDiffTest {
 
     @Test
     fun `action changes compare kinds, selectors and roles over the roles both explorations used`() {
-        val before = Models.kadro(1)
+        val before = Models.portal(1)
         val after =
-            Models.kadro(2).let { model ->
+            Models.portal(2).let { model ->
                 model.copy(
                     roles = model.roles.filter { it.name != "admin" },
                     actions =
@@ -165,7 +165,7 @@ class SiteModelDiffTest {
 
     @Test
     fun `a page reachable by other roles and with new test ids is a changed page`() {
-        val before = Models.kadro(1)
+        val before = Models.portal(1)
         val after =
             before.copy(
                 version = 2,

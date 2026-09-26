@@ -4,7 +4,7 @@
 
 ## Nə istəyirik, niyə və məqsəd
 
-Pətək — bir əmrlə işə düşən, hədəf saytda N sayda AI tester agentini eyni anda ayrı-ayrı brauzer sessiyalarında işlədən və sübut əsaslı hesabat verən çoxistifadəçili test platformasıdır. İlk hədəf KadroHR web (staging), uzunmüddətli hədəf sənin yazdığın istənilən sayt.
+Pətək — bir əmrlə işə düşən, hədəf saytda N sayda AI tester agentini eyni anda ayrı-ayrı brauzer sessiyalarında işlədən və sübut əsaslı hesabat verən çoxistifadəçili test platformasıdır. Heç bir konkret sayt üçün yazılmayıb: hədəf sahibin verdiyi istənilən saytdır (ən dəqiq nəticəni test rejimi olan staging verir).
 
 **Niyə**
 
@@ -15,9 +15,9 @@ Pətək — bir əmrlə işə düşən, hədəf saytda N sayda AI tester agentin
 
 **MVP-nin məqsədi (ölçülə bilən)**
 
-`petek run scenarios/kadrohr.yaml` əmri ilə:
+Test kontraktını (`docs/TARGET_CONTRACT.md`) verən saytda `petek run scenarios/<sayt>.yaml` əmri ilə:
 
-1. 30 agent KadroHR staging-də qeydiyyatdan keçir — email təsdiqi və OTP daxil, insan müdaxiləsi olmadan.
+1. 30 agent hədəf saytın staging-ində qeydiyyatdan keçir — email təsdiqi və OTP daxil, insan müdaxiləsi olmadan.
 2. Şirkət, 5 departament, rəhbərlər və işçilər yaradılır; hər agent öz rolunda login olur.
 3. Elan ssenarisi (1 → 29) və ticket ssenariləri (yarat → in-progress → assign → approve/reject → bildiriş) icra olunur.
 4. Hər addımın sübutu (screenshot, DOM, vaxt, oracle cavabı) saxlanılır, hesabat çıxır.
@@ -37,7 +37,7 @@ MVP tək maşında, web-də, ssenarili rejimdə 30 agentlə tam dövrəni (qeydi
 | Hesabat | Markdown/HTML fayl, konsol lövhəsi | Web paneli, tarixçə, trend |
 | Kəşfiyyatçı agent | Yox | Faza 6: sayt modeli, avtomatik ssenari |
 | Əks-əlaqə | Yox | Faza 7: sürpriz triajı, ssenari v2, fərq kəşfiyyatı |
-| Hədəf | KadroHR staging | İstənilən sənin saytın |
+| Hədəf | Test kontraktını verən sayt (staging, fake target) | Sahibin istənilən saytı |
 
 ## Arxitektura və komponentlər
 
@@ -51,7 +51,7 @@ flowchart TD
   ORK --> MON[Monitor<br/>vəziyyət lövhəsi]
   ORK --> AG[Tester agentlər x N<br/>LLM + öz browser context]
   AG --> AD[Adapter: web<br/>Playwright]
-  AD --> T[Hədəf: KadroHR staging]
+  AD --> T[Hədəf sayt: staging]
   T --> MAIL[Poçt qutusu<br/>Mailpit]
   MAIL --> AG
   AG --> EV[(Sübut bazası<br/>SQLite)]
@@ -72,7 +72,7 @@ Oxunuşu: orkestrator kimlikləri yaradır və addımları paylayır; agentlər 
 | Tester agent | Gör → LLM qərar verir → Playwright icra edir → qeyd et; yalnız whitelist əməliyyatlar | `agent/AgentLoop.kt`, `Tools.kt`, `Llm.kt` |
 | Adapter (web) | Agent başına Playwright instansı, browser server-ə `connect()`, context, snapshot, screenshot | `adapter/WebAdapter.kt`, `BrowserServer.kt` |
 | Poçt oxuyucu | Mailpit REST API-dən OTP və təsdiq linki | `mail/MailReader.kt` |
-| Oracle müştərisi | KadroHR `/test/...` endpointlərindən həqiqət mənbəyi | `oracle/Oracle.kt` |
+| Oracle müştərisi | Hədəfin `/test/...` endpointlərindən həqiqət mənbəyi | `oracle/Oracle.kt` |
 | Sübut bazası | run, identity, step, event, artifact, finding cədvəlləri | `evidence/Store.kt` |
 | Hakim + hesabat | Typed assertlər, üç mənbəli müqayisə, Markdown/HTML hesabat | `evidence/Judge.kt`, `Report.kt` |
 
@@ -92,7 +92,7 @@ Beş qərar bütün kodun sərhədlərini çəkir; hər biri pozulanda sistemin 
 
 ## Kimlik reyestri, email və OTP mexanizmi
 
-MVP-də bütün poçt Mailpit-ə gedir, telefon kodu KadroHR-ın test rejimindən oxunur — DNS, real domen və SMS provayderi lazım deyil.
+MVP-də bütün poçt Mailpit-ə gedir, telefon kodu hədəfin test rejimindən oxunur — DNS, real domen və SMS provayderi lazım deyil.
 
 **Reyestrin sahələri**
 
@@ -100,7 +100,7 @@ MVP-də bütün poçt Mailpit-ə gedir, telefon kodu KadroHR-ın test rejimində
 |---|---|---|
 | `agent_id` | `a07` | run daxilində sabit |
 | `display_name` | `Əli Kərimov` | sən verdiyin adlar əvvəl, sonra daxili siyahı; eyni run-da təkrar olmur |
-| `email` | `eli.k7x2.a07@test.kadrohr.com` | ad + run-ın 4 simvollu qısaltması + agent_id; həmişə unikal |
+| `email` | `eli.k7x2.a07@test.portal.example` | ad + run-ın 4 simvollu qısaltması + agent_id; həmişə unikal |
 | `password` | generasiya, 16 simvol | SQLite-da açıq saxlanır — yalnız test kimliyi |
 | `phone` | `+99450` + 7 rəqəm | uydurma, real nömrə deyil; test rejimində validasiya olunmur |
 | `role` | `admin` / `manager` / `employee` | campaign.yaml-dakı bölgüyə görə |
@@ -113,17 +113,17 @@ Rol bölgüsü deterministikdir: admin = 1 (agent `a01`), hər departamentə 1 m
 **Email: Mailpit ilə (MVP)**
 
 1. Mailpit Docker ilə qaldırılır: SMTP `:1025`, REST API və UI `:8025`.
-2. KadroHR staging-in çıxış SMTP-si test rejimində Mailpit-ə yönəlir. Beləliklə hədəf real poçt göndərmir, hər məktub Mailpit-də qalır.
-3. `test.kadrohr.com` domeni real olmalı deyil — məktub heç vaxt internetə çıxmır.
+2. Hədəf staging-in çıxış SMTP-si test rejimində Mailpit-ə yönəlir. Beləliklə hədəf real poçt göndərmir, hər məktub Mailpit-də qalır.
+3. `test.portal.example` domeni real olmalı deyil — məktub heç vaxt internetə çıxmır.
 4. Agentin `run: read_email_code` addımı Mailpit API-də `to:<email>` ilə axtarır, hər 1 saniyədə bir, maksimum 60 saniyə.
 5. Kod regex ilə çıxarılır (4–8 rəqəm); təsdiq linki varsa `href` götürülüb eyni browser context-də açılır.
 6. Oxunan məktub "read" işarələnir ki, köhnə kod təkrar istifadə olunmasın; məktubun id-si sübut bazasına yazılır.
 
-Alternativ (Faza 8, KadroHR-dan başqa hədəflər üçün): real catch-all domen + IMAP oxuyucu. Eyni `MailReader` interfeysi, fərqli implementasiya.
+Alternativ (Faza 8, poçtu Mailpit-ə yönəldə bilməyən hədəflər üçün): real catch-all domen + IMAP oxuyucu. Eyni `MailReader` interfeysi, fərqli implementasiya.
 
 **Telefon və SMS OTP**
 
-- Test rejimində KadroHR SMS göndərmir; kodu `GET /test/otp/{phone}` oracle endpointi qaytarır (yalnız test tenantı üçün).
+- Test rejimində hədəf SMS göndərmir; kodu `GET /test/otp/{phone}` oracle endpointi qaytarır (yalnız test tenantı üçün).
 - `run` funksiyaları telefon addımını özləri keçir; `do` addımında agent `get_phone_code` alətini çağırır, harness kodu `/test/otp/{phone}`-dan bir neçə saniyə təkrar soruşaraq oxuyur və `{vars.phone_code}` kimi saxlayır (kod LLM-ə getmir).
 - Sadə alternativ: test rejimində sabit kod `000000`. Oracle variantı üstündür — real kod generasiyası da test olunur.
 - Real SMS provayderi ilə iş MVP-dən kənardır.
@@ -139,7 +139,7 @@ Alternativ (Faza 8, KadroHR-dan başqa hədəflər üçün): real catch-all dome
 
 Ssenari YAML-dır: `do` sətirləri təbii dildir (LLM şərh edir), `run`, `emits`, `wait_for` və `assert` isə kod tərəfindən icra və yoxlanır.
 
-Aşağıdakı blok `scenarios/contract-demo.yaml`-ın tam surətidir (fayl dəyişəndə bu da yenilənir): kontrakt saytı (`docs/TARGET_CONTRACT.md`, fake target) üçün kampaniya. Real KadroHR üçün kampaniya `scenarios/kadrohr.yaml`-dır: eyni sxem, üstəlik `target_profile.flows` (qeydiyyat, dəvət, şirkət kodu ilə qoşulma, login axınları real markup-a görə), `local_storage`, `dismiss`, `api_prefix` və `campaign.pacing` (aşağıda "Hədəf axınları").
+Aşağıdakı blok `scenarios/contract-demo.yaml`-ın tam surətidir (fayl dəyişəndə bu da yenilənir): kontrakt saytı (`docs/TARGET_CONTRACT.md`, fake target) üçün kampaniya. Axınları kontraktdan fərqlənən real sayt üçün nümunə kampaniya `docs/examples/company-portal.yaml`-dır: eyni sxem, üstəlik `target_profile.flows` (qeydiyyat, dəvət, şirkət kodu ilə qoşulma, login axınları real markup-a görə), `local_storage`, `dismiss`, `api_prefix` və `campaign.pacing` (aşağıda "Hədəf axınları").
 
 ```yaml
 # Contract demo campaign (docs/PLAN.md "Ssenari formatı"): the site of docs/TARGET_CONTRACT.md, which the fake target
@@ -147,7 +147,7 @@ Aşağıdakı blok `scenarios/contract-demo.yaml`-ın tam surətidir (fayl dəyi
 # `do` = natural language for the LLM agent; `run`, `emits`, `wait_for` and `assert` are executed and checked by code.
 campaign:
   name: contract-demo
-  target: https://staging.kadrohr.com     # PETEK_TARGET in .env wins
+  target: https://staging.portal.example     # PETEK_TARGET in .env wins
   testers: 30
   seed: 42
   names: [Əli, Vəli, Sahil, Cəmil, Amil]   # the rest comes from the built-in catalog
@@ -250,8 +250,8 @@ steps:
 
 ### Hədəf axınları (`target_profile.flows`)
 
-Pətək istənilən sayta uyğunlaşmalıdır: KadroHR-ın real axınları kontraktdan fərqlənir (linklə təsdiq, loginə şirkət
-kodu, ad/soyad ayrı, şifrə təkrarı, overlay-lər). Ona görə deterministik `run` funksiyaları sabit kod yox, kampaniyadakı
+Pətək istənilən sayta uyğunlaşmalıdır: real saytların axınları çox vaxt kontraktdan fərqlənir (linklə təsdiq, loginə
+şirkət kodu, ad/soyad ayrı, şifrə təkrarı, overlay-lər). Ona görə deterministik `run` funksiyaları sabit kod yox, kampaniyadakı
 **axınları** icra edir. Axın adlarını run funksiyaları seçir:
 
 | Run funksiyası | Axın(lar) |
@@ -285,7 +285,7 @@ xəta mesajlarında `{url}`. `{self.password}` yalnız `fill` dəyərində ola b
 selektorunun mətni mesaja əlavə olunur.
 
 Profilin digər açarları: `local_storage` (hər brauzer kontekstinə, səhifə skriptlərindən əvvəl, yalnız hədəf origin-ə
-yazılır, məs. `kadro:domain_dialog_dismissed: "1"`), `dismiss` (hər addımdan əvvəl görünən overlay-lər bağlanır;
+yazılır, məs. `portal:domain_dialog_dismissed: "1"`), `dismiss` (hər addımdan əvvəl görünən overlay-lər bağlanır;
 selektor olduğu kimi işlənir, şablon ola bilməz),
 `api_prefix` (`{api}` → `/api/v1`, fayl yüklənəndə açılır). `campaign.pacing: {start_stagger_ms, max_parallel_actors}`
 bir addımın aktorlarını agent id sırası ilə aralıqla və ən çox N paralel başladır (IP limitləri üçün); `parallel: true`
@@ -305,7 +305,7 @@ MVP Kotlin/JVM 21 + Gradle (Kotlin DSL) + kotlinx.coroutines + Playwright Java +
 | Konfiqurasiya | kotlinx.serialization + kaml (YAML) | tipli sxem, aydın xəta mesajları |
 | CLI | Clikt + Mordant | əmrlər və canlı konsol lövhəsi |
 | Sübut bazası | sqlite-jdbc + Exposed | tək fayl, run başına ayrı DB mümkündür |
-| Poçt və oracle | Ktor client | Mailpit REST, KadroHR `/test/...` |
+| Poçt və oracle | Ktor client | Mailpit REST, hədəfin `/test/...` API-si |
 | Hesabat | kotlinx.html → HTML, Markdown şablon | screenshot linkləri ilə |
 | Loglama | kotlin-logging + logback | `run_id`/`agent_id` MDC ilə |
 
@@ -316,13 +316,13 @@ petek/
   build.gradle.kts, settings.gradle.kts
   docker-compose.yml               # Mailpit
   AGENTS.md, docs/PLAN.md
-  scenarios/kadrohr.yaml
+  docs/examples/company-portal.yaml
   src/main/kotlin/az/petek/
     Main.kt                        # Clikt: plan / run / report / teardown / smoke
     config/Config.kt               # campaign.yaml → data class-lar
     identity/Identity.kt           # reyestr, seed, unikallıq
     mail/MailReader.kt             # interfeys + MailpitReader
-    oracle/Oracle.kt               # KadroHR test endpointləri
+    oracle/Oracle.kt               # hədəfin test endpointləri
     agent/
       AgentLoop.kt                 # gör → qərar → et → qeyd; limit, dövrə aşkarı
       Tools.kt                     # whitelist əməliyyatlar
@@ -345,7 +345,7 @@ petek/
   src/test/kotlin/az/petek/         # faza smoke testləri
 ```
 
-## KadroHR tərəfində hazırlıq
+## Hədəf sayt tərəfində hazırlıq
 
 Sayt sənindir: hədəfdə `TEST_MODE` açmaq platformanın yarısını asanlaşdırır, ona görə bu iş Faza 0-dadır və Pətək kodundan əvvəl bitir.
 
@@ -353,7 +353,7 @@ Sayt sənindir: hədəfdə `TEST_MODE` açmaq platformanın yarısını asanlaş
 
 - Ayrı staging mühiti və ayrı DB; production-a heç bir bağlantı yoxdur.
 - Çıxış SMTP → Mailpit (`:1025`); SMS provayderi söndürülür, kod `/test/otp/{phone}`-dan oxunur.
-- `@test.kadrohr.com` email ilə yaradılan şirkət `is_test=true` alır; oracle və teardown yalnız belə şirkətlərdə işləyir (təhlükəsizlik qapağı).
+- `@test.portal.example` email ilə yaradılan şirkət `is_test=true` alır; oracle və teardown yalnız belə şirkətlərdə işləyir (təhlükəsizlik qapağı).
 - Rate limit və CAPTCHA test IP-ləri üçün söndürülür (allowlist).
 - Test endpointləri `X-Test-Token` başlığı tələb edir; token yalnız staging env-də var.
 
@@ -386,11 +386,11 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 1 | Konfiqurasiya və reyestr | `petek plan` 30 deterministik kimlik verir | 1–2 gün |
 | 2 | Tək agent | Bir agent `do` tapşırığını sübutla tamamlayır | 1–2 həftə |
 | 3 | N agent və orkestrator | 30 agent eyni anda, izolyasiya sübutu, ilişmə aşkarı | 3–5 gün |
-| 4 | Ssenari və real-time | emits/wait_for, assertlər, KadroHR ssenariləri keçir | 1 həftə |
+| 4 | Ssenari və real-time | emits/wait_for, assertlər, kontrakt saytının ssenariləri keçir | 1 həftə |
 | 5 | Hesabat, stabillik, təmizlik | Tək əmr → hesabat; 3 run eyni nəticə; teardown | 3–5 gün |
 | 6 | Kəşfiyyatçı | Sayt modeli, avtomatik ssenari | sonra |
 | 7 | Sürpriz və əks-əlaqə | Triaj, ssenari v2, fərq kəşfiyyatı | sonra |
-| 8 | Bünövrə düzəlişləri və biznes hazırlığı | Real KadroHR-da kəşfiyyat işləyir; lisenziya, `workspace_id`, edition portları | 3–5 gün |
+| 8 | Bünövrə düzəlişləri və biznes hazırlığı | Real saytda kəşfiyyat işləyir; lisenziya, `workspace_id`, edition portları | 3–5 gün |
 | 9 | Provayder-agnostik AI qatı | Layihə hansı AI-ı işlədirsə Pətək onunla işləyir (`auto`) | 1 həftə |
 | 10 | Hədəf profili və giriş zənciri | Bir neçə sayt, öz hesablarınla giriş, IMAP/manual OTP, sübut səviyyələri | 1–2 həftə |
 | 11 | Alət üzü | MCP server + `--json` CLI: ev sahibi AI Pətəki çağırır | 1 həftə |
@@ -411,10 +411,10 @@ Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablan
 
 **Faza 0 — Hədəf və mühit**
 
-- [ ] Staging mühiti ayrı DB ilə qaldırılır, `TEST_MODE` bayrağı əlavə olunur — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
-- [ ] SMTP → Mailpit, SMS → `/test/otp/{phone}`; rate limit və CAPTCHA allowlist — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
-- [ ] `is_test` tenant bayrağı; oracle və teardown endpointləri (yuxarıdakı cədvəl) — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
-- [ ] Əsas UI elementlərinə `data-testid` — **sahib:** KadroHR tərəfi (`docs/KADROHR_READINESS.md`; fake target bunu kontrakt üzrə edir)
+- [ ] Staging mühiti ayrı DB ilə qaldırılır, `TEST_MODE` bayrağı əlavə olunur — **sahib:** hədəf saytın sahibi (`docs/TARGET_CONTRACT.md`; fake target bunu kontrakt üzrə edir)
+- [ ] SMTP → Mailpit, SMS → `/test/otp/{phone}`; rate limit və CAPTCHA allowlist — **sahib:** hədəf saytın sahibi (`docs/TARGET_CONTRACT.md`; fake target bunu kontrakt üzrə edir)
+- [ ] `is_test` tenant bayrağı; oracle və teardown endpointləri (yuxarıdakı cədvəl) — **sahib:** hədəf saytın sahibi (`docs/TARGET_CONTRACT.md`; fake target bunu kontrakt üzrə edir)
+- [ ] Əsas UI elementlərinə `data-testid` — **sahib:** hədəf saytın sahibi (`docs/TARGET_CONTRACT.md`; fake target bunu kontrakt üzrə edir)
 - [x] Real-time mexanizmi və bildirişin DOM görünüşü sənədləşdirilir
 - [x] Repo: IntelliJ IDEA, Kotlin/JVM (indi JDK 25 toolchain), Gradle (Kotlin DSL); `Chromium ilk Playwright.create()-də avtomatik yüklənir`, `.env` (LLM açarı, test token, Mailpit URL)
 - [x] `docker-compose.yml` ilə Mailpit
@@ -458,7 +458,7 @@ Hazır sayılır: 30 agent eyni anda login olur, hər biri ekranda öz adını o
 - [x] `orchestrator/Bus.kt`: `emits` → hadisə + t0; `wait_for` → gözləmə + timeout; alan tərəfdə t1
 - [x] `scenario/Asserts.kt`: `visible_text`, `not_visible`, `oracle`, `http_status`, `count`, `latency_max`, `only_one_succeeds`
 - [x] `oracle``/Oracle.kt`: test endpointləri müştərisi
-- [x] `scenarios/kadrohr.yaml`: setup, elan, ticket axını, icazə, yarış
+- [x] `docs/examples/company-portal.yaml`: setup, elan, ticket axını, icazə, yarış
 
 Hazır sayılır: elan ssenarisi 29/29 çatır və gecikmələr agent başına yazılır; ticket axınları oracle ilə təsdiqlənir; icazə testi 403 qaytarır; yarış testində yalnız biri qalib gəlir.
 
@@ -499,7 +499,7 @@ IMAP) aşağıda Faza 10-dadır.
 2. **AI provayderindən asılı deyil.** Sahibdə hansı AI varsa (Codex, Gemini, Cursor, Grok, Copilot, Ollama...), Pətək
    onu tapır və onunla işləyir; heç bir vendor default və ya xüsusi deyil (2026-09-26). AI yoxdursa kəşfiyyat və `do`
    addımları işləmir, Pətək necə qurulacağını deyir; dondurulmuş `run` ssenariləri LLM-siz də icra olunur.
-3. **Bir neçə sayt.** Sahibin 2–3 fərqli saytı var; KadroHR yalnız ilk hədəf və nümunə profildir.
+3. **Bir neçə sayt.** Sahibin 2–3 fərqli saytı var; hər birinin öz hədəf profili olur, heç biri xüsusi deyil.
 4. **Kəşfiyyatçı özü daxil ola bilməlidir**: test API ilə şirkət yarada bilmirsə sahibin verdiyi hesablarla, o da yoxsa
    özü qeydiyyatdan keçib OTP-ni oxuyaraq; heç biri alınmasa anonim. Qeydiyyat alınmasa login məlumatlarına düşür.
 5. **Məlumat yoxdursa kor testlər**: kəşfiyyatçının topladığı modelə əsasən, model boş olsa da ümumi naxışlarla test.
@@ -547,7 +547,7 @@ edir. 100 tester × hər addım isə bir IDE agentinin daşıyacağı yük deyil
 
 ### Faza 8 — Bünövrə düzəlişləri və biznes hazırlığı
 
-Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan biznes qərarları indi verilsin.
+Məqsəd: real saytda kəşfiyyat işləsin; sonradan dəyişməsi baha olan biznes qərarları indi verilsin.
 
 - [x] `RoleSessions.kt` boş `TargetProfile` ilə setup kampaniyası qururdu → default kontrakt axınları; indi saytın
   öz ssenarisinin profilini götürür (`CatalogSetupProfiles`: təsdiqlənmiş/dondurulmuş versiya, yoxsa sahibin faylı,
@@ -570,7 +570,7 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
   (linux-x64, linux-arm64, mac-x64, mac-arm64, win-x64; default host). `release.yml` matrisi (ubuntu, ubuntu-arm,
   macos, windows) hər bundle-ı öz platformunda qurur, `bin/petek --help`-i JDK-sız işlədir, `SHA256SUMS` ilə birlikdə
   Release-ə qoyur; `build.yml` (əl ilə) linux bundle-ını qurub başladır. Lokal sübut: linux-x64 bundle-ı
-  (165 MB) `/tmp`-də JDK-sız `doctor` — Chromium slim driver-dən qalxdı, kadrohr.com HTTP 200.
+  (165 MB) `/tmp`-də JDK-sız `doctor` — Chromium slim driver-dən qalxdı, real hədəf HTTP 200.
 - [x] Konsist arxitektura testləri `e2e/`-də (AGENTS.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
 - [x] Tester izolyasiyası auditi və sərtləşdirmə (`docs/requirements/R01` "Isolation guarantees"): roster parolsuz
   (`Colleague`), paylaşılan dəyərlər write-once, `{last_id}` eyni addımdakı başqa agentin ID-sinə düşmür, yalnız
@@ -585,12 +585,12 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
 - [x] Telemetriya portu `UsageSink` (opt-in, default söndürülü, yalnız sayğaclar, məzmun yoxdur); `UsageMeter` ona
   yazır; hazırda tək implementasiya lokal fayldır.
 
-Hazır sayılır: `petek panel` real KadroHR-da (test API açıq) rol-əsaslı kəşfiyyatı tamamlayır; `./gradlew build`
+Hazır sayılır: `petek panel` real saytda (test API açıq) rol-əsaslı kəşfiyyatı tamamlayır; `./gradlew build`
 yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
-Vəziyyət: build və `LICENSE` şərti ödənir; real KadroHR-da rol-əsaslı kəşfiyyat KadroHR staging-i (test API) gözləyir —
-fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu deyir, qəbulun real sayt hissəsini yox.
+Vəziyyət: build və `LICENSE` şərti ödənir; real saytda rol-əsaslı kəşfiyyat test API-si olan staging gözləyir —
+fake target-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu deyir, qəbulun real sayt hissəsini yox.
 
-#### İlk real run-lar (2026-09-26, fake KadroHR + real Chromium + real AI CLI)
+#### İlk real run-lar (2026-09-26, fake target + real Chromium + real AI CLI)
 
 `petek doctor` 7/7 yaşıl (LLM daxil), `smoke`, `plan`, `run` (10 və 30 tester), `report`, `teardown` real işlədi.
 10 tester: PASSED, 33 addım, 125 s, 70 screenshot, $0.45. 30 tester: 61 tapşırıq, 175 s; ilk run yalnız
@@ -608,17 +608,17 @@ fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu 
   oxunanlar da xülasədədir.
 - **Fake target** brauzer SSE axınını bağlayanda "Request /events failed" + stack trace yazırdı (hər run sonunda
   onlarla); müştərinin getməsi indi debug səviyyəsindədir.
-- **Real kadrohr.com (anonim, yalnız oxu, panel ilə):** `doctor` saytı, siyasəti və LLM-i yaşıl görür, test API tokeni
+- **Real sayt (anonim, yalnız oxu, panel ilə):** `doctor` saytı, siyasəti və LLM-i yaşıl görür, test API tokeni
   və test poçtu sahibin staging-ində olmalıdır. Kəşfiyyat 54 s-də 7 səhifə gəzdi, 18 ideya və ssenari qaralaması
   yaratdı. Tapıntılar: (1) Chromium konteynerin proxy sertifikatına inanmırdı (`ERR_CERT_AUTHORITY_INVALID`) —
   `PETEK_BROWSER_IGNORE_TLS_ERRORS` seçimi əlavə olundu (default söndürülü; bu maşında CA NSS-ə import edildi);
-  (2) kadrohr.com SPA-dır, `load`-dan sonra boş qabıq gəlir, kəşfiyyatçı 7 səhifədən 5-ini boş çəkirdi və analitik
+  (2) sayt SPA-dır, `load`-dan sonra boş qabıq gəlir, kəşfiyyatçı 7 səhifədən 5-ini boş çəkirdi və analitik
   "səhifə xarabdır?" soruşurdu — indi məzmun görünənə qədər gözləyir (`pageSettleTimeout` 4 s, 250 ms addımla);
   (3) analitikin bəzi sualları türkcə gəlirdi — dil qaydası prompt-a yazıldı. Düzəlişdən sonra təkrar kəşfiyyat
   (48 s): 4 səhifənin hamısı məzmunla çəkildi, sayt modelində 4 form və 35 əməliyyat (giriş: e-poçt, şifrə, şirkət
   kodu; qeydiyyat: 7 sahə), 15 ideya, 9 sual Azərbaycan dilində. Rollarla gəzinti və sınaq toxunuşu test API tokeni
-  olmadan atlanır — real KadroHR üçün növbəti addım sahibin staging-i və `docs/KADROHR_READINESS.md` P0 maddələridir.
-- **Real kadrohr.com, 5 tester (`scenarios/kadrohr-anonymous.yaml`, token və test poçtu olmadan):** 3 dəq 07 san,
+  olmadan atlanır — növbəti addım sahibin test rejimli staging-i və `docs/TARGET_CONTRACT.md`-dəki test API-dir.
+- **Real sayt, 5 tester (`docs/examples/company-portal-anonymous.yaml`-a bənzər kampaniya, token və test poçtu olmadan):** 3 dəq 07 san,
   102 addım (93 keçdi), $0.86. Ana səhifə və səhv login hər 5 agentdə düzgün ("Email və ya şifrə yanlışdır");
   şirkət sahibinin qeydiyyatı (a01) formun 8 sahəsini doldurub `/register/verify` "Email-inizi yoxlayın" ekranına
   çatdı — kod oxunmadığı üçün burada bitir. **Saytda tapıntı:** naməlum şirkət kodu (`PETEK-DEMO`) ilə işçi
@@ -639,7 +639,7 @@ fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu 
   `.env`-ə şablondan yazılır və panel onun üçün açılır, cavab gələnə qədər heç nə başlamır (sahibin istəyi,
   2026-09-26: "məlumatları brauzerdə yazmalıydım"); `petek mcp`
   `UnavailablePanelBackend(NO_TARGET)` ilə cavab verir (host AI sahibdən soruşur və gözləyir). Əvvəlki
-  "`.env` yoxdursa fake KadroHR" fallback-i və `--demo` silindi (`DemoTarget`, `app`-ın fake-target runtime
+  "`.env` yoxdursa fake target" fallback-i və `--demo` silindi (`DemoTarget`, `app`-ın fake-target runtime
   asılılığı); fake target yalnız `--env-file .env.fake-target` ilə, Pətəkin öz e2e testləri üçün.
 - **Dil (sahibin qərarı, 2026-09-26):** AI-ın sahib üçün yazdığı heç bir mətn Azərbaycan dilinə məcbur edilmir.
   `PETEK_LANGUAGE` (default `auto` = sahibin öz təlimatının/ssenarisinin dili, yoxdursa səhifənin dili; ya da ad,
@@ -717,24 +717,24 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
 - [x] `targets/<ad>.yaml` hədəf profili (domain: `campaign` feature-ində `TargetSpec`; DTO infrastructure-da):
   ```yaml
   target:
-    name: kadrohr
-    url: https://staging.kadrohr.com
-    api_url: https://api.staging.kadrohr.com     # oracle və TestApiMailbox üçün ayrıca baza (KADROHR_READINESS açıq maddəsi)
-    production_hosts: [kadrohr.com, www.kadrohr.com]
-    mail: {source: test-api | mailpit | imap | manual, domain: test.kadrohr.com}
-    test_api: {token: '${PETEK_TEST_TOKEN_KADROHR}'}   # sirlər yalnız .env-dən referansla (dırnaq içində)
+    name: my-portal
+    url: https://staging.portal.example
+    api_url: https://api.staging.portal.example     # oracle və TestApiMailbox üçün ayrıca baza (API öz hostundadırsa)
+    production_hosts: [portal.example, www.portal.example]
+    mail: {source: test-api | mailpit | imap | manual, domain: test.portal.example}
+    test_api: {token: '${PETEK_TEST_TOKEN_PORTAL}'}   # sirlər yalnız .env-dən referansla (dırnaq içində)
     sign_in:                                        # giriş zənciri, sıra ilə cəhd olunur
       - test_company                                # /test API ilə şirkət + rollar (indiki yol)
       - own_accounts                                # sahibin verdiyi hesablar (aşağıda)
       - self_register                               # özü qeydiyyat + poçt/OTP
       - anonymous
     accounts:                                       # own_accounts üçün; parollar .env referansı
-      - {role: admin, email: owner@example.com, password: '${PETEK_ACC_KADROHR_ADMIN}'}
-    profile: scenarios/kadrohr.yaml#target_profile  # selektorlar və axınlar (mövcud format)
+      - {role: admin, email: owner@example.com, password: '${PETEK_ACC_PORTAL_ADMIN}'}
+    profile: docs/examples/company-portal.yaml#target_profile  # selektorlar və axınlar (mövcud format)
   ```
   `PETEK_TARGET` yalnız default hədəfin adı/URL-i olur; `RunTargets` `config.copy(target=…)` yerinə profili götürür;
   `PanelRunsAdapter.kt:119`-dakı "yalnız PETEK_TARGET" bloku qaldırılır.
-  **Vəziyyət:** `TargetSpec` (campaign domain), `YamlTargetSpecSource`, `PETEK_TARGETS_DIR`, `PETEK_TARGET=<ad>`, `${VAR}` sirləri dırnaq içində; panel profili olan istənilən saytda run və teardown edir; MCP `list_targets` profilləri göstərir; nümunə `targets/kadrohr.yaml`.
+  **Vəziyyət:** `TargetSpec` (campaign domain), `YamlTargetSpecSource`, `PETEK_TARGETS_DIR`, `PETEK_TARGET=<ad>`, `${VAR}` sirləri dırnaq içində; panel profili olan istənilən saytda run və teardown edir; MCP `list_targets` profilləri göstərir; nümunə `docs/examples/target-profile.yaml`.
 - [x] Giriş zənciri (`identity` + `mail` application): `SignInStrategy` portu, zəncir dekoratoru; hər qərar
   (`hansı strategiya, niyə keçildi`) `event` cədvəlinə və hesabata yazılır. Kəşfiyyatçı (`RoleSessions`) və
   `register_and_login` eyni zənciri istifadə edir.
@@ -758,7 +758,7 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
   **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake saytla e2e — Faza 13 bəndi.
 
-Hazır sayılır: iki fərqli hədəf profili (fake KadroHR + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
+Hazır sayılır: iki fərqli hədəf profili (fake target + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
 paneldən seçilir; ikincidə kəşfiyyatçı sahibin hesabı ilə daxil olur, hesabat sübut səviyyələrini göstərir.
 
 ### Faza 11 — Alət üzü (MCP + `--json`)
@@ -840,8 +840,8 @@ Məqsəd: HR SaaS forması nüvədən çıxsın; sayt haqqında heç nə bilməy
 ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
 
 - [x] `Roles.kt` enum-ları sərbəst sətirə: rollar və qeydiyyat rejimləri kampaniya/hədəf profili tərəfindən müəyyən
-  olunur; `admin/manager/employee` KadroHR profilinin dəyərləridir.
-  **Vəziyyət:** `Role`/`RegistrationMode` açıq value class-lardır (sabitlər KadroHR dəyərləridir); yeni qapılar `self`, `login`, `guest`.
+  olunur; `admin/manager/employee` yalnız kontrakt profilinin dəyərləridir.
+  **Vəziyyət:** `Role`/`RegistrationMode` açıq value class-lardır (sabitlər kontraktın dəyərləridir); yeni qapılar `self`, `login`, `guest`.
 - [x] Şirkət/departament/`seed_company`/dəvət-şirkət kodu məntiqi "tenant" plugin-inə (`features/tenant` və ya
   `campaign` daxilində isteğe bağlı bölmə): profil `tenant: none | company` deyir; `PromptBuilder` "Company context"
   blokunu yalnız tenant varsa qoşur; teardown resurs üzrə ümumiləşir.
@@ -860,12 +860,12 @@ ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
   qərar verilir, ikinci fake saytda real Chromium ilə sübut olunub (qəsdən qoyulmuş icazə xətası tapılır).
 - [x] Kəşfiyyatçı draftları şirkətsiz setup ilə (yalnız login və ya anonim); seed yolları və açar sözlər profildə.
   **Vəziyyət:** `ScenarioSettings.forSiteWithoutCompanies`: görülən rollar, hər birinə 2 tester, qapı `self` (yalnız anonim görülübsə `guest`).
-- [x] KadroHR default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → `targets/kadrohr.yaml`.
+- [x] Konkret bir saytın default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → hədəf profili (`docs/examples/target-profile.yaml`).
 - [x] Testlər: tenant-sız kampaniya e2e ikinci fake saytda; Konsist "core/domain HR anlayışı bilmir" qaydası.
   **Vəziyyət:** `FakeNotesServer` (şirkətsiz qeydlər tətbiqi, test API-siz), `TenantlessEndToEndTest` (real Chromium).
 
 Hazır sayılır: ikinci fake sayt (şirkət anlayışı olmayan, adi login-li tətbiq) `petek explore` → draft → `run` →
-hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
+hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniyası dəyişməz nəticə verir.
 
 ### Faza 14 — Ekosistem və ödənişli modullar
 
@@ -1016,8 +1016,8 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 22 — Demo hədəfləri
 
-- [ ] Ghost (xəbər) və WooCommerce (mağaza) sahibin serverində; hər biri üçün kampaniya və qısa video. KadroHR
-  laboratoriya qalır; fake target yalnız e2e üçündür (qayda 12).
+- [ ] Ghost (xəbər) və WooCommerce (mağaza) sahibin serverində; hər biri üçün kampaniya və qısa video. Fake target
+  yalnız e2e üçündür (qayda 12).
 
 ## Sübut bazası və hesabat
 
@@ -1072,34 +1072,27 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
 **Qərar gözləyən suallar** (hamısı cavablandı, 2026-09-25)
 
 - [x] Qeydiyyat dəvətlə, yoxsa sərbəst şirkət kodu ilə? — **Hər ikisi, tester başına.** `campaign.registration` bölgüsü hər kimliyə öz rejimini verir; rəhbərlər həmişə dəvətlə qoşulur (şirkət kodu ilə qeydiyyat işçi yaradır), qalan dəvətlər işçilərə düşür.
-- [x] KadroHR web-də real-time mexanizmi hansıdır? — **Avtomatik aşkarlanır.** Pətək ondan asılı deyil: gecikmə DOM-da ölçülür, nəqliyyat (WebSocket, SSE, polling) şəbəkə trafikindən tapılıb hesabatda göstərilir.
+- [x] Hədəf saytda real-time mexanizmi hansıdır? — **Avtomatik aşkarlanır.** Pətək ondan asılı deyil: gecikmə DOM-da ölçülür, nəqliyyat (WebSocket, SSE, polling) şəbəkə trafikindən tapılıb hesabatda göstərilir.
 - [x] Elanın "oxundu" statusu backend-də var, yoxsa yalnız bildiriş göndərilir? (receipts oracle-ı buna bağlıdır) — **Var** (təsdiqləndi); `receipts` oracle assert-i default kampaniyadadır.
 - [x] Hansı LLM provayderi və model agentlər üçün? — **Sahibdə hansı AI varsa** (2026-09-26: heç bir vendor default deyil; R09, ADR-0008).
 
-**Real KadroHR üçün açıq suallar** (`scenarios/kadrohr.yaml`, 2026-09-25)
+**Real saytlar üçün açıq sual**
 
-- [ ] KadroHR-ın test API-si hansı ünvandadır? API `api.kadrohr.com`-dadır, sayt isə `kadrohr.com`; oracle və
-  `TestApiMailbox` üçün ayrıca baza URL (məs. `PETEK_TEST_API_URL`) lazımdır — app konfiqurasiyası.
-- [ ] `http_status` yoxlaması agentin cookie-ləri ilə hədəf origin-ə gedir, KadroHR isə access token-i JS-də saxlayıb
-  `Authorization` başlığı ilə `api.kadrohr.com`-a göndərir. `forbidden_approval`-dakı 403 yoxlamasının işləməsi üçün ya
-  test rejimində API eyni origin-dən (`kadrohr.com/api/...`) cookie ilə açılmalı, ya da Pətək sessiyanın token-ini
-  istifadə etməyi öyrənməlidir. Qərara qədər bu yoxlama 401 görə bilər.
-- [ ] Məzuniyyəti kim təsdiqləyə bilər (`leave.approve`)? Kampaniya IT və HR menecerlərinin yarışını fərz edir; icazə
-  yalnız departament rəhbərindədirsə yarış aktorları dəyişməlidir.
-- [ ] `/test/announcements/{id}` və `/test/leave-requests/{id}` cavab formaları (`title`, `status: APPROVED`) test
-  API yazılanda təsdiqlənməlidir.
+- [ ] `http_status` yoxlaması agentin cookie-ləri ilə hədəf origin-ə gedir; access token-i JS-də saxlayıb `Authorization`
+  başlığı ilə ayrı API hostuna göndərən saytda bu yoxlama 401 görə bilər. Həll: test rejimində API-nin eyni origin-dən
+  cookie ilə açılması, ya da Pətəkin sessiyanın token-ini istifadə etməyi öyrənməsi.
 
 **Sahibin əlavə qərarları (2026-09-25)**
 
 - Tester sayı məcburi deyil və limit yoxdur: maşın güclüdürsə 100 və ya 500 tester də ola bilər. `petek capacity` maşının götürə biləcəyi maksimumu **tövsiyə edir**, heç vaxt qadağan etmir; `run` tövsiyədən çox tester istənəndə yalnız xəbərdarlıq verir.
 - Brauzer dialoqları (`alert`/`confirm`/`prompt`/`beforeunload`) qəbul edilir və sübut kimi yazılır (növ, mətn, vaxt); agent onları növbəti addımda görür.
-- kadrohr.com hələ müştərisi olmayan, buraxılışdan əvvəlki hədəfdir: TargetPolicy qalır, `.env.example`-da `PETEK_ALLOW_PRODUCTION=true` (sayt canlıya çıxanda `false` edilməlidir).
+- Müştərisi olmayan, buraxılışdan əvvəlki sayt production host kimi test oluna bilər: TargetPolicy qalır, sahib `PETEK_ALLOW_PRODUCTION=true`-nu açıq verir (sayt canlıya çıxanda `false` edilməlidir).
 
 ## MVP-nin uğur meyarları
 
 Aşağıdakıların hamısı işarələnəndə MVP bitmiş sayılır və Faza 6-ya keçilir.
 
-- [ ] `petek run scenarios/kadrohr.yaml` tək əmrlə, insan müdaxiləsi olmadan sona çatır
+- [ ] Test rejimli real saytda `petek run scenarios/<sayt>.yaml` tək əmrlə, insan müdaxiləsi olmadan sona çatır
 - [ ] 30 agentin ən azı 28-i qeydiyyat + OTP + login mərhələsini keçir; qalanların səbəbi hesabatdadır
 - [ ] Hər agent login sonrası öz adını görür (izolyasiya sübutu)
 - [ ] Elan 29 alandan ən azı 28-inə çatır, gecikmələr ölçülüb yazılır

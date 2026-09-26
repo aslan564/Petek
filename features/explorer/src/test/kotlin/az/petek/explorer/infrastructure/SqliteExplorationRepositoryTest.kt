@@ -99,7 +99,7 @@ class SqliteExplorationRepositoryTest {
             FindingId("fnd_1"),
             FindingKind.BROKEN_LINK,
             Severity.MEDIUM,
-            "https://kadro.test/old",
+            "https://portal.test/old",
             "404",
             "anonymous",
             listOf(ArtifactId("art_1")),
@@ -125,7 +125,7 @@ class SqliteExplorationRepositoryTest {
         withRepository { repository ->
             repository.create(record(ExplorationId("exp_1"), startedAt = at))
             repository.create(record(ExplorationId("exp_2"), URI("https://other.test"), at.plusSeconds(10)))
-            repository.create(record(ExplorationId("exp_3"), URI("https://KADRO.test/"), at.plusSeconds(20)))
+            repository.create(record(ExplorationId("exp_3"), URI("https://PORTAL.test/"), at.plusSeconds(20)))
 
             repository.list().map { it.id.value } shouldContainExactly listOf("exp_3", "exp_2", "exp_1")
             repository.list(Models.TARGET).map { it.id.value } shouldContainExactly listOf("exp_3", "exp_1")
@@ -136,7 +136,7 @@ class SqliteExplorationRepositoryTest {
     fun `a full site model survives the round trip and versions are unique per target`() =
         withRepository { repository ->
             val v1 =
-                Models.kadro(1).copy(
+                Models.portal(1).copy(
                     createdAt = at,
                     unknowns = listOf(Unknown("u1", "Kim görür?", "trial", "tickets", Provenance.INFERRED, listOf(ArtifactId("art_9")))),
                     realtime =
@@ -152,19 +152,19 @@ class SqliteExplorationRepositoryTest {
                         ),
                 )
             repository.saveModel(v1)
-            val v2 = Models.kadro(2).copy(explorationId = ExplorationId("exp_2"), partial = true)
+            val v2 = Models.portal(2).copy(explorationId = ExplorationId("exp_2"), partial = true)
             repository.saveModel(v2)
 
             repository.model(id) shouldBe v1
             repository.model(Models.TARGET, 1) shouldBe v1
-            repository.model(URI("https://kadro.test/"), 2)!!.explorationId shouldBe ExplorationId("exp_2")
+            repository.model(URI("https://portal.test/"), 2)!!.explorationId shouldBe ExplorationId("exp_2")
             repository.latestVersion(Models.TARGET) shouldBe 2
             repository.latestModel(Models.TARGET) shouldBe v2
             repository.latestModel(URI("https://nothing.test")).shouldBeNull()
             repository.latestVersion(URI("https://nothing.test")) shouldBe 0
             repository.versions(Models.TARGET) shouldContainExactly listOf(1, 2)
-            shouldThrow<IllegalArgumentException> { repository.saveModel(Models.kadro(2).copy(explorationId = ExplorationId("exp_3"))) }
-            shouldThrow<IllegalArgumentException> { repository.saveModel(Models.kadro(5).copy(explorationId = id)) }
+            shouldThrow<IllegalArgumentException> { repository.saveModel(Models.portal(2).copy(explorationId = ExplorationId("exp_3"))) }
+            shouldThrow<IllegalArgumentException> { repository.saveModel(Models.portal(5).copy(explorationId = id)) }
         }
 
     @Test
@@ -187,7 +187,7 @@ class SqliteExplorationRepositoryTest {
                     id,
                     1,
                     Models.TARGET,
-                    "explorer-kadro-v1",
+                    "explorer-portal-v1",
                     "campaign:\n  name: \"x\"\n",
                     listOf(CoveredIdea(idea, listOf("ticket-approve-race"))),
                     listOf(SkippedIdea(idea.copy(pattern = TestPattern.BOUNDARY), "not observed")),
@@ -212,7 +212,7 @@ class SqliteExplorationRepositoryTest {
     @Test
     fun `every kind of event is stored, replayed in order and numbered without duplicates`() =
         withRepository { repository ->
-            val model = Models.kadro()
+            val model = Models.portal()
 
             fun header(seq: Long) = EventHeader(id, seq, at.plusMillis(seq))
             val events =
@@ -223,14 +223,14 @@ class SqliteExplorationRepositoryTest {
                     ExplorationEvent.PageVisited(
                         header(4),
                         "anonymous",
-                        "https://kadro.test/login",
+                        "https://portal.test/login",
                         "/login",
                         "Daxil ol",
                         200,
                         120,
                         ArtifactId("art_1"),
                     ),
-                    ExplorationEvent.PageVisited(header(5), "anonymous", "https://kadro.test/x", "/x", "X", null, null, null),
+                    ExplorationEvent.PageVisited(header(5), "anonymous", "https://portal.test/x", "/x", "X", null, null, null),
                     ExplorationEvent.ActionDiscovered(header(6), model.actions.first { it.trial != null }),
                     ExplorationEvent.FindingRecorded(header(7), finding),
                     ExplorationEvent.UnknownRaised(header(8), Unknown("u1", "Q?", "", null, Provenance.OBSERVED, emptyList())),

@@ -42,11 +42,11 @@ class CompareExplorationsUseCaseTest {
     fun `the latest diff compares the two newest versions of the target`() =
         runTest {
             compare.latest(Models.TARGET).shouldBeNull()
-            repository.saveModel(Models.kadro(1))
+            repository.saveModel(Models.portal(1))
             compare.latest(Models.TARGET).shouldBeNull()
-            val v2 = Models.kadro(2)
+            val v2 = Models.portal(2)
             repository.saveModel(v2.copy(pages = v2.pages.filter { it.urlPattern != "/announcements" }))
-            repository.saveModel(Models.kadro(3))
+            repository.saveModel(Models.portal(3))
 
             val diff = compare.latest(Models.TARGET).shouldNotBeNull()
 
@@ -60,11 +60,11 @@ class CompareExplorationsUseCaseTest {
     @Test
     fun `partial models of unfinished explorations are left out of the latest diff`() =
         runTest {
-            repository.saveModel(Models.kadro(1))
-            val v2 = Models.kadro(2)
+            repository.saveModel(Models.portal(1))
+            val v2 = Models.portal(2)
             repository.saveModel(v2.copy(pages = v2.pages.take(1), partial = true))
             compare.latest(Models.TARGET).shouldBeNull()
-            repository.saveModel(Models.kadro(3))
+            repository.saveModel(Models.portal(3))
 
             val diff = compare.latest(Models.TARGET).shouldNotBeNull()
 
@@ -75,9 +75,9 @@ class CompareExplorationsUseCaseTest {
 }
 
 class ReadOnlyBrowserSessionTest {
-    private val site = FakeSite(URI("https://kadro.test"))
+    private val site = FakeSite(URI("https://portal.test"))
     private val inner = site.session()
-    private val session = ReadOnlyBrowserSession(inner, SiteOrigin.of(URI("https://kadro.test")))
+    private val session = ReadOnlyBrowserSession(inner, SiteOrigin.of(URI("https://portal.test")))
 
     @Test
     fun `looking is allowed on the target's origin`() =
@@ -85,11 +85,11 @@ class ReadOnlyBrowserSessionTest {
             site.page("/tickets", "T")
 
             session.navigate("/tickets")
-            session.navigate("https://kadro.test/tickets")
+            session.navigate("https://portal.test/tickets")
             session.request("GET", "/tickets").status shouldBe 200
             session.snapshot().title shouldBe "T"
 
-            inner.actions shouldContainExactly listOf("navigate /tickets", "navigate https://kadro.test/tickets", "request GET /tickets")
+            inner.actions shouldContainExactly listOf("navigate /tickets", "navigate https://portal.test/tickets", "request GET /tickets")
         }
 
     @Test
@@ -109,7 +109,7 @@ class ReadOnlyBrowserSessionTest {
                     { session.request("GET", "https://other.test/x") },
                     { session.navigate("https://other.test/") },
                     { session.navigate("//other.test/x") },
-                    { session.navigate("http://kadro.test/") },
+                    { session.navigate("http://portal.test/") },
                     { session.close() },
                 )
 

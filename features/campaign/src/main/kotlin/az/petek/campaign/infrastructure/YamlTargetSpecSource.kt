@@ -34,16 +34,16 @@ import java.nio.file.Path
  *
  * ```yaml
  * target:
- *   name: kadrohr
- *   url: https://staging.kadrohr.com
- *   api_url: https://api.staging.kadrohr.com
- *   production_hosts: [kadrohr.com, www.kadrohr.com]
- *   mail: {source: test-api, domain: test.kadrohr.com}
- *   test_api: {token: '${PETEK_TEST_TOKEN_KADROHR}'}   # or {mode: none}; paths: {otp: /qa/otp/{phone}, ...}
+ *   name: my-portal
+ *   url: https://staging.portal.example
+ *   api_url: https://api.staging.portal.example
+ *   production_hosts: [portal.example, www.portal.example]
+ *   mail: {source: test-api, domain: test.portal.example}
+ *   test_api: {token: '${PETEK_TEST_TOKEN_PORTAL}'}   # or {mode: none}; paths: {otp: /qa/otp/{phone}, ...}
  *   sign_in: [test_company, own_accounts, self_register, anonymous]
  *   accounts:
- *     - {role: admin, email: owner@example.com, password: '${PETEK_ACC_KADROHR_ADMIN}'}
- *   profile: scenarios/kadrohr.yaml
+ *     - {role: admin, email: owner@example.com, password: '${PETEK_ACC_PORTAL_ADMIN}'}
+ *   profile: docs/examples/company-portal.yaml
  *   tenant: company        # or none: a site without companies (drafts sign testers up instead of seeding one)
  * ```
  *

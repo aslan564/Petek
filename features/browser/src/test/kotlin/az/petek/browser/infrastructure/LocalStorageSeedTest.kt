@@ -77,32 +77,32 @@ class LocalStorageSeedTest {
 
     @Test
     fun `the page's first script already reads the seeded values`() =
-        withSession(mapOf("kadro:lang" to "az", "kadro:domain_dialog_dismissed" to "1")) { session ->
+        withSession(mapOf("portal:lang" to "az", "portal:domain_dialog_dismissed" to "1")) { session ->
             session.navigate("/storage")
 
-            session.readText("#seen") shouldBe "kadro:lang=az; kadro:domain_dialog_dismissed=1"
+            session.readText("#seen") shouldBe "portal:lang=az; portal:domain_dialog_dismissed=1"
         }
 
     @Test
     fun `values the page changed are seeded again on the next page load`() =
-        withSession(mapOf("kadro:lang" to "az")) { session ->
+        withSession(mapOf("portal:lang" to "az")) { session ->
             session.navigate("/storage")
             session.navigate("/storage")
 
-            session.readText("#seen")!! shouldContain "kadro:lang=az"
+            session.readText("#seen")!! shouldContain "portal:lang=az"
         }
 
     @Test
     fun `another origin does not receive the target's values`() =
-        withSession(mapOf("kadro:lang" to "az")) { session ->
+        withSession(mapOf("portal:lang" to "az")) { session ->
             session.navigate("http://localhost:$port/storage")
 
-            session.readText("#seen") shouldBe "kadro:lang=null; kadro:domain_dialog_dismissed=null"
+            session.readText("#seen") shouldBe "portal:lang=null; portal:domain_dialog_dismissed=null"
         }
 
     @Test
     fun `values with quotes, backslashes and line breaks arrive unchanged`() =
-        withSession(mapOf("kadro:lang" to "a\"b\\c\nd")) { session ->
+        withSession(mapOf("portal:lang" to "a\"b\\c\nd")) { session ->
             session.navigate("/storage")
 
             session.readText("#raw") shouldBe "\"a\\\"b\\\\c\\nd\""
@@ -113,14 +113,14 @@ class LocalStorageSeedTest {
         withSession(emptyMap()) { session ->
             session.navigate("/storage")
 
-            session.readText("#seen") shouldBe "kadro:lang=null; kadro:domain_dialog_dismissed=null"
+            session.readText("#seen") shouldBe "portal:lang=null; portal:domain_dialog_dismissed=null"
         }
 
     @Test
     fun `the script is only built when there is something to seed and names the target origin`() {
         LocalStorageSeed.script(SessionOptions("a", baseUrl)).shouldBeNull()
-        val script = LocalStorageSeed.script(SessionOptions("a", URI("https://KadroHR.com:443/app"), localStorage = mapOf("k" to "v")))!!
-        script shouldContain "location.origin !== \"https://kadrohr.com\""
+        val script = LocalStorageSeed.script(SessionOptions("a", URI("https://Portal.example:443/app"), localStorage = mapOf("k" to "v")))!!
+        script shouldContain "location.origin !== \"https://portal.example\""
         script shouldContain "[\"k\", \"v\"]"
         script shouldNotContain "443"
     }
@@ -145,10 +145,10 @@ class LocalStorageSeedTest {
             <html><head><title>Storage</title></head><body>
             <p id="seen"></p><p id="raw"></p>
             <script>
-              const keys = ['kadro:lang', 'kadro:domain_dialog_dismissed'];
+              const keys = ['portal:lang', 'portal:domain_dialog_dismissed'];
               document.getElementById('seen').textContent = keys.map(k => k + '=' + localStorage.getItem(k)).join('; ');
-              document.getElementById('raw').textContent = JSON.stringify(localStorage.getItem('kadro:lang'));
-              localStorage.setItem('kadro:lang', 'en');
+              document.getElementById('raw').textContent = JSON.stringify(localStorage.getItem('portal:lang'));
+              localStorage.setItem('portal:lang', 'en');
             </script>
             </body></html>
             """.trimIndent()

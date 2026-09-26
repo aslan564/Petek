@@ -96,7 +96,7 @@ class PanelHttpTest {
             post("/api/exploration", instructions).statusCode() shouldBe 202
             panel.exploration { it.status != ExplorationStatus.RUNNING && it.draftYaml != null }
             json(get("/api/exploration")).jsonObject["status"]!!.jsonPrimitive.content shouldBe "FINISHED"
-            post("/api/exploration", instructions.replace("http://127.0.0.1:9", "https://kadrohr.com")).let {
+            post("/api/exploration", instructions.replace("http://127.0.0.1:9", "https://portal.example")).let {
                 it.statusCode() shouldBe 400
                 it.body() shouldContain "istehsal ünvanıdır"
             }
@@ -120,7 +120,7 @@ class PanelHttpTest {
             history["scenarioId"]!!.jsonPrimitive.content shouldBe approved
             history["reportUrl"]!!.jsonPrimitive.content shouldBe "/runs/${runId.value}/report/"
             get("/runs/${runId.value}/report/").statusCode() shouldBe 200
-            post("/api/runs", """{"scenarioId":"$approved","target":"kadrohr.com"}""").statusCode() shouldBe 400
+            post("/api/runs", """{"scenarioId":"$approved","target":"portal.example"}""").statusCode() shouldBe 400
             post("/api/runs/cancel").body() shouldBe """{"cancelled":false}"""
         }
 

@@ -49,7 +49,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * The explorer against the fake KadroHR (testing/fake-target) in a real Chromium, with a scripted LLM: the anonymous
+ * The explorer against the fake target (testing/fake-target) in a real Chromium, with a scripted LLM: the anonymous
  * pass must find the sign-in and the two sign-up pages with their forms, and change nothing on the site.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -89,7 +89,7 @@ class ExplorerFakeTargetIntegrationTest {
     }
 
     @Test
-    fun `the anonymous pass learns the fake KadroHR sign-in and sign-up pages and their forms without changing anything`() =
+    fun `the anonymous pass learns the fake target sign-in and sign-up pages and their forms without changing anything`() =
         runBlocking<Unit> {
             val sessions = engine.start(BrowserEngineConfig())
             SqliteDatabase.open(dir.resolve("petek.db")).use { db ->

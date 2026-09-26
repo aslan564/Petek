@@ -45,7 +45,7 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Proof that testers cannot reach into each other's environment, at the size of a real campaign and far beyond
  * (docs/requirements/R01, R02, R12). The real orchestrator, step executor, event bus, actor resolver and shared state
- * run N agents through a KadroHR-shaped campaign; only the browser, the agents' decisions and the target are fakes, so
+ * run N agents through a portal-shaped campaign; only the browser, the agents' decisions and the target are fakes, so
  * what is checked is the harness's own behaviour:
  *
  * - every agent gets its own identity, session and runtime; no two share a session object;

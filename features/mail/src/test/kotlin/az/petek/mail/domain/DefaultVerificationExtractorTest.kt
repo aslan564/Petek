@@ -106,7 +106,7 @@ class DefaultVerificationExtractorTest {
             id: String = "m1",
         ) = MailMessage(
             id = id,
-            to = listOf("eli.k7x2.a07@test.kadrohr.com"),
+            to = listOf("eli.k7x2.a07@test.portal.example"),
             subject = subject,
             receivedAt = Instant.parse("2026-09-25T10:00:00Z"),
             text = text,
@@ -129,13 +129,13 @@ class DefaultVerificationExtractorTest {
                     "Azerbaijani text mail",
                     "482913",
                     subject = "Təsdiq kodu",
-                    text = "Salam Əli,\n\nSizin təsdiq kodunuz: 482913\nKod 10 dəqiqə ərzində etibarlıdır.\n\n© 2026 KadroHR",
+                    text = "Salam Əli,\n\nSizin təsdiq kodunuz: 482913\nKod 10 dəqiqə ərzində etibarlıdır.\n\n© 2026 Demo Portal",
                 ),
                 case(
                     "English text mail",
                     "739201",
                     subject = "Your code",
-                    text = "Hi,\nYour verification code is 739201. It expires in 15 minutes.\nKadroHR, 2026",
+                    text = "Hi,\nYour verification code is 739201. It expires in 15 minutes.\nDemo Portal, 2026",
                 ),
                 case(
                     "HTML-only mail with head, style and a second number",
@@ -168,8 +168,8 @@ class DefaultVerificationExtractorTest {
                     "digits inside links and e-mail addresses are not codes",
                     null,
                     text =
-                        "Kodu buradan daxil edin: https://staging.kadrohr.com/verify/123456?u=77889900" +
-                            " və ya yazın: user12345@test.kadrohr.com",
+                        "Kodu buradan daxil edin: https://staging.portal.example/verify/123456?u=77889900" +
+                            " və ya yazın: user12345@test.portal.example",
                 ),
                 case("without a keyword a 6-digit number is preferred", "567890", text = "Ref 1234 and 567890"),
                 case("an Azerbaijani suffix after a hyphen is allowed", "482913", text = "Kodunuz 482913-dür."),
@@ -202,23 +202,23 @@ class DefaultVerificationExtractorTest {
             listOf(
                 case(
                     "HTML anchor with an entity-encoded query",
-                    "https://staging.kadrohr.com/invite/tok-123?x=1&y=2",
+                    "https://staging.portal.example/invite/tok-123?x=1&y=2",
                     html =
                         "<p>Sizi dəvət edirik</p>" +
-                            "<a class=\"btn\" href=\"https://staging.kadrohr.com/invite/tok-123?x=1&amp;y=2\">Qəbul et</a>",
+                            "<a class=\"btn\" href=\"https://staging.portal.example/invite/tok-123?x=1&amp;y=2\">Qəbul et</a>",
                 ),
                 case(
                     "the first matching anchor wins and unrelated anchors are skipped",
-                    "https://staging.kadrohr.com/verify?t=abc",
+                    "https://staging.portal.example/verify?t=abc",
                     html =
-                        "<a href=\"https://kadrohr.com/\">Ana səhifə</a> " +
-                            "<a href='https://staging.kadrohr.com/verify?t=abc'>Təsdiqlə</a> " +
-                            "<a href=\"https://staging.kadrohr.com/confirm?t=zzz\">x</a>",
+                        "<a href=\"https://portal.example/\">Ana səhifə</a> " +
+                            "<a href='https://staging.portal.example/verify?t=abc'>Təsdiqlə</a> " +
+                            "<a href=\"https://staging.portal.example/confirm?t=zzz\">x</a>",
                 ),
                 case(
                     "text URL followed by sentence punctuation",
-                    "https://staging.kadrohr.com/invite/abc123",
-                    text = "Dəvəti qəbul etmək üçün: https://staging.kadrohr.com/invite/abc123.",
+                    "https://staging.portal.example/invite/abc123",
+                    text = "Dəvəti qəbul etmək üçün: https://staging.portal.example/invite/abc123.",
                 ),
                 case(
                     "an HTML anchor is preferred over a text URL",
@@ -229,7 +229,7 @@ class DefaultVerificationExtractorTest {
                 case(
                     "links that are not about verification are ignored",
                     null,
-                    text = "https://kadrohr.com/about https://kadrohr.com/pricing",
+                    text = "https://portal.example/about https://portal.example/pricing",
                 ),
                 case(
                     "a non-ASCII dəvət path is percent-encoded",

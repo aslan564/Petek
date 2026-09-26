@@ -32,7 +32,7 @@ class FileSystemScenarioFilesTest {
     @Test
     fun `text is written and read back byte exact`() =
         runTest {
-            val path = dir.resolve("nested/deeper/kadrohr.yaml")
+            val path = dir.resolve("nested/deeper/portal.yaml")
             val text = "\uFEFFcampaign:\r\n  departments: [Satış, Əməliyyat]\n"
 
             files.write(path, text, overwrite = false)
@@ -44,7 +44,7 @@ class FileSystemScenarioFilesTest {
     @Test
     fun `an existing file is never replaced without overwrite`() =
         runTest {
-            val path = dir.resolve("kadrohr.yaml")
+            val path = dir.resolve("portal.yaml")
             Files.writeString(path, "original\n")
 
             val error = shouldThrow<ScenarioFileException> { files.write(path, "new\n", overwrite = false) }
@@ -56,13 +56,13 @@ class FileSystemScenarioFilesTest {
     @Test
     fun `with overwrite the file is replaced and no temporary file is left behind`() =
         runTest {
-            val path = dir.resolve("kadrohr.yaml")
+            val path = dir.resolve("portal.yaml")
             Files.writeString(path, "original\n")
 
             files.write(path, "new\n", overwrite = true)
 
             Files.readString(path) shouldBe "new\n"
-            dir.listDirectoryEntries().map { it.fileName.toString() } shouldBe listOf("kadrohr.yaml")
+            dir.listDirectoryEntries().map { it.fileName.toString() } shouldBe listOf("portal.yaml")
         }
 
     @Test

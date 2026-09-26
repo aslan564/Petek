@@ -27,7 +27,7 @@ class MutationRecorderTest {
     private val start = at(0)
 
     private fun recorder(
-        target: String = "https://staging.kadrohr.test",
+        target: String = "https://staging.portal.test",
         capacity: Int = 500,
     ) = MutationRecorder(URI(target), capacity)
 
@@ -35,10 +35,10 @@ class MutationRecorderTest {
     fun `mutating requests to the target keep method path status and time`() {
         val recorder = recorder()
 
-        recorder.responded("POST", "https://staging.kadrohr.test/tickets/t2/approve", 303, at(5))
-        recorder.responded("put", "https://staging.kadrohr.test/api/tickets/t2", 200, at(6))
-        recorder.responded("PATCH", "https://staging.kadrohr.test/api/tickets/t2", 422, at(7))
-        recorder.responded("DELETE", "https://staging.kadrohr.test/api/tickets/t2", 409, at(8))
+        recorder.responded("POST", "https://staging.portal.test/tickets/t2/approve", 303, at(5))
+        recorder.responded("put", "https://staging.portal.test/api/tickets/t2", 200, at(6))
+        recorder.responded("PATCH", "https://staging.portal.test/api/tickets/t2", 422, at(7))
+        recorder.responded("DELETE", "https://staging.portal.test/api/tickets/t2", 409, at(8))
 
         recorder.since(start) shouldContainExactly
             listOf(
@@ -53,7 +53,7 @@ class MutationRecorderTest {
     fun `reads and other methods are not mutations`() {
         val recorder = recorder()
 
-        listOf("GET", "HEAD", "OPTIONS").forEach { recorder.responded(it, "https://staging.kadrohr.test/tickets", 200, at(1)) }
+        listOf("GET", "HEAD", "OPTIONS").forEach { recorder.responded(it, "https://staging.portal.test/tickets", 200, at(1)) }
 
         recorder.since(start).shouldBeEmpty()
     }
@@ -64,9 +64,9 @@ class MutationRecorderTest {
 
         listOf(
             "https://analytics.example.test/collect",
-            "https://api.staging.kadrohr.test/tickets/t2/approve",
-            "http://staging.kadrohr.test/tickets/t2/approve",
-            "https://staging.kadrohr.test:8443/tickets/t2/approve",
+            "https://api.staging.portal.test/tickets/t2/approve",
+            "http://staging.portal.test/tickets/t2/approve",
+            "https://staging.portal.test:8443/tickets/t2/approve",
             "not a url at all",
             "/relative/only",
         ).forEach { recorder.responded("POST", it, 200, at(1)) }
@@ -80,8 +80,8 @@ class MutationRecorderTest {
 
         recorder.responded("POST", "http://127.0.0.1:8080/a", 201, at(1))
         recorder.responded("POST", "HTTP://127.0.0.1:8080/b", 201, at(2))
-        val https = recorder("https://Kadrohr.test")
-        https.responded("POST", "https://kadrohr.test:443/c", 200, at(3))
+        val https = recorder("https://Portal.test")
+        https.responded("POST", "https://portal.test:443/c", 200, at(3))
 
         recorder.since(start).map { it.path } shouldContainExactly listOf("/a", "/b")
         https.since(start).map { it.path } shouldContainExactly listOf("/c")
@@ -91,8 +91,8 @@ class MutationRecorderTest {
     fun `query strings and fragments never reach the recorded path`() {
         val recorder = recorder()
 
-        recorder.responded("POST", "https://staging.kadrohr.test/join?token=secret#top", 303, at(1))
-        recorder.responded("POST", "https://staging.kadrohr.test?x=1", 200, at(2))
+        recorder.responded("POST", "https://staging.portal.test/join?token=secret#top", 303, at(1))
+        recorder.responded("POST", "https://staging.portal.test?x=1", 200, at(2))
 
         recorder.since(start).map { it.path } shouldContainExactly listOf("/join", "/")
     }
@@ -100,7 +100,7 @@ class MutationRecorderTest {
     @Test
     fun `since keeps the answers seen at or after the given harness time`() {
         val recorder = recorder()
-        (1L..4L).forEach { recorder.responded("POST", "https://staging.kadrohr.test/r$it", 200, at(it * 10)) }
+        (1L..4L).forEach { recorder.responded("POST", "https://staging.portal.test/r$it", 200, at(it * 10)) }
 
         recorder.since(at(20)).map { it.path } shouldContainExactly listOf("/r2", "/r3", "/r4")
         recorder.since(at(41)).shouldBeEmpty()
@@ -110,7 +110,7 @@ class MutationRecorderTest {
     @Test
     fun `only the latest mutations are kept`() {
         val recorder = recorder(capacity = 3)
-        (1L..5L).forEach { recorder.responded("POST", "https://staging.kadrohr.test/r$it", 200, at(it)) }
+        (1L..5L).forEach { recorder.responded("POST", "https://staging.portal.test/r$it", 200, at(it)) }
 
         recorder.since(start).map { it.path } shouldContainExactly listOf("/r3", "/r4", "/r5")
     }
@@ -119,7 +119,7 @@ class MutationRecorderTest {
     fun `a target without a usable origin records nothing`() {
         val recorder = recorder("/relative")
 
-        recorder.responded("POST", "https://staging.kadrohr.test/x", 200, at(1))
+        recorder.responded("POST", "https://staging.portal.test/x", 200, at(1))
 
         recorder.since(start).shouldBeEmpty()
     }

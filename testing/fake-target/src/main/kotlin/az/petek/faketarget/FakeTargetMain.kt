@@ -14,10 +14,10 @@ package az.petek.faketarget
 import java.util.concurrent.CountDownLatch
 
 /**
- * `./gradlew :testing:fake-target:run`: a local fake KadroHR for demos and manual runs of Pətək.
+ * `./gradlew :testing:fake-target:run`: a local fake target for demos and manual runs of Pətək.
  *
  * Environment (all optional): `PETEK_TEST_TOKEN` (default `dev-token`), `PETEK_MAIL_DOMAIN` (default
- * `test.kadrohr.com`), `FAKE_TARGET_PORT` (18080), `FAKE_TARGET_MAIL_PORT` (18025; different from Mailpit's 8025 so both can run),
+ * `test.portal.example`), `FAKE_TARGET_PORT` (18080), `FAKE_TARGET_MAIL_PORT` (18025; different from Mailpit's 8025 so both can run),
  * `FAKE_TARGET_PHONE_OTP` (true), `FAKE_TARGET_NOTIFICATION_DELAY_MS` (0), `FAKE_TARGET_BUGS`
  * (comma-separated [FakeBug] names) and `FAKE_TARGET_RACE_WINDOW_MS` (2000; widen it when LLM-driven agents should
  * hit [FakeBug.RACE_DOUBLE_APPROVE], since their clicks are seconds apart).
@@ -36,7 +36,7 @@ fun main() {
     )
     println(
         """
-        |Fake KadroHR is running.
+        |Fake target is running.
         |  Web:          http://localhost:${server.baseUrl.port}
         |  Mailpit API:  http://localhost:${server.mailpitUrl.port}
         |  X-Test-Token: ${options.config.testToken}

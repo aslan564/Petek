@@ -1,6 +1,6 @@
 # Target contract
 
-What a target site offers so Pətək can test it deterministically. KadroHR is the first target. The fake target
+What a target site offers so Pətək can test it deterministically. The fake target
 (`testing/fake-target`) implements exactly this contract and is used by the e2e tests
 (`scenarios/contract-demo.yaml`). Every path and selector can be overridden per campaign under `target_profile:`
 (`paths`, `selectors`); the defaults below come from `TargetProfile.DEFAULT_PATHS` / `DEFAULT_SELECTORS`.
@@ -8,7 +8,7 @@ What a target site offers so Pətək can test it deterministically. KadroHR is t
 The contract is the default, not a requirement: a site whose flows differ describes them under
 `target_profile.flows` (sign-up, join by invitation or company code, login, identity check; docs/ARCHITECTURE.md
 "Target flows"), with `local_storage`, `dismiss` for overlays and `api_prefix` for its regular API. The flows of §2
-below are `TargetProfile.DEFAULT_FLOWS`. `scenarios/kadrohr.yaml` describes the real KadroHR this way.
+below are `TargetProfile.DEFAULT_FLOWS`. `docs/examples/company-portal.yaml` describes such a site this way.
 
 ## 1. Test mode (staging only)
 
@@ -78,12 +78,12 @@ pattern (`set-password\?token=`) when it does not contain one of the hints above
 `http_status` assertions call the target's normal API with the agent's own session cookies. Example:
 `POST /api/tickets/{id}/approve` returns `200` for a manager and `403` for an employee. Approving an already decided
 ticket returns `409`. Only one of two concurrent approvals may succeed. The prefix `/api` is
-`target_profile.api_prefix` (KadroHR: `/api/v1`); campaign paths may write it as `{api}` (`{api}/tickets/{last_id}/approve`).
+`target_profile.api_prefix` (e.g. `/api/v1`); campaign paths may write it as `{api}` (`{api}/tickets/{last_id}/approve`).
 
-## 6. Status of KadroHR
+## 6. A site that differs from the contract
 
-The KadroHR side (test mode, test API, `data-testid`s) lives in its own repository; docs/KADROHR_READINESS.md lists
-what it needs. Its real flows differ from §2, so `scenarios/kadrohr.yaml` describes them as flows over its current
-markup; `scenarios/contract-demo.yaml` runs against the fake target (`./gradlew :testing:fake-target:run`).
-Against a site without the test API, oracle assertions are reported as `SKIPPED`, and flows that need Mailpit or
-`/test/otp` cannot finish.
+A real site adds its test mode, test API and `data-testid`s in its own code, as far as its owner wants. Where its
+flows differ from §2, the campaign describes them as flows over its current markup (`docs/examples/company-portal.yaml`);
+`scenarios/contract-demo.yaml` runs against the fake target (`./gradlew :testing:fake-target:run`). Against a site
+without the test API, oracle assertions are reported as `SKIPPED`, and flows that need Mailpit or `/test/otp` cannot
+finish (`docs/examples/company-portal-anonymous.yaml` shows what testers can do there).

@@ -98,7 +98,7 @@ class LiveNotificationsTest {
     fun `deleting the company ends its members' open streams`() =
         runBlocking<Unit> {
             val team = fake.team()
-            val other = fake.registerOwner(email = "other@test.kadrohr.com", company = "Qalan MMC")
+            val other = fake.registerOwner(email = "other@test.portal.example", company = "Qalan MMC")
             LiveStream(team.itEmployee.browser).use { member ->
                 LiveStream(other.browser).use { outsider ->
                     member.awaitConnected()

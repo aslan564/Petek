@@ -96,7 +96,7 @@ class MailpitMailboxTest {
     @Test
     fun `the recipient is compared case-insensitively and may be one of several`() {
         val mailpit = FakeMailpit()
-        mailpit.add(stored("m1", to = listOf("someone@test.kadrohr.com", ELI.uppercase())))
+        mailpit.add(stored("m1", to = listOf("someone@test.portal.example", ELI.uppercase())))
         val mailbox = mailboxFor(serve(mailpit))
 
         runBlocking { mailbox.findLatest(" $ELI ", SINCE) }?.id shouldBe "m1"
@@ -423,7 +423,7 @@ class MailpitMailboxTest {
     }
 
     private companion object {
-        const val ELI = "eli.k7x2.a07@test.kadrohr.com"
+        const val ELI = "eli.k7x2.a07@test.portal.example"
         val SINCE: Instant = Instant.parse("2026-09-25T10:00:00Z")
 
         fun stored(

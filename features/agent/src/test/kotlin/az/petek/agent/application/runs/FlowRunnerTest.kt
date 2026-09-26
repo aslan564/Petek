@@ -63,7 +63,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Flows of a site that is not the contract, modelled on the real KadroHR (docs/KADROHR_READINESS.md): login with a
+ * Flows of a site that is not the contract, modelled on the company portal (docs/TARGET_CONTRACT.md): login with a
  * company code, sign-up confirmed by an e-mail link, invitations that set a password, overlays, interstitial pages.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -104,7 +104,7 @@ class FlowRunnerTest {
     @Test
     fun `a custom login types the company code the admin published and waits for the signed-in user`() =
         runTest {
-            val (fixture, _) = fixture(employee, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, _) = fixture(employee, FlowNames.LOGIN to PORTAL_LOGIN)
             fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
 
             val outcome = fixture.run("login")
@@ -128,7 +128,7 @@ class FlowRunnerTest {
     @Test
     fun `a refused custom login reports the site's alert under the flow's reason and keeps a screenshot of it`() =
         runTest {
-            val (fixture, _) = fixture(employee, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, _) = fixture(employee, FlowNames.LOGIN to PORTAL_LOGIN)
             fixture.shared.put(SharedRunState.COMPANY_CODE, "WRONG123")
 
             val outcome = fixture.run("login")
@@ -144,7 +144,7 @@ class FlowRunnerTest {
     @Test
     fun `a shared value that is not published yet is awaited before it is typed`() =
         runTest {
-            val (fixture, _) = fixture(employee, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, _) = fixture(employee, FlowNames.LOGIN to PORTAL_LOGIN)
             launch {
                 delay(2.minutes)
                 fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
@@ -194,7 +194,7 @@ class FlowRunnerTest {
     @Test
     fun `overlays are dismissed before the step they would block and a vanished overlay does not fail the flow`() =
         runTest {
-            val (fixture, site) = fixture(employee, FlowNames.LOGIN to KADRO_LOGIN, dismiss = listOf("#consent-ok", "#chat-close"))
+            val (fixture, site) = fixture(employee, FlowNames.LOGIN to PORTAL_LOGIN, dismiss = listOf("#consent-ok", "#chat-close"))
             fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
             site.page("/login", LOGIN_EMAIL, LOGIN_PASSWORD, LOGIN_CODE, SUBMIT, "#consent-ok", "#chat-close")
             site.on("clickSelector #consent-ok") { fixture.browser.visibleSelectors -= "#consent-ok" }
@@ -211,9 +211,9 @@ class FlowRunnerTest {
         }
 
     @Test
-    fun `an owner on a KadroHR-like site signs up, confirms by link and signs in with the published company code`() =
+    fun `an owner on a portal-like site signs up, confirms by link and signs in with the published company code`() =
         runTest {
-            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to KADRO_SIGN_UP, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to PORTAL_SIGN_UP, FlowNames.LOGIN to PORTAL_LOGIN)
             var verified = false
             site.page(
                 "/register",
@@ -243,7 +243,7 @@ class FlowRunnerTest {
                 site.show(VERIFY_LINK)
             }
             site.on("navigate /register/verify") { site.show(if (verified) "/register/complete" else "/register/verify") }
-            fixture.verification.sendLink(owner.email, "https://kadrohr.test/help")
+            fixture.verification.sendLink(owner.email, "https://portal.test/help")
             fixture.verification.sendLink(owner.email, VERIFY_LINK)
             fixture.oracle.companies["c9"] = TestCompany("c9", "Pətək Test MMC", CODE, isTest = true)
             fixture.oracle.owners[owner.email.lowercase()] = "c9"
@@ -284,9 +284,9 @@ class FlowRunnerTest {
         }
 
     @Test
-    fun `an invited tester on a KadroHR-like site sets a password from the invitation link and then signs in`() =
+    fun `an invited tester on a portal-like site sets a password from the invitation link and then signs in`() =
         runTest {
-            val (fixture, site) = fixture(invited, FlowNames.JOIN_BY_INVITE to KADRO_INVITE, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, site) = fixture(invited, FlowNames.JOIN_BY_INVITE to PORTAL_INVITE, FlowNames.LOGIN to PORTAL_LOGIN)
             fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
             site.page("/api/v1/auth/set-password", "#password", "#confirmPassword", "#submitBtn")
             site.on("clickSelector #submitBtn") { fixture.browser.visibleTexts += "Parol uğurla təyin edildi" }
@@ -309,7 +309,7 @@ class FlowRunnerTest {
     fun `after the account_created marker a failed attempt is retried by signing in, not by joining again`() =
         runTest {
             val join = Flow(listOf(Goto("/join"), Click("#join"), AccountCreated, WaitFor(listOf("#welcome"), null, 2.seconds)))
-            val (fixture, site) = fixture(employee, FlowNames.JOIN_BY_CODE to join, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, site) = fixture(employee, FlowNames.JOIN_BY_CODE to join, FlowNames.LOGIN to PORTAL_LOGIN)
             fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
             site.page("/join", "#join")
 
@@ -355,7 +355,7 @@ class FlowRunnerTest {
     fun `a sign-up that asserted the identity with its own selector is not sent through the login flow again`() =
         runTest {
             val signUp = Flow(listOf(Goto("/register"), Click("#go"), AssertIdentity("#me")))
-            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to PORTAL_LOGIN)
             site.page("/register", "#go")
             site.page("/welcome", "#me", texts = mapOf("#me" to owner.displayName))
             site.on("clickSelector #go") { site.show("/welcome") }
@@ -373,7 +373,7 @@ class FlowRunnerTest {
     fun `a sign-up that ends signed out is signed in with the login flow and then checked`() =
         runTest {
             val signUp = Flow(listOf(Goto("/register"), Click("#go"), WaitFor(emptyList(), "Hesab yaradıldı")))
-            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, site) = fixture(owner, FlowNames.REGISTER_OWNER to signUp, FlowNames.LOGIN to PORTAL_LOGIN)
             fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
             site.page("/register", "#go")
             site.page("/done", visibleTexts = setOf("Hesab yaradıldı"))
@@ -402,10 +402,11 @@ class FlowRunnerTest {
             site.page("/tenant-login", "#tenant", "#enter")
             site.on("clickSelector #enter") { site.show("/home") }
 
-            val outcome = fixture.run("register_owner", args = mapOf("company" to "Kadro Sınaq MMC"))
+            val outcome = fixture.run("register_owner", args = mapOf("company" to "Portal Sınaq MMC"))
 
             outcome.status shouldBe ActionStatus.SUCCEEDED
-            fixture.browser.actions shouldContainAll listOf("fillSelector #company=Kadro Sınaq MMC", "fillSelector #tenant=Kadro Sınaq MMC")
+            fixture.browser.actions shouldContainAll
+                listOf("fillSelector #company=Portal Sınaq MMC", "fillSelector #tenant=Portal Sınaq MMC")
         }
 
     @Test
@@ -418,9 +419,9 @@ class FlowRunnerTest {
                         AccountCreated,
                     ),
                 )
-            val (fixture, _) = fixture(invited, FlowNames.JOIN_BY_INVITE to join, FlowNames.LOGIN to KADRO_LOGIN)
+            val (fixture, _) = fixture(invited, FlowNames.JOIN_BY_INVITE to join, FlowNames.LOGIN to PORTAL_LOGIN)
             fixture.shared.put(SharedRunState.COMPANY_CODE, CODE)
-            fixture.shared.put("last_invite", "https://api.kadrohr.test/api/v1/auth/set-password?token=someone-else")
+            fixture.shared.put("last_invite", "https://api.portal.test/api/v1/auth/set-password?token=someone-else")
             fixture.verification.sendLink(invited.email, INVITE_LINK)
 
             val outcome = fixture.run("register_and_login")
@@ -428,7 +429,7 @@ class FlowRunnerTest {
             outcome.status shouldBe ActionStatus.SUCCEEDED
             fixture.verification.calls shouldContainExactly listOf(invited.email to MailPurpose.LINK)
             // Shared values are write-once: the tester used its own link, and the value another tester published stays.
-            fixture.shared.get("last_invite") shouldBe "https://api.kadrohr.test/api/v1/auth/set-password?token=someone-else"
+            fixture.shared.get("last_invite") shouldBe "https://api.portal.test/api/v1/auth/set-password?token=someone-else"
         }
 
     @Test
@@ -468,15 +469,15 @@ class FlowRunnerTest {
                 )
             val (fixture, site) = fixture(employee, FlowNames.LOGIN to login)
             site.page("/login", "#banner", texts = mapOf("#banner" to "Salam, Cəmil! Xoş gəldiniz"))
-            fixture.verification.sendLink(employee.email, "https://kadrohr.test/docs/start")
+            fixture.verification.sendLink(employee.email, "https://portal.test/docs/start")
 
             fixture.run("login").status shouldBe ActionStatus.SUCCEEDED
 
             fixture.runtime.variables["greeting"] shouldBe "Cəmil"
             fixture.shared.get("last_greeting") shouldBe "Cəmil (a04)"
-            fixture.shared.get("manual") shouldBe "https://kadrohr.test/docs/start"
+            fixture.shared.get("manual") shouldBe "https://portal.test/docs/start"
             fixture.browser.actions.filter { it.startsWith("navigate") } shouldContainExactly
-                listOf("navigate /login", "navigate https://kadrohr.test/docs/start")
+                listOf("navigate /login", "navigate https://portal.test/docs/start")
             fixture.steps.single { it.action == "login: publish shared.last_greeting" }.detail shouldBe "\"Cəmil (a04)\""
         }
 
@@ -676,8 +677,8 @@ class FlowRunnerTest {
         const val ALERT = "role=alert"
         const val USER_NAME = "aside [aria-label=Profil] p.font-medium"
         const val HYBRID = "role=radio[name=\"Hibrid\"]"
-        const val VERIFY_LINK = "https://api.kadrohr.test/api/v1/registration/verify?token=a.b.c"
-        const val INVITE_LINK = "https://api.kadrohr.test/api/v1/auth/set-password?token=u-1"
+        const val VERIFY_LINK = "https://api.portal.test/api/v1/registration/verify?token=a.b.c"
+        const val INVITE_LINK = "https://api.portal.test/api/v1/auth/set-password?token=u-1"
 
         val SELECTORS =
             mapOf(
@@ -689,7 +690,7 @@ class FlowRunnerTest {
                 "session.user_name" to USER_NAME,
             )
 
-        val KADRO_LOGIN =
+        val PORTAL_LOGIN =
             Flow(
                 listOf(
                     Goto("login"),
@@ -707,7 +708,7 @@ class FlowRunnerTest {
                 ),
             )
 
-        val KADRO_SIGN_UP =
+        val PORTAL_SIGN_UP =
             Flow(
                 listOf(
                     Goto("register"),
@@ -730,7 +731,7 @@ class FlowRunnerTest {
                 ),
             )
 
-        val KADRO_INVITE =
+        val PORTAL_INVITE =
             Flow(
                 listOf(
                     EmailLink(LinkPurpose.INVITE, "set-password\\?token="),

@@ -17,7 +17,7 @@ import az.petek.agent.domain.SharedRunState
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.AgentTestData.sel
 import az.petek.agent.testing.RunFunctionFixture
-import az.petek.agent.testing.SimulatedKadro
+import az.petek.agent.testing.SimulatedPortal
 import az.petek.evidence.domain.StepStatus
 import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailboxException
@@ -91,7 +91,7 @@ class RegisterAndLoginRunFunctionTest {
             val fixture = RunFunctionFixture(joiner)
             launch {
                 delay(2.minutes)
-                fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+                fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             }
 
             val outcome = fixture.run("register_and_login")
@@ -99,7 +99,7 @@ class RegisterAndLoginRunFunctionTest {
             outcome.status shouldBe ActionStatus.SUCCEEDED
             outcome.summary shouldStartWith "Joined by company code and signed in."
             currentTime.toInt() shouldBeGreaterThanOrEqual 120_000
-            fixture.site.fields["join.code"] shouldBe SimulatedKadro.COMPANY_CODE
+            fixture.site.fields["join.code"] shouldBe SimulatedPortal.COMPANY_CODE
             fixture.site.fields["join.email"] shouldBe joiner.email
             fixture.site.accounts
                 .getValue(joiner.email.lowercase())
@@ -126,7 +126,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `phone verification and a landing on the login page are handled on the way in`() =
         runTest {
             val fixture = RunFunctionFixture(joiner)
-            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             fixture.site.phoneVerification = true
             fixture.site.landOnLoginAfterVerification = true
 
@@ -240,7 +240,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `a form that is never accepted fails after exactly three attempts`() =
         runTest {
             val fixture = RunFunctionFixture(joiner)
-            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             fixture.site.acceptForms = false
 
             val outcome = fixture.run("register_and_login")
@@ -256,7 +256,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `a transient browser failure is healed by the next attempt`() =
         runTest {
             val fixture = RunFunctionFixture(joiner)
-            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             var failures = 0
             fixture.browser.failOn = { action -> action == "clickSelector ${sel("join.submit")}" && failures++ == 0 }
 
@@ -328,7 +328,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `a rejected phone code fails with otp_rejected after every attempt`() =
         runTest {
             val fixture = RunFunctionFixture(joiner)
-            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             fixture.site.phoneVerification = true
             fixture.site.rejectPhoneCodes = true
 
@@ -344,7 +344,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `a phone step without a code in the test API is a registration failure`() =
         runTest {
             val fixture = RunFunctionFixture(joiner)
-            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             fixture.site.phoneVerification = true
             fixture.site.publishPhoneCodes = false
 
@@ -359,7 +359,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `an unrecognised page after verification fails the attempt and the next attempt signs in`() =
         runTest {
             val fixture = RunFunctionFixture(joiner)
-            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedKadro.COMPANY_CODE)
+            fixture.shared.put(SharedRunState.COMPANY_CODE, SimulatedPortal.COMPANY_CODE)
             fixture.site.landOnUnknownPage = true
 
             val outcome = fixture.run("register_and_login")
@@ -375,7 +375,7 @@ class RegisterAndLoginRunFunctionTest {
     fun `an expired invitation link is a registration failure`() =
         runTest {
             val fixture = RunFunctionFixture(invited)
-            fixture.shared.put(SharedRunState.inviteLink(invited.email), "${SimulatedKadro.BASE}/invite/expired")
+            fixture.shared.put(SharedRunState.inviteLink(invited.email), "${SimulatedPortal.BASE}/invite/expired")
 
             val outcome = fixture.run("register_and_login")
 

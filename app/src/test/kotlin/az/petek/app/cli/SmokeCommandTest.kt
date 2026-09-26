@@ -35,8 +35,8 @@ class SmokeCommandTest {
         FakeBrowserEngine { session, _ ->
             session.snapshotProvider = {
                 PageSnapshot(
-                    url = "https://staging.kadrohr.test/login",
-                    title = "KadroHR — Giriş",
+                    url = "https://staging.portal.test/login",
+                    title = "Demo Portal — Giriş",
                     elements =
                         listOf(
                             PageElement(1, "textbox", "E-poçt", "input", "login-email", null, true),
@@ -51,19 +51,19 @@ class SmokeCommandTest {
     @Test
     fun `smoke opens the target and reports what an agent would see`() =
         runBlocking<Unit> {
-            val cli = CliHarness(dir, mapOf("PETEK_TARGET" to "https://staging.kadrohr.test"), browser = browser)
+            val cli = CliHarness(dir, mapOf("PETEK_TARGET" to "https://staging.portal.test"), browser = browser)
 
             val result = cli.run("smoke")
 
             result.statusCode shouldBe 0
-            result.stdout shouldContain "Opened https://staging.kadrohr.test (now at https://staging.kadrohr.test/login)"
-            result.stdout shouldContain "Title: KadroHR — Giriş"
+            result.stdout shouldContain "Opened https://staging.portal.test (now at https://staging.portal.test/login)"
+            result.stdout shouldContain "Title: Demo Portal — Giriş"
             result.stdout shouldContain "Interactive elements in the snapshot: 2"
             result.stdout shouldContain "Real-time transports: sse"
             result.stdout shouldContain "SSE GET /events"
             val screenshot = cli.evidenceDir.resolve("smoke.png")
             Files.readAllBytes(screenshot).decodeToString() shouldContain "png:smoke"
-            browser.sessions.single().actions shouldContain "navigate https://staging.kadrohr.test"
+            browser.sessions.single().actions shouldContain "navigate https://staging.portal.test"
             browser.sessions.single().closed shouldBe true
             browser.stopCount shouldBe 1
         }
@@ -83,7 +83,7 @@ class SmokeCommandTest {
         runBlocking<Unit> {
             val cli = CliHarness(dir, browser = browser)
 
-            val result = cli.run("smoke", "--url", "https://kadrohr.com")
+            val result = cli.run("smoke", "--url", "https://portal.example")
 
             result.statusCode shouldBe 2
             result.stderr shouldContain "production host"
@@ -95,7 +95,7 @@ class SmokeCommandTest {
         runBlocking<Unit> {
             val cli = CliHarness(dir, browser = browser)
 
-            listOf("https://KadroHR.com./", "HTTPS://kadrohr.com", "https://kadrohr.com.:443/login").forEach { url ->
+            listOf("https://Portal.example./", "HTTPS://portal.example", "https://portal.example.:443/login").forEach { url ->
                 val result = cli.run("smoke", "--url", url)
 
                 result.statusCode shouldBe 2

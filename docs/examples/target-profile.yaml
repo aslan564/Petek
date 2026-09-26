@@ -1,0 +1,19 @@
+# Example target profile (docs/PLAN.md Faza 10, ADR-0010). Copy it to targets/<name>.yaml for your site: PETEK_TARGET=<name>
+# selects it, and a run or exploration whose site is its url uses these settings. Secrets are ${VARIABLE} references
+# to .env, never values.
+target:
+  name: my-portal
+  url: https://staging.portal.example
+  # A test API on its own host (docs/TARGET_CONTRACT.md).
+  api_url: https://api.staging.portal.example
+  production_hosts: [portal.example, www.portal.example]
+  mail: {source: test-api, domain: test.portal.example}
+  test_api: {token: '${PETEK_TEST_TOKEN}'}
+  # Tried in this order by the explorer: a test company through the test API, then the owner's accounts, then
+  # registering by itself, then looking around without an account.
+  sign_in: [test_company, own_accounts, self_register, anonymous]
+  # The login form also asks for the company's code: give it as the account's `fields` (not a secret; the login flow
+  # reads it as {shared.company_code}).
+  # accounts:
+  #   - {role: admin, email: owner@example.com, password: '${PETEK_ACC_PORTAL_ADMIN}', fields: {company_code: ABC123}}
+  profile: docs/examples/company-portal.yaml

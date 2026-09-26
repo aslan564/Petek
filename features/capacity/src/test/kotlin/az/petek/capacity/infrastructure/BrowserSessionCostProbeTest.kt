@@ -98,10 +98,10 @@ class BrowserSessionCostProbeTest {
                 listOf(listOf("navigate about:blank"), listOf("navigate about:blank"))
 
             val other = FakeEngine()
-            probe(target = other).measure(sessions = 1, url = URI("https://staging.kadrohr.test/login"))
-            other.sessions.single().actions shouldContainExactly listOf("navigate https://staging.kadrohr.test/login")
+            probe(target = other).measure(sessions = 1, url = URI("https://staging.portal.test/login"))
+            other.sessions.single().actions shouldContainExactly listOf("navigate https://staging.portal.test/login")
             other.events shouldContainExactly
-                listOf("start contextsPerBrowser=20", "open capacity-1 base=https://staging.kadrohr.test/login", "stop")
+                listOf("start contextsPerBrowser=20", "open capacity-1 base=https://staging.portal.test/login", "stop")
         }
 
     @Test

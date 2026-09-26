@@ -349,7 +349,7 @@ class PageHeuristicsTest {
             Total: NaN AZN
             [object Object]
             java.lang.NullPointerException: boom
-            at az.kadro.Api.run(Api.kt:42)
+            at az.portal.Api.run(Api.kt:42)
             Hər şey qaydasındadır
             """.trimIndent()
         val facts =
@@ -365,7 +365,7 @@ class PageHeuristicsTest {
                 "Total: NaN AZN",
                 "[object Object]",
                 "java.lang.NullPointerException: boom",
-                "at az.kadro.Api.run(Api.kt:42)",
+                "at az.portal.Api.run(Api.kt:42)",
             )
         PageHeuristics
             .inspect(

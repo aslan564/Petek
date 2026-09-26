@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.minutes
 
 /**
  * One agent, the simulated site and every collaborator of the standard run functions. With [contractSite] the agent's
- * browser is [SimulatedKadro] (docs/TARGET_CONTRACT.md); without it the plain [browser], which a test scripts itself
+ * browser is [SimulatedPortal] (docs/TARGET_CONTRACT.md); without it the plain [browser], which a test scripts itself
  * (see [ScriptedSite]) for sites described by a custom [target] profile.
  */
 class RunFunctionFixture(
@@ -49,7 +49,7 @@ class RunFunctionFixture(
     val verification = FakeVerification()
     val oracle = FakeTargetOracle(isAvailable = oracleAvailable)
     val browser = FakeBrowserSession(identity.agentId.value, clock)
-    val site = SimulatedKadro(verification, oracle, browser)
+    val site = SimulatedPortal(verification, oracle, browser)
     val shared = InMemorySharedRunState()
     val evidence = InMemoryEvidence()
     val artifacts = InMemoryArtifactStore()

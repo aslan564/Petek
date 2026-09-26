@@ -1,7 +1,7 @@
 # Pətək — AGENTS.md
 
 ## Layihə
-Pətək çoxistifadəçili AI test platformasıdır: N AI tester agenti hədəf saytda (ilk hədəf KadroHR) eyni anda ayrı
+Pətək çoxistifadəçili AI test platformasıdır: N AI tester agenti istənilən hədəf saytda eyni anda ayrı
 brauzer sessiyalarında işləyir, orkestrator onları koordinasiya edir, nəticə sübut əsaslı hesabatdır.
 Tam plan: `docs/PLAN.md`. Arxitektura və modul xəritəsi: `docs/ARCHITECTURE.md`. Hər tələbin arxitektura sənədi:
 `docs/requirements/` (R01–R15, dəyişiklik toxunduğu tələbi yeniləyir). Hədəf saytın test kontraktı
@@ -63,6 +63,10 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     (`TargetReachability`); sayt verilməyibsə panel, MCP və CLI sahibdən soruşur və cavab gələnə qədər heç nə etmir.
     Fake target (`testing/fake-target`) yalnız Pətəkin öz e2e testləri üçündür (`--env-file .env.fake-target` ilə
     açıq şəkildə) və heç vaxt sahibin nəticəsi kimi təqdim edilmir.
+13. Pətək universal alətdir, heç bir konkret sayt, müştəri və ya şirkət üçün yazılmayıb: kodda, testlərdə, sənədlərdə,
+    nümunələrdə və konfiqurasiyada heç bir real saytın/məhsulun adı keçmir. Nümunələr neytral adlarla yazılır
+    (`staging.example.com`, `portal.example`, `*.test`, "Demo Portal"); bir saytın ayarları yalnız sahibin öz hədəf
+    profilində (`targets/<ad>.yaml`) olur.
 
 ## Əmrlər
     docker compose up -d                                   # Mailpit :1025 / :8025
@@ -70,7 +74,7 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     ./gradlew spotlessApply                                # formatlama
     ./gradlew e2eTest                                      # fake target + real Chromium ilə e2e (panel, e2e modulu, 30 sessiyalı izolyasiya sübutu)
     ./gradlew :e2e:liveTest                                # real LLM ilə (sizin öz AI planınızı/kvotanızı işlədir)
-    ./gradlew :testing:fake-target:run                     # lokal fake KadroHR: http://127.0.0.1:18080, poçt 18025
+    ./gradlew :testing:fake-target:run                     # lokal fake target: http://127.0.0.1:18080, poçt 18025
     ./gradlew :app:run --args="--env-file .env.fake-target doctor"   # fake saytla yoxlama (IntelliJ: hazır run konfiqurasiyaları)
     ./gradlew :app:run --args="doctor"
     ./gradlew :app:run --args="verify"                     # sahiblik kodu və yoxlaması (/.well-known faylı və ya DNS TXT)
@@ -80,15 +84,15 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     node --test launcher/test/*.test.js                    # npx petek başladıcısının testləri (Node 18+)
     ./gradlew :app:run --args="capacity"                   # bu maşın üçün tövsiyə olunan maksimum tester (limit deyil)
     ./gradlew :app:run --args="capacity --measure 5"       # real sessiyalarla ölçərək
-    ./gradlew :app:run --args="plan scenarios/kadrohr.yaml"
-    ./gradlew :app:run --args="run scenarios/kadrohr.yaml --repeat 3"
+    ./gradlew :app:run --args="plan scenarios/my-site.yaml"
+    ./gradlew :app:run --args="run scenarios/my-site.yaml --repeat 3"
     ./gradlew :app:run --args="report <run_id>"
     ./gradlew :app:run --args="teardown --run <run_id>"
 
 ## Kod konvensiyaları
 - `suspend` funksiyalar; bloklayan I/O yalnız `Dispatchers.IO`-da və ya sessiyanın öz dispetçerində.
 - Konfiqurasiya və ssenari modelləri domain `data class`-larıdır; YAML DTO-ları infrastructure-dadır.
-  Sxem dəyişəndə `scenarios/kadrohr.yaml` (real KadroHR), `scenarios/contract-demo.yaml` (fake target, `docs/PLAN.md`-dəki nümunə) və `docs/ARCHITECTURE.md` də yenilənir.
+  Sxem dəyişəndə `docs/examples/company-portal.yaml` (kontraktdan fərqlənən real sayt nümunəsi), `scenarios/contract-demo.yaml` (fake target, `docs/PLAN.md`-dəki nümunə) və `docs/ARCHITECTURE.md` də yenilənir.
 - Testlər: JUnit 6 + Kotest assertions (`shouldBe`), mock kitabxanası yoxdur — `testFixtures`-dakı fake-lər
   (`FakeBrowserSession`, `ScriptedLlmClient`, `InMemoryEvidence`, `FakeMailbox`, `FakeTargetOracle`, `FakeHarnessClock`).
   Test adları backtick ilə, cümlə kimi. Real brauzer tələb edən testlər `@Tag("e2e")`, real LLM `@Tag("live")`.

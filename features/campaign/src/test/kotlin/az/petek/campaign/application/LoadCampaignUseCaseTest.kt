@@ -19,10 +19,12 @@ import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.campaign
+import az.petek.campaign.testing.companyPortalAnonymousScenario
+import az.petek.campaign.testing.companyPortalScenario
 import az.petek.campaign.testing.contractDemoScenario
-import az.petek.campaign.testing.kadrohrScenario
 import az.petek.campaign.testing.step
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -41,21 +43,29 @@ class LoadCampaignUseCaseTest {
     private fun write(yaml: String): Path = dir.resolve("campaign.yaml").also { Files.writeString(it, yaml.trimIndent()) }
 
     @Test
-    fun `the real kadrohr campaign loads and validates`() {
-        val campaign = useCase().execute(kadrohrScenario(), KNOWN_RUN_FUNCTIONS)
+    fun `the company portal example campaign loads and validates`() {
+        val campaign = useCase().execute(companyPortalScenario(), KNOWN_RUN_FUNCTIONS)
         campaign.settings.testers shouldBe 30
         campaign.allSteps.size shouldBe 9
     }
 
     @Test
+    fun `the example for a site without a test API loads and validates without setup`() {
+        val campaign = useCase().execute(companyPortalAnonymousScenario(), KNOWN_RUN_FUNCTIONS)
+
+        campaign.settings.name shouldBe "portal-anonymous"
+        campaign.setup.shouldBeEmpty()
+    }
+
+    @Test
     fun `the target override reaches the validated campaign`() {
-        useCase(URI("http://127.0.0.1:8080")).execute(kadrohrScenario(), KNOWN_RUN_FUNCTIONS).settings.target shouldBe
+        useCase(URI("http://127.0.0.1:8080")).execute(companyPortalScenario(), KNOWN_RUN_FUNCTIONS).settings.target shouldBe
             URI("http://127.0.0.1:8080")
     }
 
     @Test
     fun `the real campaign needs its run functions`() {
-        val error = shouldThrow<CampaignValidationException> { useCase().execute(kadrohrScenario(), setOf("login")) }
+        val error = shouldThrow<CampaignValidationException> { useCase().execute(companyPortalScenario(), setOf("login")) }
         error.issues.map { it.message.substringAfter("unknown run function ").substringBefore(" ") } shouldContainExactly
             listOf("'register_owner'", "'seed_company'", "'register_and_login'")
     }
@@ -73,7 +83,7 @@ class LoadCampaignUseCaseTest {
             write(
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: 4
                   seed: 1
                   roles: {admin: 1, manager: 1, employee: 1}
@@ -114,7 +124,7 @@ class LoadCampaignUseCaseTest {
             write(
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: 7
                   seed: 1
                   roles: {admin: 1, manager: 2, employee: 4}
@@ -138,7 +148,7 @@ class LoadCampaignUseCaseTest {
             write(
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: 2
                   seed: 1
                   roles: {admin: 1, manager: 0, employee: 1}

@@ -18,7 +18,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Tuning of the explorer that is not part of an owner's request. The defaults suit a small web application such as
- * KadroHR; the composition root may override them.
+ * a company portal; the composition root may override them.
  *
  * @property seedPaths well-known sign-in and sign-up paths tried besides the links the target shows; a guess that
  *   answers with an error is dropped silently (it was not a broken link, just a wrong guess).
@@ -54,7 +54,7 @@ data class ExplorerSettings(
     val maxRoles: Int = 20,
     /**
      * How long a page that loaded empty is given to render before it is captured: single-page applications answer
-     * `load` with an empty shell and draw the page afterwards (kadrohr.com, 2026-09-26). Polled every [pageSettlePoll].
+     * `load` with an empty shell and draw the page afterwards (seen on a real single-page application, 2026-09-26). Polled every [pageSettlePoll].
      */
     val pageSettleTimeout: Duration = 4.seconds,
     val pageSettlePoll: Duration = 250.milliseconds,

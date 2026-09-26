@@ -74,7 +74,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A [PanelBackend] with realistic simulated data, so every screen of the panel can be seen working without the
- * explorer, scenarios or orchestration modules: an explorer walking a KadroHR-like site, versioned scenarios with a
+ * explorer, scenarios or orchestration modules: an explorer walking a portal-like site, versioned scenarios with a
  * triage proposal, a run history with a repeat group, and runs started through [runStarter] (the demo plays a
  * simulated run on the live board). Long work runs in [scope]; one exploration and one run at a time.
  *
@@ -135,7 +135,7 @@ class DemoPanelBackend(
     private fun seedScenarios(now: Instant) {
         val byVersion = mutableMapOf<Pair<String, Int>, String>()
         for (s in DemoContent.SCENARIOS) {
-            val id = "scn_${s.name.substringAfter("kadrohr-")}_v${s.version}"
+            val id = "scn_${s.name.substringAfter("portal-")}_v${s.version}"
             byVersion[s.name to s.version] = id
             val created = now.minus(Duration.ofDays(s.daysAgo)).minus(Duration.ofHours(3))
             val status = ScenarioStatus.valueOf(s.status)
@@ -592,7 +592,7 @@ class DemoPanelBackend(
             state.value?.draftYaml
                 ?: throw PanelConflictException("Kəşfiyyatın hələ ssenari layihəsi yoxdur; kəşfiyyat bir az da irəliləsin.")
         return lock.withLock {
-            val name = "kadrohr-explored"
+            val name = "portal-explored"
             val version = (scenarioList.filter { it.version.name == name }.maxOfOrNull { it.version.version } ?: 0) + 1
             val view =
                 ScenarioView(

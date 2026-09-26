@@ -60,7 +60,7 @@ class MailOutbox internal constructor(
         val mail =
             SentMail(
                 id = id,
-                messageId = "$id@fake.kadrohr.local",
+                messageId = "$id@fake-target.local",
                 from = SENDER,
                 to = listOf(to),
                 subject = subject,
@@ -104,6 +104,6 @@ class MailOutbox internal constructor(
         }
 
     private companion object {
-        val SENDER = MailAddress("KadroHR", "no-reply@fake.kadrohr.local")
+        val SENDER = MailAddress("Demo Portal", "no-reply@fake-target.local")
     }
 }

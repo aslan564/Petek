@@ -26,7 +26,7 @@ import az.petek.dashboard.domain.TestIdeaView
 import az.petek.dashboard.domain.UnknownView
 import az.petek.dashboard.testing.FakeScreens.Page
 
-/** What the demo explorer "finds" on a KadroHR-like site, and the scenarios and runs the demo panel starts with. */
+/** What the demo explorer "finds" on a portal-like site, and the scenarios and runs the demo panel starts with. */
 object DemoContent {
     private val OBSERVED = Provenance.OBSERVED
     private val INFERRED = Provenance.INFERRED
@@ -173,7 +173,7 @@ object DemoContent {
     /** The walk, in order: which page, as whom, what the screen showed, how it answered. */
     val VISITS: List<DemoVisit> =
         listOf(
-            DemoVisit(ExplorationPhase.ANONYMOUS, "/", "KadroHR — Ana səhifə", "anonymous", Page.LOGIN, 200, 640),
+            DemoVisit(ExplorationPhase.ANONYMOUS, "/", "Demo Portal — Ana səhifə", "anonymous", Page.LOGIN, 200, 640),
             DemoVisit(ExplorationPhase.ANONYMOUS, "/login", "Daxil ol", "anonymous", Page.LOGIN, 200, 410),
             DemoVisit(ExplorationPhase.ANONYMOUS, "/register", "Qeydiyyat", "anonymous", Page.JOIN, 200, 530),
             DemoVisit(ExplorationPhase.ANONYMOUS, "/join", "Şirkətə qoşul", "anonymous", Page.JOIN, 200, 380),
@@ -203,7 +203,7 @@ object DemoContent {
                 ExplorationFindingView(
                     "HTTP_ERROR",
                     FindingSeverity.HIGH,
-                    "https://staging.kadrohr.az/employees/export",
+                    "https://staging.portal.example/employees/export",
                     "GET /api/employees/export → 500 Internal Server Error",
                     emptyList(),
                 ),
@@ -211,7 +211,7 @@ object DemoContent {
                 ExplorationFindingView(
                     "SLOW_PAGE",
                     FindingSeverity.MEDIUM,
-                    "https://staging.kadrohr.az/tickets",
+                    "https://staging.portal.example/tickets",
                     "Səhifə 4,8 s-də yükləndi (hədd 3 s); 212 sorğu",
                     emptyList(),
                 ),
@@ -219,7 +219,7 @@ object DemoContent {
                 ExplorationFindingView(
                     "ACCESSIBILITY",
                     FindingSeverity.MEDIUM,
-                    "https://staging.kadrohr.az/announcements/new",
+                    "https://staging.portal.example/announcements/new",
                     "'Mətn' sahəsinin əlçatan adı yoxdur (label bağlı deyil)",
                     emptyList(),
                 ),
@@ -227,7 +227,7 @@ object DemoContent {
                 ExplorationFindingView(
                     "CONSOLE_ERROR",
                     FindingSeverity.LOW,
-                    "https://staging.kadrohr.az/announcements",
+                    "https://staging.portal.example/announcements",
                     "Uncaught TypeError: Cannot read properties of undefined (reading 'avatar')",
                     emptyList(),
                 ),
@@ -235,7 +235,7 @@ object DemoContent {
                 ExplorationFindingView(
                     "BROKEN_LINK",
                     FindingSeverity.LOW,
-                    "https://staging.kadrohr.az/help",
+                    "https://staging.portal.example/help",
                     "Altbilgidəki 'Kömək' keçidi 404 qaytarır",
                     emptyList(),
                 ),
@@ -286,8 +286,8 @@ object DemoContent {
         """
         # Kəşfiyyatçının modelindən kodla yığılıb (model v4). Təsdiqdən əvvəl yoxlayın.
         campaign:
-          name: kadrohr-explored
-          target: https://staging.kadrohr.az
+          name: portal-explored
+          target: https://staging.portal.example
           testers: 30
           roles: {admin: 1, manager: 5, employee: 24}
           departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
@@ -332,8 +332,8 @@ object DemoContent {
     private val CORE_V1 =
         """
         campaign:
-          name: kadrohr-core
-          target: https://staging.kadrohr.az
+          name: portal-core
+          target: https://staging.portal.example
           testers: 30
           roles: {admin: 1, manager: 5, employee: 24}
           departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
@@ -406,8 +406,8 @@ object DemoContent {
     private val SIGNUP_V1 =
         """
         campaign:
-          name: kadrohr-qeydiyyat
-          target: https://staging.kadrohr.az
+          name: portal-qeydiyyat
+          target: https://staging.portal.example
           testers: 10
           roles: {admin: 1, manager: 1, employee: 8}
           departments: [IT, HR]
@@ -433,9 +433,9 @@ object DemoContent {
     /** name, version, status, source, parent version, note, days ago, yaml. */
     val SCENARIOS: List<DemoScenario> =
         listOf(
-            DemoScenario("kadrohr-core", 1, "FROZEN", "USER", null, "İlk əl ilə yazılmış versiya; 3 run-da sabit keçdi.", 12, CORE_V1),
+            DemoScenario("portal-core", 1, "FROZEN", "USER", null, "İlk əl ilə yazılmış versiya; 3 run-da sabit keçdi.", 12, CORE_V1),
             DemoScenario(
-                "kadrohr-core",
+                "portal-core",
                 2,
                 "APPROVED",
                 "USER",
@@ -445,7 +445,7 @@ object DemoContent {
                 CORE_V2,
             ),
             DemoScenario(
-                "kadrohr-core",
+                "portal-core",
                 3,
                 "DRAFT",
                 "TRIAGE",
@@ -454,8 +454,8 @@ object DemoContent {
                 1,
                 CORE_V3,
             ),
-            DemoScenario("kadrohr-qeydiyyat", 1, "SUPERSEDED", "USER", null, "Yalnız qeydiyyat axını.", 20, SIGNUP_V1),
-            DemoScenario("kadrohr-qeydiyyat", 2, "FROZEN", "USER", 1, "Üzvlərin sayı oracle ilə yoxlanır.", 9, SIGNUP_V2),
+            DemoScenario("portal-qeydiyyat", 1, "SUPERSEDED", "USER", null, "Yalnız qeydiyyat axını.", 20, SIGNUP_V1),
+            DemoScenario("portal-qeydiyyat", 2, "FROZEN", "USER", 1, "Üzvlərin sayı oracle ilə yoxlanır.", 9, SIGNUP_V2),
         )
 }
 

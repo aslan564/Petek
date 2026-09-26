@@ -127,12 +127,12 @@ class DashboardServerTest {
     fun `the page names the default target escaped, and none when the server has none`() =
         runBlocking<Unit> {
             val artifacts = TempDirArtifactStore(dir.resolve("evidence"))
-            val server = DashboardServer(dashboard, artifacts, port = 0, defaultTarget = "https://kadro.test/?a=1&b=\"<x>\"")
+            val server = DashboardServer(dashboard, artifacts, port = 0, defaultTarget = "https://portal.test/?a=1&b=\"<x>\"")
             try {
                 val base = server.start().toString().removeSuffix("/")
                 val html = serve().client.get(base + "/").bodyAsText()
 
-                html shouldContain "<meta name=\"petek-target\" content=\"https://kadro.test/?a=1&amp;b=&quot;&lt;x&gt;&quot;\">"
+                html shouldContain "<meta name=\"petek-target\" content=\"https://portal.test/?a=1&amp;b=&quot;&lt;x&gt;&quot;\">"
             } finally {
                 server.stop()
             }

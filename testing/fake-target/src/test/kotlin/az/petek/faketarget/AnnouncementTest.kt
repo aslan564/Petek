@@ -182,7 +182,7 @@ class AnnouncementTest {
         runBlocking<Unit> {
             val team = fake.team()
             val id = announce(team)
-            val stranger = fake.registerOwner(email = "other@test.kadrohr.com", company = "Başqa MMC")
+            val stranger = fake.registerOwner(email = "other@test.portal.example", company = "Başqa MMC")
             stranger.browser.get("/announcements/$id").status shouldBe 404
             stranger.browser
                 .get("/announcements")

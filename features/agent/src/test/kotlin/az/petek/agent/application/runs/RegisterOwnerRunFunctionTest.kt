@@ -17,7 +17,7 @@ import az.petek.agent.domain.SharedRunState
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.AgentTestData.sel
 import az.petek.agent.testing.RunFunctionFixture
-import az.petek.agent.testing.SimulatedKadro
+import az.petek.agent.testing.SimulatedPortal
 import az.petek.evidence.domain.StepStatus
 import az.petek.oracle.domain.OracleException
 import az.petek.oracle.domain.TargetOracle
@@ -42,12 +42,12 @@ class RegisterOwnerRunFunctionTest {
             val outcome = fixture.run("register_owner", mapOf("company" to " Sınaq MMC "))
 
             outcome.status shouldBe ActionStatus.SUCCEEDED
-            outcome.objectId shouldBe SimulatedKadro.COMPANY_ID
+            outcome.objectId shouldBe SimulatedPortal.COMPANY_ID
             outcome.summary shouldContain "as owner of 'Sınaq MMC'"
             fixture.site.signedIn?.name shouldBe admin.displayName
-            fixture.oracle.companies[SimulatedKadro.COMPANY_ID]?.name shouldBe "Sınaq MMC"
-            fixture.shared.get(SharedRunState.COMPANY_ID) shouldBe SimulatedKadro.COMPANY_ID
-            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedKadro.COMPANY_CODE
+            fixture.oracle.companies[SimulatedPortal.COMPANY_ID]?.name shouldBe "Sınaq MMC"
+            fixture.shared.get(SharedRunState.COMPANY_ID) shouldBe SimulatedPortal.COMPANY_ID
+            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedPortal.COMPANY_CODE
             fixture.browser.actions shouldContain "fillSelector ${sel("verify.phone_code")}=${fixture.oracle.otps[admin.phone]}"
             fixture.storageStateSaved() shouldBe true
             fixture.assertPasswordNotRecorded()
@@ -60,7 +60,7 @@ class RegisterOwnerRunFunctionTest {
 
             fixture.run("register_owner").status shouldBe ActionStatus.SUCCEEDED
 
-            fixture.oracle.companies[SimulatedKadro.COMPANY_ID]?.name shouldBe RegisterOwnerRunFunction.DEFAULT_COMPANY
+            fixture.oracle.companies[SimulatedPortal.COMPANY_ID]?.name shouldBe RegisterOwnerRunFunction.DEFAULT_COMPANY
             fixture.site.fields["register.company"] shouldBe "Pətək Test MMC"
         }
 

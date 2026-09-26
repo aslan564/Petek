@@ -33,7 +33,7 @@ class SiteOwnershipTest {
     private val clock = FakeHarnessClock()
     private val probe = ScriptedOwnershipProbe()
     private val ledger = InMemoryOwnershipLedger()
-    private val ownership = OwnershipTestKit.siteOwnership(clock, probe, local = setOf("kadro.test"), ledger = ledger)
+    private val ownership = OwnershipTestKit.siteOwnership(clock, probe, local = setOf("portal.test"), ledger = ledger)
     private val stage = URI("https://stage.example.com/login")
 
     @Test
@@ -41,7 +41,7 @@ class SiteOwnershipTest {
         runTest {
             ownership.check(URI("http://localhost:18080/")) shouldBe OwnershipStatus.Exempt("localhost")
             ownership.check(URI("http://shop.localhost/")) shouldBe OwnershipStatus.Exempt("shop.localhost")
-            ownership.check(URI("http://kadro.test/")) shouldBe OwnershipStatus.Exempt("kadro.test")
+            ownership.check(URI("http://portal.test/")) shouldBe OwnershipStatus.Exempt("portal.test")
             probe.looks.shouldBeEmpty()
         }
 

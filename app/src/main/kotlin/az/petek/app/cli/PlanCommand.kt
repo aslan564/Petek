@@ -32,7 +32,7 @@ import kotlinx.serialization.json.putJsonArray
  * planning the same file again prints and stores exactly the same registry. Nothing touches the target.
  */
 class PlanCommand : PetekSubcommand("plan") {
-    private val file by argument("campaign", help = "campaign YAML file, e.g. scenarios/kadrohr.yaml").path()
+    private val file by argument("campaign", help = "campaign YAML file, e.g. docs/examples/company-portal.yaml").path()
 
     override fun help(context: Context): String = "Validate a campaign and print its identity registry (nothing is executed)."
 

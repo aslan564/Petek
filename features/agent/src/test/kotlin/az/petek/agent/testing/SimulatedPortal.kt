@@ -21,12 +21,12 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * A tiny KadroHR behind a fake browser, following docs/TARGET_CONTRACT.md: sign-up, join by company code, accept an
+ * A tiny company portal behind a fake browser, following docs/TARGET_CONTRACT.md: sign-up, join by company code, accept an
  * invitation, e-mail code, optional phone code, login, logout and the company page. Pages are represented by the set
  * of visible `data-testid`s of [FakeBrowserSession]; every browser call is still recorded in [browser]'s `actions`.
  * Switches let tests make the site misbehave (reject codes, forget forms, show another user's name).
  */
-class SimulatedKadro(
+class SimulatedPortal(
     val verification: FakeVerification,
     val oracle: FakeTargetOracle,
     val browser: FakeBrowserSession = FakeBrowserSession("site"),
@@ -304,7 +304,7 @@ class SimulatedKadro(
     private fun sel(key: String): String = AgentTestData.sel(key)
 
     companion object {
-        const val BASE = "https://staging.kadrohr.test"
+        const val BASE = "https://staging.portal.test"
         const val COMPANY_ID = "c1"
         const val COMPANY_CODE = "PTK-4821"
 

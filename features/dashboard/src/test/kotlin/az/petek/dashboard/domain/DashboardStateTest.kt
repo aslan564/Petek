@@ -83,13 +83,13 @@ class DashboardStateTest {
 
     @Test
     fun `a created run fills the header and its elapsed time follows the monotonic clock`() {
-        val state = board(RunCreated(runRecord(name = "Elan axını", target = "https://staging.kadrohr.test"), at(0)))
+        val state = board(RunCreated(runRecord(name = "Elan axını", target = "https://staging.portal.test"), at(0)))
 
         val view = state.snapshot(at(seconds = 75, millis = 500))
 
         view.run.runId shouldBe RUN
         view.run.campaignName shouldBe "Elan axını"
-        view.run.target shouldBe "https://staging.kadrohr.test"
+        view.run.target shouldBe "https://staging.portal.test"
         view.run.startedAt shouldBe T0
         view.run.phase shouldBe RunPhase.RUNNING
         view.run.elapsedMs shouldBe 75_500

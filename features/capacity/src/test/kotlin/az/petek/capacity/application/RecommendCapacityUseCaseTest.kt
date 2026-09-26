@@ -61,10 +61,10 @@ class RecommendCapacityUseCaseTest {
         runTest {
             val useCase = RecommendCapacityUseCase(hostProbe, costProbe())
 
-            val advice = useCase.execute(contextsPerBrowser = 20, Measurement(sessions = 3, url = URI("https://staging.kadrohr.test")))
+            val advice = useCase.execute(contextsPerBrowser = 20, Measurement(sessions = 3, url = URI("https://staging.portal.test")))
 
             advice.perSession shouldBe measured
-            events shouldContainExactly listOf("host", "measure 3 https://staging.kadrohr.test")
+            events shouldContainExactly listOf("host", "measure 3 https://staging.portal.test")
         }
 
     @Test

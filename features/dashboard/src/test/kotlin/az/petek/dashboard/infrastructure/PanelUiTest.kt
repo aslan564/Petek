@@ -256,12 +256,12 @@ class PanelUiTest {
         page.locator("[data-field=testers] input[type=number]").fill("60")
         page.waitFor("() => document.querySelector('.capacity.warn') !== null")
         page.text(".capacity") shouldContain "tövsiyədən (41) çoxdur"
-        page.locator("[data-field=target] input").fill("staging.kadrohr.az")
+        page.locator("[data-field=target] input").fill("staging.portal.example")
         page.locator("button", Page.LocatorOptions().setHasText("Kəşf et")).first().click()
         page.waitFor("() => document.querySelector('[data-field=target].field.invalid') !== null")
         page.text(".field-error[data-field=target]") shouldContain "http"
 
-        page.locator("[data-field=target] input").fill("https://staging.kadrohr.az")
+        page.locator("[data-field=target] input").fill("https://staging.portal.example")
         page.locator("button", Page.LocatorOptions().setHasText("Kəşf et")).first().click()
         page.waitFor("() => location.hash === '#/kesfiyyat'")
         page.waitFor(

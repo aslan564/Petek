@@ -199,7 +199,7 @@ class RunnerPacingTest {
     fun `every browser session is opened with the target's local storage`() =
         runTest {
             val f = fixture()
-            val storage = mapOf("kadro:domain_dialog_dismissed" to "1")
+            val storage = mapOf("portal:domain_dialog_dismissed" to "1")
             val campaign = oneStep().let { it.copy(target = it.target.copy(localStorage = storage)) }
 
             f.runner().run(campaign)

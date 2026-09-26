@@ -259,7 +259,7 @@ class DefaultIdentityRegistryGeneratorTest {
     fun `a given full name is used exactly as written`() {
         val result = generator().generate(spec(names = listOf("Əli Kərimov", "Günel", "Nigar Səfərova")), RUN_TAG)
         result.identities[0].displayName shouldBe "Əli Kərimov"
-        result.identities[0].email shouldBe "eli.k7x2.a01@test.kadrohr.com"
+        result.identities[0].email shouldBe "eli.k7x2.a01@test.portal.example"
         result.identities[1].displayName shouldStartWith "Günel "
         result.identities[2].displayName shouldBe "Nigar Səfərova"
     }
@@ -396,19 +396,19 @@ class DefaultIdentityRegistryGeneratorTest {
 
     @Test
     fun `e-mails combine the ASCII first name, run tag and agent id`() {
-        identities[0].email shouldBe "eli.k7x2.a01@test.kadrohr.com"
-        identities[1].email shouldBe "veli.k7x2.a02@test.kadrohr.com"
-        identities[3].email shouldBe "cemil.k7x2.a04@test.kadrohr.com"
+        identities[0].email shouldBe "eli.k7x2.a01@test.portal.example"
+        identities[1].email shouldBe "veli.k7x2.a02@test.portal.example"
+        identities[3].email shouldBe "cemil.k7x2.a04@test.portal.example"
         identities.forEach { identity ->
-            identity.email shouldMatch Regex("[a-z0-9-]+\\.k7x2\\.${identity.agentId.value}@test\\.kadrohr\\.com")
+            identity.email shouldMatch Regex("[a-z0-9-]+\\.k7x2\\.${identity.agentId.value}@test\\.portal\\.example")
             identity.email shouldStartWith AsciiSlug.of(identity.displayName.substringBefore(' ')) + "."
         }
     }
 
     @Test
     fun `the mail domain is trimmed and lower-cased`() {
-        val result = generator().generate(spec(mailDomain = " Test.KadroHR.com "), RUN_TAG)
-        result.identities.forEach { it.email.substringAfter('@') shouldBe "test.kadrohr.com" }
+        val result = generator().generate(spec(mailDomain = " Test.Portal.example "), RUN_TAG)
+        result.identities.forEach { it.email.substringAfter('@') shouldBe "test.portal.example" }
     }
 
     @Test

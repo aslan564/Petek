@@ -178,7 +178,7 @@ class TicketTest {
             team.itEmployee2.api("assign", id, """{"email":"${team.itEmployee2.email}"}""").status shouldBe 403
             team.hrManager.api("approve", id).status shouldBe 403
             team.itManager.api("approve", "t999").status shouldBe 404
-            fake.registerOwner(email = "stranger@test.kadrohr.com", company = "Başqa").api("approve", id).status shouldBe 404
+            fake.registerOwner(email = "stranger@test.portal.example", company = "Başqa").api("approve", id).status shouldBe 404
 
             val approved = team.itManager.api("approve", id)
             approved.status shouldBe 200
@@ -209,7 +209,7 @@ class TicketTest {
             team.itManager.api("assign", id, """{"email":""}""").status shouldBe 400
             team.itManager.api("assign", id, "not json").status shouldBe 400
             team.itManager
-                .api("assign", id, """{"email":"nobody@test.kadrohr.com"}""")
+                .api("assign", id, """{"email":"nobody@test.portal.example"}""")
                 .json()
                 .string("error") shouldBe "unknown_assignee"
             team.itManager.browser
@@ -280,7 +280,7 @@ class TicketTest {
         runBlocking<Unit> {
             val team = fake.team()
             val id = createTicket(team.itEmployee)
-            val stranger = fake.registerOwner(email = "stranger@test.kadrohr.com", company = "Başqa")
+            val stranger = fake.registerOwner(email = "stranger@test.portal.example", company = "Başqa")
             stranger.browser.get("/tickets/$id").status shouldBe 404
             stranger.browser
                 .get("/tickets")

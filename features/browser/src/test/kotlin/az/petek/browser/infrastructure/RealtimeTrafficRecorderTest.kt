@@ -40,21 +40,21 @@ class RealtimeTrafficRecorderTest {
 
     @Test
     fun `a websocket is reported without its query string or credentials`() {
-        recorder.webSocketOpened("wss://user:pass@kadrohr.test/socket?token=secret#x")
-        recorder.webSocketOpened("wss://kadrohr.test/socket?token=other")
+        recorder.webSocketOpened("wss://user:pass@portal.test/socket?token=secret#x")
+        recorder.webSocketOpened("wss://portal.test/socket?token=other")
 
         val observation = recorder.observation()
 
         observation.transports shouldBe setOf(RealtimeTransport.WEBSOCKET)
-        observation.details shouldContainExactly listOf("WebSocket wss://kadrohr.test/socket")
+        observation.details shouldContainExactly listOf("WebSocket wss://portal.test/socket")
     }
 
     @Test
     fun `an event stream is reported once per endpoint`() {
-        recorder.eventStreamSeen("http://kadrohr.test/events?since=1")
-        recorder.eventStreamSeen("http://kadrohr.test/events?since=2")
+        recorder.eventStreamSeen("http://portal.test/events?since=1")
+        recorder.eventStreamSeen("http://portal.test/events?since=2")
 
-        recorder.observation().details shouldContainExactly listOf("SSE http://kadrohr.test/events")
+        recorder.observation().details shouldContainExactly listOf("SSE http://portal.test/events")
     }
 
     @Test

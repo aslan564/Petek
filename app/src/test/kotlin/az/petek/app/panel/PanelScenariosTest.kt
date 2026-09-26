@@ -182,14 +182,14 @@ class PanelScenariosTest {
         }
 
     @Test
-    fun `the project's own KadroHR campaign is imported, approved and planned for its 30 testers`() =
+    fun `the company portal example campaign is imported, approved and planned for its 30 testers`() =
         runBlocking<Unit> {
-            val campaign = Files.readString(Path.of("..", "scenarios", "kadrohr.yaml"))
-            val panel = harness(mapOf("kadrohr.yaml" to campaign))
+            val campaign = Files.readString(Path.of("..", "docs", "examples", "company-portal.yaml"))
+            val panel = harness(mapOf("company-portal.yaml" to campaign))
 
             val version = panel.backend.scenarios().single()
 
-            version.name shouldBe "kadrohr-real"
+            version.name shouldBe "portal-real"
             version.status shouldBe ScenarioStatus.APPROVED
             panel.backend
                 .scenario(version.id)

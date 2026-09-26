@@ -145,8 +145,8 @@ class JsonDecisionProtocolTest {
     fun `navigation accepts site paths and http(s) URLs only`() {
         action("""{"reason": "r", "tool": "navigate", "url": "/tickets?status=open"}""") shouldBe
             AgentAction.Navigate("/tickets?status=open")
-        action("""{"reason": "r", "tool": "navigate", "url": "https://staging.kadrohr.com/x"}""") shouldBe
-            AgentAction.Navigate("https://staging.kadrohr.com/x")
+        action("""{"reason": "r", "tool": "navigate", "url": "https://staging.portal.example/x"}""") shouldBe
+            AgentAction.Navigate("https://staging.portal.example/x")
         action("""{"reason": "r", "tool": "navigate", "url": "HTTP://host/"}""") shouldBe AgentAction.Navigate("HTTP://host/")
         listOf("//evil.example/x", "tickets", "javascript:alert(1)", "file:///etc/passwd", "ftp://host/x", "https:///nohost", "/a b")
             .forEach { url -> error("""{"reason": "r", "tool": "navigate", "url": "$url"}""") shouldContain "'url' must be a path" }

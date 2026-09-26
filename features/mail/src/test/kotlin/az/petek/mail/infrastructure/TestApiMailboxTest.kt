@@ -64,7 +64,7 @@ class TestApiMailboxTest {
             html: String? = null,
             links: List<String> = emptyList(),
             read: Boolean = false,
-            subject: String = "Kadro HR - Email Təsdiqləmə",
+            subject: String = "Demo Portal - Email Təsdiqləmə",
         ) {
             mails +=
                 buildJsonObject {
@@ -122,7 +122,7 @@ class TestApiMailboxTest {
 
         message.id shouldBe "e2"
         message.to shouldContainExactly listOf(ELI)
-        message.subject shouldBe "Kadro HR - Email Təsdiqləmə"
+        message.subject shouldBe "Demo Portal - Email Təsdiqləmə"
         message.receivedAt shouldBe Instant.parse("2026-09-25T10:00:02Z")
         message.text shouldBe "Kod: 222222"
         message.html shouldBe "<p>Kod: 222222</p>"
@@ -152,31 +152,31 @@ class TestApiMailboxTest {
         api.mails +=
             buildJsonObject {
                 put("id", "e1")
-                put("to", buildJsonArray { add(JsonPrimitive("hr@test.kadrohr.com")) })
+                put("to", buildJsonArray { add(JsonPrimitive("hr@test.portal.example")) })
                 put("created_at", "2026-09-25T10:00:01Z")
             }
         api.mails +=
             buildJsonObject {
                 put("id", "e2")
-                put("to", buildJsonArray { add(JsonPrimitive("hr@test.kadrohr.com")) })
+                put("to", buildJsonArray { add(JsonPrimitive("hr@test.portal.example")) })
                 put("created_at", "2026-09-25T10:00:02Z")
             }
         api.add("e3", to = ELI.uppercase(), createdAt = "2026-09-25T10:00:03Z")
         val mailbox = mailboxFor(serve(api))
 
         runBlocking { mailbox.findLatest(ELI, SINCE) }?.id shouldBe "e3"
-        runBlocking { mailbox.findRecent("hr@test.kadrohr.com", SINCE) }.map { it.id } shouldContainExactly listOf("e2", "e1")
+        runBlocking { mailbox.findRecent("hr@test.portal.example", SINCE) }.map { it.id } shouldContainExactly listOf("e2", "e1")
     }
 
     @Test
     fun `links the API lists separately are added to the text`() {
         val api = FakeTestApi()
-        val invite = "https://api.kadrohr.test/api/v1/auth/set-password?token=abc"
+        val invite = "https://api.portal.test/api/v1/auth/set-password?token=abc"
         api.add(
             "e1",
             text = "Sizi dəvət etdilər",
-            links = listOf(invite, "https://kadrohr.test/"),
-            html = "<a href=\"https://kadrohr.test/\">x</a>",
+            links = listOf(invite, "https://portal.test/"),
+            html = "<a href=\"https://portal.test/\">x</a>",
         )
 
         val message = runBlocking { mailboxFor(serve(api)).findLatest(ELI, SINCE) }.shouldNotBeNull()
@@ -277,7 +277,7 @@ class TestApiMailboxTest {
     @Test
     fun `the verification use case reads codes and pattern links through the test API`() {
         val api = FakeTestApi()
-        val invite = "https://api.kadrohr.test/api/v1/auth/set-password?token=9f1c"
+        val invite = "https://api.portal.test/api/v1/auth/set-password?token=9f1c"
         api.add("code", createdAt = "2026-09-25T10:00:01Z", text = "Təsdiq kodu: 482913")
         api.add("invite", createdAt = "2026-09-25T10:00:02Z", text = "Sizi dəvət etdilər: $invite")
         val mailbox = mailboxFor(serve(api))
@@ -298,7 +298,7 @@ class TestApiMailboxTest {
     }
 
     private companion object {
-        const val ELI = "eli.k7x2.a07@test.kadrohr.com"
+        const val ELI = "eli.k7x2.a07@test.portal.example"
         const val TOKEN = "secret-test-token-1"
         val SINCE: Instant = Instant.parse("2026-09-25T10:00:00Z")
     }

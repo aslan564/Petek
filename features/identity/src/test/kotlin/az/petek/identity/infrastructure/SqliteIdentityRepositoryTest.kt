@@ -174,7 +174,7 @@ class SqliteIdentityRepositoryTest {
 
             val error = shouldThrow<IdentityConflictException> { repository.replaceAll(otherRunId, plan) }
 
-            error.message.orEmpty() shouldContain "eli.k7x2.a01@test.kadrohr.com"
+            error.message.orEmpty() shouldContain "eli.k7x2.a01@test.portal.example"
             error.message.orEmpty() shouldContain otherRunId.value
             repository.findByRun(otherRunId).shouldBeEmpty()
             repository.findByRun(runId) shouldBe plan.identities
@@ -190,7 +190,7 @@ class SqliteIdentityRepositoryTest {
 
             val error = shouldThrow<IdentityConflictException> { repository.replaceAll(otherRunId, shouting) }
 
-            error.message.orEmpty() shouldContain "eli.k7x2.a01@test.kadrohr.com"
+            error.message.orEmpty() shouldContain "eli.k7x2.a01@test.portal.example"
         }
 
     @Test

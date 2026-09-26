@@ -22,7 +22,7 @@ import az.petek.core.security.Secret
 
 /**
  * One tester's identity. Created only by the orchestrator (AGENTS.md rule 7); agents read it and never invent one.
- * Example: a07, "Əli Kərimov", eli.k7x2.a07@test.kadrohr.com.
+ * Example: a07, "Əli Kərimov", eli.k7x2.a07@test.portal.example.
  */
 data class Identity(
     val agentId: AgentId,
@@ -54,7 +54,7 @@ data class IdentitySpec(
     val inviteCount: Int,
     /** Testers who join with the company code; always employees. */
     val companyCodeCount: Int,
-    /** Catch-all test domain, e.g. `test.kadrohr.com`. */
+    /** Catch-all test domain, e.g. `test.portal.example`. */
     val mailDomain: String,
     /**
      * The owner's own inbox, e.g. `test@company.az` (Faza 16): when set, every tester gets its `+` address,

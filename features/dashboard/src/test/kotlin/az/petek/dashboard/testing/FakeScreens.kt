@@ -22,7 +22,7 @@ import javax.imageio.ImageIO
 import kotlin.random.Random
 
 /**
- * Draws plausible "screenshots" of a KadroHR-like page for the demo and the UI test, so the dashboard's thumbnails
+ * Draws plausible "screenshots" of a portal-like page for the demo and the UI test, so the dashboard's thumbnails
  * look like the real thing without a browser. Deterministic for the same arguments.
  */
 object FakeScreens {
@@ -96,7 +96,7 @@ object FakeScreens {
         g.fillRect(0, 0, WIDTH, 44)
         g.color = Color.WHITE
         g.font = Font(Font.SANS_SERIF, Font.BOLD, 17)
-        g.drawString("KadroHR", 18, 28)
+        g.drawString("Demo Portal", 18, 28)
         g.font = Font(Font.SANS_SERIF, Font.PLAIN, 12)
         var x = 120
         for (item in listOf(Page.ANNOUNCEMENTS, Page.TASKS, Page.NOTIFICATIONS)) {
@@ -199,13 +199,13 @@ object FakeScreens {
     ) {
         g.color = NAVY
         g.font = Font(Font.SANS_SERIF, Font.BOLD, 22)
-        g.drawString("KadroHR", WIDTH / 2 - 48, 62)
+        g.drawString("Demo Portal", WIDTH / 2 - 48, 62)
         card(g, WIDTH / 2 - 150, 84, 300, 270)
         g.color = INK
         g.font = Font(Font.SANS_SERIF, Font.BOLD, 17)
         g.drawString(page.title, WIDTH / 2 - 126, 120)
         label(g, "E-poçt", WIDTH / 2 - 126, 148)
-        input(g, WIDTH / 2 - 126, 156, 252, 30, "user${random.nextInt(99)}@test.kadrohr.com")
+        input(g, WIDTH / 2 - 126, 156, 252, 30, "user${random.nextInt(99)}@test.portal.example")
         label(g, if (page == Page.JOIN) "Şirkət kodu" else "Parol", WIDTH / 2 - 126, 206)
         input(g, WIDTH / 2 - 126, 214, 252, 30, if (page == Page.JOIN) "KDR-4821" else "••••••••")
         button(g, WIDTH / 2 - 126, 268, 252, if (page == Page.JOIN) "Qoşul" else "Daxil ol", BLUE)

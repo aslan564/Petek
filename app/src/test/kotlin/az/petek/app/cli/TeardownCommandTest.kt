@@ -69,7 +69,7 @@ class TeardownCommandTest {
     fun `the latest run's test company is deleted on the target`() =
         runBlocking<Unit> {
             val cli = cli()
-            val companyId = FakeTargets.registerOwner(target, "owner@test.kadrohr.com")
+            val companyId = FakeTargets.registerOwner(target, "owner@test.portal.example")
             val runId = recordRun(cli, "run_1", companyId)
 
             val result = cli.run("teardown")
@@ -84,7 +84,7 @@ class TeardownCommandTest {
     fun `a second teardown finds nothing left`() =
         runBlocking<Unit> {
             val cli = cli()
-            val companyId = FakeTargets.registerOwner(target, "owner@test.kadrohr.com")
+            val companyId = FakeTargets.registerOwner(target, "owner@test.portal.example")
             recordRun(cli, "run_1", companyId)
             cli.run("teardown").statusCode shouldBe 0
 
@@ -102,8 +102,8 @@ class TeardownCommandTest {
     fun `a named run is torn down instead of the latest`() =
         runBlocking<Unit> {
             val cli = cli()
-            val older = FakeTargets.registerOwner(target, "older@test.kadrohr.com")
-            val newer = FakeTargets.registerOwner(target, "newer@test.kadrohr.com")
+            val older = FakeTargets.registerOwner(target, "older@test.portal.example")
+            val newer = FakeTargets.registerOwner(target, "newer@test.portal.example")
             recordRun(cli, "run_old", older, startedAt = Instant.parse("2026-09-01T10:00:00Z"))
             recordRun(cli, "run_new", newer, startedAt = Instant.parse("2026-09-02T10:00:00Z"))
 

@@ -34,7 +34,7 @@ import java.nio.file.Path
  * @property productionHosts hosts refused as a target unless [allowProduction] (AGENTS.md rule 8).
  * @property testToken `X-Test-Token` for the target's `/test/...` API; null disables oracle assertions.
  * @property testApiUrl where the `/test/...` API lives when it is not on the target's own origin (`PETEK_TEST_API_URL`,
- *   e.g. KadroHR's `api.` host); null means the target itself, see [testApiBase].
+ *   e.g. a separate `api.` host); null means the target itself, see [testApiBase].
  * @property mailSource where verification mail is read from (`PETEK_MAIL_SOURCE`); the test API needs [testToken].
  * @property identitySecret key of the password derivation; from `PETEK_IDENTITY_SECRET` or `~/.petek/identity.secret`.
  * @property llmProvider the AI provider that answers (`PETEK_LLM_PROVIDER`; `auto` is resolved while loading, see

@@ -158,7 +158,7 @@ class IdentitySpecValidationTest {
 
     @Test
     fun `an invalid mail domain is rejected`() {
-        listOf("", "test@kadrohr.com", "-test.com", "test..com", "test_kadrohr.com", "a".repeat(201)).forEach {
+        listOf("", "test@portal.example", "-test.com", "test..com", "test_portal.example", "a".repeat(201)).forEach {
             conflict(spec(mailDomain = it)) shouldContain "is not a valid domain name"
         }
     }

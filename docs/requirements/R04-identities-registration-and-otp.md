@@ -41,7 +41,7 @@ the same identities) and independent of mailboxes a human reads.
 - `identity`: generator determinism, uniqueness for large N, quota tests.
 - `mail`: `MailpitMailboxTest`, `TestApiMailboxTest` (Ktor fake servers), `ImapMailboxTest`, `ManualCodesTest`,
   extractor tests.
-- `agent`: run-function tests over the contract flows and KadroHR-shaped flows with `FakeMailbox`.
+- `agent`: run-function tests over the contract flows and portal-shaped flows with `FakeMailbox`.
 - `app`: `ConfigLoaderTest` (mail source, test API URL), `AppContainerTest`, `DoctorCommandTest` ("Test inbox").
 - `e2e`: full sign-up of many testers against the fake target.
 

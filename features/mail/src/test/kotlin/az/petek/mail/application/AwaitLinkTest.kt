@@ -43,10 +43,10 @@ class AwaitLinkTest {
 
     @Test
     fun `a link the built-in hints do not know is found by its pattern`() {
-        val invite = mail("m1", "Sizi dəvət etdilər: https://api.kadrohr.test/api/v1/auth/set-password?token=9f1c-77")
+        val invite = mail("m1", "Sizi dəvət etdilər: https://api.portal.test/api/v1/auth/set-password?token=9f1c-77")
 
         extractor.extract(invite, MailPurpose.LINK).shouldBeNull()
-        extractor.extractLink(invite, SET_PASSWORD)?.link shouldBe URI("https://api.kadrohr.test/api/v1/auth/set-password?token=9f1c-77")
+        extractor.extractLink(invite, SET_PASSWORD)?.link shouldBe URI("https://api.portal.test/api/v1/auth/set-password?token=9f1c-77")
     }
 
     @Test
@@ -54,28 +54,28 @@ class AwaitLinkTest {
         val message =
             mail(
                 "m1",
-                text = "Kodunuz: 482913. Ətraflı: https://kadrohr.test/help",
+                text = "Kodunuz: 482913. Ətraflı: https://portal.test/help",
                 html =
-                    """<a href="https://kadrohr.test/help">Kömək</a> <a href="https://api.kadrohr.test/registration/verify?token=a.b.c">Təsdiqlə</a>""",
+                    """<a href="https://portal.test/help">Kömək</a> <a href="https://api.portal.test/registration/verify?token=a.b.c">Təsdiqlə</a>""",
             )
 
         val found = extractor.extractLink(message, Regex("registration/verify\\?token="))
 
-        found shouldBe VerificationCode("482913", URI("https://api.kadrohr.test/registration/verify?token=a.b.c"), "m1")
+        found shouldBe VerificationCode("482913", URI("https://api.portal.test/registration/verify?token=a.b.c"), "m1")
     }
 
     @Test
     fun `no matching link means no result`() {
-        extractor.extractLink(mail("m1", "https://kadrohr.test/help"), SET_PASSWORD).shouldBeNull()
+        extractor.extractLink(mail("m1", "https://portal.test/help"), SET_PASSWORD).shouldBeNull()
     }
 
     @Test
     fun `awaitLink waits for the matching mail, skips others and marks only it read`() =
         runTest {
-            mailbox.deliver(mail("welcome", "Xoş gəldiniz: https://kadrohr.test/confirm/abc", at = SINCE.plusSeconds(1)))
+            mailbox.deliver(mail("welcome", "Xoş gəldiniz: https://portal.test/confirm/abc", at = SINCE.plusSeconds(1)))
             launch {
                 delay(3.seconds)
-                mailbox.deliver(mail("invite", "https://api.kadrohr.test/api/v1/auth/set-password?token=t1", at = SINCE.plusSeconds(4)))
+                mailbox.deliver(mail("invite", "https://api.portal.test/api/v1/auth/set-password?token=t1", at = SINCE.plusSeconds(4)))
             }
 
             val found = useCase.awaitLink(ELI, SINCE, SET_PASSWORD, timeout = 60.seconds, pollInterval = 1.seconds)
@@ -89,7 +89,7 @@ class AwaitLinkTest {
     @Test
     fun `awaitLink times out like await when no matching link arrives`() =
         runTest {
-            mailbox.deliver(mail("welcome", "https://kadrohr.test/confirm/abc"))
+            mailbox.deliver(mail("welcome", "https://portal.test/confirm/abc"))
 
             val error = shouldThrow<MailTimeoutException> { useCase.awaitLink(ELI, SINCE, SET_PASSWORD, 5.seconds, 1.seconds) }
 
@@ -119,9 +119,9 @@ class AwaitLinkTest {
     @Test
     fun `the default awaitLink accepts the purpose link only when it matches the pattern`() =
         runTest {
-            val simple = LinkOnly(URI("https://kadrohr.test/invite/abc"))
+            val simple = LinkOnly(URI("https://portal.test/invite/abc"))
 
-            simple.awaitLink(ELI, SINCE, Regex("/invite/")).link shouldBe URI("https://kadrohr.test/invite/abc")
+            simple.awaitLink(ELI, SINCE, Regex("/invite/")).link shouldBe URI("https://portal.test/invite/abc")
             shouldThrow<MailTimeoutException> { simple.awaitLink(ELI, SINCE, SET_PASSWORD, 7.seconds) }.timeout shouldBe 7.seconds
         }
 
@@ -132,7 +132,7 @@ class AwaitLinkTest {
                 override fun extract(
                     message: MailMessage,
                     purpose: MailPurpose,
-                ): VerificationCode? = VerificationCode(null, URI("https://kadrohr.test/invite/x"), message.id)
+                ): VerificationCode? = VerificationCode(null, URI("https://portal.test/invite/x"), message.id)
             }
 
         basic.extractLink(mail("m1", ""), Regex("invite"))?.messageId shouldBe "m1"
@@ -153,7 +153,7 @@ class AwaitLinkTest {
     }
 
     private companion object {
-        const val ELI = "eli.k7x2.a07@test.kadrohr.com"
+        const val ELI = "eli.k7x2.a07@test.portal.example"
         val SINCE: Instant = Instant.parse("2026-09-25T10:00:00Z")
         val SET_PASSWORD = Regex("set-password\\?token=")
 
@@ -162,6 +162,6 @@ class AwaitLinkTest {
             text: String,
             html: String? = null,
             at: Instant = SINCE.plusSeconds(1),
-        ) = MailMessage(id, listOf(ELI), "Kadro HR", at, text, html, read = false)
+        ) = MailMessage(id, listOf(ELI), "Demo Portal", at, text, html, read = false)
     }
 }

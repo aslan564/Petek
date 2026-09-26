@@ -16,7 +16,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.RunFunctionFixture
-import az.petek.agent.testing.SimulatedKadro
+import az.petek.agent.testing.SimulatedPortal
 import az.petek.evidence.domain.StepStatus
 import az.petek.oracle.domain.Invitee
 import az.petek.oracle.domain.OracleSafetyException
@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.seconds
 class SeedCompanyRunFunctionTest {
     private val admin = AgentTestData.admin
 
-    /** A test API that also returns invitation links, as KadroHR may. */
+    /** A test API that also returns invitation links, as a real site may. */
     private class LinkingOracle(
         private val inner: FakeTargetOracle,
     ) : TargetOracle by inner {
@@ -50,7 +50,7 @@ class SeedCompanyRunFunctionTest {
     }
 
     private fun FakeTargetOracle.ownedCompany(
-        code: String? = SimulatedKadro.COMPANY_CODE,
+        code: String? = SimulatedPortal.COMPANY_CODE,
         isTest: Boolean = true,
     ) {
         companies["c1"] = TestCompany("c1", "Pətək Test MMC", code, isTest)
@@ -79,7 +79,7 @@ class SeedCompanyRunFunctionTest {
                         ),
                 )
             fixture.shared.get(SharedRunState.COMPANY_ID) shouldBe "c1"
-            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedKadro.COMPANY_CODE
+            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedPortal.COMPANY_CODE
             outcome.summary shouldBe "Seeded company c1: 3 departments, 2 invitations (0 links returned), company code PTK-4821."
         }
 
@@ -168,7 +168,7 @@ class SeedCompanyRunFunctionTest {
 
             fixture.run("seed_company").status shouldBe ActionStatus.SUCCEEDED
 
-            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedKadro.COMPANY_CODE
+            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedPortal.COMPANY_CODE
         }
 
     @Test
@@ -197,7 +197,7 @@ class SeedCompanyRunFunctionTest {
             outcome.status shouldBe ActionStatus.FAILED
             outcome.failureReason shouldBe FailureReason.MISSING_PREREQUISITE
             outcome.summary shouldContain "2 invitation-mode testers cannot be invited; company code PTK-4821 was published"
-            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedKadro.COMPANY_CODE
+            fixture.shared.get(SharedRunState.COMPANY_CODE) shouldBe SimulatedPortal.COMPANY_CODE
         }
 
     @Test

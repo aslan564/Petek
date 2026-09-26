@@ -7,7 +7,7 @@
 ## Context
 Verdicts must be trustworthy and explainable: no verdict without evidence (rule 5), and assertions are checked by
 code, never by the LLM (rule 2). Tests create companies and users on a real site, so a mistake must never harm
-production data (rule 8). The owner wants to test kadrohr.com, which is a production host.
+production data (rule 8). The owner also wants to test real sites that are production hosts.
 
 ## Decision
 - **Verdicts.** Typed assertions (`visible_text`, `not_visible`, `oracle`, `http_status`, `count`, `latency_max`,
@@ -56,6 +56,6 @@ production data (rule 8). The owner wants to test kadrohr.com, which is a produc
 
 ## Consequences
 - Easier: a failed check points to a class of bug (backend vs delivery/UI) with screenshots and oracle bodies.
-- Harder: testing production (kadrohr.com) needs an explicit opt-in. Production has no test API, so e-mail/OTP
+- Harder: testing a production host needs an explicit opt-in. Production has no test API, so e-mail/OTP
   sign-up flows and oracle checks cannot complete there. Recommended: a staging host with test mode.
-- Revisit: when KadroHR ships test mode, run `petek probe` to verify the contract before the first real campaign.
+- Revisit: when a target ships its test mode, run `petek probe` to verify the contract before the first real campaign.

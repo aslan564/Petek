@@ -28,7 +28,7 @@ import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.ValueTarget
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
-import az.petek.campaign.testing.kadrohrScenario
+import az.petek.campaign.testing.companyPortalScenario
 import az.petek.core.model.Role
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
@@ -43,9 +43,9 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** `scenarios/kadrohr.yaml`, the campaign for the real KadroHR, describes its flows and validates for any team size. */
-class KadrohrCampaignFileTest {
-    private val file = kadrohrScenario()
+/** `docs/examples/company-portal.yaml`, the campaign for the company portal, describes its flows and validates for any team size. */
+class CompanyPortalCampaignFileTest {
+    private val file = companyPortalScenario()
     private val campaign = YamlCampaignSource().load(file)
     private val target = campaign.target
 
@@ -96,25 +96,25 @@ class KadrohrCampaignFileTest {
     }
 
     @Test
-    fun `the real site is targeted at a paced rate with KadroHR's API prefix and first-visit flags`() {
-        campaign.settings.name shouldBe "kadrohr-real"
-        campaign.settings.target shouldBe URI("https://kadrohr.com")
+    fun `the real site is targeted at a paced rate with the portal's API prefix and first-visit flags`() {
+        campaign.settings.name shouldBe "portal-real"
+        campaign.settings.target shouldBe URI("https://staging.portal.example")
         campaign.settings.testers shouldBe 30
         campaign.settings.pacing shouldBe Pacing(startStagger = 1500.milliseconds)
         target.apiPrefix shouldBe "/api/v1"
-        target.localStorage["kadro:domain_dialog_dismissed"] shouldBe "1"
-        target.localStorage["kadro:lang"] shouldBe "az"
+        target.localStorage["portal:domain_dialog_dismissed"] shouldBe "1"
+        target.localStorage["portal:lang"] shouldBe "az"
         target.dismiss shouldContainExactly listOf("role=button[name=\"Qəbul edirəm\"]")
     }
 
     @Test
-    fun `every run function has a KadroHR flow and the password is only ever typed`() {
+    fun `every run function has a portal flow and the password is only ever typed`() {
         target.flows.keys shouldBe FlowNames.ALL
         listOf(FlowNames.REGISTER_OWNER, FlowNames.JOIN_BY_INVITE, FlowNames.JOIN_BY_CODE, FlowNames.LOGIN).forEach { name ->
             flow(name) shouldNotBe TargetProfile.DEFAULT_FLOWS[name]
         }
         flow(FlowNames.VERIFY_IDENTITY) shouldBe TargetProfile.DEFAULT_FLOWS[FlowNames.VERIFY_IDENTITY]
-        // KadroHR has companies: nobody signs up on their own, so the default sign_up flow is not part of its profile.
+        // The portal has companies: nobody signs up on their own, so the default sign_up flow is not part of its profile.
         val typed =
             target.flows
                 .filterKeys { it != FlowNames.SIGN_UP }
@@ -181,7 +181,7 @@ class KadrohrCampaignFileTest {
     }
 
     @Test
-    fun `created objects are identified through KadroHR's test API`() {
+    fun `created objects are identified through the portal's test API`() {
         target.idSources shouldBe
             mapOf(
                 "announcement_created" to IdSource.OracleField("/test/announcements/latest?by={self.email}", "id"),

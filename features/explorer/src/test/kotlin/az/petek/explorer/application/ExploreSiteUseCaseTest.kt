@@ -66,12 +66,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.seconds
 
 class ExploreSiteUseCaseTest {
-    private val target = URI("https://kadro.test")
+    private val target = URI("https://portal.test")
     private val site = FakeSite(target)
     private val repository = InMemoryExplorationRepository()
     private val artifacts = InMemoryArtifactStore()
     private val ids = SequentialIdGenerator()
-    private val policy = TargetPolicy(productionHosts = setOf("kadrohr.com"), allowProduction = false)
+    private val policy = TargetPolicy(productionHosts = setOf("portal.example"), allowProduction = false)
     private val events = CopyOnWriteArrayList<ExplorationEvent>()
     private val observer = ExplorationObserver { events += it }
     private val llm = ScriptedLlmClient { purposeOnly(it) }
@@ -100,7 +100,7 @@ class ExploreSiteUseCaseTest {
         }
     }
 
-    /** The public side of a small KadroHR: the root sends visitors to the login page. */
+    /** The public side of a small company portal: the root sends visitors to the login page. */
     private fun publicSite() {
         site.redirect("/", "/login", view = "anonymous")
         site.page("/login", "Daxil ol") {
@@ -266,7 +266,7 @@ class ExploreSiteUseCaseTest {
             val result = useCase().execute(request())
 
             val broken = result.findings.single { it.kind == FindingKind.BROKEN_LINK }
-            broken.pageUrl shouldBe "https://kadro.test/old-page"
+            broken.pageUrl shouldBe "https://portal.test/old-page"
             broken.detail shouldContain "answers 404"
             broken.evidence.size shouldBe 1
             result.findings.none { "/signup" in it.pageUrl } shouldBe true
@@ -296,7 +296,7 @@ class ExploreSiteUseCaseTest {
             val result = useCase().execute(request())
 
             val console = result.findings.single { it.kind == FindingKind.CONSOLE_ERROR }
-            console.pageUrl shouldBe "https://kadro.test/about"
+            console.pageUrl shouldBe "https://portal.test/about"
             console.detail shouldContain "TypeError: x is undefined"
             console.evidence.shouldNotBeEmpty()
             val failed = result.findings.single { it.kind == FindingKind.FAILED_REQUEST }
@@ -304,7 +304,7 @@ class ExploreSiteUseCaseTest {
             failed.detail shouldContain "GET /api/news -> 500"
             val mobile = result.findings.single { it.kind == FindingKind.MOBILE_OVERFLOW }
             mobile.detail shouldContain "120 px wider"
-            result.findings.none { it.pageUrl == "https://kadro.test/" && it.kind == FindingKind.MOBILE_OVERFLOW } shouldBe true
+            result.findings.none { it.pageUrl == "https://portal.test/" && it.kind == FindingKind.MOBILE_OVERFLOW } shouldBe true
         }
 
     @Test
@@ -534,7 +534,7 @@ class ExploreSiteUseCaseTest {
                     field("Parol", "password", type = "password", testId = "invite-password", value = "hunter2hunter2")
                     submit("Qəbul et", testId = "invite-submit")
                 }
-                text("Sizin link: https://kadro.test/reset?token=s3cr3tvalue")
+                text("Sizin link: https://portal.test/reset?token=s3cr3tvalue")
                 link("Dəvət", "/invite/Xk9pQ2mN7vB4tL8wR5yZabcd?token=s3cr3tvalue")
             }
             site.page("/invite/Xk9pQ2mN7vB4tL8wR5yZabcd", "Dəvət səhifəsi")
@@ -569,7 +569,7 @@ class ExploreSiteUseCaseTest {
             val refused =
                 shouldThrow<ExplorationRefusedException> {
                     useCase().execute(
-                        ExplorationRequest(URI("https://kadrohr.com"), null, ExplorationBudget(), setOf(ExplorationPhase.ANONYMOUS)),
+                        ExplorationRequest(URI("https://portal.example"), null, ExplorationBudget(), setOf(ExplorationPhase.ANONYMOUS)),
                     )
                 }
 
@@ -709,7 +709,7 @@ class ExploreSiteUseCaseTest {
                         .notes
                         .joinToString("\n"),
             )
-            val opened = admin.actions.lastIndexOf("navigate https://kadro.test/announcements/a1")
+            val opened = admin.actions.lastIndexOf("navigate https://portal.test/announcements/a1")
             admin.actions.drop(opened + 1).first { !it.startsWith("request") } shouldStartWith "click "
             admin.actions shouldNotContain "clickSelector [data-testid=\"announcement-delete\"]"
             val notes = result.record.summary.notes

@@ -32,7 +32,7 @@ object DemoPlans {
         yaml: String,
     ): RunPlanView =
         when (name) {
-            "kadrohr-qeydiyyat" -> {
+            "portal-qeydiyyat" -> {
                 RunPlanView(
                     null,
                     name,

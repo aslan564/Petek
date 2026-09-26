@@ -81,7 +81,7 @@ internal class FlowRunner(
      * flow asserted the identity and the page shows no `session.user_name`), then `verify_identity` unless a flow
      * already asserted the identity, and saves the session unless a flow saved it. With the contract flows a
      * registration ends signed in and checked, so nothing is left to do; a site that sends its new users to the login
-     * page (KadroHR) signs them in here. A flow that asserted the identity with a literal selector of its own counts as
+     * page (as some real sites do) signs them in here. A flow that asserted the identity with a literal selector of its own counts as
      * signed in, so it is not sent through a second login (which a signed-in site may answer with a redirect).
      * [company] is `{campaign.company}` in those flows, as in the sign-up's own.
      */

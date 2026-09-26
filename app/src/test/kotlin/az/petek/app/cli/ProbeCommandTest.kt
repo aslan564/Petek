@@ -158,7 +158,7 @@ class ProbeCommandTest {
         runBlocking<Unit> {
             val browser = browser()
 
-            val result = cli(browser).run("probe", "--url", "https://www.kadrohr.com")
+            val result = cli(browser).run("probe", "--url", "https://www.portal.example")
 
             result.statusCode shouldBe 2
             result.stderr shouldContain "production host"

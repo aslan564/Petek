@@ -62,7 +62,7 @@ class FlowYamlReadingTest {
     private val header =
         """
         campaign:
-          target: https://staging.kadrohr.test
+          target: https://staging.portal.test
           testers: 3
           seed: 7
           roles: {admin: 1, manager: 0, employee: 2}
@@ -252,14 +252,14 @@ class FlowYamlReadingTest {
                     """
                     target_profile:
                       api_prefix: /api/v1
-                      local_storage: {"kadro:domain_dialog_dismissed": "1", "kadro:lang": az}
+                      local_storage: {"portal:domain_dialog_dismissed": "1", "portal:lang": az}
                       dismiss: ["role=dialog >> text=Qəbul et", "#chat-close"]
                     """,
                 ),
             ).target
 
         target.apiPrefix shouldBe "/api/v1"
-        target.localStorage shouldBe mapOf("kadro:domain_dialog_dismissed" to "1", "kadro:lang" to "az")
+        target.localStorage shouldBe mapOf("portal:domain_dialog_dismissed" to "1", "portal:lang" to "az")
         target.dismiss shouldContainExactly listOf("role=dialog >> text=Qəbul et", "#chat-close")
     }
 
@@ -269,7 +269,7 @@ class FlowYamlReadingTest {
             load(
                 """
                 campaign:
-                  target: https://staging.kadrohr.test
+                  target: https://staging.portal.test
                   testers: 3
                   seed: 7
                   roles: {admin: 1, manager: 0, employee: 2}

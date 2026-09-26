@@ -30,7 +30,7 @@ internal object PanelWaits {
     /** The scripted site most panel tests explore: a home page linking a sign-in and a join form. */
     fun site(base: URI = URI("http://127.0.0.1:9")): FakeSiteEngine =
         FakeSiteEngine(base).apply {
-            page("/", "Kadro") {
+            page("/", "Portal") {
                 link("Daxil ol", "/login")
                 link("Qoşul", "/join")
             }

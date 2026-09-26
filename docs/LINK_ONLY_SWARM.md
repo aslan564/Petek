@@ -46,7 +46,7 @@ Bu bölmə üstündür: aşağıdakı bölmələr onunla toqquşarsa, bu bölmə
 14. **Poçt.** Əvvəl sahibin öz poçt qutusu və "artı ünvan" IMAP ilə, developer üçün lokal Mailpit. Pətəkin öz
     serverindəki qutu sonra gəlir, ödənişli modul kimi: yalnız qəbul edir, məktubları bir gündən sonra silir, yalnız
     run sahibinə göstərir.
-15. **Demo.** Ghost (xəbər) və WooCommerce (mağaza) sahibin öz serverində qaldırılır. KadroHR laboratoriya qalır.
+15. **Demo.** Ghost (xəbər) və WooCommerce (mağaza) sahibin öz serverində qaldırılır.
 16. **Sahiblik.** Tam test yalnız sahibliyi təsdiqlənmiş sayta aparılır: saytın kökündə Pətəkin verdiyi kodla fayl və
     ya DNS qeydi. Bu, bir dəfə edilir və yadda qalır. Localhost və daxili şəbəkə ünvanları təsdiqsiz qəbul olunur.
     Təsdiq yoxdursa, Pətək yalnız oxuyur.
@@ -225,7 +225,7 @@ axtarır, hesabat sahibin dilində yazılır.
 | Kəşfiyyatçının öz hesabı, özü qeydiyyat | yoxdur; kəşfiyyatçı test API ilə yaradılan şirkətin rol sessiyaları ilə girir | Faza 10: giriş zənciri `test_company` → `own_accounts` → `self_register` → `anonymous` |
 | Təlimat sənədindəki test hesabları (A) | kəşfiyyatçıya düz dildə təlimat verilir, hesab götürmək yoxdur | Faza 10: panel, `.env` referansı |
 | Testini bitirənlər arasında hesab dəyişdirmə (icazə ilə) | yoxdur | yoxdur |
-| Ssenaridə qapı təyinatı (qeydiyyat, login, qonaq) | qismən: KadroHR qeydiyyat rejimləri (şirkət kodu, dəvət) | Faza 13: rejimlər sərbəst sətir olur |
+| Ssenaridə qapı təyinatı (qeydiyyat, login, qonaq) | qismən: şirkət əsaslı qeydiyyat rejimləri (şirkət kodu, dəvət) | Faza 13: rejimlər sərbəst sətir olur |
 | Sahibin qutusu + artı ünvan (IMAP) | Mailpit və test API oxunur | Faza 10: `imap` |
 | Pətəkin serverindəki poçt qutusu | yoxdur | yoxdur (ödənişli modul, sonra) |
 | Qapını bir dəfə öyrən, kodla təkrarla; baryer | yoxdur | yoxdur |

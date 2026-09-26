@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test
 import java.net.URI
 
 class SiteModelAccumulatorTest {
-    private val target = URI("https://kadro.test")
+    private val target = URI("https://portal.test")
     private val accumulator = SiteModelAccumulator(target)
 
     private fun visit(
@@ -74,7 +74,7 @@ class SiteModelAccumulatorTest {
             .map { it.name } shouldContainExactly listOf("title", "priority")
         page.testIds shouldContainExactly listOf("x-admin", "x-employee")
         page.evidence.size shouldBe 2
-        accumulator.exampleUrl("/tickets", "employee") shouldBe URI("https://kadro.test/tickets")
+        accumulator.exampleUrl("/tickets", "employee") shouldBe URI("https://portal.test/tickets")
     }
 
     @Test

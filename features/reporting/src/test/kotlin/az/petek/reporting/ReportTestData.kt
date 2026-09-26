@@ -46,8 +46,8 @@ object ReportTestData {
         result: RunResult = RunResult.FAILED,
         repeatGroup: String? = null,
         repeatIndex: Int? = null,
-        campaignName: String = "kadrohr-core",
-        target: String = "https://staging.kadrohr.test",
+        campaignName: String = "portal-core",
+        target: String = "https://staging.portal.test",
     ) = RunRecord(
         runId = runId,
         runTag = RunTag("k7x2"),

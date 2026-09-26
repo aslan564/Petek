@@ -25,7 +25,7 @@ import java.net.URI
 
 class OracleTestTargetCheckTest {
     private val site = URI("http://127.0.0.1:18080")
-    private val owner = "owner@test.kadrohr.com"
+    private val owner = "owner@test.portal.example"
     private val oracle =
         FakeTargetOracle().apply {
             companies["c1"] = TestCompany("c1", "Pətək Test MMC", "PTK-1", isTest = true)
@@ -52,7 +52,7 @@ class OracleTestTargetCheckTest {
     @Test
     fun `another site never gets the test token`() =
         runTest {
-            val verdict = OracleTestTargetCheck(oracle, site, owner).check(URI("https://kadrohr.com"))
+            val verdict = OracleTestTargetCheck(oracle, site, owner).check(URI("https://portal.example"))
 
             verdict.shouldBeInstanceOf<TestTargetVerdict.Refused>().reason shouldContain "başqa sayta göndərilmir"
         }
@@ -65,7 +65,7 @@ class OracleTestTargetCheckTest {
                 .shouldBeInstanceOf<TestTargetVerdict.Refused>()
                 .reason shouldContain "PETEK_TEST_TOKEN"
             OracleTestTargetCheck(oracle, site, null).check(site).shouldBeInstanceOf<TestTargetVerdict.Refused>()
-            OracleTestTargetCheck(oracle, site, "nobody@test.kadrohr.com").check(site).shouldBeInstanceOf<TestTargetVerdict.Refused>()
+            OracleTestTargetCheck(oracle, site, "nobody@test.portal.example").check(site).shouldBeInstanceOf<TestTargetVerdict.Refused>()
             val broken =
                 object : az.petek.oracle.domain.TargetOracle by oracle {
                     override suspend fun companyByOwner(ownerEmail: String) =

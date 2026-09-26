@@ -126,7 +126,7 @@ class TestPatternLibraryTest {
 
     @Test
     fun `ideas are ordered by priority, then action id, then pattern`() {
-        val ideas = library.ideas(Models.kadro())
+        val ideas = library.ideas(Models.portal())
 
         ideas.zipWithNext().forEach { (a, b) ->
             (a.priority > b.priority || (a.priority == b.priority && a.actionId <= b.actionId)) shouldBe true

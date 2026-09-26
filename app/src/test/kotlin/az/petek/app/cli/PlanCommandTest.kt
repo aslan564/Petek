@@ -62,7 +62,7 @@ class PlanCommandTest {
             listOf("a01", "a02", "a03", "a04", "admin", "manager", "employee", "owner", "invite", "company_code", "+99450")
                 .forEach { result.stdout shouldContain it }
             result.stdout shouldContain "Əli"
-            result.stdout shouldContain "@test.kadrohr.com"
+            result.stdout shouldContain "@test.portal.example"
             result.stdout shouldContain "Nothing was executed against the target"
             val stored = cli.evidence { it.identities.findByRun(planRunIdIn(result.stdout)) }
             stored shouldHaveSize 4
@@ -149,13 +149,13 @@ class PlanCommandTest {
         }
 
     @Test
-    fun `the real KadroHR campaign plans thirty testers`() =
+    fun `the company portal campaign plans thirty testers`() =
         runBlocking<Unit> {
             val scenario =
                 generateSequence(Path.of("").toAbsolutePath()) { it.parent }
-                    .map { it.resolve("scenarios/kadrohr.yaml") }
+                    .map { it.resolve("docs/examples/company-portal.yaml") }
                     .firstOrNull(Files::isRegularFile)
-            assumeTrue(scenario != null, "scenarios/kadrohr.yaml is not reachable from the test's working directory")
+            assumeTrue(scenario != null, "docs/examples/company-portal.yaml is not reachable from the test's working directory")
             val cli = CliHarness(dir)
 
             val result = cli.run("plan", scenario!!.toString())

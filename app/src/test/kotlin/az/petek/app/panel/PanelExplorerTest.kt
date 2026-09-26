@@ -88,10 +88,10 @@ class PanelExplorerTest {
             val panel = harness()
 
             val refusal =
-                shouldThrow<PanelRequestException> { panel.backend.startExploration(PanelHarness.instructions("https://KadroHR.com/")) }
+                shouldThrow<PanelRequestException> { panel.backend.startExploration(PanelHarness.instructions("https://Portal.example/")) }
 
             refusal.problems.single().field shouldBe PanelInstructions.TARGET
-            refusal.problems.single().message shouldContain "'kadrohr.com' istehsal ünvanıdır"
+            refusal.problems.single().message shouldContain "'portal.example' istehsal ünvanıdır"
             panel.backend.exploration().shouldBeNull()
             panel.site.startCount shouldBe 0
         }
@@ -232,7 +232,7 @@ class PanelExplorerTest {
             panel.backend.compareWithPrevious().shouldBeNull()
 
             panel.site.remove("/join")
-            panel.site.page("/", "Kadro") {
+            panel.site.page("/", "Portal") {
                 link("Daxil ol", "/login")
                 link("Kömək", "/help")
             }
@@ -260,7 +260,7 @@ class PanelExplorerTest {
                     )
                 }
             panel = harness(roleSessions = sessions)
-            panel.site.page("/", "Kadro", view = "admin") { link("Elanlar", "/announcements") }
+            panel.site.page("/", "Portal", view = "admin") { link("Elanlar", "/announcements") }
             panel.site.page("/announcements", "Elanlar", view = "admin") {
                 form("/announcements") {
                     field("Başlıq", "title", testId = "announcement-title")
@@ -300,7 +300,7 @@ class PanelExplorerTest {
                     ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
                     site = URI("https://stage.example.com"),
                 )
-            panel.site.page("/", "Kadro") { link("Qoşul", "/join") }
+            panel.site.page("/", "Portal") { link("Qoşul", "/join") }
             panel.site.page("/join", "Qoşul")
 
             // Waits for the end of the exploration itself: a read-only walk need not produce a draft.

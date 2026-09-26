@@ -24,7 +24,7 @@ private val logger = KotlinLogging.logger {}
 /** The target profile (paths, selectors, sign-up and login flows) the explorer's setup campaign uses, and where it came from. */
 internal data class SetupProfile(
     val profile: TargetProfile,
-    /** Shown to the owner, e.g. `kadrohr-real v1` or the contract default. */
+    /** Shown to the owner, e.g. `portal-real v1` or the contract default. */
     val origin: String,
 )
 
@@ -39,7 +39,7 @@ internal fun interface SetupProfileSource {
  * the contract default of docs/TARGET_CONTRACT.md when nothing is stored or the text no longer loads. Every stored
  * scenario describes the configured site (runs go only there), so no site check is needed until target profiles
  * arrive (docs/PLAN.md Faza 10). Without this the setup campaign would sign up with the contract's `data-testid`
- * flows, which the real KadroHR does not have (docs/KADROHR_READINESS.md).
+ * flows, which the company portal does not have (docs/TARGET_CONTRACT.md).
  */
 internal class CatalogSetupProfiles(
     private val catalog: ScenarioCatalog,

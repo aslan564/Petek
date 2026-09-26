@@ -19,7 +19,7 @@ import java.net.URI
 class WebUrlsTest {
     @Test
     fun `scheme and host are lower-cased and the trailing dot of the host is dropped`() {
-        WebUrls.canonical(URI("HTTPS://Staging.KadroHR.com./app")) shouldBe URI("https://staging.kadrohr.com/app")
+        WebUrls.canonical(URI("HTTPS://Staging.Portal.example./app")) shouldBe URI("https://staging.portal.example/app")
     }
 
     @Test
@@ -30,7 +30,7 @@ class WebUrlsTest {
 
     @Test
     fun `an already canonical URL is returned unchanged`() {
-        val url = URI("https://staging.kadrohr.com/")
+        val url = URI("https://staging.portal.example/")
 
         WebUrls.canonical(url) shouldBeSameInstanceAs url
     }

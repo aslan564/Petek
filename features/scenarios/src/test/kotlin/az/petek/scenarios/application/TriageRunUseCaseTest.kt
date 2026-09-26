@@ -333,7 +333,7 @@ class TriageRunUseCaseTest {
                     srp("join", "a04") to
                         answer(
                             TriageCategory.MODEL_GAP,
-                            edits = listOf("seed: 7" to "seed: 8", "https://staging.kadrohr.test" to "https://www.kadrohr.test"),
+                            edits = listOf("seed: 7" to "seed: 8", "https://staging.portal.test" to "https://www.portal.test"),
                         ),
                     srp("forbidden", "a04") to malformed,
                 )
@@ -701,11 +701,11 @@ class TriageRunUseCaseTest {
     fun `a change of the target line is refused even when a target override hides it`() =
         runTest {
             givenRun(RunStories.problemReported("a03"), RunStories.failedJoin("a04"))
-            val overridden = ScenarioTestKit.validator(dir.resolve("work"), targetOverride = URI("https://override.kadrohr.test"))
+            val overridden = ScenarioTestKit.validator(dir.resolve("work"), targetOverride = URI("https://override.portal.test"))
             val llm =
                 fixed(
                     srp("read_announce", "a03") to
-                        answer(TriageCategory.MODEL_GAP, edits = listOf("https://staging.kadrohr.test" to "https://www.kadrohr.test")),
+                        answer(TriageCategory.MODEL_GAP, edits = listOf("https://staging.portal.test" to "https://www.portal.test")),
                     srp("join", "a04") to answer(TriageCategory.SCENARIO_BUG, edits = listOf(readTask to readTaskFixed)),
                 )
             val useCase = TriageRunUseCase(llm, evidence, evidence, scenarios, triage, overridden, clock, ids)

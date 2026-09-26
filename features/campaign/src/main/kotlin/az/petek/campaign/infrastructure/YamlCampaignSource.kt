@@ -37,7 +37,7 @@ import java.security.MessageDigest
 import java.util.HexFormat
 
 /**
- * Reads a campaign YAML file (schema: `scenarios/kadrohr.yaml`, docs/PLAN.md "Ssenari formatı") with kaml's node API,
+ * Reads a campaign YAML file (schema: `docs/examples/company-portal.yaml`, docs/PLAN.md "Ssenari formatı") with kaml's node API,
  * so every problem carries the line it came from. The schema is strict: unknown keys are errors, not silently ignored,
  * because a misspelled `wait_for` or `assert` would otherwise turn into a test that checks nothing.
  *
@@ -150,7 +150,7 @@ class YamlCampaignSource(
 
         fun sha256(bytes: ByteArray): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
 
-        /** `scenarios/kadrohr.yaml` -> `kadrohr`. */
+        /** `docs/examples/company-portal.yaml` -> `company-portal`. */
         fun defaultName(path: Path): String {
             val fileName = path.fileName?.toString().orEmpty()
             return fileName.substringBeforeLast('.').ifBlank { fileName }.ifBlank { "campaign" }

@@ -77,7 +77,7 @@ class FakeMailpit(
                                     put("ID", m.id)
                                     put("MessageID", "${m.id}@mailpit")
                                     put("Read", m.read)
-                                    put("From", address("KadroHR", "noreply@kadrohr.com"))
+                                    put("From", address("Demo Portal", "noreply@portal.example"))
                                     put("To", addresses(m.to))
                                     put("Cc", JsonNull)
                                     put("Subject", m.subject)
@@ -102,7 +102,7 @@ class FakeMailpit(
             buildJsonObject {
                 put("ID", m.id)
                 put("MessageID", "${m.id}@mailpit")
-                put("From", address("KadroHR", "noreply@kadrohr.com"))
+                put("From", address("Demo Portal", "noreply@portal.example"))
                 put("To", addresses(m.to))
                 put("Cc", JsonNull)
                 put("Bcc", JsonNull)

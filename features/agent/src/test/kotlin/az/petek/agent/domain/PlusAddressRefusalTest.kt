@@ -24,7 +24,7 @@ class PlusAddressRefusalTest {
 
     @Test
     fun `no plus address, or no e-mail error, is not a plus refusal`() {
-        PlusAddressRefusal.detect("anar.r1.a01@test.kadrohr.com", "Please enter a valid email address") shouldBe false
+        PlusAddressRefusal.detect("anar.r1.a01@test.portal.example", "Please enter a valid email address") shouldBe false
         PlusAddressRefusal.detect("test+r1-a01@company.az", "Password is too short") shouldBe false
     }
 }

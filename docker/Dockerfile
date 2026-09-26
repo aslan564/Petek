@@ -15,7 +15,7 @@
 #   docker/prepare-context.sh app/build/distributions/petek-0.1.0-linux-x64.tar.gz amd64
 #   docker build -f docker/Dockerfile -t petek docker/
 #   docker run --rm -v "$PWD:/work" --env-file .env petek doctor
-#   docker run --rm -v "$PWD:/work" --env-file .env petek run scenarios/kadrohr.yaml --json
+#   docker run --rm -v "$PWD:/work" --env-file .env petek run docs/examples/company-portal.yaml --json
 #   docker run --rm -v "$PWD:/work" --env-file .env --network host petek panel --no-open   # the panel binds loopback only
 #
 ARG PLAYWRIGHT_VERSION=1.63.0

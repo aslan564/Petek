@@ -88,7 +88,7 @@ class DefaultAgentLoopTest {
 
     /** A login page whose password field echoes what was typed, like a careless site would. */
     private fun loginPage(session: FakeBrowserSession): FakeBrowserSession {
-        session.url = "https://staging.kadrohr.test/login"
+        session.url = "https://staging.portal.test/login"
         session.snapshotProvider = {
             val typed =
                 session.actions
@@ -97,7 +97,7 @@ class DefaultAgentLoopTest {
                     ?.removeSuffix(" +submit")
             PageSnapshot(
                 url = session.url,
-                title = "KadroHR",
+                title = "Demo Portal",
                 elements =
                     listOf(
                         PageElement(1, "textbox", "E-poçt", "input", "login-email", null, true),
@@ -361,17 +361,17 @@ class DefaultAgentLoopTest {
         runTest {
             val llm =
                 scripted(
-                    decision("navigate", """"url": "https://kadrohr.com/register""""),
-                    decision("navigate", """"url": "https://STAGING.kadrohr.test/tickets""""),
+                    decision("navigate", """"url": "https://portal.example/register""""),
+                    decision("navigate", """"url": "https://STAGING.portal.test/tickets""""),
                     decision("navigate", """"url": "/announcements""""),
                     decision("done", """"summary": "ok""""),
                 )
 
             execute(llm).status shouldBe ActionStatus.SUCCEEDED
 
-            browser.actions shouldContainExactly listOf("navigate https://STAGING.kadrohr.test/tickets", "navigate /announcements")
+            browser.actions shouldContainExactly listOf("navigate https://STAGING.portal.test/tickets", "navigate /announcements")
             llm.userTurn(1) shouldContain
-                "INVALID: Only pages of the site under test can be opened. Use a path such as /tickets or an absolute URL on staging.kadrohr.test."
+                "INVALID: Only pages of the site under test can be opened. Use a path such as /tickets or an absolute URL on staging.portal.test."
             evidence.stepList.first().status shouldBe StepStatus.FAILED
         }
 
@@ -381,7 +381,7 @@ class DefaultAgentLoopTest {
             browser.url = "about:blank"
             val llm =
                 scripted(
-                    decision("navigate", """"url": "https://staging.kadrohr.test/login""""),
+                    decision("navigate", """"url": "https://staging.portal.test/login""""),
                     decision("navigate", """"url": "/login""""),
                     decision("done", """"summary": "ok""""),
                 )
@@ -891,7 +891,7 @@ class DefaultAgentLoopTest {
         runTest {
             val encoded = URLEncoder.encode(password, StandardCharsets.UTF_8)
             encoded shouldNotBe password
-            browser.url = "https://staging.kadrohr.test/login?email=x&password=$encoded"
+            browser.url = "https://staging.portal.test/login?email=x&password=$encoded"
             val llm = scripted(decision("read_text", """"selector": "#echo""""), decision("done", """"summary": "ok""""))
             browser.selectorTexts["#echo"] = "query: password=$encoded"
 

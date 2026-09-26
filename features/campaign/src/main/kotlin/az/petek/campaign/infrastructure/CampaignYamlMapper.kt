@@ -45,7 +45,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Maps a parsed campaign YAML tree onto the domain model, following the schema of `scenarios/kadrohr.yaml` and
+ * Maps a parsed campaign YAML tree onto the domain model, following the schema of `docs/examples/company-portal.yaml` and
  * docs/PLAN.md "Ssenari formatı". Structural problems (unknown keys, wrong types, missing keys) are collected with
  * lines and thrown together as one [CampaignValidationException]; cross-field rules are left to the validator.
  * `{api}` is replaced by `target_profile.api_prefix` once the whole file is mapped (see [expandApiPrefix]).

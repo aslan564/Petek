@@ -55,7 +55,7 @@ object ScenarioTestKit {
         |# Mini campaign for scenario tests.
         |campaign:
         |  name: mini
-        |  target: https://staging.kadrohr.test
+        |  target: https://staging.portal.test
         |  testers: 4
         |  seed: 7
         |  roles: {admin: 1, manager: 1, employee: 2}
@@ -130,7 +130,7 @@ object ScenarioTestKit {
         campaignHash = hash,
         campaignName = name,
         seed = 7,
-        target = "https://staging.kadrohr.test",
+        target = "https://staging.portal.test",
         startedAt = T0,
         endedAt = T0.plusSeconds(600).takeIf { result != RunResult.RUNNING },
         result = result,

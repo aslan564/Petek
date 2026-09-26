@@ -292,7 +292,7 @@ class TestCompanyRoleSessionsTest {
     ) = Identity(
         AgentId(agent),
         agent,
-        "$agent@test.kadrohr.com",
+        "$agent@test.portal.example",
         Secret("password-123"),
         "+994500000000",
         role,

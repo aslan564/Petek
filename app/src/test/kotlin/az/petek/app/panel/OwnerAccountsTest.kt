@@ -36,7 +36,7 @@ class OwnerAccountsTest {
     private val config by lazy {
         PetekConfig(
             target = URI("https://stage.shop.example"),
-            productionHosts = setOf("kadrohr.com"),
+            productionHosts = setOf("portal.example"),
             identitySecret = Secret("owner-accounts-test-secret-123"),
             evidenceDir = dir.resolve("evidence"),
         )
@@ -119,7 +119,7 @@ class OwnerAccountsTest {
     fun `a production site is refused before anything is written`() {
         val accounts = OwnerAccounts(config, env, targets)
 
-        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://kadrohr.com", "admin", "a@b.az", "x")) }
+        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://portal.example", "admin", "a@b.az", "x")) }
         Files.exists(env) shouldBe false
     }
 

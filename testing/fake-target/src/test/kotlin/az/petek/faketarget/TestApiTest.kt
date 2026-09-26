@@ -76,7 +76,7 @@ class TestApiTest {
             company.string("id") shouldMatch Regex("c\\d+")
             company.string("code") shouldMatch Regex("PTK-\\d{4}")
             fake.testGet("/test/companies/${company.string("id")}").json() shouldBe company
-            fake.testGet("/test/companies?owner=nobody@test.kadrohr.com").status shouldBe 404
+            fake.testGet("/test/companies?owner=nobody@test.portal.example").status shouldBe 404
             fake.testGet("/test/companies/c999").status shouldBe 404
             fake.testGet("/test/companies").status shouldBe 400
         }
@@ -88,13 +88,13 @@ class TestApiTest {
             browser.submit(
                 "/register",
                 "name" to "Vəli",
-                "email" to "v@test.kadrohr.com",
+                "email" to "v@test.portal.example",
                 "phone" to "+994500000001",
                 "password" to "owner-secret-1",
                 "company" to "X",
             )
             fake.testGet("/test/otp/+994500000001").status shouldBe 404
-            browser.submit("/verify", "email" to "v@test.kadrohr.com", "code" to fake.verificationCode("v@test.kadrohr.com"))
+            browser.submit("/verify", "email" to "v@test.portal.example", "code" to fake.verificationCode("v@test.portal.example"))
             val otp = fake.testGet("/test/otp/+994500000001")
             otp.status shouldBe 200
             otp.json().keys shouldBe setOf("phone", "code")
@@ -111,8 +111,8 @@ class TestApiTest {
             val companyId = fake.companyOf(owner.email).string("id")
             val invites =
                 listOf(
-                    Invite("a@test.kadrohr.com", "A", "manager", "IT"),
-                    Invite("b@test.kadrohr.com", "B", "employee", "Satış"),
+                    Invite("a@test.portal.example", "A", "manager", "IT"),
+                    Invite("b@test.portal.example", "B", "employee", "Satış"),
                 )
             val first = fake.seed(companyId, listOf("IT", "HR"), invites)
             first.string("company_id") shouldBe companyId
@@ -120,13 +120,13 @@ class TestApiTest {
             first["departments"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content } shouldBe
                 mapOf("IT" to "d1", "HR" to "d2", "Satış" to "d3")
             val links = first["invites"]!!.jsonArray.map { it.jsonObject.string("email") to it.jsonObject.string("link") }
-            links.map { it.first } shouldContainExactly listOf("a@test.kadrohr.com", "b@test.kadrohr.com")
+            links.map { it.first } shouldContainExactly listOf("a@test.portal.example", "b@test.portal.example")
 
             val second = fake.seed(companyId, listOf("HR", "IT", "Maliyyə"), invites.reversed())
             second["departments"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content } shouldBe
                 mapOf("IT" to "d1", "HR" to "d2", "Satış" to "d3", "Maliyyə" to "d4")
             second["invites"]!!.jsonArray.map { it.jsonObject.string("email") to it.jsonObject.string("link") } shouldBe links.reversed()
-            fake.mailsTo("a@test.kadrohr.com") shouldHaveSize 1
+            fake.mailsTo("a@test.portal.example") shouldHaveSize 1
             fake.server.store
                 .invitations() shouldHaveSize 2
         }
@@ -142,7 +142,7 @@ class TestApiTest {
             val badRole =
                 fake.testPost(
                     "/test/companies/seed",
-                    """{"company_id":"$companyId","invites":[{"email":"x@test.kadrohr.com","role":"boss"}]}""",
+                    """{"company_id":"$companyId","invites":[{"email":"x@test.portal.example","role":"boss"}]}""",
                 )
             badRole.status shouldBe 400
             badRole.json().string("error") shouldBe "invalid_role"
@@ -171,7 +171,7 @@ class TestApiTest {
             val team = fake.team()
             team.admin.browser.submit("/announcements", "title" to "Elan", "body" to "")
             team.itEmployee.browser.submit("/tickets", "title" to "T", "description" to "", "department" to "IT")
-            val other = fake.registerOwner(email = "other@test.kadrohr.com", company = "Qalan MMC")
+            val other = fake.registerOwner(email = "other@test.portal.example", company = "Qalan MMC")
 
             val deleted = fake.testDelete("/test/companies/${team.companyId}")
             deleted.status shouldBe 204
@@ -218,12 +218,12 @@ class TestApiTest {
         runBlocking<Unit> {
             val owner = fake.registerOwner()
             fake.testGet("/test/announcements/latest?by=${owner.email}").status shouldBe 404
-            fake.testGet("/test/announcements/latest?by=nobody@test.kadrohr.com").status shouldBe 404
+            fake.testGet("/test/announcements/latest?by=nobody@test.portal.example").status shouldBe 404
             fake.testGet("/test/announcements/a404").status shouldBe 404
             fake.testGet("/test/announcements/a404/receipts").status shouldBe 404
             fake.testGet("/test/tickets/latest?by=${owner.email}").status shouldBe 404
             fake.testGet("/test/tickets/t404").status shouldBe 404
-            fake.testGet("/test/notifications?user=nobody@test.kadrohr.com").status shouldBe 404
+            fake.testGet("/test/notifications?user=nobody@test.portal.example").status shouldBe 404
             fake
                 .testGet("/test/notifications?user=${owner.email}")
                 .json()["notifications"]!!

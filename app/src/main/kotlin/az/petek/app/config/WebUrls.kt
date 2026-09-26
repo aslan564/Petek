@@ -17,9 +17,9 @@ import java.net.URI
 object WebUrls {
     /**
      * [url] with a lower-case scheme and host and without the trailing dot of a fully qualified host name
-     * (`HTTPS://KadroHR.com./app` -> `https://kadrohr.com/app`). It is the same site, spelled the way
+     * (`HTTPS://Portal.example./app` -> `https://portal.example/app`). It is the same site, spelled the way
      * [az.petek.core.security.TargetPolicy] compares hosts, so a production host cannot pass the policy in another
-     * spelling (`kadrohr.com.` resolves to `kadrohr.com`). Every other part is kept exactly (raw, still encoded).
+     * spelling (`portal.example.` resolves to `portal.example`). Every other part is kept exactly (raw, still encoded).
      */
     fun canonical(url: URI): URI {
         val scheme = url.scheme ?: return url

@@ -14,7 +14,7 @@ package az.petek.core.model
 /**
  * A tester role on the target system, named by the campaign (`campaign.roles`) or the target profile: any lowercase
  * key (`editor`, `buyer`). [ADMIN], [MANAGER] and [EMPLOYEE] are the roles of a site with companies (`tenant: company`,
- * the KadroHR profile); a site without companies uses its own. Shared by campaign quotas, identity registry and actor
+ * the contract's profile); a site without companies uses its own. Shared by campaign quotas, identity registry and actor
  * selection.
  */
 @JvmInline

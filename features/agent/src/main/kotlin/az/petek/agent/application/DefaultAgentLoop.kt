@@ -157,7 +157,7 @@ class DefaultAgentLoop(
 
         /**
          * The page as the model sees it. A single-page application answers `load` with an empty shell and draws the
-         * page afterwards (kadrohr.com, 2026-09-26): an empty snapshot is retried every [PAGE_SETTLE_POLL] for at most
+         * page afterwards (seen on a real single-page application, 2026-09-26): an empty snapshot is retried every [PAGE_SETTLE_POLL] for at most
          * [PAGE_SETTLE_TIMEOUT], so the model's first decision and the step's first screenshot show the page, not the
          * shell. A page that stays empty is shown as it is; the model then reports what it sees.
          */

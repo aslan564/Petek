@@ -60,7 +60,7 @@ contention, never shared state); `PER_SESSION` gives every tester its own browse
 - **`TesterIsolationAtScaleTest`** (`features/orchestration`; 100 and 1 000 testers on every `build`, 5 000 in CI's
   e2e job via `-Dpetek.isolation.testers=5000`): the real orchestrator, step executor,
   event bus and shared state drive **100, 1 000 and 5 000** testers (fake browser and scripted decisions) through a
-  KadroHR-shaped campaign and assert every guarantee above that the harness owns: distinct identity, session object,
+  portal-shaped campaign and assert every guarantee above that the harness owns: distinct identity, session object,
   runtime and storage path per tester; every agent acted as itself; 4 999 attempts to change the admin's company code
   refused; every step, wait, event and receipt attributed to the right agent; `{last_id}` never a colleague's id.
   Measured 2026-09-25: 100 testers 0.15 s, 1 000 testers 1.5 s, 5 000 testers 13 s (virtual time).

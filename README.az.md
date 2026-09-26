@@ -16,8 +16,8 @@ English: [README.md](README.md).
   Pətək model xərcini daşımır və məlumatınızı ikinci dəfə görmür.
 - **Qərarı kod verir, model yox.** Vaxtı harness ölçür, assertləri kod yoxlayır, agent yalnız kodda yazılmış
   whitelist-dən hərəkət seçə bilər. Hansı AI-ın işlədiyi hökmün dəyərini dəyişmir.
-- **Sizin istənilən saytınız.** İlk hədəf KadroHR-dır (HR SaaS). Saytlar data kimi təsvir olunur (`target_profile`) və
-  yol xəritəsi mühərriki hədəfdən tam asılı olmayan edir.
+- **Sizin istənilən saytınız.** Pətək heç bir konkret sayt üçün yazılmayıb: sayt data kimi təsvir olunur
+  (`target_profile`), mühərrik heç bir saytı, şirkəti və ya sahəni adı ilə tanımır.
 
 Müəllif: **Aslan Aslanov** · © 2026 **Kodcraft** · [Apache License 2.0](LICENSE) ilə açıq mənbədir.
 
@@ -94,7 +94,7 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 | Veb panel | Təlimat, Kəşfiyyat, Ssenarilər (draft → təsdiq → dondurma, diff, triaj), Orkestrator tapşırıq matrisi, canlı Agentlər lövhəsi, Hesabatlar və stabillik |
 | Kəşfiyyatçı | Sayt modelini üç fazada öyrənir (səhifələr, formalar, əməliyyatlar, rollar, realtime, naməlumlar), sahibə sual verir, test ideyaları çıxarır, kampaniya layihəsi yazır |
 | Triaj | Run-ın sürprizlərini sistem bug / model boşluğu / ssenari xətası kimi ayırır və ssenari v2-ni diff kimi təklif edir |
-| Hədəflər | KadroHR (real, `scenarios/kadrohr.yaml`) və e2e üçün fake kontrakt saytı (`testing/fake-target`) |
+| Hədəflər | Sizə məxsus istənilən sayt; nümunələr `docs/examples/`-də, e2e üçün fake kontrakt saytı (`testing/fake-target`) |
 | Poçt / OTP | Mailpit catch-all qutusu və ya hədəfin test API-si (`PETEK_MAIL_SOURCE`); telefon OTP test API-dən |
 | AI | Sizdə olan hansı olursa (`PETEK_LLM_PROVIDER=auto`): istənilən AI CLI (`PETEK_LLM_BIN` + `PETEK_LLM_ARGS`), Codex, Gemini və ya OpenCode CLI, Anthropic API və ya istənilən OpenAI-uyğun endpoint (OpenAI, Grok, OpenRouter, Ollama, LM Studio, vLLM) — retry, paralellik limiti, ölçmə və tapılan növbəti AI-a keçidlə bir `LlmClient` portu arxasında; `doctor` hansını və niyə seçdiyini deyir |
 | Sübut | SQLite (run, kimlik, addım, hadisə, qəbz, assert, tapıntı, istifadə) + artefakt faylları, hər qeydin ID-si var |
@@ -174,8 +174,8 @@ Komanda sətri ilə, başdan sona:
 
 ```bash
 ./gradlew :app:run --args="capacity"                   # bu maşın neçə tester götürər (tövsiyə, limit deyil)
-./gradlew :app:run --args="plan scenarios/kadrohr.yaml" # yaradılacaq kimliklər, heç nə icra olunmur
-./gradlew :app:run --args="run scenarios/kadrohr.yaml --repeat 3"
+./gradlew :app:run --args="plan docs/examples/company-portal.yaml" # yaradılacaq kimliklər, heç nə icra olunmur
+./gradlew :app:run --args="run docs/examples/company-portal.yaml --repeat 3"
 ./gradlew :app:run --args="report latest"
 ./gradlew :app:run --args="teardown --run <run_id>"    # test şirkətini sil (hər run-ın sonunda da edilir)
 ```
@@ -226,8 +226,8 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | Açar | Default | Məna |
 |---|---|---|
 | `PETEK_TARGET` | — | Test olunan sistem; hər kampaniyanın `campaign.target`-ini əvəz edir |
-| `PETEK_TARGETS_DIR` | `targets` | Hədəf profilləri, hər sayta bir `targets/<ad>.yaml` (URL, `api_url`, production hostlar, poçt, `${VAR}` token və hesab referansları, giriş sırası, kampaniya profili); `PETEK_TARGET` profilin adı ola bilər, panel profili olan istənilən saytda run edir (bax `targets/kadrohr.yaml`) |
-| `PETEK_PRODUCTION_HOSTS` | `kadrohr.com,www.kadrohr.com` | Hədəf kimi rədd edilən hostlar, əgər … |
+| `PETEK_TARGETS_DIR` | `targets` | Hədəf profilləri, hər sayta bir `targets/<ad>.yaml` (URL, `api_url`, production hostlar, poçt, `${VAR}` token və hesab referansları, giriş sırası, kampaniya profili); `PETEK_TARGET` profilin adı ola bilər, panel profili olan istənilən saytda run edir (bax `docs/examples/target-profile.yaml`) |
+| `PETEK_PRODUCTION_HOSTS` | — (yoxdur) | Hədəf kimi rədd edilən hostlar, əgər … |
 | `PETEK_ALLOW_PRODUCTION` | `false` | … bu `true` deyilsə (qayda 8) |
 | `PETEK_TEST_TOKEN` | — | Hədəfin `/test/...` API-si üçün `X-Test-Token`; boş = oracle yoxlamaları və teardown yoxdur |
 | `PETEK_TEST_API_URL` | hədəf | `/test/...` API hədəfin origin-ində deyilsə onun baza ünvanı |
@@ -235,7 +235,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / qutu / — / `true` / `INBOX` | `imap` mənbəyi o qutunu necə oxuyur (Jakarta Mail/Angus); parol `Secret`-dir |
 | `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün) |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
-| `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | Test kimliklərinin e-poçt domeni |
+| `PETEK_MAIL_DOMAIN` | `petek.test` | Test kimliklərinin e-poçt domeni |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Test parollarının derivasiyası **və** `petek verify`-ın verdiyi sahiblik kodunun açarı (≥ 16 simvol). Eyni saytı test edən hər maşında eyni olsun: başqa açar başqa kod verir və dərc olunmuş sübut artıq uyğun gəlmir |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` mühitdəki ayar və açarlara, layihənin AI işarəsinə (`AGENTS.md`, `GEMINI.md`) və `PATH`-dakı agent CLI-lərinə görə seçir, qalanlarını ehtiyat saxlayır, heç nə tapmasa sizin yerinizə vendor seçmir, `doctor` səbəbini deyir |
 | `PETEK_LLM_MODEL` | alətin öz modeli | Model; boş olanda alət və ya provayder necə qurulubsa o işləyir; `anthropic-api` və `openai-compat` üçün məcburidir |
@@ -286,8 +286,8 @@ steps:
 ```
 
 `target_profile` saytın özünü təsvir edir: yollar, selektorlar, qeydiyyat/login axınları, bağlanacaq overlay-lər, API
-prefiksi və yaradılan ID-lərin haradan oxunduğu. `scenarios/kadrohr.yaml` real KadroHR-ı tamamilə bu yolla (kodsuz)
-təsvir edir, `scenarios/contract-demo.yaml` kontrakt saytını. Tam format, aktor qrammatikası, şablonlar və assert
+prefiksi və yaradılan ID-lərin haradan oxunduğu. `docs/examples/company-portal.yaml` axınları kontraktdan fərqlənən
+saytı tamamilə bu yolla (kodsuz) təsvir edir, `scenarios/contract-demo.yaml` kontrakt saytını. Tam format, aktor qrammatikası, şablonlar və assert
 növləri: [docs/PLAN.md](docs/PLAN.md) ("Ssenari formatı") və [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Hədəf kontraktı
@@ -295,7 +295,7 @@ növləri: [docs/PLAN.md](docs/PLAN.md) ("Ssenari formatı") və [docs/ARCHITECT
 Pətək ən yaxşı hədəf **test rejimi** verəndə işləyir: `X-Test-Token` arxasında `/test/...` API (OTP kodları,
 şirkətlər, seeding, oxunma qəbzli elanlar, ticketlər, bildirişlər, isteğe bağlı poçt), `is_test` şirkətlər və sabit
 `data-testid`-lər. [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) bunu müəyyən edir; `testing/fake-target` icra
-edir; [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) real KadroHR-ı izləyir. Test API olmadan səhifə və şəbəkə
+edir. Test API olmadan səhifə və şəbəkə
 yoxlamaları yenə işləyir, oracle yoxlamaları buraxılır, teardown mümkün olmur (yol xəritəsi bunu sübut səviyyələri
 ilə birinci dərəcəli rejim edir).
 
@@ -330,7 +330,7 @@ Protocol serveridir (əl ilə yazılmış JSON-RPC, əlavə kitabxana yoxdur; `i
 `run_triage`, `get_stability`, `teardown`. Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: run,
 təsdiq, teardown və yazma ilə kəşfiyyat rədd edilir; hədəf siyasəti hər yerdəki kimi tətbiq olunur. Hər nəticə panelin
 JSON-unu mətn və strukturlu məzmun kimi daşıyır; uğursuzluq panelin mesajı ilə `isError` nəticəsidir. `.env` yoxdursa
-server panel kimi lokal fake KadroHR-dan istifadə edir.
+server panel kimi lokal fake target-dan istifadə edir.
 
 `petek --json <əmr>` `doctor`, `init`, `plan`, `run`, `report` və `teardown` üçün stdout-a bir JSON sənəd çap edir
 (loglar stderr-də qalır; uğursuzluq adi çıxış kodu ilə `{"error": ...}`), skriptlər və CI üçün.
@@ -400,7 +400,6 @@ Faza 0–7 (MVP, kəşfiyyatçı, triaj, veb panel) icra olunub. [docs/PLAN.md](
 | [docs/requirements](docs/requirements) | Hər tələb üçün bir arxitektura sənədi: modullara, testlərə və ADR-lərə izlənə bilirlik |
 | [docs/adr](docs/adr) | Arxitektura qərar qeydləri 0001–0011 |
 | [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) | Hədəfin test rejimində nə verməli olduğu |
-| [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) | Real KadroHR: nə hazırdır, hədəfdən nə gözlənilir |
 | [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | Təhlükəsizlik siyasəti; töhfə qaydaları; bu repoda AI kod agentlərinin izlədiyi qaydalar |
 
 ## İnkişaf

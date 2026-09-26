@@ -50,7 +50,7 @@ object AgentTestData {
         return Identity(
             agentId = agentId,
             displayName = name,
-            email = "tester.k7x2.$agentId@test.kadrohr.com",
+            email = "tester.k7x2.$agentId@test.portal.example",
             password = Secret(password),
             phone = "+99450" + (1000000 + index),
             role = role,

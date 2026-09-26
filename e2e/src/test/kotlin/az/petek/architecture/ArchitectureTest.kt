@@ -118,8 +118,8 @@ class ArchitectureTest {
     private fun featureOf(packageName: String): String = packageName.removePrefix("az.petek.").substringBefore('.')
 
     private companion object {
-        /** Words of one kind of site (KadroHR); a declaration of the core named after one would tie Pətək to it. */
-        val HR_CONCEPT = Regex("(?i)department|announcement|ticket|leave|payroll|salary|vacation|kadro")
+        /** Words of one kind of site (a company's HR portal); a declaration of the core named after one would tie Pətək to it. */
+        val HR_CONCEPT = Regex("(?i)department|announcement|ticket|leave|payroll|salary|vacation")
 
         /** Paid implementations live in a separate repository behind the core's ports (ADR-0011). */
         val PAID_EDITION_PREFIXES = listOf("az.petek.premium", "az.petek.enterprise", "az.petek.hosted", "az.petek.cloud")

@@ -94,7 +94,7 @@ class CiReportWritersTest {
         val az = CustomerSummaryWriter().render(SampleReport.model())
         val en = CustomerSummaryWriter(english = true).render(SampleReport.model())
 
-        az shouldContain "Pətək https://staging.kadrohr.test saytını 30 testerlə 4 dəq 05 san ərzində yoxladı."
+        az shouldContain "Pətək https://staging.portal.test saytını 30 testerlə 4 dəq 05 san ərzində yoxladı."
         az shouldContain "2 problem tapıldı"
         az shouldContain "Saytda düzəldilməli (2)"
         az shouldContain "„read_announce“ addımında dəyişiklik saxlanıldı, amma istifadəçilər onu ekranda görmədi."

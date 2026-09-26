@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
 class InputsTest {
     @Test
     fun `e-mails are trimmed and lower-cased`() {
-        Inputs.email("  Eli.K@Test.KadroHR.com ") shouldBe "eli.k@test.kadrohr.com"
+        Inputs.email("  Eli.K@Test.Portal.example ") shouldBe "eli.k@test.portal.example"
     }
 
     @Test
@@ -29,10 +29,10 @@ class InputsTest {
 
     @Test
     fun `test companies are recognised by the owner's domain only`() {
-        Inputs.isTestEmail("a@test.kadrohr.com", "test.kadrohr.com") shouldBe true
-        Inputs.isTestEmail("a@test.kadrohr.com", "Test.KadroHR.com") shouldBe true
-        Inputs.isTestEmail("a@kadrohr.com", "test.kadrohr.com") shouldBe false
-        Inputs.isTestEmail("a@evil-test.kadrohr.com", "test.kadrohr.com") shouldBe false
+        Inputs.isTestEmail("a@test.portal.example", "test.portal.example") shouldBe true
+        Inputs.isTestEmail("a@test.portal.example", "Test.Portal.example") shouldBe true
+        Inputs.isTestEmail("a@portal.example", "test.portal.example") shouldBe false
+        Inputs.isTestEmail("a@evil-test.portal.example", "test.portal.example") shouldBe false
     }
 
     @Test

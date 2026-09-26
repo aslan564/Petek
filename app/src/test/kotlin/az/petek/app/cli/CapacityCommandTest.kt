@@ -54,16 +54,16 @@ class CapacityCommandTest {
         runBlocking<Unit> {
             assumeTrue(Files.isDirectory(Path.of("/proc/self")), "measuring reads /proc")
             val browser = FakeBrowserEngine()
-            val cli = CliHarness(dir, mapOf("PETEK_TARGET" to "https://staging.kadrohr.test"), browser = browser)
+            val cli = CliHarness(dir, mapOf("PETEK_TARGET" to "https://staging.portal.test"), browser = browser)
 
             val result = cli.run("capacity", "--measure", "3")
 
             result.statusCode shouldBe 0
-            result.stdout shouldContain "Measuring 3 real browser sessions on https://staging.kadrohr.test"
+            result.stdout shouldContain "Measuring 3 real browser sessions on https://staging.portal.test"
             result.stdout shouldContain "(measured)"
             result.stdout shouldNotContain "(estimate)"
             browser.sessions shouldHaveSize 3
-            browser.sessions.forEach { it.actions shouldContain "navigate https://staging.kadrohr.test" }
+            browser.sessions.forEach { it.actions shouldContain "navigate https://staging.portal.test" }
             browser.sessions.forEach { it.closed shouldBe true }
             browser.stopCount shouldBe 1
         }
@@ -84,9 +84,9 @@ class CapacityCommandTest {
     fun `--measure refuses a production page before opening anything`() =
         runBlocking<Unit> {
             val browser = FakeBrowserEngine()
-            val cli = CliHarness(dir, mapOf("PETEK_PRODUCTION_HOSTS" to "kadrohr.com"), browser = browser)
+            val cli = CliHarness(dir, mapOf("PETEK_PRODUCTION_HOSTS" to "portal.example"), browser = browser)
 
-            val result = cli.run("capacity", "--measure", "2", "--url", "https://kadrohr.com/login")
+            val result = cli.run("capacity", "--measure", "2", "--url", "https://portal.example/login")
 
             result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
             result.stderr shouldContain "Refusing to contact the target"

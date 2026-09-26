@@ -60,12 +60,12 @@ internal fun HTML.page(
     head {
         meta(charset = "utf-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
-        title("$title · KadroHR")
+        title("$title · Demo Portal")
         style { unsafe { raw(Assets.STYLES) } }
     }
     body {
         header("top") {
-            a(href = "/", classes = "brand") { +"KadroHR" }
+            a(href = "/", classes = "brand") { +"Demo Portal" }
             if (chrome != null) sessionHeader(chrome)
         }
         div(if (chrome != null) "layout" else "layout single") {

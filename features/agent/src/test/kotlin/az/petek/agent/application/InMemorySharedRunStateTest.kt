@@ -95,7 +95,7 @@ class InMemorySharedRunStateTest {
 
     @Test
     fun `invitation links are keyed by lower-case e-mail`() {
-        state.put(SharedRunState.inviteLink("Eli.K7X2.a07@Test.KadroHR.com"), "https://x/invite/t")
-        state.get(SharedRunState.inviteLink("eli.k7x2.a07@test.kadrohr.com")) shouldBe "https://x/invite/t"
+        state.put(SharedRunState.inviteLink("Eli.K7X2.a07@Test.Portal.example"), "https://x/invite/t")
+        state.get(SharedRunState.inviteLink("eli.k7x2.a07@test.portal.example")) shouldBe "https://x/invite/t"
     }
 }

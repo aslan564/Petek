@@ -61,4 +61,5 @@ fast and stable. Test credentials and one-time codes must not be sent to an exte
 ## Action Items
 1. [x] Protocol, loop, run functions, placeholders.
 2. [ ] Add `get_phone_code` (integration fixes, in progress).
-3. [ ] Align KadroHR markup with docs/TARGET_CONTRACT.md, or override selectors in the campaign.
+3. [x] A real site's markup: aligned with docs/TARGET_CONTRACT.md, or selectors and flows overridden in the campaign
+   (`target_profile`, Faza 10).

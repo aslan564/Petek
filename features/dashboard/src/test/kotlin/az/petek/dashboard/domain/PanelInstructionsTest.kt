@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test
 class PanelInstructionsTest {
     private val valid =
         PanelInstructions(
-            target = "https://staging.kadrohr.az",
+            target = "https://staging.portal.example",
             instructions = "Elan yaratma axınını yoxla.",
             testers = 30,
             roles = RoleSplit(admins = 1, managers = 5, employees = 24),
@@ -37,7 +37,7 @@ class PanelInstructionsTest {
 
     @Test
     fun `the target must be an absolute http or https address`() {
-        listOf("", "staging.kadrohr.az", "ftp://kadrohr.az", "https://", "javascript:alert(1)", "http://exa mple.com").forEach {
+        listOf("", "staging.portal.example", "ftp://portal.example", "https://", "javascript:alert(1)", "http://exa mple.com").forEach {
             fields(valid.copy(target = it)) shouldContainExactly listOf(PanelInstructions.TARGET)
         }
         fields(valid.copy(target = "http://127.0.0.1:8080/app")).shouldBeEmpty()
@@ -95,18 +95,21 @@ class PanelInstructionsTest {
     fun `a run request names exactly one scenario or campaign and a sane tester count`() {
         RunRequest(scenarioId = "scn_1").problems().shouldBeEmpty()
         RunRequest(scenarioId = null).problems().map { it.field } shouldContainExactly listOf(RunRequest.SCENARIO)
-        RunRequest(scenarioId = "scn_1", campaignPath = "scenarios/kadrohr.yaml").problems().map { it.field } shouldContainExactly
+        RunRequest(
+            scenarioId = "scn_1",
+            campaignPath = "docs/examples/company-portal.yaml",
+        ).problems().map { it.field } shouldContainExactly
             listOf(RunRequest.SCENARIO)
         RunRequest(scenarioId = "scn_1", testers = 0).problems().map { it.field } shouldContainExactly listOf(PanelInstructions.TESTERS)
-        RunRequest(scenarioId = null, campaignPath = "scenarios/kadrohr.yaml", testers = 30).problems().size shouldBe 0
+        RunRequest(scenarioId = null, campaignPath = "docs/examples/company-portal.yaml", testers = 30).problems().size shouldBe 0
     }
 
     @Test
     fun `a run request may name another site to run against, as a full http or https address`() {
-        RunRequest(scenarioId = "scn_1", target = "https://kadrohr.com").problems().shouldBeEmpty()
+        RunRequest(scenarioId = "scn_1", target = "https://portal.example").problems().shouldBeEmpty()
         RunRequest(scenarioId = "scn_1", target = "  ").problems().shouldBeEmpty()
         RunRequest(scenarioId = "scn_1", target = null).problems().shouldBeEmpty()
-        listOf("kadrohr.com", "ftp://kadrohr.com", "https://", "http://exa mple.com").forEach { target ->
+        listOf("portal.example", "ftp://portal.example", "https://", "http://exa mple.com").forEach { target ->
             RunRequest(scenarioId = "scn_1", target = target).problems().map { it.field } shouldContainExactly
                 listOf(PanelInstructions.TARGET)
         }

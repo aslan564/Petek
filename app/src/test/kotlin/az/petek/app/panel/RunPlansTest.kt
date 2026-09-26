@@ -83,12 +83,12 @@ class RunPlansTest {
                   - http_status: {path: "/api/tickets/1/approve", method: POST, equals: 403}
             """.trimIndent(),
         )
-        return YamlCampaignSource(URI("https://kadro.test")).load(file)
+        return YamlCampaignSource(URI("https://portal.test")).load(file)
     }
 
     private fun identities(campaign: Campaign): List<Identity> =
         DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
-            .generate(IdentitySpecs.of(campaign.settings, "test.kadro"), RunTags.forPlan(campaign.sourceHash, campaign.settings.seed))
+            .generate(IdentitySpecs.of(campaign.settings, "test.portal"), RunTags.forPlan(campaign.sourceHash, campaign.settings.seed))
             .identities
 
     @Test

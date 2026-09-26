@@ -50,16 +50,16 @@ class ConfigLoaderTest {
     private fun problems(vararg values: Pair<String, String>): List<String> =
         shouldThrow<ConfigException> { loader().fromValues(mapOf(*values)) }.problems
 
-    private val target = "PETEK_TARGET" to "https://staging.kadrohr.com"
+    private val target = "PETEK_TARGET" to "https://staging.portal.example"
 
-    /** No host is production by default; these tests name KadroHR's. */
-    private val hosts = "PETEK_PRODUCTION_HOSTS" to "kadrohr.com,www.kadrohr.com"
+    /** No host is production by default; these tests name the portal's. */
+    private val hosts = "PETEK_PRODUCTION_HOSTS" to "portal.example,www.portal.example"
 
     @Test
     fun `only the target is required and every other key has the documented default`() {
         val config = load(target)
 
-        config.target shouldBe URI("https://staging.kadrohr.com")
+        config.target shouldBe URI("https://staging.portal.example")
         config.productionHosts shouldBe emptySet()
         config.allowProduction shouldBe false
         config.testToken.shouldBeNull()
@@ -92,10 +92,10 @@ class ConfigLoaderTest {
         val config =
             load(
                 target,
-                "PETEK_PRODUCTION_HOSTS" to " KadroHR.com , app.kadrohr.com ,",
+                "PETEK_PRODUCTION_HOSTS" to " Portal.example , app.portal.example ,",
                 "PETEK_ALLOW_PRODUCTION" to "yes",
                 "PETEK_TEST_TOKEN" to "tok-123",
-                "PETEK_TEST_API_URL" to "https://api.staging.kadrohr.com/",
+                "PETEK_TEST_API_URL" to "https://api.staging.portal.example/",
                 "PETEK_MAIL_SOURCE" to "Test-API",
                 "PETEK_MAILPIT_URL" to "http://127.0.0.1:18025",
                 "PETEK_MAIL_DOMAIN" to "@QA.Example.com",
@@ -117,11 +117,11 @@ class ConfigLoaderTest {
                 "PETEK_DB" to "/var/tmp/petek.db",
             )
 
-        config.productionHosts shouldBe setOf("kadrohr.com", "app.kadrohr.com")
+        config.productionHosts shouldBe setOf("portal.example", "app.portal.example")
         config.allowProduction shouldBe true
         config.testToken shouldBe Secret("tok-123")
-        config.testApiUrl shouldBe URI("https://api.staging.kadrohr.com/")
-        config.testApiBase shouldBe URI("https://api.staging.kadrohr.com/")
+        config.testApiUrl shouldBe URI("https://api.staging.portal.example/")
+        config.testApiBase shouldBe URI("https://api.staging.portal.example/")
         config.mailSource shouldBe MailSource.TEST_API
         config.mailpitUrl shouldBe URI("http://127.0.0.1:18025")
         config.mailDomain shouldBe "qa.example.com"
@@ -165,7 +165,7 @@ class ConfigLoaderTest {
 
     @Test
     fun `an absent env file is fine when the environment has the target`() {
-        loader(mapOf(target)).load(dir.resolve(".env")).target shouldBe URI("https://staging.kadrohr.com")
+        loader(mapOf(target)).load(dir.resolve(".env")).target shouldBe URI("https://staging.portal.example")
     }
 
     @Test
@@ -173,14 +173,14 @@ class ConfigLoaderTest {
         problems(
             "PETEK_ALLOW_PRODUCTION" to "maybe",
             "PETEK_MAILPIT_URL" to "localhost:8025",
-            "PETEK_TEST_API_URL" to "api.kadrohr.com",
+            "PETEK_TEST_API_URL" to "api.portal.example",
             "PETEK_MAIL_SOURCE" to "pop3",
             "PETEK_MAIL_DOMAIN" to "not a domain",
             "PETEK_LLM_PROVIDER" to "gpt",
             "PETEK_LLM_CONCURRENCY" to "0",
             "PETEK_BROWSER_HEADLESS" to "sometimes",
             "PETEK_BROWSER_TOPOLOGY" to "cluster",
-            "PETEK_PRODUCTION_HOSTS" to "kadrohr.com,bad host",
+            "PETEK_PRODUCTION_HOSTS" to "portal.example,bad host",
             "PETEK_IDENTITY_SECRET" to "short",
         ) shouldContainExactlyInAnyOrder
             listOf(
@@ -201,9 +201,9 @@ class ConfigLoaderTest {
 
     @Test
     fun `the target must be an absolute http URL without credentials`() {
-        problems("PETEK_TARGET" to "ftp://staging.kadrohr.com") shouldContainExactlyInAnyOrder
+        problems("PETEK_TARGET" to "ftp://staging.portal.example") shouldContainExactlyInAnyOrder
             listOf("PETEK_TARGET must be an absolute http(s) URL")
-        problems("PETEK_TARGET" to "https://user:hunter2@staging.kadrohr.com") shouldContainExactlyInAnyOrder
+        problems("PETEK_TARGET" to "https://user:hunter2@staging.portal.example") shouldContainExactlyInAnyOrder
             listOf("PETEK_TARGET must not contain credentials (user:password@)")
         problems("PETEK_TARGET" to "https://exa mple.com") shouldContainExactlyInAnyOrder listOf("PETEK_TARGET is not a valid URL")
     }
@@ -282,14 +282,15 @@ class ConfigLoaderTest {
 
     @Test
     fun `the test API address is judged by the production-host policy like the target`() {
-        problems(target, hosts, "PETEK_TEST_API_URL" to "https://kadrohr.com") shouldContainExactlyInAnyOrder
+        problems(target, hosts, "PETEK_TEST_API_URL" to "https://portal.example") shouldContainExactlyInAnyOrder
             listOf(
-                "PETEK_TEST_API_URL: Target 'kadrohr.com' is a production host (listed in PETEK_PRODUCTION_HOSTS). " +
+                "PETEK_TEST_API_URL: Target 'portal.example' is a production host (listed in PETEK_PRODUCTION_HOSTS). " +
                     "Use a staging target, or set PETEK_ALLOW_PRODUCTION=true in .env to test it deliberately.",
             )
-        load(target, hosts, "PETEK_TEST_API_URL" to "https://kadrohr.com", "PETEK_ALLOW_PRODUCTION" to "true").testApiBase shouldBe
-            URI("https://kadrohr.com")
-        load(target, "PETEK_TEST_API_URL" to "https://api.staging.kadrohr.com").testApiBase shouldBe URI("https://api.staging.kadrohr.com")
+        load(target, hosts, "PETEK_TEST_API_URL" to "https://portal.example", "PETEK_ALLOW_PRODUCTION" to "true").testApiBase shouldBe
+            URI("https://portal.example")
+        load(target, "PETEK_TEST_API_URL" to "https://api.staging.portal.example").testApiBase shouldBe
+            URI("https://api.staging.portal.example")
     }
 
     @Test
@@ -403,7 +404,7 @@ class ConfigLoaderTest {
     fun `the printed configuration never shows a secret`() {
         val config =
             load(
-                "PETEK_TARGET" to "https://staging.kadrohr.com",
+                "PETEK_TARGET" to "https://staging.portal.example",
                 "PETEK_TEST_TOKEN" to "token-value-123",
                 "PETEK_IDENTITY_SECRET" to "identity-secret-value-456",
                 "PETEK_LLM_PROVIDER" to "anthropic-api",
@@ -441,8 +442,8 @@ class ConfigLoaderTest {
 
     @Test
     fun `the target policy refuses production hosts unless allowed`() {
-        val refusing = load("PETEK_TARGET" to "https://kadrohr.com", hosts)
-        val allowing = load("PETEK_TARGET" to "https://kadrohr.com", hosts, "PETEK_ALLOW_PRODUCTION" to "true")
+        val refusing = load("PETEK_TARGET" to "https://portal.example", hosts)
+        val allowing = load("PETEK_TARGET" to "https://portal.example", hosts, "PETEK_ALLOW_PRODUCTION" to "true")
 
         refusing.targetPolicy.verify(refusing.target).shouldBeInstanceOf<TargetVerdict.Refused>()
         allowing.targetPolicy.verify(allowing.target) shouldBe TargetVerdict.Allowed
@@ -450,9 +451,9 @@ class ConfigLoaderTest {
 
     @Test
     fun `a production target spelled with capitals or a trailing dot is still refused`() {
-        val config = load("PETEK_TARGET" to "HTTPS://KadroHR.com./app", hosts)
+        val config = load("PETEK_TARGET" to "HTTPS://Portal.example./app", hosts)
 
-        config.target shouldBe URI("https://kadrohr.com/app")
+        config.target shouldBe URI("https://portal.example/app")
         config.targetPolicy.verify(config.target).shouldBeInstanceOf<TargetVerdict.Refused>()
     }
 
@@ -462,7 +463,7 @@ class ConfigLoaderTest {
             dir.resolve(".env").also {
                 Files.writeString(
                     it,
-                    "PETEK_TARGET=https://staging.kadrohr.com\n" +
+                    "PETEK_TARGET=https://staging.portal.example\n" +
                         "PETEK_TEST_TOKEN=   # empty = oracle assertions are skipped\n" +
                         "PETEK_IDENTITY_SECRET= # empty = ~/.petek/identity.secret\n",
                 )

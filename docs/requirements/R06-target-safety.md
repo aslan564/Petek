@@ -37,7 +37,7 @@ destroying a customer's data.
   written to `.env` from the template (never over an existing file, `rw-------`) and the panel opens for it; nothing
   else starts before the answer. `petek mcp` still answers the
   handshake but serves `UnavailablePanelBackend(NO_TARGET)`, so every tool tells the host AI to ask the owner which
-  site to test and wait. The former fallback to a local fake KadroHR when `.env` was missing (`--demo`, `DemoTarget`)
+  site to test and wait. The former fallback to a local fake target when `.env` was missing (`--demo`, `DemoTarget`)
   is gone; the fake target is a developer stand-in reached only through an explicit `--env-file .env.fake-target`.
 - **TLS.** The browser verifies certificates like a user's would; a target with a broken certificate is a finding.
   `PETEK_BROWSER_IGNORE_TLS_ERRORS=true` accepts untrusted certificates for a self-signed staging or a network whose

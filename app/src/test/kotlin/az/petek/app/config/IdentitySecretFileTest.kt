@@ -99,7 +99,7 @@ class IdentitySecretFileTest {
 
             val loaded =
                 ConfigLoader(emptyMap(), home, IdentitySecretFile(IdentitySecretFile.defaultDirectory()))
-                    .fromValues(mapOf("PETEK_TARGET" to "https://staging.kadrohr.com"))
+                    .fromValues(mapOf("PETEK_TARGET" to "https://staging.portal.example"))
 
             Files.readString(home.resolve(".petek/identity.secret")).trim() shouldBe loaded.identitySecret.reveal()
         } finally {

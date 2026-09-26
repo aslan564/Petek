@@ -87,7 +87,7 @@ class PanelRoutesTest {
 
     private val instructions =
         """
-        {"target":"https://staging.kadrohr.az","instructions":"Elan axınını yoxla","testers":30,
+        {"target":"https://staging.portal.example","instructions":"Elan axınını yoxla","testers":30,
          "roles":{"admins":1,"managers":5,"employees":24},"departments":["IT","HR","Satış","Maliyyə","Əməliyyat"],
          "registration":{"invite":15,"companyCode":14},"budget":{"maxMinutes":30,"maxStepsPerAgent":40,"maxPages":40},
          "allowWrites":false}
@@ -221,7 +221,7 @@ class PanelRoutesTest {
 
             started.status.value shouldBe 202
             view["status"]!!.jsonPrimitive.content shouldBe "RUNNING"
-            view["target"]!!.jsonPrimitive.content shouldBe "https://staging.kadrohr.az"
+            view["target"]!!.jsonPrimitive.content shouldBe "https://staging.portal.example"
             h.post("/api/exploration", instructions, token).status.value shouldBe 409
             json(h.post("/api/exploration/cancel", token = token).bodyAsText()).jsonObject["cancelled"]!!.jsonPrimitive.boolean shouldBe
                 true
@@ -406,7 +406,7 @@ class PanelRoutesTest {
                 }
 
             finished["phases"]!!.jsonArray.map { it.jsonObject["state"]!!.jsonPrimitive.content } shouldBe listOf("DONE", "DONE", "SKIPPED")
-            finished["draftYaml"]!!.jsonPrimitive.content shouldContain "kadrohr-explored"
+            finished["draftYaml"]!!.jsonPrimitive.content shouldContain "portal-explored"
         }
 
     @Test

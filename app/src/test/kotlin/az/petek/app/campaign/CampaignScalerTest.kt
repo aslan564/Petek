@@ -37,15 +37,15 @@ class CampaignScalerTest {
     @TempDir
     lateinit var dir: Path
 
-    /** The shape of scenarios/kadrohr.yaml: 30 testers, 1 admin, 5 managers, 24 employees, 15 invite + 14 code. */
-    private fun kadrohrLike(extraSteps: String = ""): Campaign {
+    /** The shape of docs/examples/company-portal.yaml: 30 testers, 1 admin, 5 managers, 24 employees, 15 invite + 14 code. */
+    private fun portalLike(extraSteps: String = ""): Campaign {
         val file =
             dir.resolve("campaign.yaml").also {
                 Files.writeString(
                     it,
                     """
                     campaign:
-                      name: kadrohr-core
+                      name: portal-core
                       testers: 30
                       seed: 42
                       names: [Əli, Vəli, Sahil, Cəmil, Amil]
@@ -67,7 +67,7 @@ class CampaignScalerTest {
                     """.trimIndent() + extraSteps,
                 )
             }
-        return YamlCampaignSource(URI("https://staging.kadrohr.test")).load(file)
+        return YamlCampaignSource(URI("https://staging.portal.test")).load(file)
     }
 
     @Test
@@ -93,29 +93,29 @@ class CampaignScalerTest {
 
     @Test
     fun `scaling keeps one admin and the role and registration ratios`() {
-        val scaled = CampaignScaler.scale(kadrohrLike(), 12).settings
+        val scaled = CampaignScaler.scale(portalLike(), 12).settings
 
         scaled.testers shouldBe 12
         scaled.roles shouldBe RoleQuota(admin = 1, manager = 2, employee = 9)
         scaled.registration shouldBe RegistrationQuota(invite = 6, companyCode = 5)
-        scaled.name shouldBe "kadrohr-core (12 testers, scaled from 30)"
+        scaled.name shouldBe "portal-core (12 testers, scaled from 30)"
     }
 
     @Test
     fun `a scaled campaign stays valid`() {
-        val scaled = CampaignScaler.scale(kadrohrLike(), 6)
+        val scaled = CampaignScaler.scale(portalLike(), 6)
 
         DefaultCampaignValidator().validate(scaled, emptySet()).shouldBeEmpty()
     }
 
     @Test
     fun `given names beyond the new tester count are dropped`() {
-        CampaignScaler.scale(kadrohrLike(), 3).settings.names shouldContainExactly listOf("Əli", "Vəli", "Sahil")
+        CampaignScaler.scale(portalLike(), 3).settings.names shouldContainExactly listOf("Əli", "Vəli", "Sahil")
     }
 
     @Test
     fun `the steps and the rest of the campaign are unchanged`() {
-        val original = kadrohrLike()
+        val original = portalLike()
 
         val scaled = CampaignScaler.scale(original, 8)
 
@@ -127,25 +127,25 @@ class CampaignScalerTest {
 
     @Test
     fun `asking for all testers changes nothing`() {
-        val original = kadrohrLike()
+        val original = portalLike()
 
         CampaignScaler.scale(original, 30) shouldBeSameInstanceAs original
     }
 
     @Test
     fun `more testers than the campaign has keeps the same shape`() {
-        val scaled = CampaignScaler.scale(kadrohrLike(), 33).settings
+        val scaled = CampaignScaler.scale(portalLike(), 33).settings
 
         scaled.testers shouldBe 33
         scaled.roles shouldBe RoleQuota(admin = 1, manager = 6, employee = 26)
         scaled.registration shouldBe RegistrationQuota(invite = 17, companyCode = 15)
         scaled.names shouldContainExactly listOf("Əli", "Vəli", "Sahil", "Cəmil", "Amil")
-        scaled.name shouldBe "kadrohr-core (33 testers, scaled from 30)"
+        scaled.name shouldBe "portal-core (33 testers, scaled from 30)"
     }
 
     @Test
     fun `every tester count stays a valid campaign with every manager invited`() {
-        val original = kadrohrLike()
+        val original = portalLike()
         val validator = DefaultCampaignValidator()
 
         (2..240).forEach { testers ->
@@ -158,12 +158,12 @@ class CampaignScalerTest {
 
     @Test
     fun `a scaled-up campaign gets a generated identity for every tester`() {
-        val campaign = CampaignScaler.scale(kadrohrLike(), 45)
+        val campaign = CampaignScaler.scale(portalLike(), 45)
         val generator = DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
 
         val identities =
             generator
-                .generate(IdentitySpecs.of(campaign.settings, "test.kadrohr.com"), RunTags.forPlan(campaign.sourceHash, 42))
+                .generate(IdentitySpecs.of(campaign.settings, "test.portal.example"), RunTags.forPlan(campaign.sourceHash, 42))
                 .identities
 
         identities.size shouldBe 45
@@ -173,7 +173,7 @@ class CampaignScalerTest {
     @Test
     fun `a campaign with only the admin cannot grow`() {
         val adminOnly =
-            kadrohrLike().let {
+            portalLike().let {
                 it.copy(
                     settings =
                         it.settings.copy(
@@ -189,22 +189,22 @@ class CampaignScalerTest {
 
     @Test
     fun `fewer than one agent is refused`() {
-        shouldThrow<ScalingException> { CampaignScaler.scale(kadrohrLike(), 0) }
+        shouldThrow<ScalingException> { CampaignScaler.scale(portalLike(), 0) }
     }
 
     @Test
     fun `the admin alone is refused when the campaign has other testers`() {
-        shouldThrow<ScalingException> { CampaignScaler.scale(kadrohrLike(), 1) }.message shouldContain "at least 2"
+        shouldThrow<ScalingException> { CampaignScaler.scale(portalLike(), 1) }.message shouldContain "at least 2"
     }
 
     @Test
     fun `steps that no scaled tester can run are found`() {
         val financeOnly = "\n  - id: finance_only\n    actor: employee[dept=Maliyyə, n=2]\n    do: \"Only for the second finance employee\""
-        val campaign = CampaignScaler.scale(kadrohrLike(financeOnly), 6)
+        val campaign = CampaignScaler.scale(portalLike(financeOnly), 6)
         val generator = DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
         val identities =
             generator
-                .generate(IdentitySpecs.of(campaign.settings, "test.kadrohr.com"), RunTags.forPlan(campaign.sourceHash, 42))
+                .generate(IdentitySpecs.of(campaign.settings, "test.portal.example"), RunTags.forPlan(campaign.sourceHash, 42))
                 .identities
 
         CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver()).map { it.id } shouldContainExactly
@@ -213,7 +213,7 @@ class CampaignScalerTest {
 
     @Test
     fun `resizing up shares the new seats in the campaign's ratios and keeps a manager per department`() {
-        val campaign = kadrohrLike()
+        val campaign = portalLike()
 
         val resized = CampaignScaler.resize(campaign, 60)
 
@@ -221,17 +221,17 @@ class CampaignScalerTest {
         resized.settings.roles shouldBe RoleQuota(admin = 1, manager = 10, employee = 49)
         resized.settings.registration.invite + resized.settings.registration.companyCode shouldBe 59
         (resized.settings.registration.invite >= resized.settings.roles.manager) shouldBe true
-        resized.settings.name shouldBe "kadrohr-core"
+        resized.settings.name shouldBe "portal-core"
         resized.sourceHash shouldBe campaign.sourceHash
         DefaultCampaignValidator().validate(resized, emptySet()).shouldBeEmpty()
     }
 
     @Test
     fun `resizing up a small team still gives every department a manager while an employee is left`() {
-        val small = CampaignScaler.scale(kadrohrLike(), 6)
+        val small = CampaignScaler.scale(portalLike(), 6)
         small.settings.roles.manager shouldBe 1
 
-        val grown = CampaignScaler.resize(small.copy(settings = small.settings.copy(name = "kadrohr-core")), 8)
+        val grown = CampaignScaler.resize(small.copy(settings = small.settings.copy(name = "portal-core")), 8)
 
         grown.settings.roles shouldBe RoleQuota(admin = 1, manager = 5, employee = 2)
         grown.settings.registration.invite shouldBe 5
@@ -240,12 +240,12 @@ class CampaignScalerTest {
 
     @Test
     fun `resizing down works like scaling but keeps the campaign's name`() {
-        val campaign = kadrohrLike()
+        val campaign = portalLike()
 
         val resized = CampaignScaler.resize(campaign, 12)
 
         resized.settings.roles shouldBe CampaignScaler.scale(campaign, 12).settings.roles
-        resized.settings.name shouldBe "kadrohr-core"
+        resized.settings.name shouldBe "portal-core"
         CampaignScaler.resize(campaign, 30) shouldBeSameInstanceAs campaign
         shouldThrow<ScalingException> { CampaignScaler.resize(campaign, 0) }
     }

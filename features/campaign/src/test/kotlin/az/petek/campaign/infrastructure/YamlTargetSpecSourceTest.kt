@@ -45,39 +45,39 @@ class YamlTargetSpecSourceTest {
         val spec =
             source.load(
                 file(
-                    "kadrohr.yaml",
+                    "portal.yaml",
                     """
                     target:
-                      name: kadrohr
-                      url: https://staging.kadrohr.com
-                      api_url: https://api.staging.kadrohr.com
-                      production_hosts: [KadroHR.com, www.kadrohr.com]
-                      mail: {source: test-api, domain: Test.KadroHR.com}
-                      test_api: {token: '${'$'}{PETEK_TEST_TOKEN_KADROHR}'}
+                      name: portal
+                      url: https://staging.portal.example
+                      api_url: https://api.staging.portal.example
+                      production_hosts: [Portal.example, www.portal.example]
+                      mail: {source: test-api, domain: Test.Portal.example}
+                      test_api: {token: '${'$'}{PETEK_TEST_TOKEN_PORTAL}'}
                       sign_in: [own_accounts, anonymous]
                       accounts:
                         - {role: admin, email: owner@example.com, password: '${'$'}{PETEK_ACC_ADMIN}'}
                         - {role: hr, storage_state: sessions/hr.json}
-                      profile: scenarios/kadrohr.yaml
+                      profile: docs/examples/company-portal.yaml
                     """,
                 ),
             )
 
         spec shouldBe
             TargetSpec(
-                name = "kadrohr",
-                url = URI("https://staging.kadrohr.com"),
-                apiUrl = URI("https://api.staging.kadrohr.com"),
-                productionHosts = setOf("kadrohr.com", "www.kadrohr.com"),
-                mail = TargetMail("test-api", "test.kadrohr.com", null),
-                testToken = SecretRef("PETEK_TEST_TOKEN_KADROHR"),
+                name = "portal",
+                url = URI("https://staging.portal.example"),
+                apiUrl = URI("https://api.staging.portal.example"),
+                productionHosts = setOf("portal.example", "www.portal.example"),
+                mail = TargetMail("test-api", "test.portal.example", null),
+                testToken = SecretRef("PETEK_TEST_TOKEN_PORTAL"),
                 signIn = listOf(SignInMethod.OWN_ACCOUNTS, SignInMethod.ANONYMOUS),
                 accounts =
                     listOf(
                         OwnAccount("admin", "owner@example.com", SecretRef("PETEK_ACC_ADMIN")),
                         OwnAccount("hr", storageState = "sessions/hr.json"),
                     ),
-                profile = "scenarios/kadrohr.yaml",
+                profile = "docs/examples/company-portal.yaml",
             )
     }
 
@@ -171,10 +171,10 @@ class YamlTargetSpecSourceTest {
     }
 
     @Test
-    fun `the repository's KadroHR profile loads and points at the real campaign`() {
-        val spec = source.load(repoFile("targets/kadrohr.yaml"))
+    fun `the example target profile loads and points at the example campaign`() {
+        val spec = source.load(repoFile("docs/examples/target-profile.yaml"))
 
-        spec.name shouldBe "kadrohr"
+        spec.name shouldBe "my-portal"
         spec.testToken shouldBe SecretRef("PETEK_TEST_TOKEN")
         Files.exists(repoFile(checkNotNull(spec.profile))) shouldBe true
     }
