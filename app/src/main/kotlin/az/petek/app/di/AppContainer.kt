@@ -21,6 +21,7 @@ import az.petek.agent.domain.ConsecutiveLoopDetector
 import az.petek.agent.domain.JsonDecisionProtocol
 import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
+import az.petek.app.diagnostics.CliVersion
 import az.petek.app.diagnostics.HttpProbe
 import az.petek.app.diagnostics.HttpTargetReachability
 import az.petek.app.diagnostics.TargetReachability
@@ -224,6 +225,10 @@ class AppContainer(
      */
     fun diagnosticLlm(): LlmClient = overrides.llm?.let(::NonClosing) ?: LlmProviders.create(config, LlmProviders.DOCTOR_CALL_TIMEOUT)
 
+    /** `<binary> --version` of the configured CLI provider for `petek doctor`; null for an API provider or an override. */
+    fun llmBinaryVersion(): String? =
+        if (overrides.llm == null && config.llmProvider in LlmProviders.CLI_PROVIDERS) CliVersion.of(config.effectiveLlmBin) else null
+
     private val ownsBrowserEngine = AtomicBoolean(false)
 
     /** One engine per process; commands start it per run and stop it in `finally`, [close] stops it once more. */
@@ -407,7 +412,7 @@ class AppContainer(
             validator = scenarioValidator,
             clock = clock,
             ids = scenarioIds,
-            redactor = SecretRedactor(listOfNotNull(config.testToken, config.anthropicApiKey, config.identitySecret) + secrets),
+            redactor = SecretRedactor(listOfNotNull(config.testToken, config.llmApiKey, config.identitySecret) + secrets),
             options = TriageOptions(language = config.language),
         )
 

@@ -10,7 +10,7 @@
 package az.petek.llm.testing
 
 import az.petek.llm.domain.LlmClient
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.TokenUsage
@@ -26,11 +26,16 @@ class ScriptedLlmClient(
     private val usagePerCall: TokenUsage = TokenUsage(inputTokens = 100, outputTokens = 20),
     private val responder: suspend (LlmRequest) -> JsonObject,
 ) : LlmClient {
-    override val provider: LlmProviderId = LlmProviderId.CLAUDE_CLI
+    override val provider: LlmProviderKey = SCRIPTED
     val requests = CopyOnWriteArrayList<LlmRequest>()
 
     override suspend fun complete(request: LlmRequest): LlmResponse {
         requests += request
         return LlmResponse(responder(request), usagePerCall, model, costUsd = 0.0)
+    }
+
+    companion object {
+        /** Neutral: a scripted answer is no provider's. */
+        val SCRIPTED: LlmProviderKey = checkNotNull(LlmProviderKey.of("scripted"))
     }
 }

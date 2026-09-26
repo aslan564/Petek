@@ -89,6 +89,7 @@ class DoctorCommandTest {
             row(result.stdout, "Test inbox") shouldContain "Mailpit: HTTP 200"
             row(result.stdout, "Test API") shouldContain "token accepted (HTTP 404"
             row(result.stdout, "LLM provider") shouldContain "claude-cli (claude-sonnet-5) answered a structured request"
+            row(result.stdout, "LLM provider") shouldContain "[auto: no AI provider found"
             browser.sessions.single().closed shouldBe true
             browser.stopCount shouldBe 1
             Files.exists(dir.resolve("evidence/petek.db")) shouldBe false

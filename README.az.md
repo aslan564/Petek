@@ -217,12 +217,15 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | Test kimliklərinin e-poçt domeni |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Parol derivasiyasının açarı (≥ 16 simvol) |
-| `PETEK_LLM_PROVIDER` | `claude-cli` | `claude-cli` və ya `anthropic-api` (`auto` və digər provayderlər: Faza 9) |
-| `PETEK_LLM_MODEL` | `claude-sonnet-5` | Model id |
-| `PETEK_CLAUDE_BIN` | `claude` | CLI binarı |
+| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`; `auto` mühitdəki açarlara, layihənin AI işarəsinə (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) və `PATH`-dakı CLI-lərə görə seçir, `doctor` səbəbini deyir |
+| `PETEK_LLM_MODEL` | provayderin | Claude üçün `claude-sonnet-5`; Codex/Gemini/OpenCode-da CLI-nin öz modeli; `openai-compat` üçün məcburidir |
+| `PETEK_LLM_BIN` | `claude`, `codex`, … | CLI binarı (`PETEK_CLAUDE_BIN` də oxunur) |
+| `PETEK_LLM_BASE_URL` | — | OpenAI-uyğun endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
+| `PETEK_LLM_API_KEY` | — | `anthropic-api` / `openai-compat` açarı; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` alias-dır |
+| `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; rədd edilən rejim özü bir pillə aşağı düşür |
+| `PETEK_LLM_EFFORT` | dəstəkləyəndə `low` | Düşünmə səviyyəsi (Claude CLI, Codex CLI; `openai-compat`-da `reasoning_effort`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | Bütün agentlər üzrə eyni anda AI çağırışı (1–64) |
 | `PETEK_LANGUAGE` | `auto` | AI-ın sizin üçün nə dildə yazdığı (kəşfiyyatçının sualları və ideyaları, testerlərin xülasələri, triaj): `auto` sizin öz təlimat və ssenarilərinizin dilini izləyir, ya da `English` kimi ad |
-| `ANTHROPIC_API_KEY` | — | `anthropic-api` üçün |
 | `PETEK_BROWSER_HEADLESS` | `true` | `run --headful` bunu üstələyir |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | və ya `per-session` |
 | `PETEK_BROWSER_IGNORE_TLS_ERRORS` | `false` | etibarsız sertifikatları qəbul et (self-signed staging, trafiki yenidən imzalayan proxy); `doctor` açıq olduğunu göstərir |

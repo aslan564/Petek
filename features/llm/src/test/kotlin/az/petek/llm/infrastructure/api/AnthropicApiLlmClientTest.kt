@@ -13,7 +13,7 @@ import az.petek.core.security.Secret
 import az.petek.llm.LlmTestData
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.LlmRole
@@ -328,7 +328,7 @@ class AnthropicApiLlmClientTest {
     fun `provider and model come from the configuration`() {
         val client = client()
 
-        client.provider shouldBe LlmProviderId.ANTHROPIC_API
+        client.provider shouldBe LlmProviderKey.ANTHROPIC_API
         client.model shouldBe MODEL
     }
 

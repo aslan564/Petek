@@ -47,7 +47,7 @@ hints, and three JSON schemas with optional properties that OpenAI's strict mode
 - The three schemas gain a strict variant; parsers must read `null` as absent.
 
 ## Action Items
-1. [ ] Registry, `CliAgentLlmClient`, Claude profile extracted, tests on the fake process runner.
-2. [ ] `OpenAiCompatibleLlmClient` with the strict-schema adapter and a Ktor fake server test.
-3. [ ] `LlmProviderResolver` (`auto`) with fixture-directory tests; `doctor` output.
-4. [ ] Neutral config keys, hints, redactor patterns, docs, `.env.example`.
+1. [x] Registry, `CliAgentLlmClient`, Claude profile extracted, tests on the fake process runner.
+2. [x] `OpenAiCompatibleLlmClient` with the strict-schema adapter and a Ktor fake server test.
+3. [x] `LlmProviderResolver` (`auto`) with fixture-directory tests; `doctor` output.
+4. [x] Neutral config keys, hints, redactor patterns, docs, `.env.example`.

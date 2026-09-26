@@ -26,7 +26,7 @@ paketi gedir; mövcud teq rədd edilir. Commit, PR və kodda model/alət adı ya
 Kotlin 2.4 / JDK 25 toolchain, Gradle 9.8 (Kotlin DSL, version catalog, `build-logic` convention plugin-ləri,
 configuration cache), kotlinx.coroutines, Playwright Java, Ktor 3 (client; fake target üçün server),
 kotlinx.serialization + kaml, Clikt + Mordant, SQLite (sqlite-jdbc + Exposed 1.x), kotlinx.html,
-kotlin-logging + logback, Anthropic Java SDK + Claude Code CLI (LLM), JUnit 6 + Kotest assertions, Konsist,
+kotlin-logging + logback, LLM: provayder-agnostik (`PETEK_LLM_PROVIDER=auto`; Claude/Codex/Gemini/OpenCode CLI, Anthropic Java SDK, OpenAI-uyğun HTTP), JUnit 6 + Kotest assertions, Konsist,
 Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 
 ## Arxitektura qaydaları (`e2e/src/test/kotlin/az/petek/architecture/ArchitectureTest.kt` Konsist ilə hər build-də yoxlayır)

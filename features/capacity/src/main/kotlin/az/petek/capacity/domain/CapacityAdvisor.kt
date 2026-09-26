@@ -23,7 +23,7 @@ import kotlin.math.floor
  *   network, so a core drives several of them.
  *
  * The recommendation is the smaller bound, at least 1 (one tester always runs). It is advice only; LLM throughput
- * (`PETEK_LLM_CONCURRENCY`, the Claude plan's rate limits) is a separate limit on speed, not on the number of testers.
+ * (`PETEK_LLM_CONCURRENCY`, the AI provider's rate limits) is a separate limit on speed, not on the number of testers.
  */
 class CapacityAdvisor(
     private val sessionsPerCore: Int = DEFAULT_SESSIONS_PER_CORE,
@@ -113,7 +113,7 @@ class CapacityAdvisor(
             )
             add("Limiting factor: ${limiting.name.lowercase()}.")
             add(
-                "LLM throughput (PETEK_LLM_CONCURRENCY and your Claude plan's rate limits) limits how fast the testers act, " +
+                "LLM throughput (PETEK_LLM_CONCURRENCY and your AI provider's rate limits) limits how fast the testers act, " +
                     "not how many can run.",
             )
         }

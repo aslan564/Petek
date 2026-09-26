@@ -660,37 +660,44 @@ Düzəlişlərdən sonra 30 tester yenidən: **PASSED**, 87 tapşırıq, 0 uğur
 Məqsəd: `PETEK_LLM_PROVIDER=auto` default olsun; Claude, Codex, Gemini CLI və istənilən OpenAI-uyğun endpoint işləsin.
 Agent/explorer/triaj kodu dəyişmir — heç bir prompt Claude-a bağlı deyil (yoxlanıb: XML tag, thinking, native tool-use yoxdur).
 
-- [ ] `LlmProviderId` enum → açıq `value class LlmProviderKey`; `LlmProviders` reyestr (`Map<key, factory>`), exhaustive
+- [x] `LlmProviderId` enum → açıq `value class LlmProviderKey`; `LlmProviders` reyestr (`Map<key, factory>`), exhaustive
   `when` yoxdur (OCP). Köhnə açarlar `claude-cli`, `anthropic-api` saxlanır.
-- [ ] `CliAgentLlmClient` (generic): `ClaudeCliLlmClient`-in proses hissəsi (scratch dir, timeout, kill-tree, output
+- [x] `CliAgentLlmClient` (generic): `ClaudeCliLlmClient`-in proses hissəsi (scratch dir, timeout, kill-tree, output
   faylları, `ProcessRunner`) çıxarılır; hər agent üçün kiçik `CliAgentProfile` strategiyası: `command(config, request)`,
   `environment`, `transcript(messages)`, `parse(ProcessOutput)`. Claude profili mövcud `ClaudeCliInvocation` +
   `ClaudeCliResultParser`-dir; yeni profillər `codex exec`, `gemini -p`, `opencode run`.
-- [ ] Sxem dəstəyi olmayan CLI-lər üçün "sxem promptda" rejimi: sistem mətninə sxem əlavə olunur, `StructuredJson`
+- [x] Sxem dəstəyi olmayan CLI-lər üçün "sxem promptda" rejimi: sistem mətninə sxem əlavə olunur, `StructuredJson`
   parse edir, kod validasiyası (`DecisionProtocol` və s.) qalan işi görür. Bir dəfə "düzəlt" təkrarı (`Retrying`).
-- [ ] `OpenAiCompatibleLlmClient` (`infrastructure/http/`): Ktor client (kataloqda var, yeni kitabxana yoxdur);
+- [x] `OpenAiCompatibleLlmClient` (`infrastructure/http/`): Ktor client (kataloqda var, yeni kitabxana yoxdur);
   `POST {base}/v1/chat/completions`, `response_format: json_schema` (strict) → fallback `json_object` → prompt;
   `PETEK_LLM_STRUCTURED=schema|json_object|prompt`. Xəta xəritəsi `AnthropicErrors` kimi (429 retry-after, 401/403,
   404, 5xx). Bir adapter: OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio, Gemini/Anthropic compat.
-- [ ] Strict-sxem adapteri: bütün sahələr `required`, isteğe bağlılar `nullable` (OpenAI strict rejimi mövcud üç sxemi
+- [x] Strict-sxem adapteri: bütün sahələr `required`, isteğe bağlılar `nullable` (OpenAI strict rejimi mövcud üç sxemi
   rədd edir). Parserlər `null`-u "yoxdur" kimi oxuyur.
-- [ ] Konfiqurasiya: `PETEK_LLM_PROVIDER=auto` (default), `PETEK_LLM_BIN` (`PETEK_CLAUDE_BIN` alias), `PETEK_LLM_BASE_URL`,
+- [x] Konfiqurasiya: `PETEK_LLM_PROVIDER=auto` (default), `PETEK_LLM_BIN` (`PETEK_CLAUDE_BIN` alias), `PETEK_LLM_BASE_URL`,
   `PETEK_LLM_API_KEY` (`Secret`; `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY` alias), `PETEK_LLM_EFFORT`.
   Hər provayderin öz default modeli.
-- [ ] `auto` aşkarlama sırası (app/config `LlmProviderResolver`): (1) açıq `.env` dəyəri; (2) mühit açarları; (3) hədəf
+- [x] `auto` aşkarlama sırası (app/config `LlmProviderResolver`): (1) açıq `.env` dəyəri; (2) mühit açarları; (3) hədəf
   repodakı işarələr — `CLAUDE.md`/`.claude/` → claude-cli, `AGENTS.md`/`.codex/` → codex-cli, `GEMINI.md`/`.gemini/` →
   gemini-cli, `.github/copilot-instructions.md` → OpenAI-uyğun endpoint tələb olunur; (4) PATH-dakı binarlar
   (`claude`, `codex`, `gemini`, `ollama`). Hər addım səbəbi ilə loglanır və `doctor`-da göstərilir.
-- [ ] `doctor`: aşkarlanan provayder + səbəb; binar `--version`; PING. Neytral mətnlər (`CapacityAdvisor` "Claude
+- [x] `doctor`: aşkarlanan provayder + səbəb; binar `--version`; PING. Neytral mətnlər (`CapacityAdvisor` "Claude
   planı" → "AI provayderinin limitləri"; login ipucları provayderə görə).
-- [ ] `TextRedactor` və triaj `SecretRedactor`: bütün provayder açar formatları (`sk-`, `sk-ant-`, `AIza`, `gsk_`...).
-- [ ] Testlər: `CliAgentLlmClientTest` (fake process, hər profil üçün arqument siyahısı və parse), `OpenAiCompatibleLlmClientTest`
+- [x] `TextRedactor` və triaj `SecretRedactor`: bütün provayder açar formatları (`sk-`, `sk-ant-`, `AIza`, `gsk_`...).
+- [x] Testlər: `CliAgentLlmClientTest` (fake process, hər profil üçün arqument siyahısı və parse), `OpenAiCompatibleLlmClientTest`
   (Ktor fake server), `LlmProviderResolverTest` (fixture qovluqları ilə aşkarlama), `ConfigLoaderTest` yeniləmə.
   `ScriptedLlmClient.provider` neytral olur.
-- [ ] ADR-0008 (ADR-0003-ü genişləndirir), `.env.example`, `docs/ARCHITECTURE.md`, CLAUDE.md stack sətri.
+- [x] ADR-0008 (ADR-0003-ü genişləndirir), `.env.example`, `docs/ARCHITECTURE.md`, CLAUDE.md stack sətri.
 
 Hazır sayılır: eyni `scenarios/contract-demo.yaml` fake target-də (a) `claude -p`, (b) Ollama (lokal model) və (c) fake
 `codex` skripti ilə keçir; `.env`-də provayder yazılmayanda `doctor` "auto → claude-cli (CLAUDE.md tapıldı)" deyir.
+
+Vəziyyət (2026-09-26): kod və vahid testlər hazırdır — hər CLI profili saxta proses ilə (arqumentlər, STDIN, JSONL/JSON
+parse, xəta xəritəsi), OpenAI-uyğun klient Ktor saxta serveri ilə (strict sxem → `json_object` → prompt pilləsi, 429/401/
+404/5xx), `auto` fixture qovluqları ilə; `doctor` sətri `claude-cli (claude-sonnet-5, claude <versiya>) ... [auto: CLAUDE.md
+found]` formasındadır. Real Ollama və real `codex`/`gemini` ilə contract-demo run-ı bu mühitdə yoxlanmayıb (binar və
+model yoxdur) — **sahib:** öz maşınında `PETEK_LLM_PROVIDER=openai-compat` + Ollama ilə bir dəfə `petek doctor` və
+contract-demo işlətsin.
 
 ### Faza 10 — Hədəf profili və giriş zənciri
 
@@ -905,9 +912,9 @@ o yalnız run-ın öz test datasını tokenlə qorunan test API-dən silir, onu 
   anonim fazada işləyir və səbəbini deyir.
 - [x] `petek verify` (kod, iki yol, yoxlama; `--json`), `doctor`-da sahiblik sətri.
 - [x] Bundle runtime-a `jdk.naming.dns` (JNDI DNS provayderi jdeps-ə görünmür).
-- [ ] İstifadə qaydası: README (EN/AZ), `SECURITY.md`, skill paketi — yalnız sahibi olduğunuz pre/stage sayt, yalnız test
+- [x] İstifadə qaydası: README (EN/AZ), `SECURITY.md`, skill paketi — yalnız sahibi olduğunuz pre/stage sayt, yalnız test
   hesabları, real istifadəçi hesabı heç vaxt.
-- [ ] Testlər: domain qaydaları, use-case fake-lərlə, HTTP və DNS sübutu, SQLite reyestri, CLI və panel imtinası.
+- [x] Testlər: domain qaydaları, use-case fake-lərlə, HTTP və DNS sübutu, SQLite reyestri, CLI və panel imtinası.
 
 Hazır sayılır: təsdiqsiz stage-ə `petek run` exit 2 ilə imtina edir və kodu, faylın yerini, DNS qeydini göstərir; fayl
 qoyulandan sonra eyni əmr işləyir; localhost-dakı fake target ilə e2e dəyişmədən keçir.

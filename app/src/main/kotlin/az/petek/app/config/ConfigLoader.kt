@@ -9,12 +9,14 @@
 
 package az.petek.app.config
 
+import az.petek.app.di.LlmProviders
 import az.petek.browser.domain.BrowserTopology
 import az.petek.core.model.WorkingLanguage
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
+import az.petek.llm.infrastructure.http.StructuredMode
 import java.net.URI
 import java.net.URISyntaxException
 import java.nio.file.InvalidPathException
@@ -35,6 +37,8 @@ class ConfigLoader(
     private val environment: Map<String, String>,
     private val workingDirectory: Path,
     private val identitySecrets: IdentitySecretSource,
+    /** Whether a CLI is installed; used only to resolve `PETEK_LLM_PROVIDER=auto`. */
+    private val onPath: (String) -> Boolean = LlmProviderResolver.pathLookup(environment),
 ) {
     /** Loads [envFile] (absent = empty) under the environment and validates the result. */
     fun load(envFile: Path?): PetekConfig {
@@ -69,15 +73,34 @@ class ConfigLoader(
             }
             val mailpitUrl = url(Keys.MAILPIT_URL, default = PetekConfig.DEFAULT_MAILPIT_URL)
             val mailDomain = mailDomain()
-            val provider = provider()
-            val model = text(Keys.LLM_MODEL) ?: PetekConfig.DEFAULT_LLM_MODEL
-            val claudeBin = text(Keys.CLAUDE_BIN) ?: PetekConfig.DEFAULT_CLAUDE_BIN
+            val resolution = provider()
+            val provider = resolution?.provider
+            val model = text(Keys.LLM_MODEL)
+            val bin = text(Keys.LLM_BIN) ?: text(Keys.CLAUDE_BIN)
+            val baseUrl = url(Keys.LLM_BASE_URL, default = null) ?: resolution?.baseUrl
+            val apiKey = provider?.let(::apiKey)
+            val structured = structured()
+            val effort = text(Keys.LLM_EFFORT)
+            when (provider) {
+                LlmProviderKey.ANTHROPIC_API -> {
+                    if (apiKey == null) {
+                        problems += "${Keys.ANTHROPIC_API_KEY} (or ${Keys.LLM_API_KEY}) is required when ${Keys.LLM_PROVIDER} is $provider"
+                    }
+                }
+
+                LlmProviderKey.OPENAI_COMPAT -> {
+                    if (baseUrl == null) problems += "${Keys.LLM_BASE_URL} is required when ${Keys.LLM_PROVIDER} is $provider"
+                    if (model == null) {
+                        problems += "${Keys.LLM_MODEL} is required when ${Keys.LLM_PROVIDER} is $provider (${resolution.reason})"
+                    }
+                }
+
+                else -> {
+                    // The CLIs need no key or endpoint: they use the owner's own login.
+                }
+            }
             val concurrency = concurrency()
             val language = WorkingLanguage.of(text(Keys.LANGUAGE))
-            val apiKey = text(Keys.ANTHROPIC_API_KEY)?.let(::Secret)
-            if (provider == LlmProviderId.ANTHROPIC_API && apiKey == null) {
-                problems += "${Keys.ANTHROPIC_API_KEY} is required when ${Keys.LLM_PROVIDER} is ${LlmProviderId.ANTHROPIC_API.key}"
-            }
             val headless = flag(Keys.BROWSER_HEADLESS, default = true)
             val ignoreTlsErrors = flag(Keys.BROWSER_IGNORE_TLS_ERRORS, default = false)
             val topology = topology()
@@ -96,11 +119,15 @@ class ConfigLoader(
                 mailDomain = checkNotNull(mailDomain),
                 identitySecret = checkNotNull(identitySecret),
                 llmProvider = checkNotNull(provider),
+                llmProviderReason = checkNotNull(resolution).reason,
                 llmModel = model,
-                claudeBin = claudeBin,
+                llmBin = bin,
+                llmBaseUrl = baseUrl,
+                llmApiKey = apiKey,
+                llmStructured = checkNotNull(structured),
+                llmEffort = effort,
                 llmConcurrency = checkNotNull(concurrency),
                 language = language,
-                anthropicApiKey = apiKey,
                 browserHeadless = headless,
                 browserTopology = checkNotNull(topology),
                 browserIgnoreTlsErrors = ignoreTlsErrors,
@@ -187,13 +214,41 @@ class ConfigLoader(
             return source
         }
 
-        private fun provider(): LlmProviderId? {
-            val raw = text(Keys.LLM_PROVIDER) ?: return LlmProviderId.CLAUDE_CLI
-            val provider = LlmProviderId.fromKey(raw)
-            if (provider == null) {
-                problems += "${Keys.LLM_PROVIDER} must be one of ${LlmProviderId.entries.joinToString { it.key }}, was '$raw'"
+        /** `auto` (or empty) goes through [LlmProviderResolver]; anything else must be a registered provider. */
+        private fun provider(): LlmProviderResolver.Resolution? {
+            val raw = text(Keys.LLM_PROVIDER)?.lowercase()
+            val explicit =
+                if (raw == null || raw == AUTO) {
+                    null
+                } else {
+                    val key = LlmProviderKey.of(raw)?.takeIf { it in LlmProviders.KEYS }
+                    if (key == null) {
+                        problems += "${Keys.LLM_PROVIDER} must be $AUTO or one of ${LlmProviders.KEYS.joinToString()}, was '$raw'"
+                        return null
+                    }
+                    key
+                }
+            return LlmProviderResolver(workingDirectory, onPath).resolve(explicit, values)
+        }
+
+        /** `PETEK_LLM_API_KEY`, else the provider's usual variable (never echoed). */
+        private fun apiKey(provider: LlmProviderKey): Secret? {
+            val aliases =
+                when (provider) {
+                    LlmProviderKey.ANTHROPIC_API -> listOf(Keys.ANTHROPIC_API_KEY)
+                    LlmProviderKey.OPENAI_COMPAT -> listOf(Keys.OPENAI_API_KEY, Keys.GEMINI_API_KEY)
+                    else -> emptyList()
+                }
+            return (listOf(Keys.LLM_API_KEY) + aliases).firstNotNullOfOrNull { text(it) }?.let(::Secret)
+        }
+
+        private fun structured(): StructuredMode? {
+            val raw = text(Keys.LLM_STRUCTURED) ?: return StructuredMode.SCHEMA
+            val mode = StructuredMode.fromKey(raw)
+            if (mode == null) {
+                problems += "${Keys.LLM_STRUCTURED} must be one of ${StructuredMode.entries.joinToString { it.key }}, was '$raw'"
             }
-            return provider
+            return mode
         }
 
         private fun concurrency(): Int? {
@@ -258,7 +313,16 @@ class ConfigLoader(
         const val IDENTITY_SECRET = "PETEK_IDENTITY_SECRET"
         const val LLM_PROVIDER = "PETEK_LLM_PROVIDER"
         const val LLM_MODEL = "PETEK_LLM_MODEL"
+        const val LLM_BIN = "PETEK_LLM_BIN"
+
+        /** Old name of [LLM_BIN], still read. */
         const val CLAUDE_BIN = "PETEK_CLAUDE_BIN"
+        const val LLM_BASE_URL = "PETEK_LLM_BASE_URL"
+        const val LLM_API_KEY = "PETEK_LLM_API_KEY"
+        const val LLM_STRUCTURED = "PETEK_LLM_STRUCTURED"
+        const val LLM_EFFORT = "PETEK_LLM_EFFORT"
+        const val OPENAI_API_KEY = "OPENAI_API_KEY"
+        const val GEMINI_API_KEY = "GEMINI_API_KEY"
         const val LLM_CONCURRENCY = "PETEK_LLM_CONCURRENCY"
         const val LANGUAGE = "PETEK_LANGUAGE"
         const val ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
@@ -271,6 +335,7 @@ class ConfigLoader(
 
     private companion object {
         const val MAX_LLM_CONCURRENCY = 64
+        const val AUTO = "auto"
         const val MIN_SECRET_LENGTH = 16
         val WEB_SCHEMES = setOf("http", "https")
         val TRUE = setOf("true", "yes", "on", "1")

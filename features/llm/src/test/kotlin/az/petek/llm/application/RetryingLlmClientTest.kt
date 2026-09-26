@@ -15,7 +15,7 @@ import az.petek.llm.OutcomeLlmClient
 import az.petek.llm.OutcomeLlmClient.Companion.fail
 import az.petek.llm.OutcomeLlmClient.Companion.succeed
 import az.petek.llm.domain.LlmException
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.doubles.shouldBeGreaterThanOrEqual
@@ -247,7 +247,7 @@ class RetryingLlmClientTest {
         runTest {
             val client = retrying(scripted())
 
-            client.provider shouldBe LlmProviderId.ANTHROPIC_API
+            client.provider shouldBe LlmProviderKey.ANTHROPIC_API
             client.model shouldBe "outcome-model"
         }
 

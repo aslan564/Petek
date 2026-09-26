@@ -11,7 +11,7 @@ package az.petek.llm.infrastructure.api
 
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.LlmRole
@@ -47,7 +47,7 @@ class AnthropicApiLlmClient(
     private val config: AnthropicApiConfig,
 ) : LlmClient,
     AutoCloseable {
-    override val provider: LlmProviderId = LlmProviderId.ANTHROPIC_API
+    override val provider: LlmProviderKey = LlmProviderKey.ANTHROPIC_API
     override val model: String = config.model
 
     private val client: AnthropicClient = buildClient(config)

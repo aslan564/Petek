@@ -17,7 +17,7 @@ import az.petek.core.testing.FakeHarnessClock
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.LlmRole
@@ -51,14 +51,16 @@ class AppContainerTest {
 
     private fun config(
         concurrency: Int = 6,
-        provider: LlmProviderId = LlmProviderId.CLAUDE_CLI,
+        provider: LlmProviderKey = LlmProviderKey.CLAUDE_CLI,
     ) = PetekConfig(
         target = URI("http://127.0.0.1:9"),
         identitySecret = Secret("container-test-identity-secret"),
         evidenceDir = dir.resolve("evidence"),
         llmConcurrency = concurrency,
         llmProvider = provider,
-        anthropicApiKey = if (provider == LlmProviderId.ANTHROPIC_API) Secret("sk-ant-test") else null,
+        llmApiKey = if (provider == LlmProviderKey.ANTHROPIC_API) Secret("sk-ant-test") else null,
+        llmBaseUrl = if (provider == LlmProviderKey.OPENAI_COMPAT) URI("http://127.0.0.1:9/v1") else null,
+        llmModel = if (provider == LlmProviderKey.OPENAI_COMPAT) "llama3.1" else null,
     )
 
     private fun request(label: String) = LlmRequest("system", listOf(LlmMessage(LlmRole.USER, "hi")), JsonObject(emptyMap()), label = label)
@@ -68,7 +70,7 @@ class AppContainerTest {
         private val failures: Int = 0,
         private val gate: Mutex? = null,
     ) : LlmClient {
-        override val provider = LlmProviderId.CLAUDE_CLI
+        override val provider = LlmProviderKey.CLAUDE_CLI
         override val model = "counting"
         val calls = AtomicInteger()
         val inFlight = AtomicInteger()
@@ -175,9 +177,19 @@ class AppContainerTest {
     @Test
     fun `the configured provider is built when no override is given`() {
         LlmProviders.create(config()).shouldBeInstanceOf<ClaudeCliLlmClient>().model shouldBe "claude-sonnet-5"
-        val api = LlmProviders.create(config(provider = LlmProviderId.ANTHROPIC_API)).shouldBeInstanceOf<AnthropicApiLlmClient>()
-        api.provider shouldBe LlmProviderId.ANTHROPIC_API
+        val api = LlmProviders.create(config(provider = LlmProviderKey.ANTHROPIC_API)).shouldBeInstanceOf<AnthropicApiLlmClient>()
+        api.provider shouldBe LlmProviderKey.ANTHROPIC_API
         api.close()
+    }
+
+    @Test
+    fun `every registered provider can be built from its configuration`() {
+        LlmProviders.KEYS.forEach { key ->
+            val client = LlmProviders.create(config(provider = key))
+            client.provider shouldBe key
+            (client as? AutoCloseable)?.close()
+        }
+        LlmProviders.create(config(provider = LlmProviderKey.CODEX_CLI)).model shouldBe "default"
     }
 
     @Test

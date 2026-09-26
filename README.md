@@ -226,12 +226,15 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | E-mail domain of the test identities |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the password derivation (≥ 16 chars) |
-| `PETEK_LLM_PROVIDER` | `claude-cli` | `claude-cli` or `anthropic-api` (`auto` and more providers: roadmap Faza 9) |
-| `PETEK_LLM_MODEL` | `claude-sonnet-5` | Model id |
-| `PETEK_CLAUDE_BIN` | `claude` | The CLI binary |
+| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`; `auto` picks by keys in the environment, your project's AI marker (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) and the CLIs on `PATH`, and `doctor` says why |
+| `PETEK_LLM_MODEL` | the provider's | `claude-sonnet-5` for Claude; the CLI's own model for Codex/Gemini/OpenCode; required for `openai-compat` |
+| `PETEK_LLM_BIN` | `claude`, `codex`, … | The CLI binary (`PETEK_CLAUDE_BIN` is still read) |
+| `PETEK_LLM_BASE_URL` | — | An OpenAI-compatible endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
+| `PETEK_LLM_API_KEY` | — | Key of `anthropic-api` / `openai-compat`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` are aliases |
+| `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; a rejected mode steps down by itself |
+| `PETEK_LLM_EFFORT` | `low` where supported | Reasoning effort (Claude CLI, Codex CLI; `reasoning_effort` on `openai-compat`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | AI calls in flight across all agents (1–64) |
 | `PETEK_LANGUAGE` | `auto` | What the AI writes for you in (explorer questions and ideas, tester summaries, triage): `auto` follows the language of your own instructions and scenarios, or a name such as `English` |
-| `ANTHROPIC_API_KEY` | — | For `anthropic-api` |
 | `PETEK_BROWSER_HEADLESS` | `true` | `--headful` on `run` overrides it |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | or `per-session` |
 | `PETEK_BROWSER_IGNORE_TLS_ERRORS` | `false` | accept untrusted certificates (self-signed staging, re-signing proxy); `doctor` shows when it is on |

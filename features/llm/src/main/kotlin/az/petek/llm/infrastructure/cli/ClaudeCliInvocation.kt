@@ -11,7 +11,6 @@ package az.petek.llm.infrastructure.cli
 
 import az.petek.llm.domain.LlmMessage
 import az.petek.llm.domain.LlmRequest
-import az.petek.llm.domain.LlmRole
 
 /**
  * The exact way Pətək calls `claude -p`: an isolated, tool-less, stateless session whose only job is to answer with
@@ -51,13 +50,6 @@ internal object ClaudeCliInvocation {
     private fun isSessionMarker(name: String): Boolean =
         name == "CLAUDECODE" || (name.startsWith("CLAUDE_CODE_") && name != OAUTH_TOKEN_VARIABLE)
 
-    /**
-     * STDIN text: a lone user message as-is; a conversation as a plain transcript the model can continue
-     * (`USER:\n...\n\nASSISTANT:\n...`).
-     */
-    fun transcript(messages: List<LlmMessage>): String {
-        val single = messages.singleOrNull()
-        if (single != null && single.role == LlmRole.USER) return single.content
-        return messages.joinToString(separator = "\n\n") { "${it.role.name}:\n${it.content}" }
-    }
+    /** STDIN text, see [CliTranscripts.of]. */
+    fun transcript(messages: List<LlmMessage>): String = CliTranscripts.of(messages)
 }

@@ -180,20 +180,22 @@ class Doctor(
     }
 
     private suspend fun llm(): CheckResult {
-        val who = "${config.llmProvider.key} (${config.llmModel})"
+        val version = container.llmBinaryVersion()?.let { ", ${config.effectiveLlmBin} $it" }.orEmpty()
+        val who = "${config.llmProvider} (${config.llmModelLabel}$version)"
+        val why = " [${config.llmProviderReason}]"
         var client: LlmClient? = null
         return try {
             // Built inside the try: a provider that cannot even be constructed is a failed row, not a crashed doctor.
             val response = container.diagnosticLlm().also { client = it }.complete(PING)
             if (response.output["ok"] == JsonPrimitive(true)) {
-                CheckResult(LLM, CheckStatus.OK, "$who answered a structured request (model ${response.model})")
+                CheckResult(LLM, CheckStatus.OK, "$who answered a structured request (model ${response.model})$why")
             } else {
                 CheckResult(LLM, CheckStatus.FAILED, "$who answered, but not as asked: ${response.output}")
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: LlmException) {
-            CheckResult(LLM, CheckStatus.FAILED, "$who: ${e.message}")
+            CheckResult(LLM, CheckStatus.FAILED, "$who: ${e.message}$why")
         } catch (e: Exception) {
             CheckResult(LLM, CheckStatus.FAILED, "$who: ${HttpProbe.describe(e)}")
         } finally {

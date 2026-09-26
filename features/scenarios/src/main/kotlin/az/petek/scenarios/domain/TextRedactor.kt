@@ -18,7 +18,7 @@ fun interface TextRedactor {
 
 /**
  * Masks every known [secrets] value (test token, API keys, test passwords), then values that look secret whatever
- * they are: `password=…`, `token: …`, `"token": "…"` (JSON), `Authorization: Bearer …`, Anthropic keys. The producers
+ * they are: `password=…`, `token: …`, `"token": "…"` (JSON), `Authorization: Bearer …`, and the key formats of the AI providers (Anthropic, OpenAI, Google, Groq, xAI, Hugging Face). The producers
  * of evidence already redact what they know (the agent types `{self.password}`); this is the last line before text
  * reaches the model.
  * Secrets shorter than [MIN_SECRET_LENGTH] are ignored, because masking them would mangle ordinary words.
@@ -46,7 +46,13 @@ class SecretRedactor(
         private val PATTERNS: List<Pair<Regex, String>> =
             listOf(
                 Regex("(?i)\\b(bearer)\\s+[A-Za-z0-9._~+/=-]{8,}") to "$1 $MASK",
-                Regex("sk-ant-[A-Za-z0-9_-]{8,}") to MASK,
+                // Provider key formats: Anthropic and OpenAI-style (`sk-ant-`, `sk-proj-`, `sk-or-v1-`, `sk-`), Google (`AIza`),
+                // Groq (`gsk_`), xAI (`xai-`), Hugging Face (`hf_`).
+                Regex("\\bsk-(?:ant-|proj-|or-v1-)?[A-Za-z0-9_-]{16,}") to MASK,
+                Regex("\\bAIza[0-9A-Za-z_-]{30,}") to MASK,
+                Regex("\\bgsk_[A-Za-z0-9]{20,}") to MASK,
+                Regex("\\bxai-[A-Za-z0-9]{20,}") to MASK,
+                Regex("\\bhf_[A-Za-z0-9]{20,}") to MASK,
                 Regex(
                     "(?i)\\b(password|passwd|pwd|token|x-test-token|api[_-]?key|secret|authorization)" +
                         "([\"']?\\s*[:=]\\s*)([\"']?)(?!\\*\\*\\*)(?!\\{)[^\\s\"',;]+",

@@ -12,7 +12,7 @@ package az.petek.llm.infrastructure.cli
 import az.petek.llm.LlmTestData
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.LlmRole
 import az.petek.llm.domain.TokenUsage
@@ -218,7 +218,7 @@ class ClaudeCliLlmClientTest {
         runTest {
             val client = client(FakeProcessRunner.answering(SUCCESS))
 
-            client.provider shouldBe LlmProviderId.CLAUDE_CLI
+            client.provider shouldBe LlmProviderKey.CLAUDE_CLI
             client.model shouldBe "claude-haiku-4-5"
         }
 

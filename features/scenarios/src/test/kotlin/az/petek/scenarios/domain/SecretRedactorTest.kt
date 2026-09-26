@@ -52,6 +52,29 @@ class SecretRedactorTest {
     }
 
     @Test
+    fun `the key formats of every AI provider are masked`() {
+        val keys =
+            listOf(
+                "sk-proj-Ab12Cd34Ef56Gh78Ij90Kl",
+                "sk-or-v1-0123456789abcdef0123",
+                "sk-0123456789ABCDEFabcdef",
+                "AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q",
+                "gsk_0123456789abcdefABCDEF",
+                "xai-0123456789abcdefABCDEF",
+                "hf_0123456789abcdefABCDEF",
+            )
+
+        val text = SecretRedactor().redact(keys.joinToString(" and "))
+
+        keys.forEach { text shouldNotContain it.takeLast(12) }
+    }
+
+    @Test
+    fun `ordinary words that start like a key prefix stay`() {
+        SecretRedactor().redact("sk-lab and hf_x are short") shouldBe "sk-lab and hf_x are short"
+    }
+
+    @Test
     fun `placeholders and already masked values stay readable`() {
         val redactor = SecretRedactor()
 

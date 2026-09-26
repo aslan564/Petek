@@ -11,7 +11,7 @@ package az.petek.llm
 
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmMessage
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.LlmRole
@@ -75,7 +75,7 @@ class OutcomeLlmClient(
     private val clock: () -> Long = { 0L },
     outcomes: List<Outcome>,
 ) : LlmClient {
-    override val provider: LlmProviderId = LlmProviderId.ANTHROPIC_API
+    override val provider: LlmProviderKey = LlmProviderKey.ANTHROPIC_API
     override val model: String = "outcome-model"
 
     private val remaining = ArrayDeque(outcomes)

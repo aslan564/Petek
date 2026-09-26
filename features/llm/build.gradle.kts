@@ -18,8 +18,11 @@ dependencies {
     api(libs.kotlinx.serialization.json)
     implementation(libs.anthropic.java)
     implementation(libs.kotlin.logging)
+    // The OpenAI-compatible adapter (one HTTP client for OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio...).
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
     testImplementation(testFixtures(project(":core:domain")))
-    // Embedded HTTP server standing in for the Messages API in AnthropicApiLlmClient tests.
+    // Embedded HTTP server standing in for the Messages API and chat/completions in the HTTP client tests.
     testImplementation(libs.ktor.server.core)
     testImplementation(libs.ktor.server.cio)
 }

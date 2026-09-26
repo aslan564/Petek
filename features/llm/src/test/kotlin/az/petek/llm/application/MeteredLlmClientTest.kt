@@ -14,7 +14,7 @@ import az.petek.llm.OutcomeLlmClient
 import az.petek.llm.OutcomeLlmClient.Companion.fail
 import az.petek.llm.OutcomeLlmClient.Companion.succeed
 import az.petek.llm.domain.LlmException
-import az.petek.llm.domain.LlmProviderId
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.domain.TokenUsage
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.maps.shouldBeEmpty
@@ -97,7 +97,7 @@ class MeteredLlmClientTest {
     fun `provider and model are those of the wrapped client`() {
         val client = MeteredLlmClient(OutcomeLlmClient(outcomes = emptyList()), UsageMeter())
 
-        client.provider shouldBe LlmProviderId.ANTHROPIC_API
+        client.provider shouldBe LlmProviderKey.ANTHROPIC_API
         client.model shouldBe "outcome-model"
     }
 }

@@ -138,7 +138,7 @@ class CapacityAdvisorTest {
         text shouldContain "CPU: 16 cores × 6 sessions per core = 96 testers"
         text shouldContain "Limiting factor: memory."
         notes.last() shouldBe
-            "LLM throughput (PETEK_LLM_CONCURRENCY and your Claude plan's rate limits) limits how fast the testers act, " +
+            "LLM throughput (PETEK_LLM_CONCURRENCY and your AI provider's rate limits) limits how fast the testers act, " +
             "not how many can run."
     }
 

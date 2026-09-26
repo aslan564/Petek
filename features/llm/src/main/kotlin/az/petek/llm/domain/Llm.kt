@@ -56,25 +56,49 @@ data class LlmResponse(
     val costUsd: Double?,
 )
 
-/** Which backend answers. New providers are added as new infrastructure classes (open/closed). */
-enum class LlmProviderId(
-    val key: String,
+/**
+ * Which backend answers, as the open key `PETEK_LLM_PROVIDER` names it (e.g. `claude-cli`, `openai-compat`). Open on
+ * purpose: a new provider is a new infrastructure class registered under a new key, never an edit of an exhaustive
+ * `when` (open/closed). The well-known keys are the constants below.
+ */
+@JvmInline
+value class LlmProviderKey private constructor(
+    val value: String,
 ) {
-    /** Claude Code CLI in headless mode (`claude -p`), using the user's Claude plan login. */
-    CLAUDE_CLI("claude-cli"),
-
-    /** Anthropic Messages API with an API key (official Java SDK). */
-    ANTHROPIC_API("anthropic-api"),
-    ;
+    override fun toString(): String = value
 
     companion object {
-        fun fromKey(key: String): LlmProviderId? = entries.firstOrNull { it.key == key.trim().lowercase() }
+        /** Claude Code CLI in headless mode (`claude -p`), using the user's Claude plan login. */
+        val CLAUDE_CLI = LlmProviderKey("claude-cli")
+
+        /** Anthropic Messages API with an API key (official Java SDK). */
+        val ANTHROPIC_API = LlmProviderKey("anthropic-api")
+
+        /** OpenAI Codex CLI (`codex exec`), using the user's own Codex login. */
+        val CODEX_CLI = LlmProviderKey("codex-cli")
+
+        /** Google Gemini CLI (`gemini -p`), using the user's own Gemini login. */
+        val GEMINI_CLI = LlmProviderKey("gemini-cli")
+
+        /** OpenCode CLI (`opencode run`), with whatever provider it is configured for. */
+        val OPENCODE_CLI = LlmProviderKey("opencode-cli")
+
+        /** Any OpenAI-compatible `chat/completions` endpoint: OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio... */
+        val OPENAI_COMPAT = LlmProviderKey("openai-compat")
+
+        /** Keys spell as lower-case words joined by `-`, so a typo is refused instead of silently becoming a provider. */
+        fun of(key: String): LlmProviderKey? {
+            val normalized = key.trim().lowercase()
+            return if (KEY.matches(normalized)) LlmProviderKey(normalized) else null
+        }
+
+        private val KEY = Regex("[a-z][a-z0-9]*(-[a-z0-9]+)*")
     }
 }
 
 /** Port implemented by every provider. */
 interface LlmClient {
-    val provider: LlmProviderId
+    val provider: LlmProviderKey
     val model: String
 
     suspend fun complete(request: LlmRequest): LlmResponse
