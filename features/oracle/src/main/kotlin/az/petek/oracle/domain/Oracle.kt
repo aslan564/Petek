@@ -51,7 +51,7 @@ data class SeedCompanyResult(
 
 /**
  * Port: the target's test-only API (`/test/...`, `X-Test-Token`), the source of truth "C" in the A/B/C comparison.
- * Contract: docs/TARGET_CONTRACT.md. Destructive calls only touch companies with `is_test=true` (CLAUDE.md rule 8).
+ * Contract: docs/TARGET_CONTRACT.md. Destructive calls only touch companies with `is_test=true` (AGENTS.md rule 8).
  */
 interface TargetOracle {
     /** False when no test token is configured or the target has no test API; oracle assertions are then skipped. */

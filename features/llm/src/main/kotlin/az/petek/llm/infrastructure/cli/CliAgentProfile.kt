@@ -19,8 +19,8 @@ import az.petek.llm.domain.LlmRole
 import java.nio.file.Path
 
 /**
- * How one coding-agent CLI is called in headless mode: the part of a call that differs between `claude -p`,
- * `codex exec`, `gemini -p` and `opencode run`. Everything else (scratch directory, timeout, killing the process tree,
+ * How one command-line AI agent is called in headless mode: the part of a call that differs between agents
+ * (`codex exec`, `gemini -p`, `opencode run`, or any tool the owner describes). Everything else (scratch directory, timeout, killing the process tree,
  * bounded output files, "never a shell") is [CliAgentLlmClient]'s and the same for every agent (strategy pattern).
  */
 internal interface CliAgentProfile {
@@ -29,10 +29,10 @@ internal interface CliAgentProfile {
     /** The model named in errors and usage; the CLI's own default when the owner configured none. */
     val model: String
 
-    /** How errors name the agent, e.g. `Claude CLI`. */
+    /** How errors name the agent, e.g. `Codex CLI`. */
     val displayName: String
 
-    /** Prefix of the per-call temporary directory, e.g. `petek-claude-`. */
+    /** Prefix of the per-call temporary directory, e.g. `petek-codex-`. */
     val scratchPrefix: String
 
     /**

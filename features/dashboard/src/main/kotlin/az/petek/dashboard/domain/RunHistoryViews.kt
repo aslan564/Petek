@@ -35,7 +35,7 @@ data class RunSummaryView(
     val findings: Int,
     val inputTokens: Long,
     val outputTokens: Long,
-    /** Null when the LLM provider reports no cost (e.g. the Claude plan). */
+    /** Null when the LLM provider reports no cost (e.g. a subscription plan). */
     val costUsd: Double?,
     val repeatGroup: String?,
     val repeatIndex: Int?,

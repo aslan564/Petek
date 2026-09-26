@@ -16,7 +16,7 @@ import az.petek.campaign.domain.RequestPattern
 
 /**
  * What one actor's own requests say about its attempt in a race (`only_one_succeeds`). Code decides from the requests
- * the browser saw the target answer (CLAUDE.md rule 2); the agent's `done(success)` and summary are only text.
+ * the browser saw the target answer (AGENTS.md rule 2); the agent's `done(success)` and summary are only text.
  *
  * Rules, over [requests] (the actor's matching mutating requests during its action, oldest first):
  * - [succeeded]: at least one request was accepted (status < 400) and none was refused (403, 409, 422). With a broad

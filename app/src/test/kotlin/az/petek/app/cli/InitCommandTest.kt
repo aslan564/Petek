@@ -36,16 +36,16 @@ class InitCommandTest {
         runBlocking<Unit> {
             val cli = CliHarness(dir, mapOf("PETEK_TARGET" to ""))
 
-            val result = cli.run("init", "--target", "https://staging.example.com", "--ai", "claude")
+            val result = cli.run("init", "--target", "https://staging.example.com", "--ai", "agents")
 
             result.statusCode shouldBe 0
-            result.stdout shouldContain "for claude (requested)"
+            result.stdout shouldContain "for agents (requested)"
             result.stdout shouldContain "created   .env — PETEK_TARGET=https://staging.example.com"
-            result.stdout shouldContain "created   .claude/skills/petek/SKILL.md"
+            result.stdout shouldContain "created   AGENTS.md"
             result.stdout shouldContain "created   .mcp.json — server \"petek\""
             result.stdout shouldContain "petek doctor"
             Files.readString(dir.resolve(".env")) shouldContain "PETEK_TARGET=https://staging.example.com"
-            Files.exists(dir.resolve("AGENTS.md")) shouldBe false
+            Files.exists(dir.resolve("AGENTS.md")) shouldBe true
         }
 
     @Test
@@ -55,7 +55,7 @@ class InitCommandTest {
 
             result.statusCode shouldBe 0
             val document = Json.parseToJsonElement(result.stdout.trim()).jsonObject
-            document["ais"]!!.jsonArray.map { it.jsonPrimitive.content } shouldBe listOf("codex")
+            document["ais"]!!.jsonArray.map { it.jsonPrimitive.content } shouldBe listOf("agents")
             document["detected"]!!.jsonPrimitive.boolean shouldBe false
             document["changes"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content } shouldContain "AGENTS.md"
             result.stdout.lines().count { it.isNotBlank() } shouldBe 1

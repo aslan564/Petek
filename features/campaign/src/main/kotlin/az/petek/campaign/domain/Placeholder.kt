@@ -60,7 +60,7 @@ sealed interface Placeholder {
 
         /**
          * `self` fields campaign files may use. The password is absent on purpose: secrets reach the page only when the
-         * harness types them (CLAUDE.md rule 10), never through rendered prompts, URLs or assertions.
+         * harness types them (AGENTS.md rule 10), never through rendered prompts, URLs or assertions.
          */
         val CAMPAIGN_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "department", "role", "phone")
 

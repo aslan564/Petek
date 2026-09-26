@@ -800,13 +800,13 @@ class DefaultAgentLoopTest {
     @Test
     fun `an unavailable LLM ends the step at once with an error`() =
         runTest {
-            val llm = ScriptedLlmClient { throw LlmException.Unavailable("claude CLI is not logged in") }
+            val llm = ScriptedLlmClient { throw LlmException.Unavailable("the AI tool is not logged in") }
 
             val outcome = execute(llm)
 
             outcome.status shouldBe ActionStatus.ERROR
             outcome.failureReason shouldBe FailureReason.LLM_UNAVAILABLE
-            outcome.summary shouldContain "claude CLI is not logged in"
+            outcome.summary shouldContain "the AI tool is not logged in"
             outcome.stepsTaken shouldBe 0
             llm.requests shouldHaveSize 1
             evidence.stepList.single().status shouldBe StepStatus.ERROR

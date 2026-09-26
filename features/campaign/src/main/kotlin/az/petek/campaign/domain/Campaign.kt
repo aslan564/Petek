@@ -195,7 +195,7 @@ data class ScenarioStep(
 /**
  * The step tests that an action is forbidden: its assertions check the refusal itself (`not_visible` of the control,
  * `http_status` 401/403 of the request). An agent that could not perform such an action did what the step asked, so
- * the orchestrator lets those assertions decide (CLAUDE.md rule 2) instead of the wording of the agent's report.
+ * the orchestrator lets those assertions decide (AGENTS.md rule 2) instead of the wording of the agent's report.
  */
 val ScenarioStep.expectsRefusal: Boolean get() = assertions.any(AssertionSpec::expectsRefusal)
 
@@ -261,7 +261,7 @@ data class WaitForSpec(
     val timeout: Duration,
 )
 
-/** Typed checks executed by code (CLAUDE.md rule 2). */
+/** Typed checks executed by code (AGENTS.md rule 2). */
 sealed interface AssertionSpec {
     val type: String
 
@@ -310,7 +310,7 @@ sealed interface AssertionSpec {
     }
 
     /**
-     * Exactly one actor of a `parallel` step wins, judged by code from each actor's own requests (CLAUDE.md rule 2),
+     * Exactly one actor of a `parallel` step wins, judged by code from each actor's own requests (AGENTS.md rule 2),
      * never from what the agent says: an actor won when one of its requests matching [request] was accepted
      * (status < 400) and none was refused (403, 409, 422). YAML `only_one_succeeds: true` checks every mutating
      * request ([request] null); the map form `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}`

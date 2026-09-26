@@ -15,7 +15,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlin.time.Duration
 
 /**
- * The complete whitelist of what an LLM agent may do (CLAUDE.md rule 3). A new capability is a new subtype
+ * The complete whitelist of what an LLM agent may do (AGENTS.md rule 3). A new capability is a new subtype
  * here plus its executor — never a prompt change. `text` may contain harness placeholders such as
  * `{self.password}` or `{vars.email_code}`; the harness substitutes them, so secrets never reach the LLM.
  */

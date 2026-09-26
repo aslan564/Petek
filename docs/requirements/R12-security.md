@@ -17,7 +17,7 @@ page content or the model steer the tool.
 | Wrong target / production | `TargetPolicy` + `PETEK_ALLOW_PRODUCTION`; `PETEK_TARGET` overrides scenario targets; same policy in CLI, doctor, panel | `core/security`, `app` |
 | Destructive writes on real data | Oracle and teardown only on `is_test=true`; trial touch needs permission and a confirmed test target; token only to the configured API base, no redirects | `oracle`, `explorer`, `app` |
 | Prompt injection from pages | One structured decision validated against the action whitelist; the harness executes; page text is data | `agent`, `llm` |
-| AI process escaping | `claude -p` with no tools, no MCP, no settings, no session persistence; `ProcessBuilder` without a shell; scrubbed environment; fresh temp dir; kill tree on timeout | `llm/infrastructure/cli` |
+| AI process escaping | An AI command-line tool runs with the owner's arguments only (no vendor flags in the code), the known agent CLIs read-only; `ProcessBuilder` without a shell; `PETEK_LLM_ENV_UNSET` removes variables; fresh empty temp dir; kill tree on timeout | `llm/infrastructure/cli` |
 | Panel abuse from another site | Loopback bind; local `Host`/`Origin` only; per-start `X-Petek-Token` on non-GET; script nonce; masked tester e-mails | `dashboard/infrastructure` |
 | Cross-session leakage | One browser context and one Playwright per session on its own dispatcher; colleagues known without secrets (`Colleague`); shared values write-once; `{last_id}` never a concurrent colleague's id; admin-only company setup; storage states `rw-------` (see R01 "Isolation guarantees", proven at 5 000 fake and 60 real sessions) | `browser`, `agent`, `orchestration`, `campaign` |
 | Dependency compromise | Pinned versions in the catalog; wrapper checksum; Mailpit pinned and loopback; new libraries need approval | `gradle/`, `docker-compose.yml`, rule 11 |
@@ -25,8 +25,8 @@ page content or the model steer the tool.
 ## Verification
 
 - `core`: `Secret` and `TargetPolicy` tests. `app`: `ConfigLoaderTest` ("the printed configuration never shows a
-  secret"), `TargetGuardTest`, `DoctorCommandTest` (token never echoed). `llm`: `ClaudeCliLlmClientTest` (argument
-  list, environment stripping). `dashboard`: `DashboardServerTest`/`PanelHttpTest` (origin and token checks).
+  secret"), `TargetGuardTest`, `DoctorCommandTest` (token never echoed). `llm`: `GenericCliProfileTest` (argument
+  list, environment removal). `dashboard`: `DashboardServerTest`/`PanelHttpTest` (origin and token checks).
   `browser`: secret-field and dialog masking tests. `scenarios`: redactor tests.
 
 ## Hardening roadmap

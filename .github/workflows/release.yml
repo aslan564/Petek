@@ -198,7 +198,7 @@ jobs:
             ```
             tar xzf petek-${{ needs.version.outputs.version }}-linux-x64.tar.gz     # or unzip
             cd my-site && cp ../petek-${{ needs.version.outputs.version }}-linux-x64/.env.example .env   # fill PETEK_TARGET
-            ../petek-${{ needs.version.outputs.version }}-linux-x64/bin/petek doctor   # target, Chromium, inbox, test API, AI (Claude Code CLI logged in, or ANTHROPIC_API_KEY)
+            ../petek-${{ needs.version.outputs.version }}-linux-x64/bin/petek doctor   # target, Chromium, inbox, test API, AI (any AI CLI you are logged in to, or an API key)
             ../petek-${{ needs.version.outputs.version }}-linux-x64/bin/petek panel    # the web panel at http://127.0.0.1:7070
             ```
 

@@ -577,7 +577,7 @@ class DashboardState private constructor(
     private data class RunTrack(
         val runId: RunId,
         val startedAt: Instant,
-        /** Monotonic start, for the live elapsed time (CLAUDE.md rule 1). */
+        /** Monotonic start, for the live elapsed time (AGENTS.md rule 1). */
         val startedNanos: Long,
         val campaignName: String? = null,
         val target: String? = null,

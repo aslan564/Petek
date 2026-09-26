@@ -18,7 +18,7 @@ import kotlin.coroutines.CoroutineContext
 
 /**
  * Attaches `run_id` and `agent_id` to every log line written while the runner works for a run or an agent
- * (CLAUDE.md: "Loglarda MDC"). Harness-level work has no agent, so `agent_id` is cleared for it.
+ * (AGENTS.md: "Loglarda MDC"). Harness-level work has no agent, so `agent_id` is cleared for it.
  */
 object MdcDiagnosticContext : DiagnosticContext {
     const val RUN_ID = "run_id"

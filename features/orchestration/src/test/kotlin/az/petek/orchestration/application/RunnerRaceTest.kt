@@ -47,7 +47,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * `only_one_succeeds` decided by what each manager's own browser sent and the target answered (CLAUDE.md rule 2),
+ * `only_one_succeeds` decided by what each manager's own browser sent and the target answered (AGENTS.md rule 2),
  * never by the agents' `done(success)`; the manager that loses a race did what a race expects.
  */
 @OptIn(ExperimentalCoroutinesApi::class)

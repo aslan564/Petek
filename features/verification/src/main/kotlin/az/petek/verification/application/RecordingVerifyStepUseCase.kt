@@ -32,7 +32,7 @@ import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * Evaluates assertions with an [AssertionEvaluator] and records every result linked to evidence (CLAUDE.md rule 5):
+ * Evaluates assertions with an [AssertionEvaluator] and records every result linked to evidence (AGENTS.md rule 5):
  * - RECEIVER and HARNESS results share one SCREENSHOT of the actor's session per call, taken after the checks ran
  *   (`latency_max` is backed by the same screen as the `visible_text` it measures).
  * - A result carrying the target's raw answer stores it: `oracle` as ORACLE, `http_status` as HTTP, others as LOG;

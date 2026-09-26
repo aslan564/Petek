@@ -19,7 +19,7 @@ import java.nio.file.Path
 
 /**
  * Runs one campaign end to end: plan identities -> start browser -> setup -> steps -> teardown -> finalize.
- * Always tears down in `finally` unless `keepData` (CLAUDE.md rule 8, docs/PLAN.md Faza 5).
+ * Always tears down in `finally` unless `keepData` (AGENTS.md rule 8, docs/PLAN.md Faza 5).
  */
 interface CampaignRunner {
     suspend fun run(

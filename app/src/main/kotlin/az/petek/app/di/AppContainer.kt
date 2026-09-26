@@ -267,8 +267,10 @@ class AppContainer(
     fun diagnosticLlm(): LlmClient = overrides.llm?.let(::NonClosing) ?: LlmProviders.create(config, LlmProviders.DOCTOR_CALL_TIMEOUT)
 
     /** `<binary> --version` of the configured CLI provider for `petek doctor`; null for an API provider or an override. */
-    fun llmBinaryVersion(): String? =
-        if (overrides.llm == null && config.llmProvider in LlmProviders.CLI_PROVIDERS) CliVersion.of(config.effectiveLlmBin) else null
+    fun llmBinaryVersion(): String? {
+        val binary = config.effectiveLlmBin ?: return null
+        return if (overrides.llm == null && config.llmProvider in LlmProviders.CLI_PROVIDERS) CliVersion.of(binary) else null
+    }
 
     private val ownsBrowserEngine = AtomicBoolean(false)
 

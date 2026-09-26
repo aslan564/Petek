@@ -14,7 +14,7 @@ package az.petek.llm.infrastructure.cli
 import java.nio.file.Path
 
 /**
- * Starts operating-system processes. This seam lets [ClaudeCliLlmClient] be tested with a fake process, and keeps the
+ * Starts operating-system processes. This seam lets [CliAgentLlmClient] be tested with a fake process, and keeps the
  * "argument list, never a shell" rule in one place ([SystemProcessRunner]).
  */
 fun interface ProcessRunner {

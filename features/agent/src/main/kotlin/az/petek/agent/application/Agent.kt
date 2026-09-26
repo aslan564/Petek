@@ -25,7 +25,7 @@ interface AgentLoop {
     ): ActionOutcome
 }
 
-/** A deterministic `run` step implemented in code. No LLM involved (CLAUDE.md rule 6). */
+/** A deterministic `run` step implemented in code. No LLM involved (AGENTS.md rule 6). */
 interface RunFunction {
     /** Name used in the campaign YAML, e.g. `register_and_login`. */
     val name: String

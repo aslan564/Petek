@@ -16,6 +16,8 @@ import az.petek.app.config.PetekConfig
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.core.security.Secret
 import az.petek.core.testing.FakeHarnessClock
+import az.petek.llm.application.FallbackLlmClient
+import az.petek.llm.application.UnavailableLlmClient
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
@@ -25,7 +27,6 @@ import az.petek.llm.domain.LlmResponse
 import az.petek.llm.domain.LlmRole
 import az.petek.llm.domain.TokenUsage
 import az.petek.llm.infrastructure.api.AnthropicApiLlmClient
-import az.petek.llm.infrastructure.cli.ClaudeCliLlmClient
 import az.petek.mail.infrastructure.MailpitMailbox
 import az.petek.mail.infrastructure.TestApiMailbox
 import az.petek.orchestration.infrastructure.LoggingMonitorView
@@ -53,7 +54,8 @@ class AppContainerTest {
 
     private fun config(
         concurrency: Int = 6,
-        provider: LlmProviderKey = LlmProviderKey.CLAUDE_CLI,
+        provider: LlmProviderKey = LlmProviderKey.CODEX_CLI,
+        fallbacks: List<LlmProviderKey> = emptyList(),
     ) = PetekConfig(
         target = URI("http://127.0.0.1:9"),
         identitySecret = Secret("container-test-identity-secret"),
@@ -62,7 +64,9 @@ class AppContainerTest {
         llmProvider = provider,
         llmApiKey = if (provider == LlmProviderKey.ANTHROPIC_API) Secret("sk-ant-test") else null,
         llmBaseUrl = if (provider == LlmProviderKey.OPENAI_COMPAT) URI("http://127.0.0.1:9/v1") else null,
-        llmModel = if (provider == LlmProviderKey.OPENAI_COMPAT) "llama3.1" else null,
+        llmModel = if (provider in setOf(LlmProviderKey.OPENAI_COMPAT, LlmProviderKey.ANTHROPIC_API)) "model-1" else null,
+        llmBin = if (provider == LlmProviderKey.CLI) "any-ai" else null,
+        llmFallbacks = fallbacks,
     )
 
     private fun request(label: String) = LlmRequest("system", listOf(LlmMessage(LlmRole.USER, "hi")), JsonObject(emptyMap()), label = label)
@@ -72,7 +76,7 @@ class AppContainerTest {
         private val failures: Int = 0,
         private val gate: Mutex? = null,
     ) : LlmClient {
-        override val provider = LlmProviderKey.CLAUDE_CLI
+        override val provider = LlmProviderKey.CODEX_CLI
         override val model = "counting"
         val calls = AtomicInteger()
         val inFlight = AtomicInteger()
@@ -178,10 +182,19 @@ class AppContainerTest {
 
     @Test
     fun `the configured provider is built when no override is given`() {
-        LlmProviders.create(config()).shouldBeInstanceOf<ClaudeCliLlmClient>().model shouldBe "claude-sonnet-5"
+        LlmProviders.create(config()).provider shouldBe LlmProviderKey.CODEX_CLI
+        LlmProviders.create(config(provider = LlmProviderKey.CLI)).provider shouldBe LlmProviderKey.CLI
+        LlmProviders.create(config(provider = LlmProviderKey.NONE)).shouldBeInstanceOf<UnavailableLlmClient>()
         val api = LlmProviders.create(config(provider = LlmProviderKey.ANTHROPIC_API)).shouldBeInstanceOf<AnthropicApiLlmClient>()
         api.provider shouldBe LlmProviderKey.ANTHROPIC_API
         api.close()
+    }
+
+    @Test
+    fun `other AI tools found on the machine become fallbacks behind the chosen one`() {
+        val client = LlmProviders.create(config(fallbacks = listOf(LlmProviderKey.GEMINI_CLI))).shouldBeInstanceOf<FallbackLlmClient>()
+        client.provider shouldBe LlmProviderKey.CODEX_CLI
+        client.close()
     }
 
     @Test

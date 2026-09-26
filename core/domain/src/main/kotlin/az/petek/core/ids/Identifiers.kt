@@ -13,7 +13,7 @@ package az.petek.core.ids
 
 /**
  * The workspace a record belongs to (ADR-0011): always [LOCAL] on the owner's machine; a hosted edition sets one per
- * account. It joins the other ids of CLAUDE.md rule 4 so a shared store never mixes two owners' runs.
+ * account. It joins the other ids of AGENTS.md rule 4 so a shared store never mixes two owners' runs.
  */
 @JvmInline
 value class WorkspaceId(
@@ -32,7 +32,7 @@ value class WorkspaceId(
     }
 }
 
-/** Every entity the harness records carries an id (CLAUDE.md rule 4). Values are opaque strings. */
+/** Every entity the harness records carries an id (AGENTS.md rule 4). Values are opaque strings. */
 @JvmInline
 value class RunId(
     val value: String,

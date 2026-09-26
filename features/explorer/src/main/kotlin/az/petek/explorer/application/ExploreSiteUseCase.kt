@@ -42,7 +42,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private val logger = KotlinLogging.logger {}
 
-/** The target was refused before anything was stored or opened (e.g. a production host, CLAUDE.md rule 8). */
+/** The target was refused before anything was stored or opened (e.g. a production host, AGENTS.md rule 8). */
 class ExplorationRefusedException(
     message: String,
 ) : PetekException(message)

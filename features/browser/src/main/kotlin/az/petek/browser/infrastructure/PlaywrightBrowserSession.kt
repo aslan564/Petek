@@ -54,7 +54,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * [BrowserSession] on Playwright: one agent's isolated browser context (own cookies, localStorage and
  * sessionStorage) with a single page, created by the session's own [Playwright] instance on its own thread named
- * `browser-<label>`. Every Playwright object is created and used only on that thread (CLAUDE.md rule 9); the
+ * `browser-<label>`. Every Playwright object is created and used only on that thread (AGENTS.md rule 9); the
  * suspend functions may be called from any coroutine and run one at a time, in call order. A cancelled caller (step
  * timeout, watchdog) is released at once; a browser call it already started finishes on the thread first.
  *
@@ -371,7 +371,7 @@ internal class PlaywrightBrowserSession private constructor(
 
     /**
      * Refuses addresses that are not web pages. A `file:` (or `chrome:`, `view-source:`, …) address would put local
-     * files such as `.env` into snapshots that reach the LLM (CLAUDE.md rule 10), e.g. when a page talks an agent
+     * files such as `.env` into snapshots that reach the LLM (AGENTS.md rule 10), e.g. when a page talks an agent
      * into opening one. The address is read the way the browser's URL parser reads it: surrounding control
      * characters and spaces are ignored and tabs or line breaks inside it are dropped.
      */

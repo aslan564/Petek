@@ -42,7 +42,7 @@ import java.nio.file.Path
  * Idempotent: a run that already has findings is not judged again, so `finalize` after a crash, or `petek report`
  * on a finished run, only rewrites the report; a run that has not finished yet is never judged into the store.
  * Calls are serialized so two concurrent finalizations of the same run cannot both record findings. A finding
- * without evidence of its own (a failed agent action) is linked to the artifacts of its step (CLAUDE.md rule 5).
+ * without evidence of its own (a failed agent action) is linked to the artifacts of its step (AGENTS.md rule 5).
  * Every writer is attempted even when another one fails; the failure is rethrown afterwards. The app adapts
  * [finalize] to orchestration's `RunFinalizer`.
  */

@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class ConcurrencyLimitedLlmClientTest {
     /** Holds every call until [release]; tracks how many run at once. */
     private class GatedLlmClient : LlmClient {
-        override val provider = LlmProviderKey.CLAUDE_CLI
+        override val provider = LlmProviderKey.CODEX_CLI
         override val model = "gated"
         val active = AtomicInteger()
         val maxActive = AtomicInteger()
@@ -151,7 +151,7 @@ class ConcurrencyLimitedLlmClientTest {
     fun `provider and model are those of the wrapped client`() {
         val client = ConcurrencyLimitedLlmClient(GatedLlmClient(), permits = 2)
 
-        client.provider shouldBe LlmProviderKey.CLAUDE_CLI
+        client.provider shouldBe LlmProviderKey.CODEX_CLI
         client.model shouldBe "gated"
     }
 

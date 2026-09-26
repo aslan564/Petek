@@ -1,4 +1,4 @@
-# Pətək — CLAUDE.md
+# Pətək — AGENTS.md
 
 ## Layihə
 Pətək çoxistifadəçili AI test platformasıdır: N AI tester agenti hədəf saytda (ilk hədəf KadroHR) eyni anda ayrı
@@ -26,7 +26,7 @@ paketi gedir; mövcud teq rədd edilir. Commit, PR və kodda model/alət adı ya
 Kotlin 2.4 / JDK 25 toolchain, Gradle 9.8 (Kotlin DSL, version catalog, `build-logic` convention plugin-ləri,
 configuration cache), kotlinx.coroutines, Playwright Java, Ktor 3 (client; fake target üçün server),
 kotlinx.serialization + kaml, Clikt + Mordant, SQLite (sqlite-jdbc + Exposed 1.x), kotlinx.html,
-kotlin-logging + logback, LLM: provayder-agnostik (`PETEK_LLM_PROVIDER=auto`; Claude/Codex/Gemini/OpenCode CLI, Anthropic Java SDK, OpenAI-uyğun HTTP), JUnit 6 + Kotest assertions, Konsist,
+kotlin-logging + logback, LLM: heç bir vendora bağlı deyil (`PETEK_LLM_PROVIDER=auto`: istənilən AI CLI `PETEK_LLM_BIN`/`PETEK_LLM_ARGS` ilə, Codex/Gemini/OpenCode CLI, Anthropic Java SDK, OpenAI-uyğun HTTP — Grok, OpenRouter, Ollama), JUnit 6 + Kotest assertions, Konsist,
 Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 
 ## Arxitektura qaydaları (`e2e/src/test/kotlin/az/petek/architecture/ArchitectureTest.kt` Konsist ilə hər build-də yoxlayır)
@@ -69,7 +69,7 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     ./gradlew build                                        # compile + unit testlər + ktlint + lisenziya başlıqları + arxitektura testləri
     ./gradlew spotlessApply                                # formatlama
     ./gradlew e2eTest                                      # fake target + real Chromium ilə e2e (panel, e2e modulu, 30 sessiyalı izolyasiya sübutu)
-    ./gradlew :e2e:liveTest                                # real LLM ilə (Claude planından istifadə edir)
+    ./gradlew :e2e:liveTest                                # real LLM ilə (sizin öz AI planınızı/kvotanızı işlədir)
     ./gradlew :testing:fake-target:run                     # lokal fake KadroHR: http://127.0.0.1:18080, poçt 18025
     ./gradlew :app:run --args="--env-file .env.fake-target doctor"   # fake saytla yoxlama (IntelliJ: hazır run konfiqurasiyaları)
     ./gradlew :app:run --args="doctor"

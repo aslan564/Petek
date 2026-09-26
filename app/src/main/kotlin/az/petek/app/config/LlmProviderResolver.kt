@@ -18,30 +18,37 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Decides which AI provider answers when `PETEK_LLM_PROVIDER` is `auto` (the default), in this order:
+ * Decides which AI provider answers when `PETEK_LLM_PROVIDER` is `auto` (the default). Pətək is tied to no vendor: it
+ * uses whatever AI the machine and the project already have, in this order:
  *
  * 1. an explicit provider in `.env` or the environment;
- * 2. keys in the environment: `PETEK_LLM_BASE_URL` → `openai-compat`; `ANTHROPIC_API_KEY` → `anthropic-api`;
- *    `OPENAI_API_KEY` → `openai-compat` at OpenAI; `GEMINI_API_KEY` → `gemini-cli` when it is installed, else
- *    `openai-compat` at Gemini's OpenAI endpoint;
+ * 2. settings in the environment: `PETEK_LLM_BASE_URL` → `openai-compat`; `PETEK_LLM_BIN` → `cli` (any AI command-line
+ *    tool, described by `PETEK_LLM_ARGS`); an API key: `ANTHROPIC_API_KEY` → `anthropic-api`; `OPENAI_API_KEY`,
+ *    `XAI_API_KEY` (Grok), `OPENROUTER_API_KEY` → `openai-compat` at that service; `GEMINI_API_KEY` → `gemini-cli` when
+ *    it is installed, else `openai-compat` at Gemini's OpenAI endpoint;
  * 3. the project's own AI, by the marker files in [projectDirectory] (read as markers only, never executed):
- *    `CLAUDE.md`/`.claude/` → `claude-cli`, `AGENTS.md`/`.codex/` → `codex-cli`, `GEMINI.md`/`.gemini/` →
- *    `gemini-cli`, each only when its CLI is installed; `.github/copilot-instructions.md` needs an OpenAI-compatible
- *    endpoint and says so;
- * 4. the binaries on `PATH`: `claude`, `codex`, `gemini`, `opencode`, then `ollama` (a local OpenAI-compatible server).
+ *    `AGENTS.md`/`.codex/` → `codex-cli`, `GEMINI.md`/`.gemini/` → `gemini-cli`, each only when its CLI is installed;
+ *    `.github/copilot-instructions.md` needs an OpenAI-compatible endpoint and says so;
+ * 4. the known agent CLIs on `PATH` (`codex`, `gemini`, `opencode`), then `ollama` (a local OpenAI-compatible server).
  *
- * Nothing found falls back to `claude-cli`, and `petek doctor` then says how to log in. Every decision carries its
- * reason, which the config keeps and `doctor` shows.
+ * The other known agent CLIs found on `PATH` become [Resolution.fallbacks]: when the chosen one turns out to be
+ * unavailable (not logged in, refused arguments), the next one answers. Nothing found is the `none` provider, whose
+ * every call says how to set one up; `petek doctor` shows it. Every decision carries its reason.
  */
 class LlmProviderResolver(
     private val projectDirectory: Path,
     private val onPath: (String) -> Boolean,
 ) {
-    /** The provider and why; [baseUrl] is the endpoint the decision implies (OpenAI, Gemini, Ollama), if any. */
+    /**
+     * The provider and why; [baseUrl] is the endpoint the decision implies (OpenAI, x.ai, OpenRouter, Gemini, Ollama),
+     * [apiKeyVariable] the variable whose key it went by, [fallbacks] the other agent CLIs to try in order.
+     */
     data class Resolution(
         val provider: LlmProviderKey,
         val reason: String,
         val baseUrl: URI? = null,
+        val apiKeyVariable: String? = null,
+        val fallbacks: List<LlmProviderKey> = emptyList(),
     )
 
     fun resolve(
@@ -49,27 +56,53 @@ class LlmProviderResolver(
         values: Map<String, String>,
     ): Resolution {
         if (explicit != null) return Resolution(explicit, "set in ${ConfigLoader.Keys.LLM_PROVIDER}")
-        fromKeys(values)?.let { return it }
+        fromSettings(values)?.let { return it.withFallbacks() }
         val notes = mutableListOf<String>()
-        fromMarkers(notes)?.let { return it }
-        fromPath()?.let { found -> return found.copy(reason = AUTO + (notes + found.reason.removePrefix(AUTO)).joinToString("; ")) }
-        val why = (notes + "no AI provider found (no API key, no project AI marker, no known CLI on PATH)").joinToString("; ")
-        return Resolution(LlmProviderKey.CLAUDE_CLI, "auto: $why; defaulting to claude-cli")
+        fromMarkers(notes)?.let { return it.withFallbacks() }
+        fromPath()?.let { found ->
+            return found.copy(reason = AUTO + (notes + found.reason.removePrefix(AUTO)).joinToString("; ")).withFallbacks()
+        }
+        val why = (notes + "no AI provider found (no AI setting or API key, no project AI marker, no known AI CLI on PATH)")
+        return Resolution(LlmProviderKey.NONE, AUTO + why.joinToString("; "))
     }
 
-    private fun fromKeys(values: Map<String, String>): Resolution? {
+    private fun Resolution.withFallbacks(): Resolution =
+        copy(fallbacks = BINARIES.filter { (provider, binary) -> provider != this.provider && onPath(binary) }.keys.toList())
+
+    private fun fromSettings(values: Map<String, String>): Resolution? {
         fun set(key: String) = !values[key].isNullOrBlank()
+
+        fun key(
+            variable: String,
+            at: URI,
+        ) = Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: $variable is set", at, variable)
         return when {
             set(ConfigLoader.Keys.LLM_BASE_URL) -> {
                 Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: ${ConfigLoader.Keys.LLM_BASE_URL} is set")
             }
 
+            set(ConfigLoader.Keys.LLM_BIN) -> {
+                Resolution(LlmProviderKey.CLI, "auto: ${ConfigLoader.Keys.LLM_BIN} is set")
+            }
+
             set(ConfigLoader.Keys.ANTHROPIC_API_KEY) -> {
-                Resolution(LlmProviderKey.ANTHROPIC_API, "auto: ${ConfigLoader.Keys.ANTHROPIC_API_KEY} is set")
+                Resolution(
+                    LlmProviderKey.ANTHROPIC_API,
+                    "auto: ${ConfigLoader.Keys.ANTHROPIC_API_KEY} is set",
+                    apiKeyVariable = ConfigLoader.Keys.ANTHROPIC_API_KEY,
+                )
             }
 
             set(ConfigLoader.Keys.OPENAI_API_KEY) -> {
-                Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: ${ConfigLoader.Keys.OPENAI_API_KEY} is set", OPENAI)
+                key(ConfigLoader.Keys.OPENAI_API_KEY, OPENAI)
+            }
+
+            set(ConfigLoader.Keys.XAI_API_KEY) -> {
+                key(ConfigLoader.Keys.XAI_API_KEY, XAI)
+            }
+
+            set(ConfigLoader.Keys.OPENROUTER_API_KEY) -> {
+                key(ConfigLoader.Keys.OPENROUTER_API_KEY, OPENROUTER)
             }
 
             set(ConfigLoader.Keys.GEMINI_API_KEY) && onPath("gemini") -> {
@@ -77,7 +110,7 @@ class LlmProviderResolver(
             }
 
             set(ConfigLoader.Keys.GEMINI_API_KEY) -> {
-                Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: ${ConfigLoader.Keys.GEMINI_API_KEY} is set", GEMINI)
+                key(ConfigLoader.Keys.GEMINI_API_KEY, GEMINI)
             }
 
             else -> {
@@ -111,13 +144,14 @@ class LlmProviderResolver(
     companion object {
         private const val AUTO = "auto: "
         val OPENAI: URI = URI("https://api.openai.com/v1")
+        val XAI: URI = URI("https://api.x.ai/v1")
+        val OPENROUTER: URI = URI("https://openrouter.ai/api/v1")
         val GEMINI: URI = URI("https://generativelanguage.googleapis.com/v1beta/openai")
         val OLLAMA: URI = URI("http://localhost:11434/v1")
         private const val COPILOT_MARKER = ".github/copilot-instructions.md"
 
         private val MARKERS: List<Pair<List<String>, LlmProviderKey>> =
             listOf(
-                listOf("CLAUDE.md", ".claude") to LlmProviderKey.CLAUDE_CLI,
                 listOf("AGENTS.md", ".codex") to LlmProviderKey.CODEX_CLI,
                 listOf("GEMINI.md", ".gemini") to LlmProviderKey.GEMINI_CLI,
             )

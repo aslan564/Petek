@@ -14,7 +14,7 @@ package az.petek.browser.infrastructure
 import az.petek.browser.domain.PageSnapshot
 
 /**
- * Removes the current values of a page's secret fields from text captured from that page (CLAUDE.md rule 10).
+ * Removes the current values of a page's secret fields from text captured from that page (AGENTS.md rule 10).
  * Needed because Playwright's ARIA snapshot prints every textbox value, password fields included
  * (`- textbox "Şifrə": hunter2`).
  *

@@ -12,12 +12,12 @@
 package az.petek.app.di
 
 import az.petek.app.config.PetekConfig
+import az.petek.llm.application.FallbackLlmClient
+import az.petek.llm.application.UnavailableLlmClient
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.infrastructure.api.AnthropicApiConfig
 import az.petek.llm.infrastructure.api.AnthropicApiLlmClient
-import az.petek.llm.infrastructure.cli.ClaudeCliConfig
-import az.petek.llm.infrastructure.cli.ClaudeCliLlmClient
 import az.petek.llm.infrastructure.cli.CliAgentConfig
 import az.petek.llm.infrastructure.cli.CliAgents
 import az.petek.llm.infrastructure.http.OpenAiCompatibleConfig
@@ -27,7 +27,9 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Creates the bare provider client selected by `PETEK_LLM_PROVIDER` (no retries, limits or metering: the container
- * adds those decorators). The caller owns the result and must close it when it is [AutoCloseable].
+ * adds those decorators). The caller owns the result and must close it when it is [AutoCloseable]. When `auto` found
+ * more AI tools on the machine, the client is a [FallbackLlmClient] that moves on to the next one when the chosen one
+ * is unavailable, so Pətək depends on no single vendor.
  *
  * Providers are a registry keyed by [LlmProviderKey], not an exhaustive `when`: a new provider is one more entry
  * (open/closed).
@@ -41,21 +43,11 @@ object LlmProviders {
 
     private val REGISTRY: Map<LlmProviderKey, (PetekConfig, Duration) -> LlmClient> =
         linkedMapOf(
-            LlmProviderKey.CLAUDE_CLI to { config, timeout ->
-                ClaudeCliLlmClient(
-                    ClaudeCliConfig(
-                        executable = config.effectiveLlmBin,
-                        model = checkNotNull(config.effectiveLlmModel),
-                        timeout = timeout,
-                        effort = config.effectiveLlmEffort,
-                    ),
-                )
-            },
+            LlmProviderKey.CLI to { config, timeout -> CliAgents.generic(cliConfig(config, timeout)) },
             LlmProviderKey.ANTHROPIC_API to { config, timeout ->
                 val apiKey = checkNotNull(config.llmApiKey) { "the anthropic-api provider needs ANTHROPIC_API_KEY" }
-                AnthropicApiLlmClient(
-                    AnthropicApiConfig(apiKey = apiKey, model = checkNotNull(config.effectiveLlmModel), timeout = timeout),
-                )
+                val model = checkNotNull(config.effectiveLlmModel) { "the anthropic-api provider needs PETEK_LLM_MODEL" }
+                AnthropicApiLlmClient(AnthropicApiConfig(apiKey = apiKey, model = model, timeout = timeout))
             },
             LlmProviderKey.CODEX_CLI to { config, timeout -> CliAgents.codex(cliConfig(config, timeout)) },
             LlmProviderKey.GEMINI_CLI to { config, timeout -> CliAgents.gemini(cliConfig(config, timeout)) },
@@ -72,17 +64,33 @@ object LlmProviders {
                     ),
                 )
             },
+            LlmProviderKey.NONE to { config, _ -> UnavailableLlmClient(config.llmProviderReason) },
         )
 
     /** Every provider `PETEK_LLM_PROVIDER` may name besides `auto`. */
     val KEYS: Set<LlmProviderKey> = REGISTRY.keys
 
     /** Providers that run a CLI binary (so `doctor` can ask it for `--version`). */
-    val CLI_PROVIDERS: Set<LlmProviderKey> = PetekConfig.DEFAULT_BINARIES.keys
+    val CLI_PROVIDERS: Set<LlmProviderKey> = PetekConfig.DEFAULT_BINARIES.keys + LlmProviderKey.CLI
 
     fun create(
         config: PetekConfig,
         timeout: Duration = AGENT_CALL_TIMEOUT,
+    ): LlmClient {
+        val primary = open(config, timeout)
+        if (config.llmFallbacks.isEmpty()) return primary
+        val others =
+            config.llmFallbacks.map { provider ->
+                // A fallback runs with its own defaults: the model, binary and arguments in .env belong to the chosen one.
+                val own = config.copy(llmProvider = provider, llmModel = null, llmBin = null, llmArgs = emptyList(), llmEffort = null)
+                FallbackLlmClient.Candidate(provider) { open(own, timeout) }
+            }
+        return FallbackLlmClient(listOf(FallbackLlmClient.Candidate(config.llmProvider) { primary }) + others)
+    }
+
+    private fun open(
+        config: PetekConfig,
+        timeout: Duration,
     ): LlmClient {
         val factory = REGISTRY[config.llmProvider] ?: error("no LLM provider is registered as ${config.llmProvider}")
         return factory(config, timeout)
@@ -92,9 +100,11 @@ object LlmProviders {
         config: PetekConfig,
         timeout: Duration,
     ) = CliAgentConfig(
-        executable = config.effectiveLlmBin,
+        executable = checkNotNull(config.effectiveLlmBin) { "the ${config.llmProvider} provider needs PETEK_LLM_BIN" },
         model = config.effectiveLlmModel,
         timeout = timeout,
         effort = config.effectiveLlmEffort,
+        arguments = config.llmArgs,
+        unsetEnvironment = config.llmEnvUnset,
     )
 }

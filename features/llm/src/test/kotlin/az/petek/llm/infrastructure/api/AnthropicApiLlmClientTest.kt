@@ -156,7 +156,7 @@ class AnthropicApiLlmClientTest {
                 put("ref", 4)
             }
         response.usage shouldBe TokenUsage(inputTokens = 820, outputTokens = 31, cacheReadTokens = 400, cacheCreationTokens = 12)
-        response.model shouldBe "claude-haiku-4-5-20251001"
+        response.model shouldBe "test-model-small-20260101"
         response.costUsd shouldBe null
     }
 
@@ -349,7 +349,7 @@ class AnthropicApiLlmClientTest {
 
     private companion object {
         const val API_KEY = "sk-ant-test-0123456789"
-        const val MODEL = "claude-haiku-4-5"
+        const val MODEL = "test-model-small"
         const val CLICK_JSON = """{"action":"click"}"""
 
         fun message(
@@ -368,7 +368,7 @@ class AnthropicApiLlmClientTest {
                         }.toString()
                     },
                 )
-            return """{"id":"msg_01","type":"message","role":"assistant","model":"claude-haiku-4-5-20251001",""" +
+            return """{"id":"msg_01","type":"message","role":"assistant","model":"test-model-small-20260101",""" +
                 """"content":[${blocks.joinToString(",")}],"stop_reason":"$stopReason","stop_sequence":null,""" +
                 """"usage":$usage}"""
         }

@@ -15,7 +15,7 @@ import az.petek.browser.domain.PageElement
 import az.petek.browser.domain.PageSnapshot
 
 /**
- * Removes secrets from what the explorer shows the LLM (CLAUDE.md rule 10). The browser already masks password
+ * Removes secrets from what the explorer shows the LLM (AGENTS.md rule 10). The browser already masks password
  * values; on top of that the page address is replaced by its pattern (paths and query strings carry invitation and
  * reset tokens), values of secret-looking fields (password, token, code, PIN, card) are masked, and long random tokens
  * and URL query strings in any text are replaced.

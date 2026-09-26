@@ -180,12 +180,12 @@ class CliAgentProfilesTest {
                         """"tokens":{"input":700,"output":25,"cache":{"read":50,"write":0}}}}""",
                 ).joinToString("\n")
             val runner = FakeProcessRunner.answering(events)
-            val profile = OpenCodeCliProfile(CliAgentConfig(executable = "opencode", model = "anthropic/claude-sonnet-5"))
+            val profile = OpenCodeCliProfile(CliAgentConfig(executable = "opencode", model = "vendor/model-x"))
 
             val response = client(profile, runner).complete(request)
 
             val command = runner.lastSpec.command
-            command.take(6) shouldContainExactly listOf("opencode", "run", "--format", "json", "-m", "anthropic/claude-sonnet-5")
+            command.take(6) shouldContainExactly listOf("opencode", "run", "--format", "json", "-m", "vendor/model-x")
             command.last() shouldContain SchemaPrompt.INSTRUCTION
             response.output shouldBe buildJsonObject { put("action", "click") }
             response.usage shouldBe TokenUsage(inputTokens = 700, outputTokens = 25, cacheReadTokens = 50)
@@ -205,11 +205,12 @@ class CliAgentProfilesTest {
     }
 
     @Test
-    fun `the factory serves the three agents and nothing else`() {
+    fun `the factory serves the known agents and any configured tool, nothing else`() {
         CliAgents.create(LlmProviderKey.CODEX_CLI, CliAgentConfig("codex"))?.provider shouldBe LlmProviderKey.CODEX_CLI
         CliAgents.create(LlmProviderKey.GEMINI_CLI, CliAgentConfig("gemini"))?.provider shouldBe LlmProviderKey.GEMINI_CLI
         CliAgents.create(LlmProviderKey.OPENCODE_CLI, CliAgentConfig("opencode"))?.provider shouldBe LlmProviderKey.OPENCODE_CLI
-        CliAgents.create(LlmProviderKey.CLAUDE_CLI, CliAgentConfig("claude")) shouldBe null
+        CliAgents.create(LlmProviderKey.CLI, CliAgentConfig("any-ai"))?.provider shouldBe LlmProviderKey.CLI
+        CliAgents.create(LlmProviderKey.OPENAI_COMPAT, CliAgentConfig("any-ai")) shouldBe null
     }
 
     private companion object {

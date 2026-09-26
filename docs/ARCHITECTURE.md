@@ -23,7 +23,7 @@ ordered by number everywhere.
 | `features/mail` | Verification codes and invitation links (also by a site's own link pattern) from the test inbox | `Mailbox`, `VerificationExtractor`, `AwaitVerificationUseCase` | Mailpit REST client, the target's test API (`GET /test/emails`) (Ktor) |
 | `features/oracle` | Target test API (source of truth "C") | `TargetOracle`, `JsonFieldSelector` | Ktor client with `X-Test-Token`, `is_test` guard |
 | `features/browser` | Isolated browser sessions, snapshots for the LLM, real-time transport detection, accepted-and-recorded JavaScript dialogs, localStorage seeded before page scripts, the mutating requests each page sends to the target (race evidence) | `BrowserEngine`, `BrowserSessionFactory`, `BrowserSession` | Playwright (browser servers sharded by load, thread-confined sessions) |
-| `features/llm` | Structured-output LLM calls, retries, concurrency limit, usage metering; open provider keys (`LlmProviderKey`) | `LlmClient` | Coding-agent CLIs through one `CliAgentLlmClient` with a profile each (`claude -p`, `codex exec`, `gemini -p`, `opencode run`), the Anthropic Java SDK, and one Ktor `OpenAiCompatibleLlmClient` (OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio; strict `json_schema` → `json_object` → schema in the prompt) |
+| `features/llm` | Structured-output LLM calls, retries, concurrency limit, usage metering; open provider keys (`LlmProviderKey`) | `LlmClient` | Command-line AI agents through one `CliAgentLlmClient` with a profile each (any tool the owner describes in `.env`, `codex exec`, `gemini -p`, `opencode run`), the Anthropic Java SDK, and one Ktor `OpenAiCompatibleLlmClient` (OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio; strict `json_schema` → `json_object` → schema in the prompt) |
 | `features/agent` | Tool whitelist, decision protocol, agent loop, deterministic `run` functions that execute the target's flows | `DecisionProtocol`, `LoopDetector`, `AgentLoop`, `RunFunction`, `TesterAgent` | — |
 | `features/verification` | Typed assertions (visible_text, not_visible, oracle, http_status, count, latency_max, only_one_succeeds), race evidence from each actor's own requests | `AssertionEvaluator`, `VerifyStepUseCase`, `RaceEvidence` | — |
 | `features/orchestration` | Run lifecycle, actor resolution, event bus, scheduler with pacing, watchdog, teardown, repeat, live board, the orchestrator's task plan for live views | `EventBus`, `ActorResolver`, `MonitorView`, `CampaignRunner`, `RunFinalizer` | in-process bus, Mordant board |
@@ -118,7 +118,7 @@ rows show the agents that need attention first (working, blocked, failed, waitin
 ## Races (`only_one_succeeds`)
 
 A race step (`parallel: true`) asks that exactly one actor wins, e.g. two managers approving the same ticket. Who won
-is decided by code from each actor's own requests (CLAUDE.md rule 2), never by what its agent says:
+is decided by code from each actor's own requests (AGENTS.md rule 2), never by what its agent says:
 
 1. **Browser.** Every session records the mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`) its page sends to the
    target's origin, form posts and `fetch`/XHR alike, with the URL path (no query), the answer's status and the
@@ -286,7 +286,7 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
 | More testers than one machine or one IP carries? | `campaign.wave_size` splits the testers in agent order into waves: each opens its browsers, runs every step with its own testers and its own event bus (a live event never crosses waves) and closes them before the next. `PETEK_PROXIES` gives tester *n* of a wave proxy *n*; with fewer proxies than live testers the run does not start. Without proxies, an action the site answered with 429 is `rate_limited`, an environment gap, not a site bug. A crashed browser context is restored with the same identity and its storage state (`RestoringBrowserSession`). |
 | Which real-time mechanism? | Detected automatically; Pətək does not depend on it. Latency is measured in the DOM (t1 − t0). The transport (WebSocket, SSE or polling) is detected from network traffic and shown in the report. |
 | Does the backend store "read" receipts? | Yes (confirmed). The `receipts` oracle assertion is part of the default campaign. |
-| LLM provider? | Whatever AI the project already uses (ADR-0008): `PETEK_LLM_PROVIDER=auto` resolves, with a reason `doctor` shows, from an explicit value, then API keys in the environment, then the project's AI markers (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) when that CLI is installed, then the CLIs on `PATH`; nothing found falls back to the Claude Code CLI with Sonnet (`claude-sonnet-5`). Providers are a registry in `app/di/LlmProviders` keyed by `LlmProviderKey`; a new one is an entry, not an edit of a `when`. |
+| LLM provider? | Whatever AI the owner has, no vendor preferred (ADR-0008, R09): `PETEK_LLM_PROVIDER=auto` resolves, with a reason `doctor` shows, from an explicit value, then settings and API keys in the environment (`PETEK_LLM_BIN`, `PETEK_LLM_BASE_URL`, OpenAI, Grok, OpenRouter, Gemini, Anthropic keys), then the project's AI markers (`AGENTS.md`, `GEMINI.md`) when that CLI is installed, then the known agent CLIs on `PATH` and Ollama; the other CLIs found are fallbacks; nothing found is `none`, whose calls say how to set one up |
 | How many testers? | Any number: there is no fixed limit (30 was only the first campaign's size). Agent ids grow past `a99`/`a999`, identity names never run out, browsers are sharded by load. `petek capacity` recommends a maximum for the machine, `run` warns above it and still starts. |
 | Browser dialogs? | Accepted (OK / leave page; a prompt gets its default text) and recorded as evidence with type, message and time; the model sees them in its next turn. |
 | How does Pətək fit a site whose flows differ from the contract? | The campaign describes them: `target_profile.flows` (defaults: the contract), selectors by key or literal, `local_storage`, `dismiss`, `api_prefix`, `campaign.pacing`. The run functions execute flows by name; a new site needs YAML, not code. |
@@ -300,7 +300,7 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
 - **Target policy.** Hosts listed in `PETEK_PRODUCTION_HOSTS` are refused unless `PETEK_ALLOW_PRODUCTION=true`; the
   refusal names both variables. Oracle deletes require `is_test=true`.
 - **Dialogs.** A dialog's message is masked for secrets the session typed before it reaches the evidence or the LLM.
-- **Claude CLI.** It runs with no tools (`--tools ""`), no MCP servers and no settings, and without session
-  persistence. It is started via `ProcessBuilder` with an argument list (no shell).
+- **AI command-line tools.** A tool is started via `ProcessBuilder` with an argument list (no shell) in an empty
+  temporary directory; its arguments are the owner's (`PETEK_LLM_ARGS`), the code holds no vendor-specific flag.
 - **Supply chain.** Dependencies are pinned in the version catalog. The Gradle distribution is checksum-verified.
   Mailpit is pinned to a version and bound to 127.0.0.1.

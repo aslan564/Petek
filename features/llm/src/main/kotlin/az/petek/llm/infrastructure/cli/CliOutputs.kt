@@ -21,7 +21,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
 /**
- * What the non-Claude agents share when reading their output: JSON lines, token counters, and how a failure's text
+ * What the agent profiles share when reading their output: JSON lines, token counters, and how a failure's text
  * maps to an [LlmException] (login problems are `Unavailable` with the fix, limits `RateLimited`, the rest
  * `Transient`).
  */
@@ -61,16 +61,22 @@ internal object CliOutputs {
         loginHint: String,
         detail: String,
         label: String,
+        usageHint: String = "update it",
     ): LlmException {
-        val text = ClaudeCliResultParser.tail(detail).ifBlank { "no output" }
+        val text = tail(detail).ifBlank { "no output" }
         val haystack = text.lowercase()
         return when {
             AUTH_MARKERS.any { it in haystack } -> LlmException.Unavailable("$displayName cannot answer: $text. $loginHint")
             RATE_MARKERS.any { it in haystack } -> LlmException.RateLimited("$displayName is rate limited for $label: $text", null)
-            USAGE_MARKERS.any { it in haystack } -> LlmException.Unavailable("$displayName rejected Pətək's arguments; update it: $text")
+            USAGE_MARKERS.any { it in haystack } -> LlmException.Unavailable("$displayName rejected Pətək's arguments; $usageHint: $text")
             else -> LlmException.Transient("$displayName failed for $label: $text")
         }
     }
+
+    /** The last part of a long error text, where tools put the reason. */
+    fun tail(text: String): String = text.trim().takeLast(MAX_DETAIL_CHARS).trim()
+
+    private const val MAX_DETAIL_CHARS = 500
 
     private val AUTH_MARKERS =
         listOf(

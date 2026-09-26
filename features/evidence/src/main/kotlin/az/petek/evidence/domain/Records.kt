@@ -23,7 +23,7 @@ import az.petek.core.ids.WorkspaceId
 import java.time.Instant
 
 /*
- * The evidence model (docs/PLAN.md "Sübut bazası"). No verdict exists without evidence (CLAUDE.md rule 5):
+ * The evidence model (docs/PLAN.md "Sübut bazası"). No verdict exists without evidence (AGENTS.md rule 5):
  * every assertion links to at least one artifact (screenshot) or an oracle response.
  */
 

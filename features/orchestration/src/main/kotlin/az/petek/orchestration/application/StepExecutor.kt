@@ -104,7 +104,7 @@ internal data class StepResult(
  *
  * Races (`only_one_succeeds`): whether an actor succeeded is decided by code from the requests its own browser sent
  * during the action ([BrowserSession.mutations], judged by [RaceEvidence]), never by the agent's `done(success)` or
- * summary (CLAUDE.md rule 2). The session is read once right before the action's start time is taken (so answers to
+ * summary (AGENTS.md rule 2). The session is read once right before the action's start time is taken (so answers to
  * earlier requests are timestamped before it) and once after the action. Only an actor whose requests succeeded
  * emits the step's event. An actor that lost the race — the target refused it with 409/422, or it gave its answer
  * (success, a reported problem or a refusal) without sending a matching request while another actor won — did what a
@@ -440,7 +440,7 @@ internal class StepExecutor(
 
     /**
      * A forbidden-action test ([ScenarioStep.expectsRefusal], main steps only) is decided by its assertions, never by
-     * how the agent worded its stop (CLAUDE.md rule 2): an agent that reported a problem or gave up (`report_problem`
+     * how the agent worded its stop (AGENTS.md rule 2): an agent that reported a problem or gave up (`report_problem`
      * of any kind, `done` with success=false) in such a step is recorded like a `permission_denied` refusal, its own
      * words kept. Errors and guard stops (timeout, step limit, loop, invalid decisions, browser or LLM failures) stay
      * what they are: they say nothing about whether the target refused.
@@ -617,7 +617,7 @@ internal class StepExecutor(
 
     /**
      * The agent claimed success, but the target turned down the actor's own request in this race (status >= 400 and
-     * not a lost race): code decides (CLAUDE.md rule 2), so the action failed with [REQUEST_FAILED].
+     * not a lost race): code decides (AGENTS.md rule 2), so the action failed with [REQUEST_FAILED].
      */
     private fun refutedClaim(
         outcome: ActionOutcome,
@@ -1053,7 +1053,7 @@ internal class StepExecutor(
 
         /**
          * Failure key of a race action whose agent claimed success while the target turned down the actor's own
-         * request (e.g. a 500 or 403 on the approval): the request, not the agent, decides (CLAUDE.md rule 2).
+         * request (e.g. a 500 or 403 on the approval): the request, not the agent, decides (AGENTS.md rule 2).
          */
         const val REQUEST_FAILED = "request_failed"
 

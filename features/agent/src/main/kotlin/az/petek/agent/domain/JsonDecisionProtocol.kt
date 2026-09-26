@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
  * The schema is flat (one object, every argument optional): small, identical for every call (cacheable) and
  * strict-compatible (`additionalProperties: false`, no numeric bounds, which strict mode does not support). Per-tool
  * rules therefore live in [parse]: the schema only narrows what the model can say, the parser decides what is
- * allowed (CLAUDE.md rule 3). The parser is deliberately tolerant of harmless
+ * allowed (AGENTS.md rule 3). The parser is deliberately tolerant of harmless
  * encoding differences (a JSON `null` means "absent", `"12"` is accepted for an integer, `"true"` for a boolean)
  * and strict about meaning: a missing or out-of-range argument yields [DecisionParse.Invalid] with a message the
  * agent loop feeds back to the model verbatim.

@@ -17,7 +17,7 @@ import az.petek.evidence.domain.RunResource
 import az.petek.oracle.domain.TargetOracle
 
 /**
- * Removes what a run created on the target, using the resources the run registered (CLAUDE.md rule 8: the oracle
+ * Removes what a run created on the target, using the resources the run registered (AGENTS.md rule 8: the oracle
  * itself refuses companies that are not `is_test`). Works for finished runs and for runs that crashed half-way, and
  * is idempotent: a removed resource is unregistered, and a company that is already gone counts as removed.
  *

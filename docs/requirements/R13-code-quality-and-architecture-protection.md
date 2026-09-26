@@ -1,6 +1,6 @@
 # R13 — Architecture and code quality enforced by the build, not by discipline
 
-**Status:** Implemented (Faza 8) · **ADRs:** 0001 · **Rules:** `CLAUDE.md`, `CONTRIBUTING.md`
+**Status:** Implemented (Faza 8) · **ADRs:** 0001 · **Rules:** `AGENTS.md`, `CONTRIBUTING.md`
 
 ## Requirement
 
@@ -30,7 +30,7 @@ for a reviewer to notice.
   not spent automatically and that nothing is deployed before everything is finished. The gate on every commit is the
   local `./gradlew spotlessApply build`; the owner starts Build from the Actions tab when a clean-runner proof is
   wanted, and Release on `main` when a version is done.
-- **Rules for agents.** `CLAUDE.md` is the single page every AI coding agent reads first; it points to the plan, the
+- **Rules for agents.** `AGENTS.md` is the single page every AI coding agent reads first; it points to the plan, the
   architecture, the contract and the eleven never-break rules.
 
 ## Verification

@@ -31,7 +31,7 @@ import kotlin.time.Duration.Companion.seconds
 private val logger = KotlinLogging.logger {}
 
 /**
- * Writes the evidence of agent actions (CLAUDE.md rules 1, 4, 5): one [StepRecord] per action with harness
+ * Writes the evidence of agent actions (AGENTS.md rules 1, 4, 5): one [StepRecord] per action with harness
  * timings, then the page artifacts linked to it. The step is recorded before its artifacts so every artifact
  * points at an existing step. A failing screenshot never fails the action it documents; it is logged instead.
  */

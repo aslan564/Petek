@@ -42,7 +42,7 @@ private val logger = KotlinLogging.logger {}
  * `PlaywrightBrowserEngine(clock)`, then `start(config)` once per run and `stop()` in a `finally`.
  *
  * Every session is a [PlaywrightBrowserSession]: its own thread, its own `Playwright` instance and its own isolated
- * browser context (CLAUDE.md rule 9). Where the browser comes from depends on [BrowserEngineConfig.topology]:
+ * browser context (AGENTS.md rule 9). Where the browser comes from depends on [BrowserEngineConfig.topology]:
  *
  * **SHARED_SERVER** runs Chromium as Playwright *browser servers* in child processes, and every session connects to
  * one with `BrowserType.connect(wsEndpoint)`. A server hosts at most [BrowserEngineConfig.contextsPerBrowser]

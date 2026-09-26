@@ -81,11 +81,11 @@ class CiReportWritersTest {
         java.nio.file.Files
             .write(screenshot, byteArrayOf(-119, 80, 78, 71))
 
-        val html = ShareableHtmlReportWriter("claude-cli", "claude-sonnet-5").render(SampleReport.model(), directory)
+        val html = ShareableHtmlReportWriter("codex-cli", "model-1").render(SampleReport.model(), directory)
 
         html shouldContain "src=\"data:image/png;base64,iVBORw==\""
         html shouldNotContain "src=\"../a01/0001-screenshot.png\""
-        html shouldContain "<li>AI: claude-cli · claude-sonnet-5</li>"
+        html shouldContain "<li>AI: codex-cli · model-1</li>"
         html shouldContain "Sübut səviyyələri: Ekran / şəbəkə sübutu: 2"
     }
 

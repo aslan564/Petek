@@ -32,14 +32,14 @@ class LocalFileUsageSinkTest {
 
         sink.count("llm.calls", 1, UsageSink.Tags.NONE)
         sink.count("llm.calls", 2, UsageSink.Tags.NONE)
-        sink.count("run.started", 1, UsageSink.Tags.of("testers" to "2-10", "provider" to "claude-cli"))
+        sink.count("run.started", 1, UsageSink.Tags.of("testers" to "2-10", "provider" to "codex-cli"))
         sink.close()
         sink.close()
 
         val lines = Files.readAllLines(file)
         lines.size shouldBe 1
         lines.single() shouldContain "\"llm.calls\":3"
-        lines.single() shouldContain "\"run.started{provider=claude-cli,testers=2-10}\":1"
+        lines.single() shouldContain "\"run.started{provider=codex-cli,testers=2-10}\":1"
     }
 
     @Test

@@ -277,8 +277,7 @@ class PanelEndToEndTest {
             PETEK_MAILPIT_URL=$mailpit
             PETEK_MAIL_DOMAIN=test.kadrohr.com
             PETEK_IDENTITY_SECRET=local-demo-secret
-            PETEK_LLM_PROVIDER=claude-cli
-            PETEK_LLM_MODEL=claude-sonnet-5
+            PETEK_LLM_PROVIDER=codex-cli
             PETEK_LLM_CONCURRENCY=6
             PETEK_BROWSER_HEADLESS=true
             PETEK_EVIDENCE_DIR=evidence

@@ -46,7 +46,7 @@ internal data class CapturedPage(
 /**
  * Loads pages and turns them into evidence under the exploration's own evidence directory
  * (`<evidence root>/exp_…/<viewpoint>/…`); every artifact record is stored with [records] so the panel can resolve an
- * artifact id to its file. Load time is measured by the harness clock (CLAUDE.md rule 1). The snapshot is taken
+ * artifact id to its file. Load time is measured by the harness clock (AGENTS.md rule 1). The snapshot is taken
  * before the DOM, so the DOM carries the snapshot's element refs and both can be joined. A failing screenshot or DOM
  * capture costs that artifact only, never the page.
  */

@@ -25,7 +25,7 @@ import java.net.URI
 import java.net.URISyntaxException
 
 /**
- * The owner's "Hədəf sayt" as the panel checks it before anything contacts it (CLAUDE.md rule 8): a full http(s)
+ * The owner's "Hədəf sayt" as the panel checks it before anything contacts it (AGENTS.md rule 8): a full http(s)
  * address without credentials, in its canonical spelling ([WebUrls.canonical]), allowed by the [TargetPolicy]. Every
  * refusal is a [PanelRequestException] naming the form field, with a reason the owner can act on in Azerbaijani.
  */

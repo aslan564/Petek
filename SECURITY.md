@@ -29,7 +29,7 @@ trusted.
 
 ## Controls in place
 
-**Secrets (CLAUDE.md rule 10)**
+**Secrets (AGENTS.md rule 10)**
 - Every secret is a `Secret` value: `toString` prints nothing, configs print `set`/`unset`, URLs are printed with
   credentials masked.
 - The AI never receives a password: agents type the placeholder `{self.password}`, the harness substitutes it in the
@@ -56,9 +56,10 @@ trusted.
 **AI containment (rules 2, 3, 6)**
 - One structured JSON decision per step, validated in code against the action whitelist (`AgentAction`); anything
   else is rejected. The model never measures time and never evaluates an assertion.
-- The Claude CLI runs with `--tools ""`, `--strict-mcp-config`, no settings sources, no session persistence and no
-  permission prompts; it is started via `ProcessBuilder` with an argument list (no shell) in a scrubbed environment
-  (`CLAUDE_CODE_*` removed except the OAuth token), inside a fresh temporary directory.
+- An AI command-line tool is started via `ProcessBuilder` with an argument list (no shell), inside a fresh empty
+  temporary directory, with the variables named in `PETEK_LLM_ENV_UNSET` removed from its environment; the known agent
+  CLIs run read-only and without approval prompts. Which arguments a tool Pətək does not know by name gets is the
+  owner's `PETEK_LLM_ARGS`; Pətək's code carries no vendor-specific flags.
 - Page content is presented to the model as data with explicit framing; instructions found on pages are never
   executed — the model can only pick a whitelisted action, and the harness executes it.
 

@@ -26,7 +26,7 @@ sealed interface TargetAnswer {
 
 /**
  * The look at the site under test that every run and exploration takes before a single browser session opens
- * (CLAUDE.md rule 12, the owner's decision of 2026-09-26): the site that was given is contacted, and when it does
+ * (AGENTS.md rule 12, the owner's decision of 2026-09-26): the site that was given is contacted, and when it does
  * not answer nothing is tested and the reason is reported as it is. Pətək never substitutes another page, a
  * stand-in or an invented result for a site that is down, blocked or wrong.
  */

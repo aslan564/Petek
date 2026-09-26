@@ -45,7 +45,7 @@ tasks.register<Test>("e2eTest") {
 }
 
 tasks.register<Test>("liveTest") {
-    description = "Opt-in runs that call the real LLM provider (uses your Claude plan/quota)."
+    description = "Opt-in runs that call the real LLM provider (uses your own AI plan or quota)."
     group = "verification"
     testClassesDirs =
         sourceSets.test

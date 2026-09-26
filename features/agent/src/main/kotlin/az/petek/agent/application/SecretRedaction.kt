@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets
 internal const val PASSWORD_PLACEHOLDER = "{self.password}"
 
 /**
- * Removes this agent's password from [text] (CLAUDE.md rule 10). Applied to everything that may echo page
+ * Removes this agent's password from [text] (AGENTS.md rule 10). Applied to everything that may echo page
  * content or error messages back to the LLM or into evidence: a password field's value in a snapshot, an adapter
  * error that quotes the typed text, a `read_text` result, or a page URL after a form was submitted with GET (where
  * the password appears URL-encoded, e.g. `!` as `%21`).

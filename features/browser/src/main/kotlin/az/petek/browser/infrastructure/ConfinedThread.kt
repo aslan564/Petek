@@ -21,7 +21,7 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 
 /**
- * One dedicated thread that owns a Playwright instance and everything created from it (CLAUDE.md rule 9:
+ * One dedicated thread that owns a Playwright instance and everything created from it (AGENTS.md rule 9:
  * Playwright Java is not thread-safe, and its objects must be used from the thread that created them).
  * Callers on any coroutine hand blocks to the thread with [run]; blocks execute one at a time in submission order.
  *

@@ -35,7 +35,7 @@ data class AssertionInput(
     val eventEmittedAt: HarnessTimestamp?,
 )
 
-/** Result of one typed check. Evaluated by code only (CLAUDE.md rule 2). */
+/** Result of one typed check. Evaluated by code only (AGENTS.md rule 2). */
 data class AssertionResult(
     val spec: AssertionSpec,
     val verdict: Verdict,

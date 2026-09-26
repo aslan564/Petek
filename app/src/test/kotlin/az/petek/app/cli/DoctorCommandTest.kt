@@ -90,7 +90,7 @@ class DoctorCommandTest {
             row(result.stdout, "Target reachable") shouldContain "HTTP 3"
             row(result.stdout, "Test inbox") shouldContain "Mailpit: HTTP 200"
             row(result.stdout, "Test API") shouldContain "token accepted (HTTP 404"
-            row(result.stdout, "LLM provider") shouldContain "claude-cli (claude-sonnet-5) answered a structured request"
+            row(result.stdout, "LLM provider") shouldContain "none (default) answered a structured request by scripted"
             row(result.stdout, "LLM provider") shouldContain "[auto: no AI provider found"
             browser.sessions.single().closed shouldBe true
             browser.stopCount shouldBe 1
@@ -186,7 +186,7 @@ class DoctorCommandTest {
             val broke =
                 scriptedLlm {
                     throw LlmException.Unavailable(
-                        "Claude CLI cannot answer: Credit balance is too low. Run `claude`, then /login with your Claude plan account.",
+                        "AI command-line tool (any-ai) cannot answer: Credit balance is too low. Log in to this AI tool with its own login command.",
                     )
                 }
 
@@ -194,7 +194,7 @@ class DoctorCommandTest {
 
             result.statusCode shouldBe 1
             row(result.stdout, "LLM provider") shouldContain "Credit balance is too low"
-            row(result.stdout, "LLM provider") shouldContain "/login"
+            row(result.stdout, "LLM provider") shouldContain "its own login command"
         }
 
     @Test

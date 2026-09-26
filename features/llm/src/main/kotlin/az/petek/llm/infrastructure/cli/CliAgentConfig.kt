@@ -15,18 +15,24 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * How to run a coding-agent CLI other than Claude headless (`codex`, `gemini`, `opencode`).
+ * How to run a command-line AI agent headless: a known one (`codex`, `gemini`, `opencode`) or any other the owner
+ * describes ([arguments]).
  *
  * @property executable command name (resolved on `PATH`) or absolute path of the binary (`PETEK_LLM_BIN`).
  * @property model passed to the CLI when set; null keeps the model the CLI is configured for.
  * @property timeout wall-clock limit for one call; the process tree is killed when it is exceeded.
  * @property effort reasoning effort, passed only to a CLI that supports it (`PETEK_LLM_EFFORT`).
+ * @property arguments the argument template of a tool Pətək does not know by name (`PETEK_LLM_ARGS`, see
+ *   [GenericCliProfile]); the known agents ignore it.
+ * @property unsetEnvironment variables removed for the child, `NAME` or `PREFIX*` (`PETEK_LLM_ENV_UNSET`).
  */
 data class CliAgentConfig(
     val executable: String,
     val model: String? = null,
     val timeout: Duration = 180.seconds,
     val effort: String? = null,
+    val arguments: List<String> = emptyList(),
+    val unsetEnvironment: List<String> = emptyList(),
 ) {
     init {
         require(executable.isNotBlank()) { "CLI executable must not be blank" }

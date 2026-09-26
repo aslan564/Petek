@@ -9,7 +9,7 @@
 ## Architecture
 
 - [ ] No layer rule broken (Konsist passes); new ports live in `domain`, wiring only in `app/`
-- [ ] No new library, or the owner approved it (CLAUDE.md rule 11) and the version catalog is updated
+- [ ] No new library, or the owner approved it (AGENTS.md rule 11) and the version catalog is updated
 - [ ] ADR written or amended if a decision changed (`docs/adr/`)
 
 ## Verification

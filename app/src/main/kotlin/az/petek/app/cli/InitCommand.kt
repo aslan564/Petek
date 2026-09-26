@@ -28,10 +28,10 @@ import kotlinx.serialization.json.putJsonArray
 import java.nio.file.Path
 
 /**
- * `petek init [--target <url>] [--ai claude,codex,cursor,gemini,copilot|all] [--force] [DIR]`: prepares a project so
+ * `petek init [--target <url>] [--ai agents,cursor,gemini,copilot|all] [--force] [DIR]`: prepares a project so
  * Pətək runs next to it and the project's AI coding agent knows how to drive it (see [ProjectInitializer]). Without
- * `--ai` the agents are detected from the project's files (CLAUDE.md, AGENTS.md, .cursor, GEMINI.md, Copilot
- * instructions); with none recognisable, Claude Code and AGENTS.md are written. No configuration is loaded: `init`
+ * `--ai` the agents are detected from the project's files (AGENTS.md, .mcp.json, .cursor, GEMINI.md, Copilot
+ * instructions); with none recognisable, AGENTS.md and .mcp.json are written. No configuration is loaded: `init`
  * is what creates it.
  */
 class InitCommand(

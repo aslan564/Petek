@@ -18,7 +18,7 @@ import az.petek.agent.domain.SharedRunState
 
 /**
  * Substitutes harness placeholders in text the model asked to type, so credentials and codes never pass through
- * the LLM (CLAUDE.md rule 10): `{self.password}`, `{self.email}`, `{self.name}`, `{self.phone}`, `{self.agent_id}`,
+ * the LLM (AGENTS.md rule 10): `{self.password}`, `{self.email}`, `{self.name}`, `{self.phone}`, `{self.agent_id}`,
  * `{self.department}`, `{self.role}`, `{vars.<key>}`, `{shared.company_code}`, `{shared.company_id}`.
  *
  * Anything shaped like `{identifier}` or `{a.b}` is treated as a placeholder, so a typo such as `{email_code}` is

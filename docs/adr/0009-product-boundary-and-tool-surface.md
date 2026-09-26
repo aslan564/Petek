@@ -12,8 +12,8 @@ model. Root-cause analysis at source-code level is wanted without embedding a co
 
 ## Decision
 Three layers:
-1. **Host AI** (Claude Code, Codex, Gemini CLI, Cursor, ...) reads Pətək's skill pack (`SKILL.md`, `AGENTS.md`,
-   `CLAUDE.md` fragment, `.cursor/rules`, `GEMINI.md`) and plays roles: explorer, scenario author, judge, root-cause.
+1. **Host AI** (any coding agent: Codex, Gemini CLI, Cursor, ...) reads Pətək's skill pack (`SKILL.md`, the
+   `AGENTS.md` fragment, `.cursor/rules`, `GEMINI.md`) and plays roles: explorer, scenario author, judge, root-cause.
    It calls Pətək through the tool surface. Root cause happens here: the host AI already has the repository open;
    Pətək hands it a `FindingBundle` (finding, step, request/response, screenshot, A/B/C, evidence tier).
 2. **Pətək engine + panel** exposes one set of use cases (`PanelBackend` today) through three faces: the web panel,
@@ -23,12 +23,12 @@ Three layers:
    because an IDE agent cannot drive hundreds of parallel sessions over MCP.
 
 Pətək never embeds another coding agent to read the target's source, and never stores or executes host instruction
-files. Rules 1–7 of CLAUDE.md are what keep the outcome independent of which AI is calling: the harness measures time,
+files. Rules 1–7 of AGENTS.md are what keep the outcome independent of which AI is calling: the harness measures time,
 code checks assertions, the AI only picks whitelisted actions.
 
 ## Options Considered
 - **A. Skill pack only (pure BMAD).** No runtime, no evidence, no product to sell; contradicts the product goal.
-- **B. Embed Claude Code as the root-cause engine.** Ties the product to one vendor; duplicates what the host AI
+- **B. Embed one vendor's coding agent as the root-cause engine.** Ties the product to one vendor; duplicates what the host AI
   already has (repository access, user trust).
 - **C (chosen). Product with a tool surface + skill pack.** The host AI is a caller; Pətək owns UI, evidence, report.
 

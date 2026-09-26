@@ -10,8 +10,10 @@ English: [README.md](README.md).
 
 - **Məhsuldur, prompt deyil.** Pətək öz veb paneli, brauzer parkı, sübut bazası və hesabatı olan işləyən proqramdır.
   AI onun içində bir komponentdir, əksi yox.
-- **Öz AI-ını gətir.** Agentlər layihənizin zaten işlətdiyi AI ilə düşünür (bu gün Claude; Codex, Gemini, Ollama və
-  hər OpenAI-uyğun endpoint yol xəritəsindədir). Pətək model xərcini daşımır və məlumatınızı ikinci dəfə görmür.
+- **Öz AI-ını gətir, hansı olursa olsun.** Pətək heç bir AI vendoruna bağlı deyil: agentlər sizdə olan AI ilə
+  düşünür, login olduğunuz istənilən AI CLI (`.env`-də təsvir olunur, Codex, Gemini, OpenCode isə adla tapılır) və ya
+  istənilən OpenAI-uyğun API (OpenAI, Grok, OpenRouter, Ollama, ...). Biri işləməsə, tapılan növbətisi cavab verir.
+  Pətək model xərcini daşımır və məlumatınızı ikinci dəfə görmür.
 - **Qərarı kod verir, model yox.** Vaxtı harness ölçür, assertləri kod yoxlayır, agent yalnız kodda yazılmış
   whitelist-dən hərəkət seçə bilər. Hansı AI-ın işlədiyi hökmün dəyərini dəyişmir.
 - **Sizin istənilən saytınız.** İlk hədəf KadroHR-dır (HR SaaS). Saytlar data kimi təsvir olunur (`target_profile`) və
@@ -53,7 +55,7 @@ biləcəyi sübuta çevirir.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Ev sahibi AI (Claude Code / Codex / Gemini CLI / Cursor ...)  │  rollar: kəşfiyyatçı, ssenari müəllifi, hakim, kök səbəb
+│ Ev sahibi AI (kod agentiniz: Codex / Gemini CLI / Cursor ...) │  rollar: kəşfiyyatçı, ssenari müəllifi, hakim, kök səbəb
 │  Pətəkin skill paketini oxuyur, MCP / --json ilə çağırır       │  (yol xəritəsi Faza 11–12)
 └───────────────┬──────────────────────────────────────────────┘
                 │
@@ -94,7 +96,7 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 | Triaj | Run-ın sürprizlərini sistem bug / model boşluğu / ssenari xətası kimi ayırır və ssenari v2-ni diff kimi təklif edir |
 | Hədəflər | KadroHR (real, `scenarios/kadrohr.yaml`) və e2e üçün fake kontrakt saytı (`testing/fake-target`) |
 | Poçt / OTP | Mailpit catch-all qutusu və ya hədəfin test API-si (`PETEK_MAIL_SOURCE`); telefon OTP test API-dən |
-| AI | Layihənizin artıq işlətdiyi (`PETEK_LLM_PROVIDER=auto`): Claude, Codex, Gemini və ya OpenCode CLI, Anthropic API və ya istənilən OpenAI-uyğun endpoint (Ollama, LM Studio, vLLM) — retry, paralellik limiti və ölçmə ilə bir `LlmClient` portu arxasında; `doctor` hansını və niyə seçdiyini deyir |
+| AI | Sizdə olan hansı olursa (`PETEK_LLM_PROVIDER=auto`): istənilən AI CLI (`PETEK_LLM_BIN` + `PETEK_LLM_ARGS`), Codex, Gemini və ya OpenCode CLI, Anthropic API və ya istənilən OpenAI-uyğun endpoint (OpenAI, Grok, OpenRouter, Ollama, LM Studio, vLLM) — retry, paralellik limiti, ölçmə və tapılan növbəti AI-a keçidlə bir `LlmClient` portu arxasında; `doctor` hansını və niyə seçdiyini deyir |
 | Sübut | SQLite (run, kimlik, addım, hadisə, qəbz, assert, tapıntı, istifadə) + artefakt faylları, hər qeydin ID-si var |
 | Keyfiyyət qapıları | Kotlin warning = error, Spotless ilə ktlint, məcburi lisenziya başlıqları, Konsist arxitektura testləri, Kover, real Chromium ilə e2e |
 | İzolyasiya | Hər tester öz brauzer kontekstində və öz thread-ində; kolleqalarını sirlərsiz tanıyır; paylaşılan dəyərlər write-once; hər build-də 1 000 testerlə (orkestrator), CI-da 5 000 tester və 30 real Chromium sessiyası ilə (60-a qədər ölçülüb) sübut olunur — [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
@@ -109,9 +111,9 @@ layihənizin artıq istifadə etdiyidir (`PETEK_LLM_PROVIDER=auto`).
 **Buraxılışdan (build də, JDK də lazım deyil).** [Releases](https://github.com/aslan564/Petek/releases) səhifəsindən
 maşınınıza uyğun bundle-ı endirin: `petek-<versiya>-linux-x64.tar.gz`, `-linux-arm64.tar.gz`, `-mac-arm64.tar.gz` və ya
 `-win-x64.zip` (hər biri öz Java runtime-ını və Chromium driver-ini daşıyır; `SHA256SUMS` yoxlama cəmləridir), başqa
-maşın üçün `PATH`-də JDK 25 ilə işləyən `petek-<versiya>-any-jdk25.zip`. İstənilən yerə açın; bir AI olsun: planınızla
-login olmuş [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), və ya Anthropic API açarı. Chromium-u
-Playwright ilk istifadədə özü yükləyir.
+maşın üçün `PATH`-də JDK 25 ilə işləyən `petek-<versiya>-any-jdk25.zip`. İstənilən yerə açın; hansı olursa olsun bir AI
+olsun: login olduğunuz AI CLI və ya OpenAI-uyğun bir xidmətin API açarı (bax `.env.example`). Chromium-u Playwright ilk
+istifadədə özü yükləyir.
 
 ```bash
 tar xzf petek-0.1.0-linux-x64.tar.gz && cd my-site     # istənilən qovluq: Pətək saytın yanında işləyir, build-inin içində yox
@@ -184,13 +186,13 @@ Pətək **kitabxana deyil, yanaşı işləyən alətdir (sidecar)**: onu saytın
 etmirsiniz. Alət kimi qurulur (buraxılış bundle-ı və ya `npx petek`, bax R15), saytın yanında işə salınır və saytın
 URL-inə yönəldilir. `petek init` layihəni bir addımda hazırlayır: şablondan `.env` (bir daha toxunulmur),
 `.petek/petek.yaml` profili, `.petek/SKILL.md` skill paketi (rollar: kəşfiyyatçı, ssenari müəllifi, hakim, kök səbəb),
-repoda aşkarladığı AI kod agentləri üçün (və ya `--ai claude,codex,cursor,gemini,copilot|all`) təlimat faylında
-işarəli parça (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`, `.github/copilot-instructions.md`;
-əlavə olunur, təkrar çağırışda yenilənir, sizin mətninizin üstünə yazmır), layihənin MCP faylında `petek` serveri
-(`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`) və Claude Code üçün
-`.claude/skills/petek/` skill-i. `.env` və `evidence/` `.gitignore`-a düşür. **Sizin öz AI login-inizi** işlədir — BMAD layihədəki
-köməkçini necə işlədirsə, elə: `PETEK_LLM_PROVIDER=claude-cli` ilə login olduğunuz `claude` CLI-ni çağırır, modeli
-sizin planınız ödəyir; Pətək müəlliflərinə heç nə göndərilmir.
+repoda aşkarladığı AI kod agentləri üçün (və ya `--ai agents,cursor,gemini,copilot|all`) təlimat faylında işarəli
+parça (kod agentlərinin çoxunun oxuduğu `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
+`.github/copilot-instructions.md`; əlavə olunur, təkrar çağırışda yenilənir, sizin mətninizin üstünə yazmır) və
+layihənin MCP faylında `petek` serveri (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`).
+`.env` və `evidence/` `.gitignore`-a düşür. **Sizin öz AI login-inizi** işlədir — BMAD layihədəki köməkçini necə
+işlədirsə, elə: login olduğunuz AI alətini (və ya verdiyiniz API açarını) çağırır, modeli sizin planınız ödəyir; Pətək
+müəlliflərinə heç nə göndərilmir.
 
 Saytınızdan nə tələb olunur — testin dərinliyinə görə:
 
@@ -233,13 +235,15 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | Test kimliklərinin e-poçt domeni |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Test parollarının derivasiyası **və** `petek verify`-ın verdiyi sahiblik kodunun açarı (≥ 16 simvol). Eyni saytı test edən hər maşında eyni olsun: başqa açar başqa kod verir və dərc olunmuş sübut artıq uyğun gəlmir |
-| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`; `auto` mühitdəki açarlara, layihənin AI işarəsinə (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) və `PATH`-dakı CLI-lərə görə seçir, `doctor` səbəbini deyir |
-| `PETEK_LLM_MODEL` | provayderin | Claude üçün `claude-sonnet-5`; Codex/Gemini/OpenCode-da CLI-nin öz modeli; `openai-compat` üçün məcburidir |
-| `PETEK_LLM_BIN` | `claude`, `codex`, … | CLI binarı (`PETEK_CLAUDE_BIN` də oxunur) |
+| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` mühitdəki ayar və açarlara, layihənin AI işarəsinə (`AGENTS.md`, `GEMINI.md`) və `PATH`-dakı agent CLI-lərinə görə seçir, qalanlarını ehtiyat saxlayır, heç nə tapmasa sizin yerinizə vendor seçmir, `doctor` səbəbini deyir |
+| `PETEK_LLM_MODEL` | alətin öz modeli | Model; boş olanda alət və ya provayder necə qurulubsa o işləyir; `anthropic-api` və `openai-compat` üçün məcburidir |
+| `PETEK_LLM_BIN` | — | İşlədiləcək AI CLI (`cli`), və ya `codex-cli`, `gemini-cli`, `opencode-cli` üçün başqa binar |
+| `PETEK_LLM_ARGS` | — | Yalnız `cli`: onun arqumentləri, `{model}`, `{effort}`, `{system}`, `{schema}`, `{schema_file}` ilə; söhbət STDIN-ə gedir |
+| `PETEK_LLM_ENV_UNSET` | — | AI alətinin mühitindən çıxarılan dəyişənlər, `NAME` və ya `PREFIX*` |
 | `PETEK_LLM_BASE_URL` | — | OpenAI-uyğun endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
 | `PETEK_LLM_API_KEY` | — | `anthropic-api` / `openai-compat` açarı; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` alias-dır |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; rədd edilən rejim özü bir pillə aşağı düşür |
-| `PETEK_LLM_EFFORT` | dəstəkləyəndə `low` | Düşünmə səviyyəsi (Claude CLI, Codex CLI; `openai-compat`-da `reasoning_effort`) |
+| `PETEK_LLM_EFFORT` | dəstəkləyəndə `low` | Düşünmə səviyyəsi (Codex CLI, `cli`-nin `{effort}`-u; `openai-compat`-da `reasoning_effort`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | Bütün agentlər üzrə eyni anda AI çağırışı (1–64) |
 | `PETEK_LANGUAGE` | `auto` | AI-ın sizin üçün nə dildə yazdığı (kəşfiyyatçının sualları və ideyaları, testerlərin xülasələri, triaj): `auto` sizin öz təlimat və ssenarilərinizin dilini izləyir, ya da `English` kimi ad |
 | `PETEK_BROWSER_HEADLESS` | `true` | `run --headful` bunu üstələyir |
@@ -342,7 +346,7 @@ testləri qat qaydası pozulanda build-i dayandırır.
 | `features/campaign` | Kampaniya modeli, aktor qrammatikası, şablonlar, validasiya, hədəf profili və axınlar |
 | `features/identity` | Deterministik kimlik reyestri |
 | `features/browser` | Təcrid olunmuş Playwright sessiyaları, snapshot-lar, real-time nəqliyyat aşkarı, yarış sübutu |
-| `features/llm` | `LlmClient` portu, Claude CLI və Anthropic API adapterləri, retry/limit/ölçmə dekoratorları |
+| `features/llm` | `LlmClient` portu, agent CLI profilləri (`.env`-dən istənilən alət, Codex, Gemini, OpenCode), Anthropic və OpenAI-uyğun API adapterləri, retry/limit/ölçmə/ehtiyat dekoratorları |
 | `features/agent` | Hərəkət whitelist-i, qərar protokolu, agent dövrəsi, hədəf axınları üzrə `run` funksiyaları |
 | `features/mail`, `features/oracle` | Poçt mənbələri və hədəfin test API-si |
 | `features/verification` | Tipli assertlər və yarış hökmləri |
@@ -395,7 +399,7 @@ Faza 0–7 (MVP, kəşfiyyatçı, triaj, veb panel) icra olunub. [docs/PLAN.md](
 | [docs/adr](docs/adr) | Arxitektura qərar qeydləri 0001–0011 |
 | [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) | Hədəfin test rejimində nə verməli olduğu |
 | [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) | Real KadroHR: nə hazırdır, hədəfdən nə gözlənilir |
-| [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CLAUDE.md](CLAUDE.md) | Təhlükəsizlik siyasəti; töhfə qaydaları; bu repoda AI kod agentlərinin izlədiyi qaydalar |
+| [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | Təhlükəsizlik siyasəti; töhfə qaydaları; bu repoda AI kod agentlərinin izlədiyi qaydalar |
 
 ## İnkişaf
 

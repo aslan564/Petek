@@ -13,7 +13,7 @@ package az.petek.scenarios.domain
 
 import az.petek.core.security.Secret
 
-/** Removes secrets from text before it is shown to the model or stored as triage evidence (CLAUDE.md rule 10). */
+/** Removes secrets from text before it is shown to the model or stored as triage evidence (AGENTS.md rule 10). */
 fun interface TextRedactor {
     fun redact(text: String): String
 }

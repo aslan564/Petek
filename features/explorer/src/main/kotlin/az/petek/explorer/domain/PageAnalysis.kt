@@ -50,7 +50,7 @@ data class PageAnalysis(
 
 /**
  * The explorer's single structured LLM question per page (docs/PLAN.md Faza 6) and the code that checks the answer
- * (CLAUDE.md rule 3: the model proposes, code decides). Every proposed action must name an element number from the
+ * (AGENTS.md rule 3: the model proposes, code decides). Every proposed action must name an element number from the
  * snapshot the model was shown and a known [ActionKind]; texts are trimmed and capped; anything else is dropped and
  * listed in [PageAnalysis.rejected]. The model never sees secrets (see [PromptRedaction]) and never acts: it only
  * describes.

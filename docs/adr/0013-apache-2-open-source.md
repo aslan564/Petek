@@ -23,7 +23,7 @@ it, while keeping control over what is merged and released.
 
 ## Consequences
 + Anyone can use, change and redistribute Pətək, commercially too; contributors know their terms up front.
-+ The owner still decides what lands in `develop` (through the maintainers he picks) and alone decides releases.
++ The owner still decides what lands in `develop` (through the maintainers they pick) and alone decides releases.
 - Paid editions (ADR-0011) remain possible as separate modules, but the open core itself can be used commercially by
   anyone; the edition boundary is a product choice, no longer a licence restriction.
 - Earlier releases (0.1.0, 0.1.1) were published under BSL 1.1; later ones are Apache 2.0.

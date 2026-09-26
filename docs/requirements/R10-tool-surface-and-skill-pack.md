@@ -7,7 +7,7 @@ over `PanelBackend`, read-only unless `--allow-writes`; `--json` on `doctor`, `i
 ## Requirement
 
 Pətək should be usable "like a skill": installed into any project, started beside it, driven by whatever AI coding
-agent the project uses (Claude Code, Codex, Gemini CLI, Cursor, Copilot), and able to hand that agent the evidence of
+agent the project uses (Codex, Gemini CLI, Cursor, Copilot or any other), and able to hand that agent the evidence of
 a finding so it can locate the cause in the project's own source code and propose a fix. Pətək itself stays the
 product: the panel, engine, evidence and report are Pətək's; the AI is a caller.
 
@@ -45,12 +45,12 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
   writes `.env` from the repository's `.env.example` (copied into the app's resources by the build; never rewritten
   once present), `.petek/petek.yaml` (profile: target, health URL, mail source, scenario directory) and
   `.petek/SKILL.md` (Agent Skills front matter; roles explorer, scenario author, judge, root-cause, the command/tool
-  table and the rules the agent keeps). Per agent (`HostAi`, detected by markers `CLAUDE.md`/`.claude`, `AGENTS.md`/
-  `.codex`, `.cursor`, `GEMINI.md`/`.gemini`, `.github/copilot-instructions.md`; default Claude Code + AGENTS.md): a
+  table and the rules the agent keeps). Per agent (`HostAi`, detected by markers `AGENTS.md`/`.codex`/`.mcp.json`,
+  `.cursor`, `GEMINI.md`/`.gemini`, `.github/copilot-instructions.md`; default the shared `AGENTS.md` + `.mcp.json`): a
   fragment between `<!-- petek:begin -->`/`<!-- petek:end -->` in the instruction file (appended, replaced in place on
   a re-run, the owner's text untouched), the `petek` server (`petek mcp`) merged into the project MCP file
   (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json` with its `servers` key; other servers
-  kept; a file that is not JSON is left alone and reported) and, for Claude Code, `.claude/skills/petek/SKILL.md`.
+  kept; a file that is not JSON is left alone and reported). No vendor-named file is written.
   Files Pətək owns are rewritten only with `--force`; `.gitignore` gains `.env` and `evidence/`. Every file is reported
   as created / updated / kept / unchanged. Rule 6 of `SKILL.md` binds the host AI to the configured site: no invented
   screens or results, no stand-in; a site that does not answer is reported; without a site it asks the owner and waits.
@@ -69,7 +69,7 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
 
 ## Verification
 
-- Done: `ProjectInitializerTest` (empty project; owner's `CLAUDE.md` and `.gitignore` gain the fragment once and keep
+- Done: `ProjectInitializerTest` (empty project; owner's `AGENTS.md` and `.gitignore` gain the fragment once and keep
   their text, a stale fragment is replaced in place, a third run writes nothing; `.env` kept, profile rewritten only
   with `--force`; detection from `.cursor` and `GEMINI.md`; `.mcp.json` keeps other servers and keys, Copilot's
   `servers` shape; a broken JSON file is left alone), `InitCommandTest` (no configuration loaded, `--dir`, unknown
@@ -80,7 +80,7 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
   missing argument, wrong `jsonrpc`), `McpCommandTest` (app, production wiring: the owner's scenario file is listed
   through MCP; stdout carries protocol only), `--json` assertions in `DoctorCommandTest`, `InitCommandTest`,
   `TeardownCommandTest`.
-- Planned: an MCP client (Claude Code `.mcp.json`) runs `explore_site` → `get_findings` on the fake target end to end.
+- Planned: an MCP client reading `.mcp.json` runs `explore_site` → `get_findings` on the fake target end to end.
 
 ## Open items
 

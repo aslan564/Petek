@@ -315,7 +315,7 @@ MVP Kotlin/JVM 21 + Gradle (Kotlin DSL) + kotlinx.coroutines + Playwright Java +
 petek/
   build.gradle.kts, settings.gradle.kts
   docker-compose.yml               # Mailpit
-  CLAUDE.md, docs/PLAN.md
+  AGENTS.md, docs/PLAN.md
   scenarios/kadrohr.yaml
   src/main/kotlin/az/petek/
     Main.kt                        # Clikt: plan / run / report / teardown / smoke
@@ -496,9 +496,9 @@ IMAP) aşağıda Faza 10-dadır.
    orada hansı saytı, hansı hissəni, neçə testerlə yoxlayacağını seçir, mühərrik işləyir, sübutlu hesabat çıxır. UI,
    mühərrik, sübut sistemi və hesabat Pətəkindir; AI yalnız "düşünən" hissəni doldurur. BMAD kimi yalnız təlimat faylı
    deyil, işləyən proqramdır — ideya və dəyər sahibdə qalır, satıla bilir.
-2. **AI provayderindən asılı deyil.** Layihə hansı AI-ı işlədirsə (Claude, Codex, Gemini, Copilot, Ollama...), Pətək
-   onu tapır və onunla işləyir. AI yoxdursa kəşfiyyat və `do` addımları işləmir (hələlik); dondurulmuş `run`
-   ssenariləri LLM-siz də icra olunur. İndi sahibin layihəsində Claude var, ona görə default Claude-dur.
+2. **AI provayderindən asılı deyil.** Sahibdə hansı AI varsa (Codex, Gemini, Cursor, Grok, Copilot, Ollama...), Pətək
+   onu tapır və onunla işləyir; heç bir vendor default və ya xüsusi deyil (2026-09-26). AI yoxdursa kəşfiyyat və `do`
+   addımları işləmir, Pətək necə qurulacağını deyir; dondurulmuş `run` ssenariləri LLM-siz də icra olunur.
 3. **Bir neçə sayt.** Sahibin 2–3 fərqli saytı var; KadroHR yalnız ilk hədəf və nümunə profildir.
 4. **Kəşfiyyatçı özü daxil ola bilməlidir**: test API ilə şirkət yarada bilmirsə sahibin verdiyi hesablarla, o da yoxsa
    özü qeydiyyatdan keçib OTP-ni oxuyaraq; heç biri alınmasa anonim. Qeydiyyat alınmasa login məlumatlarına düşür.
@@ -517,15 +517,15 @@ IMAP) aşağıda Faza 10-dadır.
 | Sübut bazası, hesabat, tarixçə, teardown | Kök səbəbi repoda tapmaq, düzəliş təklif etmək |
 | Hədəf profilləri, giriş zənciri, kontrakt | — |
 
-Pozulmamalı qaydalar (CLAUDE.md) bu bölgünü zaten diktə edir: vaxtı harness ölçür, assertləri kod yoxlayır, AI yalnız
+Pozulmamalı qaydalar (AGENTS.md) bu bölgünü zaten diktə edir: vaxtı harness ölçür, assertləri kod yoxlayır, AI yalnız
 whitelist daxilində hərəkət seçir. Ona görə AI-ın kim olduğu nəticənin etibarını dəyişmir.
 
 ### Üç qatlı arxitektura
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Ev sahibi AI (Claude Code / Codex / Gemini CLI / Cursor ...)  │
-│  oxuyur: SKILL.md · AGENTS.md · CLAUDE.md · .cursor/rules      │
+│ Ev sahibi AI (kod agenti: Codex / Gemini CLI / Cursor ...)    │
+│  oxuyur: SKILL.md · AGENTS.md · .cursor/rules · GEMINI.md      │
 │  rollar: explorer · scenario author · judge · root-cause       │
 └───────────────┬──────────────────────────────────────────────┘
                 │ MCP (petek mcp)  /  CLI --json
@@ -571,7 +571,7 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
   macos, windows) hər bundle-ı öz platformunda qurur, `bin/petek --help`-i JDK-sız işlədir, `SHA256SUMS` ilə birlikdə
   Release-ə qoyur; `build.yml` (əl ilə) linux bundle-ını qurub başladır. Lokal sübut: linux-x64 bundle-ı
   (165 MB) `/tmp`-də JDK-sız `doctor` — Chromium slim driver-dən qalxdı, kadrohr.com HTTP 200.
-- [x] Konsist arxitektura testləri `e2e/`-də (CLAUDE.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
+- [x] Konsist arxitektura testləri `e2e/`-də (AGENTS.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
 - [x] Tester izolyasiyası auditi və sərtləşdirmə (`docs/requirements/R01` "Isolation guarantees"): roster parolsuz
   (`Colleague`), paylaşılan dəyərlər write-once, `{last_id}` eyni addımdakı başqa agentin ID-sinə düşmür, yalnız
   admin `register_owner`/`seed_company`, hər hadisənin bir emit addımı, sessiya faylları `rw-------`. Sübut:
@@ -590,7 +590,7 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
 Vəziyyət: build və `LICENSE` şərti ödənir; real KadroHR-da rol-əsaslı kəşfiyyat KadroHR staging-i (test API) gözləyir —
 fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu deyir, qəbulun real sayt hissəsini yox.
 
-#### İlk real run-lar (2026-09-26, fake KadroHR + real Chromium + real Claude CLI)
+#### İlk real run-lar (2026-09-26, fake KadroHR + real Chromium + real AI CLI)
 
 `petek doctor` 7/7 yaşıl (LLM daxil), `smoke`, `plan`, `run` (10 və 30 tester), `report`, `teardown` real işlədi.
 10 tester: PASSED, 33 addım, 125 s, 70 screenshot, $0.45. 30 tester: 61 tapşırıq, 175 s; ilk run yalnız
@@ -629,7 +629,7 @@ fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu 
   davranışı promptda "əvvəl dialoqu bağla" qaydası ilə qısaltmaq açıq maddədir; (3) a02 `/register/employee`-yə
   keçəndən sonra köhnə (login) snapshot-u gördü və "form login formu ilə eynidir" dedi — URL dəyişəndən sonra
   yenidən çəkmə (stale snapshot) açıq maddədir.
-- **Saxta test yoxdur (sahibin qərarı, 2026-09-26, CLAUDE.md qayda 12):** yalnız verilən sayt test olunur; saxta
+- **Saxta test yoxdur (sahibin qərarı, 2026-09-26, AGENTS.md qayda 12):** yalnız verilən sayt test olunur; saxta
   ekran, saxta səhifə, uydurma nəticə qəti qadağandır. `TargetReachability` (`app/diagnostics`,
   `AppContainer.reachability`) `petek run`, paneldən run və kəşfiyyat brauzer açmazdan əvvəl sayta baxır: cavab
   yoxdursa və ya 5xx-dirsə `TargetUnreachableException` (çıxış kodu 2) / hədəf sahəsi altında
@@ -644,7 +644,7 @@ fake KadroHR-da `PanelEndToEndTest` ilə keçir. Qutular kodun hazır olduğunu 
   hələlik Azərbaycancadır (lokalizasiya ayrıca).
 - **CI siyasəti (sahibin qərarı, 2026-09-26):** Actions heç bir push-da işləmir — `build.yml` və `release.yml`
   yalnız `workflow_dispatch`. Səbəb: dəqiqə limiti və "hər şey bitməmiş deploy yoxdur". Hər commit-in qapısı lokal
-  `./gradlew spotlessApply build`; buraxılış əl ilə (CLAUDE.md-də addımlar). Bunun üçün GitHub-da default branch
+  `./gradlew spotlessApply build`; buraxılış əl ilə (AGENTS.md-də addımlar). Bunun üçün GitHub-da default branch
   `main` olmalıdır (əks halda "Run workflow" düyməsi workflow-u görmür).
 - **CI-da panel testləri (Release run #1–2):** panelin start-up import-u sahibin ssenarisini bəzən kataloqa
   yazmırdı — `SQLITE_BUSY_SNAPSHOT`: yazı tranzaksiyası əvvəl oxuyub (versiya nömrəsi) sonra INSERT edirdi (deferred
@@ -660,15 +660,16 @@ Düzəlişlərdən sonra 30 tester yenidən: **PASSED**, 87 tapşırıq, 0 uğur
 
 ### Faza 9 — Provayder-agnostik AI qatı
 
-Məqsəd: `PETEK_LLM_PROVIDER=auto` default olsun; Claude, Codex, Gemini CLI və istənilən OpenAI-uyğun endpoint işləsin.
-Agent/explorer/triaj kodu dəyişmir — heç bir prompt Claude-a bağlı deyil (yoxlanıb: XML tag, thinking, native tool-use yoxdur).
+Məqsəd: `PETEK_LLM_PROVIDER=auto` default olsun; istənilən AI CLI, Codex, Gemini CLI və istənilən OpenAI-uyğun endpoint
+işləsin. Agent/explorer/triaj kodu dəyişmir — heç bir prompt bir vendora bağlı deyil (yoxlanıb: XML tag, thinking, native
+tool-use yoxdur). 2026-09-26: vendor adı koddan və sənədlərdən çıxarıldı, ümumi `cli` profili gəldi (R09).
 
 - [x] `LlmProviderId` enum → açıq `value class LlmProviderKey`; `LlmProviders` reyestr (`Map<key, factory>`), exhaustive
-  `when` yoxdur (OCP). Köhnə açarlar `claude-cli`, `anthropic-api` saxlanır.
-- [x] `CliAgentLlmClient` (generic): `ClaudeCliLlmClient`-in proses hissəsi (scratch dir, timeout, kill-tree, output
-  faylları, `ProcessRunner`) çıxarılır; hər agent üçün kiçik `CliAgentProfile` strategiyası: `command(config, request)`,
-  `environment`, `transcript(messages)`, `parse(ProcessOutput)`. Claude profili mövcud `ClaudeCliInvocation` +
-  `ClaudeCliResultParser`-dir; yeni profillər `codex exec`, `gemini -p`, `opencode run`.
+  `when` yoxdur (OCP).
+- [x] `CliAgentLlmClient` (generic): proses hissəsi (scratch dir, timeout, kill-tree, output faylları, `ProcessRunner`);
+  hər agent üçün kiçik `CliAgentProfile` strategiyası: `command(config, request)`, `environment`,
+  `transcript(messages)`, `parse(ProcessOutput)`. Profillər: `codex exec`, `gemini -p`, `opencode run` və `.env`-də
+  təsvir olunan istənilən alət üçün `GenericCliProfile` (`PETEK_LLM_BIN`, `PETEK_LLM_ARGS`, 2026-09-26).
 - [x] Sxem dəstəyi olmayan CLI-lər üçün "sxem promptda" rejimi: sistem mətninə sxem əlavə olunur, `StructuredJson`
   parse edir, kod validasiyası (`DecisionProtocol` və s.) qalan işi görür. Bir dəfə "düzəlt" təkrarı (`Retrying`).
 - [x] `OpenAiCompatibleLlmClient` (`infrastructure/http/`): Ktor client (kataloqda var, yeni kitabxana yoxdur);
@@ -677,27 +678,29 @@ Agent/explorer/triaj kodu dəyişmir — heç bir prompt Claude-a bağlı deyil 
   404, 5xx). Bir adapter: OpenAI, Ollama, Groq, Mistral, OpenRouter, LM Studio, Gemini/Anthropic compat.
 - [x] Strict-sxem adapteri: bütün sahələr `required`, isteğe bağlılar `nullable` (OpenAI strict rejimi mövcud üç sxemi
   rədd edir). Parserlər `null`-u "yoxdur" kimi oxuyur.
-- [x] Konfiqurasiya: `PETEK_LLM_PROVIDER=auto` (default), `PETEK_LLM_BIN` (`PETEK_CLAUDE_BIN` alias), `PETEK_LLM_BASE_URL`,
-  `PETEK_LLM_API_KEY` (`Secret`; `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY` alias), `PETEK_LLM_EFFORT`.
-  Hər provayderin öz default modeli.
+- [x] Konfiqurasiya: `PETEK_LLM_PROVIDER=auto` (default), `PETEK_LLM_BIN`, `PETEK_LLM_ARGS`, `PETEK_LLM_ENV_UNSET`,
+  `PETEK_LLM_BASE_URL`, `PETEK_LLM_API_KEY` (`Secret`; `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`XAI_API_KEY`/
+  `OPENROUTER_API_KEY`/`GEMINI_API_KEY` alias), `PETEK_LLM_EFFORT`. Pətək heç bir provayderə model seçmir.
 - [x] `auto` aşkarlama sırası (app/config `LlmProviderResolver`): (1) açıq `.env` dəyəri; (2) mühit açarları; (3) hədəf
-  repodakı işarələr — `CLAUDE.md`/`.claude/` → claude-cli, `AGENTS.md`/`.codex/` → codex-cli, `GEMINI.md`/`.gemini/` →
-  gemini-cli, `.github/copilot-instructions.md` → OpenAI-uyğun endpoint tələb olunur; (4) PATH-dakı binarlar
-  (`claude`, `codex`, `gemini`, `ollama`). Hər addım səbəbi ilə loglanır və `doctor`-da göstərilir.
-- [x] `doctor`: aşkarlanan provayder + səbəb; binar `--version`; PING. Neytral mətnlər (`CapacityAdvisor` "Claude
-  planı" → "AI provayderinin limitləri"; login ipucları provayderə görə).
+  repodakı işarələr — `AGENTS.md`/`.codex/` → codex-cli, `GEMINI.md`/`.gemini/` → gemini-cli,
+  `.github/copilot-instructions.md` → OpenAI-uyğun endpoint tələb olunur; (4) PATH-dakı binarlar (`codex`, `gemini`,
+  `opencode`, `ollama`). Tapılan digər agent CLI-ləri ehtiyatdır; heç nə tapılmasa `none`. Hər addım səbəbi ilə
+  loglanır və `doctor`-da göstərilir.
+- [x] `doctor`: aşkarlanan provayder + səbəb, ehtiyatlar və hansının cavab verdiyi; binar `--version`; PING. Neytral
+  mətnlər (`CapacityAdvisor` "AI provayderinin limitləri"; login ipucları provayderə görə).
 - [x] `TextRedactor` və triaj `SecretRedactor`: bütün provayder açar formatları (`sk-`, `sk-ant-`, `AIza`, `gsk_`...).
 - [x] Testlər: `CliAgentLlmClientTest` (fake process, hər profil üçün arqument siyahısı və parse), `OpenAiCompatibleLlmClientTest`
   (Ktor fake server), `LlmProviderResolverTest` (fixture qovluqları ilə aşkarlama), `ConfigLoaderTest` yeniləmə.
   `ScriptedLlmClient.provider` neytral olur.
-- [x] ADR-0008 (ADR-0003-ü genişləndirir), `.env.example`, `docs/ARCHITECTURE.md`, CLAUDE.md stack sətri.
+- [x] ADR-0008 (ADR-0003-ü genişləndirir), `.env.example`, `docs/ARCHITECTURE.md`, AGENTS.md stack sətri.
 
-Hazır sayılır: eyni `scenarios/contract-demo.yaml` fake target-də (a) `claude -p`, (b) Ollama (lokal model) və (c) fake
-`codex` skripti ilə keçir; `.env`-də provayder yazılmayanda `doctor` "auto → claude-cli (CLAUDE.md tapıldı)" deyir.
+Hazır sayılır: eyni `scenarios/contract-demo.yaml` fake target-də (a) `.env`-də təsvir olunan bir AI CLI, (b) Ollama
+(lokal model) və (c) fake `codex` skripti ilə keçir; `.env`-də provayder yazılmayanda `doctor` "auto → codex-cli
+(AGENTS.md tapıldı)" kimi səbəbi deyir.
 
 Vəziyyət (2026-09-26): kod və vahid testlər hazırdır — hər CLI profili saxta proses ilə (arqumentlər, STDIN, JSONL/JSON
 parse, xəta xəritəsi), OpenAI-uyğun klient Ktor saxta serveri ilə (strict sxem → `json_object` → prompt pilləsi, 429/401/
-404/5xx), `auto` fixture qovluqları ilə; `doctor` sətri `claude-cli (claude-sonnet-5, claude <versiya>) ... [auto: CLAUDE.md
+404/5xx), `auto` fixture qovluqları ilə; `doctor` sətri `codex-cli (default, codex <versiya>) ... [auto: AGENTS.md
 found]` formasındadır. Real Ollama və real `codex`/`gemini` ilə contract-demo run-ı bu mühitdə yoxlanmayıb (binar və
 model yoxdur) — **sahib:** öz maşınında `PETEK_LLM_PROVIDER=openai-compat` + Ollama ilə bir dəfə `petek doctor` və
 contract-demo işlətsin.
@@ -776,10 +779,10 @@ Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-c
   **Vəziyyət:** `BuildFindingBundlesUseCase` (reporting), `petek findings <run|latest> --json`, MCP `get_finding_bundle`, panel `findingBundles`.
 - [x] Testlər: `McpServerTest` (əl sıxma, alət siyahısı və sxemlər, oxu alətləri, tapılmadı → `isError`, yazma
   rədd/icazə, JSON-RPC xəta kodları), `McpCommandTest` (real montaj, sahibin faylı MCP ilə siyahıda), `--json`
-  yoxlamaları doctor/init/teardown testlərində. Qalır: real MCP müştərisi ilə (Claude Code `.mcp.json`)
+  yoxlamaları doctor/init/teardown testlərində. Qalır: `.mcp.json` oxuyan real MCP müştərisi ilə
   `explore_site` → `get_findings` zənciri fake target-də.
 
-Hazır sayılır: Claude Code-da (`.mcp.json`) və başqa bir MCP müştərisində `explore_site` → `get_findings` zənciri
+Hazır sayılır: `.mcp.json` oxuyan iki fərqli MCP müştərisində `explore_site` → `get_findings` zənciri
 fake target-də işləyir; eyni iş `petek explore --json | petek findings --json` ilə də alınır.
 
 ### Faza 12 — Skill paketi və paylanma
@@ -788,9 +791,9 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
 
 - [x] `petek init` (hədəf repoda): `.env` (şablondan; bir daha toxunulmur), `.petek/petek.yaml` (profil),
   `.petek/SKILL.md` (Agent Skills formatı), AI-a görə (`HostAi`, repodakı işarələrlə aşkarlanır; `--ai` ilə seçilir)
-  təlimat faylında işarəli parça (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
+  təlimat faylında işarəli parça (`AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
   `.github/copilot-instructions.md`), layihə MCP faylında `petek` serveri (`.mcp.json`, `.cursor/mcp.json`,
-  `.gemini/settings.json`, `.vscode/mcp.json`), Claude Code üçün `.claude/skills/petek/SKILL.md`; `.gitignore`-a
+  `.gemini/settings.json`, `.vscode/mcp.json`); vendor adlı fayl yazılmır; `.gitignore`-a
   `.env`, `evidence/`. Mövcud faylların üstünə yazmır: parça əlavə edir/yeniləyir, JSON-a bir qeyd qatır, öz
   fayllarını yalnız `--force` ilə yenidən yazır. Testlər: `ProjectInitializerTest`, `InitCommandTest`.
 - [x] Rol təlimatları (`.petek/SKILL.md`, ingiliscə): *explorer* (naməlumları sahibdən soruş, `answer_unknown`),
@@ -824,7 +827,7 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   **Vəziyyət:** `report/share.html` (screenshot-lar `data:` ilə içində, AI provayderi/model, sübut səviyyələri). PDF ixracı yeni kitabxana (məs. OpenPDF) tələb edir — **sahib qərarı** (qayda 11); brauzerdən "Print → PDF" işləyir.
 - [x] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
 
-Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; Claude Code və Codex
+Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; iki fərqli kod agenti
 həmin repoda `SKILL.md`-ni oxuyub `explore_site` çağırır; GitHub Action fake target-də yaşıl/qırmızı verir.
 
 ### Faza 13 — Universal hədəf modeli
@@ -888,8 +891,9 @@ hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
 
 | Açar | Default | Məna |
 |---|---|---|
-| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `anthropic-api`, `openai-compat` |
-| `PETEK_LLM_BIN` | provayderə görə | CLI binarı (`PETEK_CLAUDE_BIN` alias) |
+| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none` |
+| `PETEK_LLM_BIN` | provayderə görə | CLI binarı; `cli` üçün işlədiləcək istənilən AI aləti |
+| `PETEK_LLM_ARGS` | — | `cli` üçün arqument şablonu (`{model}`, `{effort}`, `{system}`, `{schema}`, `{schema_file}`) |
 | `PETEK_LLM_BASE_URL` | — | OpenAI-uyğun endpoint (məs. `http://localhost:11434/v1`) |
 | `PETEK_LLM_API_KEY` | — | `Secret`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` alias |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt` |
@@ -1066,7 +1070,7 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
 - [x] Qeydiyyat dəvətlə, yoxsa sərbəst şirkət kodu ilə? — **Hər ikisi, tester başına.** `campaign.registration` bölgüsü hər kimliyə öz rejimini verir; rəhbərlər həmişə dəvətlə qoşulur (şirkət kodu ilə qeydiyyat işçi yaradır), qalan dəvətlər işçilərə düşür.
 - [x] KadroHR web-də real-time mexanizmi hansıdır? — **Avtomatik aşkarlanır.** Pətək ondan asılı deyil: gecikmə DOM-da ölçülür, nəqliyyat (WebSocket, SSE, polling) şəbəkə trafikindən tapılıb hesabatda göstərilir.
 - [x] Elanın "oxundu" statusu backend-də var, yoxsa yalnız bildiriş göndərilir? (receipts oracle-ı buna bağlıdır) — **Var** (təsdiqləndi); `receipts` oracle assert-i default kampaniyadadır.
-- [x] Hansı LLM provayderi və model agentlər üçün? — **Claude, Claude planı ilə** (`claude -p`), default model **Sonnet** (`claude-sonnet-5`); Anthropic API alternativ olaraq qalır.
+- [x] Hansı LLM provayderi və model agentlər üçün? — **Sahibdə hansı AI varsa** (2026-09-26: heç bir vendor default deyil; R09, ADR-0008).
 
 **Real KadroHR üçün açıq suallar** (`scenarios/kadrohr.yaml`, 2026-09-25)
 

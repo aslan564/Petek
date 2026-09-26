@@ -18,7 +18,7 @@ import az.petek.verification.domain.AssertionInput
 
 /**
  * Evaluates a step's assertions and records each result as evidence. Every browser-based verdict gets a
- * screenshot artifact and every oracle/HTTP verdict gets the response body artifact (CLAUDE.md rule 5).
+ * screenshot artifact and every oracle/HTTP verdict gets the response body artifact (AGENTS.md rule 5).
  */
 interface VerifyStepUseCase {
     suspend fun verifyActor(

@@ -16,7 +16,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
 
 /**
- * A point in time as measured by the harness (CLAUDE.md rule 1: time is never measured by the LLM).
+ * A point in time as measured by the harness (AGENTS.md rule 1: time is never measured by the LLM).
  * [wall] is for records and reports; [monotonicNanos] is for latency maths inside one JVM.
  */
 data class HarnessTimestamp(

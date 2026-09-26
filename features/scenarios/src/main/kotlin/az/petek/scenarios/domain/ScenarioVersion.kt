@@ -15,7 +15,7 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.util.HexFormat
 
-/** Id of one stored scenario version (CLAUDE.md rule 4). Opaque, e.g. `scn_0192…`. */
+/** Id of one stored scenario version (AGENTS.md rule 4). Opaque, e.g. `scn_0192…`. */
 @JvmInline
 value class ScenarioVersionId(
     val value: String,

@@ -23,7 +23,7 @@ import kotlinx.serialization.json.putJsonArray
 /**
  * `petek teardown [--run <run_id>]`: deletes what a run left on the target (its test company), e.g. after a crash or
  * a `--keep-data` run; the latest run when no id is given. Only the run's own target is touched, through the test API,
- * which refuses companies that are not `is_test` (CLAUDE.md rule 8). Idempotent: a second call finds nothing left.
+ * which refuses companies that are not `is_test` (AGENTS.md rule 8). Idempotent: a second call finds nothing left.
  * Exit code 1 when something could not be removed.
  */
 class TeardownCommand : PetekSubcommand("teardown") {

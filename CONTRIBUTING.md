@@ -1,7 +1,7 @@
 # Contributing to Pətək
 
 Pətək is © 2026 Kodcraft (author: Aslan Aslanov) and open source under the Apache License 2.0. Contributions are
-welcome under the terms below; the same rules apply to people and to AI coding agents (see `CLAUDE.md`).
+welcome under the terms below; the same rules apply to people and to AI coding agents (see `AGENTS.md`).
 
 ## Terms
 
@@ -47,7 +47,7 @@ welcome under the terms below; the same rules apply to people and to AI coding a
 
 - Feature-based clean architecture: `features/<name>/{domain,application,infrastructure}`; ports in `domain`,
   constructor injection, no DI framework, wiring only in `app/`. Infrastructure classes are `internal` where possible.
-- The eleven "never break" rules of `CLAUDE.md`: the harness measures time; code evaluates assertions; agents act only
+- The eleven "never break" rules of `AGENTS.md`: the harness measures time; code evaluates assertions; agents act only
   through the `AgentAction` whitelist; everything has an id; no verdict without evidence; deterministic work is a
   `run` step; identities are created only by the orchestrator; oracle/teardown only on `is_test`; one Playwright per
   session on its own dispatcher; secrets travel as `Secret`; ask before adding a library.

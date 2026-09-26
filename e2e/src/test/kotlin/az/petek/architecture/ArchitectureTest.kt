@@ -23,7 +23,7 @@ import com.lemonappdev.konsist.api.verify.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * The architecture rules of CLAUDE.md, checked on every build (ADR-0001): feature-based clean architecture with three
+ * The architecture rules of AGENTS.md, checked on every build (ADR-0001): feature-based clean architecture with three
  * layers per feature, dependencies through ports, `app` as the only composition root. Production sources of every
  * module are in scope; the e2e task runs from the repository root so Konsist sees all of them.
  */

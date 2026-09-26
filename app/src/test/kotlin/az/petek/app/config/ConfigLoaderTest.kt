@@ -68,12 +68,13 @@ class ConfigLoaderTest {
         config.mailSource shouldBe MailSource.MAILPIT
         config.mailpitUrl shouldBe URI("http://localhost:8025")
         config.mailDomain shouldBe "petek.test"
-        config.llmProvider shouldBe LlmProviderKey.CLAUDE_CLI
+        config.llmProvider shouldBe LlmProviderKey.NONE
         config.llmProviderReason shouldContain "no AI provider found"
+        config.llmFallbacks shouldBe emptyList()
         config.llmModel.shouldBeNull()
-        config.effectiveLlmModel shouldBe "claude-sonnet-5"
-        config.effectiveLlmBin shouldBe "claude"
-        config.effectiveLlmEffort shouldBe "low"
+        config.effectiveLlmModel.shouldBeNull()
+        config.effectiveLlmBin.shouldBeNull()
+        config.effectiveLlmEffort.shouldBeNull()
         config.llmBaseUrl.shouldBeNull()
         config.llmStructured shouldBe StructuredMode.SCHEMA
         config.llmConcurrency shouldBe 6
@@ -100,8 +101,10 @@ class ConfigLoaderTest {
                 "PETEK_MAIL_DOMAIN" to "@QA.Example.com",
                 "PETEK_IDENTITY_SECRET" to "a-long-enough-identity-secret",
                 "PETEK_LLM_PROVIDER" to "anthropic-api",
-                "PETEK_LLM_MODEL" to "claude-haiku-4-5",
-                "PETEK_CLAUDE_BIN" to "/opt/claude/bin/claude",
+                "PETEK_LLM_MODEL" to "model-small-1",
+                "PETEK_LLM_BIN" to "/opt/ai/bin/ai-tool",
+                "PETEK_LLM_ARGS" to "-p --model {model}",
+                "PETEK_LLM_ENV_UNSET" to "OUTER_*, SESSION_ID",
                 "PETEK_LLM_EFFORT" to "medium",
                 "PETEK_LLM_STRUCTURED" to "json_object",
                 "PETEK_LLM_CONCURRENCY" to "3",
@@ -126,8 +129,10 @@ class ConfigLoaderTest {
         config.llmProvider shouldBe LlmProviderKey.ANTHROPIC_API
         config.llmProviderReason shouldBe "set in PETEK_LLM_PROVIDER"
         config.language shouldBe WorkingLanguage("English")
-        config.llmModel shouldBe "claude-haiku-4-5"
-        config.effectiveLlmBin shouldBe "/opt/claude/bin/claude"
+        config.llmModel shouldBe "model-small-1"
+        config.effectiveLlmBin shouldBe "/opt/ai/bin/ai-tool"
+        config.llmArgs shouldBe listOf("-p", "--model", "{model}")
+        config.llmEnvUnset shouldBe listOf("OUTER_*", "SESSION_ID")
         config.llmEffort shouldBe "medium"
         config.llmStructured shouldBe StructuredMode.JSON_OBJECT
         config.llmConcurrency shouldBe 3
@@ -186,7 +191,7 @@ class ConfigLoaderTest {
                 "PETEK_TEST_API_URL must be an absolute http(s) URL",
                 "PETEK_MAIL_SOURCE must be one of mailpit, test-api, imap, manual, was 'pop3'",
                 "PETEK_MAIL_DOMAIN must be a bare domain such as test.example.com",
-                "PETEK_LLM_PROVIDER must be auto or one of claude-cli, anthropic-api, codex-cli, gemini-cli, opencode-cli, openai-compat, was 'gpt'",
+                "PETEK_LLM_PROVIDER must be auto or one of cli, anthropic-api, codex-cli, gemini-cli, opencode-cli, openai-compat, none, was 'gpt'",
                 "PETEK_LLM_CONCURRENCY must be a whole number between 1 and 64, was '0'",
                 "PETEK_BROWSER_HEADLESS must be true or false",
                 "PETEK_BROWSER_TOPOLOGY must be one of shared-server, per-session, was 'cluster'",
@@ -204,9 +209,12 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `the API provider needs its key`() {
+    fun `the API provider needs its key and a model, since Pətək picks no vendor's model for you`() {
         problems(target, "PETEK_LLM_PROVIDER" to "anthropic-api") shouldContainExactlyInAnyOrder
-            listOf("ANTHROPIC_API_KEY (or PETEK_LLM_API_KEY) is required when PETEK_LLM_PROVIDER is anthropic-api")
+            listOf(
+                "ANTHROPIC_API_KEY (or PETEK_LLM_API_KEY) is required when PETEK_LLM_PROVIDER is anthropic-api",
+                "PETEK_LLM_MODEL is required when PETEK_LLM_PROVIDER is anthropic-api",
+            )
     }
 
     @Test
@@ -234,7 +242,11 @@ class ConfigLoaderTest {
 
     @Test
     fun `auto follows the keys in the environment first`() {
-        load(target, "ANTHROPIC_API_KEY" to "sk-ant-0123456789").llmProvider shouldBe LlmProviderKey.ANTHROPIC_API
+        load(target, "ANTHROPIC_API_KEY" to "sk-ant-0123456789", "PETEK_LLM_MODEL" to "model-1").llmProvider shouldBe
+            LlmProviderKey.ANTHROPIC_API
+        val grok = load(target, "XAI_API_KEY" to "xai-0123456789", "PETEK_LLM_MODEL" to "model-1")
+        grok.llmBaseUrl shouldBe URI("https://api.x.ai/v1")
+        grok.llmApiKey shouldBe Secret("xai-0123456789")
         val openAi = load(target, "OPENAI_API_KEY" to "sk-0123456789abcdef", "PETEK_LLM_MODEL" to "gpt-5-mini")
         openAi.llmProvider shouldBe LlmProviderKey.OPENAI_COMPAT
         openAi.llmBaseUrl shouldBe URI("https://api.openai.com/v1")
@@ -255,9 +267,15 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `PETEK_LLM_BIN wins over the old PETEK_CLAUDE_BIN and a bad structured mode is refused`() {
-        load(target, "PETEK_LLM_BIN" to "/usr/local/bin/claude", "PETEK_CLAUDE_BIN" to "/old/claude").effectiveLlmBin shouldBe
-            "/usr/local/bin/claude"
+    fun `any AI command-line tool is chosen by PETEK_LLM_BIN alone, a bad template or structured mode is refused`() {
+        val any = load(target, "PETEK_LLM_BIN" to "/usr/local/bin/any-ai", "PETEK_LLM_ARGS" to "--print \"{system}\"")
+        any.llmProvider shouldBe LlmProviderKey.CLI
+        any.effectiveLlmBin shouldBe "/usr/local/bin/any-ai"
+        any.llmArgs shouldBe listOf("--print", "{system}")
+        problems(target, "PETEK_LLM_PROVIDER" to "cli") shouldContainExactlyInAnyOrder
+            listOf("PETEK_LLM_BIN is required when PETEK_LLM_PROVIDER is cli: the AI command-line tool to run")
+        problems(target, "PETEK_LLM_BIN" to "any-ai", "PETEK_LLM_ARGS" to "-p \"open") shouldContainExactlyInAnyOrder
+            listOf("PETEK_LLM_ARGS: the argument template has an unclosed \" quote")
         problems(target, "PETEK_LLM_STRUCTURED" to "xml") shouldContainExactlyInAnyOrder
             listOf("PETEK_LLM_STRUCTURED must be one of schema, json_object, prompt, was 'xml'")
     }
@@ -389,6 +407,7 @@ class ConfigLoaderTest {
                 "PETEK_TEST_TOKEN" to "token-value-123",
                 "PETEK_IDENTITY_SECRET" to "identity-secret-value-456",
                 "PETEK_LLM_PROVIDER" to "anthropic-api",
+                "PETEK_LLM_MODEL" to "model-1",
                 "ANTHROPIC_API_KEY" to "sk-ant-api-key-789",
             )
 

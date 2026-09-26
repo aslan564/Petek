@@ -24,7 +24,7 @@ data class LlmMessage(
 
 /**
  * One decision request. The model must answer with JSON that matches [responseSchema] (structured output);
- * the caller still validates the answer in code (CLAUDE.md rule 3: the whitelist lives in code, not in the prompt).
+ * the caller still validates the answer in code (AGENTS.md rule 3: the whitelist lives in code, not in the prompt).
  */
 data class LlmRequest(
     val system: String,
@@ -54,12 +54,12 @@ data class LlmResponse(
     val output: JsonObject,
     val usage: TokenUsage,
     val model: String,
-    /** Reported by the provider when available (the Claude CLI reports it; the API does not). */
+    /** Reported by the provider when available (some agent CLIs report it; most APIs do not). */
     val costUsd: Double?,
 )
 
 /**
- * Which backend answers, as the open key `PETEK_LLM_PROVIDER` names it (e.g. `claude-cli`, `openai-compat`). Open on
+ * Which backend answers, as the open key `PETEK_LLM_PROVIDER` names it (e.g. `codex-cli`, `openai-compat`). Open on
  * purpose: a new provider is a new infrastructure class registered under a new key, never an edit of an exhaustive
  * `when` (open/closed). The well-known keys are the constants below.
  */
@@ -70,8 +70,14 @@ value class LlmProviderKey private constructor(
     override fun toString(): String = value
 
     companion object {
-        /** Claude Code CLI in headless mode (`claude -p`), using the user's Claude plan login. */
-        val CLAUDE_CLI = LlmProviderKey("claude-cli")
+        /**
+         * Any command-line AI agent the owner configures (`PETEK_LLM_BIN` and the argument template `PETEK_LLM_ARGS`),
+         * with that tool's own login: Pətək's code names no vendor for it.
+         */
+        val CLI = LlmProviderKey("cli")
+
+        /** No AI provider could be found or was configured; every call says how to set one up. */
+        val NONE = LlmProviderKey("none")
 
         /** Anthropic Messages API with an API key (official Java SDK). */
         val ANTHROPIC_API = LlmProviderKey("anthropic-api")

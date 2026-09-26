@@ -27,12 +27,15 @@ enum class HostAi(
     val mcpFile: String?,
     val mcpServersKey: String = "mcpServers",
 ) {
-    CLAUDE("claude", listOf("CLAUDE.md", ".claude"), "CLAUDE.md", ".mcp.json"),
-    CODEX("codex", listOf("AGENTS.md", ".codex"), "AGENTS.md", null),
+    /** `AGENTS.md`, the instruction file most coding agents read, and the project-level `.mcp.json` many of them load. */
+    AGENTS("agents", listOf("AGENTS.md", ".codex", ".mcp.json"), "AGENTS.md", ".mcp.json"),
     CURSOR("cursor", listOf(".cursor"), ".cursor/rules/petek.mdc", ".cursor/mcp.json"),
     GEMINI("gemini", listOf("GEMINI.md", ".gemini"), "GEMINI.md", ".gemini/settings.json"),
     COPILOT("copilot", listOf(".github/copilot-instructions.md"), ".github/copilot-instructions.md", ".vscode/mcp.json", "servers"),
     ;
+
+    /** Other names `--ai` accepts for this entry (`codex` reads `AGENTS.md`). */
+    val aliases: Set<String> get() = if (this == AGENTS) setOf("codex") else emptySet()
 
     /** Whether [project] carries one of this agent's marker files. */
     fun isUsedIn(project: Path): Boolean = markers.any { Files.exists(project.resolve(it)) }
@@ -50,7 +53,13 @@ enum class HostAi(
                 .map { it.trim().lowercase() }
                 .filter { it.isNotEmpty() }
                 .flatMapTo(linkedSetOf()) { name ->
-                    if (name == ALL) entries else listOf(requireNotNull(entries.find { it.key == name }) { unknown(name) })
+                    if (name ==
+                        ALL
+                    ) {
+                        entries
+                    } else {
+                        listOf(requireNotNull(entries.find { it.key == name || name in it.aliases }) { unknown(name) })
+                    }
                 }
 
         private fun unknown(name: String) = "unknown AI '$name'; use ${entries.joinToString(", ") { it.key }} or $ALL"

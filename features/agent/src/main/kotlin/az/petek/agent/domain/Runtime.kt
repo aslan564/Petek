@@ -72,7 +72,7 @@ interface SharedRunState {
 /**
  * What one agent may know about another tester of the run: who they are and how they join, never how they sign in.
  * There is no password and no phone here, so a colleague's credentials cannot reach another agent's runtime, prompt
- * or evidence by construction (least privilege; CLAUDE.md rules 7 and 10).
+ * or evidence by construction (least privilege; AGENTS.md rules 7 and 10).
  */
 data class Colleague(
     val agentId: AgentId,
@@ -96,7 +96,7 @@ data class Colleague(
     }
 }
 
-/** Everything one agent owns during a run. The identity is read-only (CLAUDE.md rule 7). */
+/** Everything one agent owns during a run. The identity is read-only (AGENTS.md rule 7). */
 data class AgentRuntime(
     val runId: RunId,
     val identity: Identity,

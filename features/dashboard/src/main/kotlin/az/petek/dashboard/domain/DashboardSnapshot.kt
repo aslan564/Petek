@@ -27,7 +27,7 @@ import java.time.Instant
 /*
  * The read model of the live dashboard: "who is doing what, right now". Built only from what the harness already
  * observes (monitor notifications and recorded evidence), so the dashboard can never disagree with the evidence store.
- * Every text in it comes from evidence that the agents already redacted (CLAUDE.md rule 10); identities contribute
+ * Every text in it comes from evidence that the agents already redacted (AGENTS.md rule 10); identities contribute
  * their name, role, department and registration mode only, never e-mails, phones or passwords.
  */
 

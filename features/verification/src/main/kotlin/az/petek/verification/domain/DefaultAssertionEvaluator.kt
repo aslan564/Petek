@@ -29,7 +29,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * The code-only judge of typed assertions (CLAUDE.md rule 2): nothing here asks an LLM, and every time is taken
+ * The code-only judge of typed assertions (AGENTS.md rule 2): nothing here asks an LLM, and every time is taken
  * from the harness [clock] (rule 1).
  *
  * Contract beyond [AssertionEvaluator]:

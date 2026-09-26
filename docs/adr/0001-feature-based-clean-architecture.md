@@ -7,7 +7,7 @@
 ## Context
 Pətək grows in phases (MVP web → explorer agent → API/mobile adapters → web panel and multi-machine; docs/PLAN.md).
 It is built by one developer, often with AI coding agents working in parallel. The code must stay easy to change per
-capability (e.g. swap Mailpit for IMAP, Playwright for Appium, Claude CLI for another LLM) without ripple effects,
+capability (e.g. swap Mailpit for IMAP, Playwright for Appium, one AI CLI for another) without ripple effects,
 and boundaries must be enforceable rather than a matter of discipline.
 
 ## Decision
@@ -65,5 +65,5 @@ evidence the boundaries work.
 ## Action Items
 1. [x] Convention plugins, version catalog, per-feature modules.
 2. [x] Konsist architecture tests in `e2e` (`ArchitectureTest`, 7 rules, run with `build`; added 2026-09-25 — the
-   rules had been stated in CLAUDE.md but not enforced until then).
+   rules had been stated in AGENTS.md but not enforced until then).
 3. [ ] Revisit module granularity at Faza 8 (web panel / Spring Boot).

@@ -12,8 +12,8 @@ npx petek panel                                          # the web panel at http
 The first run downloads the release bundle for this machine (Linux x64/arm64, macOS Apple silicon, Windows x64;
 each carries its own Java runtime, so no JDK is needed) into `~/.petek/versions/<version>`, checks its SHA-256
 against the release's `SHA256SUMS`, and every run after that starts it directly. The launcher itself has no
-dependencies. Chromium is downloaded by Playwright on first use. You need an AI: the Claude Code CLI logged in with
-your plan, or an Anthropic API key.
+dependencies. Chromium is downloaded by Playwright on first use. You need an AI, any one: an AI command-line tool you
+are logged in to, or an API key for any OpenAI-compatible service (see `.env.example`).
 
 | Variable | Meaning |
 |---|---|

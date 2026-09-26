@@ -146,7 +146,7 @@ data class DialogEvent(
 /**
  * A mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) the session's page sent to the target's origin and the answer it
  * got: a form post as well as a `fetch`/XHR call. It is what a race verdict rests on (`only_one_succeeds`): code reads
- * which request the target accepted or refused instead of trusting the agent's summary (CLAUDE.md rule 2).
+ * which request the target accepted or refused instead of trusting the agent's summary (AGENTS.md rule 2).
  *
  * [path] is the URL path without query string or fragment (those may carry tokens), [status] the HTTP status of the
  * answer (a redirect after a form post counts with its own status, e.g. 303), and [at] the harness time the session saw
@@ -198,7 +198,7 @@ data class SlowResponse(
 
 /**
  * One isolated browser context owned by one agent (own cookies, localStorage, sessionStorage).
- * Implementations confine every underlying browser call to the session's own thread (CLAUDE.md rule 9);
+ * Implementations confine every underlying browser call to the session's own thread (AGENTS.md rule 9);
  * callers may invoke these suspend functions from any coroutine.
  */
 interface BrowserSession {

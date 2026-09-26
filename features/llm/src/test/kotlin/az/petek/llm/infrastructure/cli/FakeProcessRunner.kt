@@ -51,7 +51,7 @@ class FakeProcessRunner(
         ) = FakeProcessRunner { FakeProcess(stdout, stderr, exitCode) }
 
         fun missingExecutable() =
-            FakeProcessRunner { throw IOException("Cannot run program \"claude\": error=2, No such file or directory") }
+            FakeProcessRunner { throw IOException("Cannot run program \"any-ai\": error=2, No such file or directory") }
     }
 }
 

@@ -31,10 +31,10 @@ import java.nio.file.Path
  * - for every host AI chosen or detected: a Pətək fragment in the agent's instruction file between
  *   `<!-- petek:begin -->` and `<!-- petek:end -->` (appended to the owner's text, replaced on a re-run, never
  *   overwriting anything else), a `petek` entry in the agent's project MCP configuration (merged into the JSON, other
- *   servers kept) and, for Claude Code, the skill under `.claude/skills/petek/`,
+ *   servers kept),
  * - `.env` and `evidence/` in `.gitignore`.
  *
- * Files Pətək owns (under `.petek/`, the skill copies) are created when absent and kept otherwise unless
+ * Files Pətək owns (under `.petek/`) are created when absent and kept otherwise unless
  * [Request.force]; files the owner shares with
  * Pətək only ever gain or refresh the marked fragment or the one JSON entry. Every write is reported as a [Change].
  */
@@ -43,7 +43,7 @@ class ProjectInitializer(
 ) {
     /**
      * @property ais the agents to write for; null means detect them in the directory and fall back to [DEFAULT_AIS].
-     * @property force rewrite the files Pətək owns (under `.petek/`, the skill copies) from the current templates; `.env` is
+     * @property force rewrite the files Pətək owns (under `.petek/`) from the current templates; `.env` is
      *   never rewritten.
      */
     data class Request(
@@ -82,7 +82,6 @@ class ProjectInitializer(
         changes += owned(project, SKILL, templates.skill(), request.force)
         changes += gitignore(project)
         ais.sortedBy { it.ordinal }.forEach { ai ->
-            if (ai == HostAi.CLAUDE) changes += owned(project, CLAUDE_SKILL, templates.skill(), request.force)
             changes += fragment(project, ai)
             ai.mcpFile?.let { changes += mcpEntry(project, it, ai.mcpServersKey) }
         }
@@ -186,14 +185,13 @@ class ProjectInitializer(
         const val ENV = ".env"
         const val PROFILE = ".petek/petek.yaml"
         const val SKILL = ".petek/SKILL.md"
-        const val CLAUDE_SKILL = ".claude/skills/petek/SKILL.md"
         const val GITIGNORE = ".gitignore"
         const val BEGIN = "<!-- petek:begin -->"
         const val END = "<!-- petek:end -->"
         const val MCP_SERVER = "petek"
 
-        /** When no agent is recognisable in the project: Claude Code and the cross-agent `AGENTS.md`. */
-        val DEFAULT_AIS: Set<HostAi> = setOf(HostAi.CLAUDE, HostAi.CODEX)
+        /** When no agent is recognisable in the project: the cross-agent `AGENTS.md` and `.mcp.json`. */
+        val DEFAULT_AIS: Set<HostAi> = setOf(HostAi.AGENTS)
 
         val IGNORED: List<String> = listOf(".env", "evidence/")
 

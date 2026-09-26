@@ -38,28 +38,39 @@ class LlmProviderResolverTest {
 
     @Test
     fun `an explicit provider wins over everything`() {
-        marker("CLAUDE.md")
+        marker("AGENTS.md")
 
-        resolve(setOf("claude"), mapOf("ANTHROPIC_API_KEY" to "k"), explicit = LlmProviderKey.GEMINI_CLI) shouldBe
+        resolve(setOf("codex"), mapOf("ANTHROPIC_API_KEY" to "k"), explicit = LlmProviderKey.GEMINI_CLI) shouldBe
             LlmProviderResolver.Resolution(LlmProviderKey.GEMINI_CLI, "set in PETEK_LLM_PROVIDER")
     }
 
     @Test
-    fun `keys in the environment come before the project's markers`() {
-        marker("CLAUDE.md")
+    fun `settings and keys in the environment come before the project's markers`() {
+        marker("AGENTS.md")
 
-        resolve(setOf("claude"), mapOf("PETEK_LLM_BASE_URL" to "http://localhost:11434/v1")).provider shouldBe LlmProviderKey.OPENAI_COMPAT
-        resolve(setOf("claude"), mapOf("ANTHROPIC_API_KEY" to "k")).provider shouldBe LlmProviderKey.ANTHROPIC_API
+        resolve(setOf("codex"), mapOf("PETEK_LLM_BASE_URL" to "http://localhost:11434/v1")).provider shouldBe LlmProviderKey.OPENAI_COMPAT
+        resolve(setOf("codex"), mapOf("PETEK_LLM_BIN" to "any-ai")).provider shouldBe LlmProviderKey.CLI
+        resolve(setOf("codex"), mapOf("ANTHROPIC_API_KEY" to "k")).provider shouldBe LlmProviderKey.ANTHROPIC_API
         resolve(values = mapOf("GEMINI_API_KEY" to "k")) shouldBe
-            LlmProviderResolver.Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: GEMINI_API_KEY is set", LlmProviderResolver.GEMINI)
+            LlmProviderResolver.Resolution(
+                LlmProviderKey.OPENAI_COMPAT,
+                "auto: GEMINI_API_KEY is set",
+                LlmProviderResolver.GEMINI,
+                "GEMINI_API_KEY",
+            )
         resolve(setOf("gemini"), mapOf("GEMINI_API_KEY" to "k")).provider shouldBe LlmProviderKey.GEMINI_CLI
     }
 
     @Test
-    fun `each project marker picks its own CLI when it is installed`() {
+    fun `Grok and OpenRouter keys reach their OpenAI-compatible endpoints`() {
+        resolve(values = mapOf("XAI_API_KEY" to "k")) shouldBe
+            LlmProviderResolver.Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: XAI_API_KEY is set", LlmProviderResolver.XAI, "XAI_API_KEY")
+        resolve(values = mapOf("OPENROUTER_API_KEY" to "k")).baseUrl shouldBe LlmProviderResolver.OPENROUTER
+    }
+
+    @Test
+    fun `each project marker picks its own CLI when it is installed, and the other installed CLIs are fallbacks`() {
         listOf(
-            "CLAUDE.md" to LlmProviderKey.CLAUDE_CLI,
-            ".claude" to LlmProviderKey.CLAUDE_CLI,
             "AGENTS.md" to LlmProviderKey.CODEX_CLI,
             ".codex" to LlmProviderKey.CODEX_CLI,
             "GEMINI.md" to LlmProviderKey.GEMINI_CLI,
@@ -67,9 +78,18 @@ class LlmProviderResolverTest {
         ).forEach { (name, provider) ->
             dir.toFile().listFiles()?.forEach { it.deleteRecursively() }
             marker(name)
+            val other = if (provider == LlmProviderKey.CODEX_CLI) LlmProviderKey.GEMINI_CLI else LlmProviderKey.CODEX_CLI
 
-            resolve(setOf("claude", "codex", "gemini")) shouldBe LlmProviderResolver.Resolution(provider, "auto: $name found")
+            resolve(setOf("codex", "gemini")) shouldBe
+                LlmProviderResolver.Resolution(provider, "auto: $name found", fallbacks = listOf(other))
         }
+    }
+
+    @Test
+    fun `every other known agent CLI on PATH is a fallback, in order`() {
+        marker("AGENTS.md")
+
+        resolve(setOf("codex", "gemini", "opencode")).fallbacks shouldBe listOf(LlmProviderKey.GEMINI_CLI, LlmProviderKey.OPENCODE_CLI)
     }
 
     @Test
@@ -84,11 +104,14 @@ class LlmProviderResolverTest {
     }
 
     @Test
-    fun `a local Ollama is found last, and nothing at all falls back to claude-cli with the reason`() {
+    fun `a local Ollama is found last, and nothing at all is no provider with the reason, never a vendor picked for you`() {
         resolve(setOf("ollama")) shouldBe
             LlmProviderResolver.Resolution(LlmProviderKey.OPENAI_COMPAT, "auto: ollama is on PATH", URI("http://localhost:11434/v1"))
-        resolve().reason shouldBe
-            "auto: no AI provider found (no API key, no project AI marker, no known CLI on PATH); defaulting to claude-cli"
+        resolve() shouldBe
+            LlmProviderResolver.Resolution(
+                LlmProviderKey.NONE,
+                "auto: no AI provider found (no AI setting or API key, no project AI marker, no known AI CLI on PATH)",
+            )
     }
 
     @Test

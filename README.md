@@ -10,8 +10,10 @@ Azərbaycanca: [README.az.md](README.az.md).
 
 - **Product, not a prompt.** Pətək is a running program with its own web panel, browser fleet, evidence database and
   report. The AI is a component inside it, not the other way round.
-- **Bring your own AI.** The agents think with whatever AI your project already uses (Claude today; Codex, Gemini,
-  Ollama and any OpenAI-compatible endpoint on the roadmap). Pətək never carries the model cost or sees your data twice.
+- **Bring your own AI, any one.** Pətək is tied to no AI vendor: the agents think with whatever AI you have, an AI
+  command-line tool you are logged in to (described in `.env`, or Codex, Gemini and OpenCode found by name) or any
+  OpenAI-compatible API (OpenAI, Grok, OpenRouter, Ollama, ...). When one is unavailable, the next one found answers.
+  Pətək never carries the model cost or sees your data twice.
 - **Code decides, not the model.** Time is measured by the harness, assertions are evaluated by code, and an agent can
   only perform actions from a code-owned whitelist. Which AI is used does not change what a verdict is worth.
 - **Any site of yours.** The first target is KadroHR (an HR SaaS). Sites are described as data (`target_profile`),
@@ -53,7 +55,7 @@ evidence a developer can act on.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Host AI (Claude Code / Codex / Gemini CLI / Cursor ...)       │  roles: explorer, scenario author, judge, root-cause
+│ Host AI (your coding agent: Codex / Gemini CLI / Cursor ...)  │  roles: explorer, scenario author, judge, root-cause
 │  reads Pətək's skill pack, calls Pətək through MCP / --json   │  (roadmap Faza 11–12)
 └───────────────┬──────────────────────────────────────────────┘
                 │
@@ -95,7 +97,7 @@ A run (`petek run scenarios/<campaign>.yaml`):
 | Triage | Sorts a run's surprises into system bug / model gap / scenario bug and proposes scenario v2 as a reviewable diff |
 | Targets | KadroHR (real, `scenarios/kadrohr.yaml`) and a fake contract site (`testing/fake-target`) for e2e |
 | Mail / OTP | Mailpit catch-all inbox or the target's test API (`PETEK_MAIL_SOURCE`); phone OTP from the test API |
-| AI | Whatever your project already uses (`PETEK_LLM_PROVIDER=auto`): the Claude, Codex, Gemini or OpenCode CLI, the Anthropic API, or any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM), behind one `LlmClient` port with retry, concurrency limit and metering; `doctor` says which one and why |
+| AI | Whatever you have (`PETEK_LLM_PROVIDER=auto`): any AI command-line tool (`PETEK_LLM_BIN` + `PETEK_LLM_ARGS`), the Codex, Gemini or OpenCode CLI, the Anthropic API, or any OpenAI-compatible endpoint (OpenAI, Grok, OpenRouter, Ollama, LM Studio, vLLM), behind one `LlmClient` port with retry, concurrency limit, metering and fallback to the next AI found; `doctor` says which one and why |
 | Evidence | SQLite (runs, identities, steps, events, receipts, assertions, findings, usage) + artifact files, every record with an id |
 | Quality gates | Kotlin warnings as errors, ktlint via Spotless, licence headers enforced, Konsist architecture tests, Kover coverage, e2e with real Chromium |
 | Isolation | Every tester in its own browser context and thread, knowing colleagues without their secrets; shared values write-once; proven with 1 000 testers through the orchestrator on every build, 5 000 and 30 real Chromium sessions in CI (measured up to 60) — see [R01](docs/requirements/R01-concurrent-multi-agent-testing.md) |
@@ -111,8 +113,8 @@ it. The AI is whatever your project already uses (`PETEK_LLM_PROVIDER=auto`).
 [releases page](https://github.com/aslan564/Petek/releases): `petek-<version>-linux-x64.tar.gz`, `-linux-arm64.tar.gz`,
 `-mac-arm64.tar.gz` or `-win-x64.zip` (each carries its own Java runtime and Chromium driver; `SHA256SUMS` lists the
 checksums), or `petek-<version>-any-jdk25.zip` for any other machine with JDK 25 on `PATH`. Extract it anywhere and
-have an AI: the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) logged in with your plan, or an
-Anthropic API key. Chromium is downloaded by Playwright on first use.
+have an AI, any one: an AI command-line tool you are logged in to, or an API key for an OpenAI-compatible service
+(see `.env.example`). Chromium is downloaded by Playwright on first use.
 
 ```bash
 tar xzf petek-0.1.0-linux-x64.tar.gz && cd my-site     # any directory: Pətək runs next to the site, never inside its build
@@ -185,13 +187,13 @@ Pətək is a **sidecar, not a library**: you do not add it to your site's Maven,
 like a tool (a release bundle or `npx petek`, see R15), started next to the site, and pointed at the site's URL.
 `petek init` prepares the project in one step: it writes `.env` from the template (never touched again), the profile
 `.petek/petek.yaml`, the skill pack `.petek/SKILL.md` (roles: explorer, scenario author, judge, root-cause), and for
-the AI coding agents it detects in the repository (or `--ai claude,codex,cursor,gemini,copilot|all`) a marked
-fragment in their instruction file (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
-`.github/copilot-instructions.md`; appended, refreshed on a re-run, never overwriting your text), the `petek` server
-in their project MCP file (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`) and, for
-Claude Code, the skill under `.claude/skills/petek/`. `.env` and `evidence/` go into `.gitignore`. It uses **your own AI login**, the way BMAD uses whatever assistant the
-project already has: with `PETEK_LLM_PROVIDER=claude-cli` it calls the `claude` CLI you are logged into, and your plan
-pays for the model; nothing is sent to Pətək's authors.
+the AI coding agents it detects in the repository (or `--ai agents,cursor,gemini,copilot|all`) a marked fragment in
+their instruction file (`AGENTS.md`, which most coding agents read, `.cursor/rules/petek.mdc`, `GEMINI.md`,
+`.github/copilot-instructions.md`; appended, refreshed on a re-run, never overwriting your text) and the `petek` server
+in their project MCP file (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`). `.env` and
+`evidence/` go into `.gitignore`. It uses **your own AI login**, the way BMAD uses whatever assistant the project
+already has: it calls the AI tool you are logged into (or the API key you give), and your plan pays for the model;
+nothing is sent to Pətək's authors.
 
 What your site needs, by depth of testing:
 
@@ -236,13 +238,15 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `test.kadrohr.com` | E-mail domain of the test identities |
 | `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
-| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`; `auto` picks by keys in the environment, your project's AI marker (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) and the CLIs on `PATH`, and `doctor` says why |
-| `PETEK_LLM_MODEL` | the provider's | `claude-sonnet-5` for Claude; the CLI's own model for Codex/Gemini/OpenCode; required for `openai-compat` |
-| `PETEK_LLM_BIN` | `claude`, `codex`, … | The CLI binary (`PETEK_CLAUDE_BIN` is still read) |
+| `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` picks by settings and keys in the environment, your project's AI marker (`AGENTS.md`, `GEMINI.md`) and the agent CLIs on `PATH`, keeps the others as fallbacks, picks no vendor for you when nothing is found, and `doctor` says why |
+| `PETEK_LLM_MODEL` | the tool's own | The model; empty keeps the one the tool or provider is configured for; required for `anthropic-api` and `openai-compat` |
+| `PETEK_LLM_BIN` | — | The AI command-line tool to run (`cli`), or another binary for `codex-cli`, `gemini-cli`, `opencode-cli` |
+| `PETEK_LLM_ARGS` | — | `cli` only: its arguments, with `{model}`, `{effort}`, `{system}`, `{schema}`, `{schema_file}`; the conversation goes to STDIN |
+| `PETEK_LLM_ENV_UNSET` | — | Variables removed from the AI tool's environment, `NAME` or `PREFIX*` |
 | `PETEK_LLM_BASE_URL` | — | An OpenAI-compatible endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
 | `PETEK_LLM_API_KEY` | — | Key of `anthropic-api` / `openai-compat`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` are aliases |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; a rejected mode steps down by itself |
-| `PETEK_LLM_EFFORT` | `low` where supported | Reasoning effort (Claude CLI, Codex CLI; `reasoning_effort` on `openai-compat`) |
+| `PETEK_LLM_EFFORT` | `low` where supported | Reasoning effort (Codex CLI, `{effort}` of `cli`; `reasoning_effort` on `openai-compat`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | AI calls in flight across all agents (1–64) |
 | `PETEK_LANGUAGE` | `auto` | What the AI writes for you in (explorer questions and ideas, tester summaries, triage): `auto` follows the language of your own instructions and scenarios, or a name such as `English` |
 | `PETEK_BROWSER_HEADLESS` | `true` | `--headful` on `run` overrides it |
@@ -346,7 +350,7 @@ framework. Konsist tests in `e2e/` fail the build when a layer rule is broken.
 | `features/campaign` | Campaign model, actor grammar, templates, validation, target profile and flows |
 | `features/identity` | Deterministic identity registry |
 | `features/browser` | Isolated Playwright sessions, snapshots, real-time transport detection, race evidence |
-| `features/llm` | `LlmClient` port, Claude CLI and Anthropic API adapters, retry/limit/metering decorators |
+| `features/llm` | `LlmClient` port, agent CLI profiles (any tool from `.env`, Codex, Gemini, OpenCode), Anthropic and OpenAI-compatible API adapters, retry/limit/metering/fallback decorators |
 | `features/agent` | Action whitelist, decision protocol, agent loop, `run` functions over target flows |
 | `features/mail`, `features/oracle` | Inbox sources and the target's test API |
 | `features/verification` | Typed assertions and race verdicts |
@@ -397,7 +401,7 @@ Phases 0–7 (MVP, explorer, triage, web panel) are implemented. The "Pətək 2"
 | [docs/adr](docs/adr) | Architecture decision records 0001–0011 |
 | [docs/TARGET_CONTRACT.md](docs/TARGET_CONTRACT.md) | What a target offers in test mode |
 | [docs/KADROHR_READINESS.md](docs/KADROHR_READINESS.md) | The real KadroHR: what is done, what the target still needs |
-| [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CLAUDE.md](CLAUDE.md) | Security policy; how to contribute; the rules AI coding agents follow in this repository |
+| [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | Security policy; how to contribute; the rules AI coding agents follow in this repository |
 
 ## Development
 

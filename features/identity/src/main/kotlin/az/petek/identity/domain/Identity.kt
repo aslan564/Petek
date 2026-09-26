@@ -21,7 +21,7 @@ import az.petek.core.model.Role
 import az.petek.core.security.Secret
 
 /**
- * One tester's identity. Created only by the orchestrator (CLAUDE.md rule 7); agents read it and never invent one.
+ * One tester's identity. Created only by the orchestrator (AGENTS.md rule 7); agents read it and never invent one.
  * Example: a07, "Əli Kərimov", eli.k7x2.a07@test.kadrohr.com.
  */
 data class Identity(

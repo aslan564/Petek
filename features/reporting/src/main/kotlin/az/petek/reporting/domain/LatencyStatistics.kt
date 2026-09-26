@@ -17,7 +17,7 @@ import kotlin.math.roundToLong
 
 /**
  * Real-time delivery statistics per emitted event (docs/PLAN.md "Real-time"): every latency is t1 − t0 as measured
- * by the harness (CLAUDE.md rule 1); this only aggregates. A receiver whose receipt says `received = false` is
+ * by the harness (AGENTS.md rule 1); this only aggregates. A receiver whose receipt says `received = false` is
  * missing; a received receipt without a latency counts as received but stays out of avg/p95/max.
  */
 object LatencyStatistics {

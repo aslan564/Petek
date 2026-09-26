@@ -23,7 +23,7 @@ class TargetRefusedException(
     message: String,
 ) : PetekException(message)
 
-/** The checks every command runs before it contacts a target (CLAUDE.md rule 8). */
+/** The checks every command runs before it contacts a target (AGENTS.md rule 8). */
 object TargetGuard {
     /**
      * Throws [TargetRefusedException] unless [policy] allows [target]. The policy judges the canonical spelling

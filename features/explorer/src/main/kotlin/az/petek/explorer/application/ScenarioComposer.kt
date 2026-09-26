@@ -39,7 +39,7 @@ import az.petek.explorer.domain.UrlPatterns
 
 /**
  * Turns test ideas into campaign steps, by code only (the LLM is not involved): short `do` texts made from action
- * names, and the assertions that make each idea checkable by code (CLAUDE.md rule 2):
+ * names, and the assertions that make each idea checkable by code (AGENTS.md rule 2):
  *
  * | idea | steps and assertions |
  * |---|---|

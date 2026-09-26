@@ -22,6 +22,7 @@ import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderKey
+import az.petek.llm.infrastructure.cli.CliArguments
 import az.petek.llm.infrastructure.http.StructuredMode
 import az.petek.mail.infrastructure.ImapSettings
 import java.net.URI
@@ -91,15 +92,29 @@ class ConfigLoader(
             val resolution = provider()
             val provider = resolution?.provider
             val model = text(Keys.LLM_MODEL)
-            val bin = text(Keys.LLM_BIN) ?: text(Keys.CLAUDE_BIN)
+            val bin = text(Keys.LLM_BIN)
+            val llmArgs = llmArgs()
+            val llmEnvUnset =
+                text(Keys.LLM_ENV_UNSET)
+                    ?.split(',')
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    .orEmpty()
             val baseUrl = url(Keys.LLM_BASE_URL, default = null) ?: resolution?.baseUrl
-            val apiKey = provider?.let(::apiKey)
+            val apiKey = provider?.let { apiKey(it, resolution.apiKeyVariable) }
             val structured = structured()
             val effort = text(Keys.LLM_EFFORT)
             when (provider) {
                 LlmProviderKey.ANTHROPIC_API -> {
                     if (apiKey == null) {
                         problems += "${Keys.ANTHROPIC_API_KEY} (or ${Keys.LLM_API_KEY}) is required when ${Keys.LLM_PROVIDER} is $provider"
+                    }
+                    if (model == null) problems += "${Keys.LLM_MODEL} is required when ${Keys.LLM_PROVIDER} is $provider"
+                }
+
+                LlmProviderKey.CLI -> {
+                    if (bin == null) {
+                        problems += "${Keys.LLM_BIN} is required when ${Keys.LLM_PROVIDER} is $provider: the AI command-line tool to run"
                     }
                 }
 
@@ -141,8 +156,11 @@ class ConfigLoader(
                     identitySecret = checkNotNull(identitySecret),
                     llmProvider = checkNotNull(provider),
                     llmProviderReason = checkNotNull(resolution).reason,
+                    llmFallbacks = resolution.fallbacks,
                     llmModel = model,
                     llmBin = bin,
+                    llmArgs = llmArgs,
+                    llmEnvUnset = llmEnvUnset,
                     llmBaseUrl = baseUrl,
                     llmApiKey = apiKey,
                     llmStructured = checkNotNull(structured),
@@ -316,15 +334,42 @@ class ConfigLoader(
             return LlmProviderResolver(workingDirectory, onPath).resolve(explicit, values)
         }
 
-        /** `PETEK_LLM_API_KEY`, else the provider's usual variable (never echoed). */
-        private fun apiKey(provider: LlmProviderKey): Secret? {
+        /** `PETEK_LLM_API_KEY`, else the variable auto-detection went by, else the provider's usual ones (never echoed). */
+        private fun apiKey(
+            provider: LlmProviderKey,
+            detectedBy: String?,
+        ): Secret? {
             val aliases =
                 when (provider) {
-                    LlmProviderKey.ANTHROPIC_API -> listOf(Keys.ANTHROPIC_API_KEY)
-                    LlmProviderKey.OPENAI_COMPAT -> listOf(Keys.OPENAI_API_KEY, Keys.GEMINI_API_KEY)
-                    else -> emptyList()
+                    LlmProviderKey.ANTHROPIC_API -> {
+                        listOf(Keys.ANTHROPIC_API_KEY)
+                    }
+
+                    LlmProviderKey.OPENAI_COMPAT -> {
+                        listOf(
+                            Keys.OPENAI_API_KEY,
+                            Keys.XAI_API_KEY,
+                            Keys.OPENROUTER_API_KEY,
+                            Keys.GEMINI_API_KEY,
+                        )
+                    }
+
+                    else -> {
+                        emptyList()
+                    }
                 }
-            return (listOf(Keys.LLM_API_KEY) + aliases).firstNotNullOfOrNull { text(it) }?.let(::Secret)
+            return (listOfNotNull(Keys.LLM_API_KEY, detectedBy) + aliases).firstNotNullOfOrNull { text(it) }?.let(::Secret)
+        }
+
+        /** `PETEK_LLM_ARGS` split like a shell would, without one; an unclosed quote is a problem. */
+        private fun llmArgs(): List<String> {
+            val raw = text(Keys.LLM_ARGS) ?: return emptyList()
+            return try {
+                CliArguments.split(raw)
+            } catch (e: IllegalArgumentException) {
+                problems += "${Keys.LLM_ARGS}: ${e.message}"
+                emptyList()
+            }
         }
 
         private fun structured(): StructuredMode? {
@@ -454,8 +499,10 @@ class ConfigLoader(
         const val LLM_MODEL = "PETEK_LLM_MODEL"
         const val LLM_BIN = "PETEK_LLM_BIN"
 
-        /** Old name of [LLM_BIN], still read. */
-        const val CLAUDE_BIN = "PETEK_CLAUDE_BIN"
+        const val LLM_ARGS = "PETEK_LLM_ARGS"
+        const val LLM_ENV_UNSET = "PETEK_LLM_ENV_UNSET"
+        const val XAI_API_KEY = "XAI_API_KEY"
+        const val OPENROUTER_API_KEY = "OPENROUTER_API_KEY"
         const val LLM_BASE_URL = "PETEK_LLM_BASE_URL"
         const val LLM_API_KEY = "PETEK_LLM_API_KEY"
         const val LLM_STRUCTURED = "PETEK_LLM_STRUCTURED"

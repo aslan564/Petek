@@ -20,7 +20,7 @@ import java.net.URI
  * selectors and flows. Several profiles let one panel test several sites; `PETEK_TARGET` names the default one.
  *
  * Secrets are never values here: [testToken] and account passwords are [SecretRef]s to `.env` variables, resolved by
- * the composition root (CLAUDE.md rule 10).
+ * the composition root (AGENTS.md rule 10).
  */
 data class TargetSpec(
     val name: String,

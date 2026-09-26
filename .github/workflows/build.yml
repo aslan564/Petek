@@ -2,7 +2,7 @@ name: Build
 
 # Runs only by hand (Actions → Build → Run workflow): the owner asked that no push spends Actions minutes and that
 # nothing is deployed before everything is finished. The gate on every commit is the local `./gradlew spotlessApply
-# build` (CLAUDE.md); this workflow is the same build on a clean runner, plus the bundle, the Docker image and, when
+# build` (AGENTS.md); this workflow is the same build on a clean runner, plus the bundle, the Docker image and, when
 # asked, the end-to-end job. A newer manual run cancels the one in progress.
 on:
   workflow_dispatch:

@@ -35,7 +35,7 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * The runner's own evidence: step records for harness decisions (waits, emits, skips, teardown) with timings taken
- * from the harness clock (CLAUDE.md rule 1), and failure screenshots when the agent could not leave evidence itself.
+ * from the harness clock (AGENTS.md rule 1), and failure screenshots when the agent could not leave evidence itself.
  */
 internal class HarnessEvidence(
     private val recorder: EvidenceRecorder,

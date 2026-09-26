@@ -228,7 +228,7 @@ class BuildReportUseCase(
     /**
      * The screenshot a step row links to: the last one taken in that step record or, for a record without one of its
      * own (the orchestrator's per-actor summary of an action, a wait), the last one the same agent took in the same
-     * scenario step up to that record's end. So every row with an outcome points at evidence (CLAUDE.md rule 5).
+     * scenario step up to that record's end. So every row with an outcome points at evidence (AGENTS.md rule 5).
      */
     private class Screenshots(
         steps: List<StepRecord>,

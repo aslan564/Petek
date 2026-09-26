@@ -37,7 +37,7 @@
   </logger>
   <logger name="com.microsoft.playwright" level="WARN"/>
   <logger name="io.ktor" level="WARN"/>
-  <!-- Exposed logs SQL with bound values at DEBUG, which includes test passwords (CLAUDE.md rule 10). -->
+  <!-- Exposed logs SQL with bound values at DEBUG, which includes test passwords (AGENTS.md rule 10). -->
   <logger name="Exposed" level="WARN"/>
   <logger name="org.jetbrains.exposed" level="WARN"/>
   <logger name="com.anthropic" level="WARN"/>

@@ -17,6 +17,7 @@ import az.petek.app.config.WebUrls
 import az.petek.app.di.AppContainer
 import az.petek.browser.domain.SessionOptions
 import az.petek.core.security.TargetVerdict
+import az.petek.llm.application.FallbackLlmClient
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmMessage
@@ -207,15 +208,28 @@ class Doctor(
     }
 
     private suspend fun llm(): CheckResult {
-        val version = container.llmBinaryVersion()?.let { ", ${config.effectiveLlmBin} $it" }.orEmpty()
+        val version = container.llmBinaryVersion()?.let { ", ${config.effectiveLlmBin.orEmpty()} $it" }.orEmpty()
         val who = "${config.llmProvider} (${config.llmModelLabel}$version)"
-        val why = " [${config.llmProviderReason}]"
+        val fallbacks =
+            config.llmFallbacks
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(prefix = "; then ")
+                .orEmpty()
+        val why = " [${config.llmProviderReason}$fallbacks]"
         var client: LlmClient? = null
         return try {
             // Built inside the try: a provider that cannot even be constructed is a failed row, not a crashed doctor.
             val response = container.diagnosticLlm().also { client = it }.complete(PING)
+            val passed = (client as? FallbackLlmClient)?.skipped.orEmpty()
+            val answered =
+                client
+                    ?.provider
+                    ?.takeIf { it != config.llmProvider }
+                    ?.let { " by $it" }
+                    .orEmpty()
+            val note = passed.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = "; passed over: ").orEmpty()
             if (response.output["ok"] == JsonPrimitive(true)) {
-                CheckResult(LLM, CheckStatus.OK, "$who answered a structured request (model ${response.model})$why")
+                CheckResult(LLM, CheckStatus.OK, "$who answered a structured request$answered (model ${response.model})$why$note")
             } else {
                 CheckResult(LLM, CheckStatus.FAILED, "$who answered, but not as asked: ${response.output}")
             }

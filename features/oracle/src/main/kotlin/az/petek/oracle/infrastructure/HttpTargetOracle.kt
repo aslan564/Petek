@@ -62,7 +62,7 @@ private val logger = KotlinLogging.logger {}
  *   space there. Absolute URLs and `.`/`..` segments are refused and redirects are not followed, so the token is only
  *   ever sent to the target host, under the target's base path. Credentials in [baseUrl] are ignored and never shown.
  * - Lookups map 404 to null. [deleteCompany] first reads the company and refuses ([OracleSafetyException]) unless the
- *   target knows it under that id with `is_test` set (CLAUDE.md rule 8); a 403 on the delete itself is a refusal too.
+ *   target knows it under that id with `is_test` set (AGENTS.md rule 8); a 403 on the delete itself is a refusal too.
  * - Failures become [OracleException] with the request and status; the token is redacted from every message.
  *
  * Owns (and [close]s) its HTTP client unless one is injected. An injected client must not follow redirects and should

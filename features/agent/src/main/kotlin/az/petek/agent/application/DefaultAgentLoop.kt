@@ -60,7 +60,7 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * The `do` loop: snapshot -> LLM decision -> whitelist action -> evidence, until the model calls `done` /
- * `report_problem`, or a guard stops it. Guards, all decided by code (CLAUDE.md rules 2 and 3):
+ * `report_problem`, or a guard stops it. Guards, all decided by code (AGENTS.md rules 2 and 3):
  * - [StepContext.maxSteps] LLM decisions -> `step_limit`; the whole execution runs within [StepContext.timeout] -> `timeout`;
  * - the same action chosen repeatedly (per [LoopDetector]) -> `loop_detected`, the repeat is not executed;
  * - a ref that is not on the page, a placeholder that does not resolve or an absolute URL on another host is an
@@ -257,7 +257,7 @@ class DefaultAgentLoop(
 
         /**
          * Checks what the protocol cannot know: the ref exists on this page, every placeholder resolves, and an
-         * absolute URL stays on the site under test (the target policy of CLAUDE.md rule 8 is checked once for the
+         * absolute URL stays on the site under test (the target policy of AGENTS.md rule 8 is checked once for the
          * target; an agent must not wander to another host, such as production, because a page or its task says so).
          */
         private fun prepare(

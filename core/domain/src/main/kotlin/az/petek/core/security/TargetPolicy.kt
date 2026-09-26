@@ -14,7 +14,7 @@ package az.petek.core.security
 import java.net.URI
 
 /**
- * Guards against pointing test agents at production by accident (CLAUDE.md rule 8).
+ * Guards against pointing test agents at production by accident (AGENTS.md rule 8).
  * A target whose host exactly matches an entry of [productionHosts] is refused unless [allowProduction] is set explicitly.
  * The refusal names the `.env` variables (`PETEK_PRODUCTION_HOSTS`, `PETEK_ALLOW_PRODUCTION`), so the user knows
  * exactly which switch decides it.

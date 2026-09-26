@@ -112,10 +112,10 @@ class AnthropicApiLlmClient(
     ): LlmResponse {
         val text = message.content().firstNotNullOfOrNull { block -> block.text().getOrNull()?.text() }
         rejectIncomplete(message.stopReason().getOrNull(), text.orEmpty(), request)
-        if (text == null) throw LlmException.InvalidOutput("Claude's answer for ${request.label} has no text", raw = "")
+        if (text == null) throw LlmException.InvalidOutput("The model's answer for ${request.label} has no text", raw = "")
         val output =
             StructuredJson.parseObject(text)
-                ?: throw LlmException.InvalidOutput("Claude's answer for ${request.label} is not a JSON object", text)
+                ?: throw LlmException.InvalidOutput("The model's answer for ${request.label} is not a JSON object", text)
         val usage = message.usage()
         return LlmResponse(
             output = output,
@@ -139,11 +139,11 @@ class AnthropicApiLlmClient(
         val problem =
             when (stopReason) {
                 StopReason.REFUSAL -> {
-                    "Claude refused to answer ${request.label}"
+                    "The model refused to answer ${request.label}"
                 }
 
                 StopReason.MAX_TOKENS -> {
-                    "Claude's answer for ${request.label} was cut off at max_tokens=${request.maxOutputTokens}"
+                    "The model's answer for ${request.label} was cut off at max_tokens=${request.maxOutputTokens}"
                 }
 
                 StopReason.MODEL_CONTEXT_WINDOW_EXCEEDED -> {
