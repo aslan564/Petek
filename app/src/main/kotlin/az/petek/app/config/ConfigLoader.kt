@@ -150,6 +150,7 @@ class ConfigLoader(
                     dbPath = checkNotNull(dbPath),
                     telemetry = telemetry,
                     targets = targets,
+                    targetsDir = path(Keys.TARGETS_DIR, DEFAULT_TARGETS_DIR),
                 )
             // PETEK_TARGET naming a profile takes that profile's settings; a URL keeps the .env ones.
             return if (named != null) TargetProfileConfig.apply(loaded, named) else loaded

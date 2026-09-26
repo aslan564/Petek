@@ -56,6 +56,32 @@ class ProbeReportWriterTest {
     }
 
     @Test
+    fun `capabilities name the test API, mail, live updates, a CAPTCHA and a rate limit`() {
+        val pages =
+            listOf(
+                page("login").copy(captcha = "recaptcha"),
+                page("register", http = HttpCheck.Answered(429, null)),
+            )
+        val ready = TargetCapabilities.of(report(pages), "imap")
+        val absent = TargetCapabilities.of(report(anonymous = HttpCheck.Answered(404, null)), "manual")
+        val noToken = TargetCapabilities.of(report(token = TestApiProbe.TokenCheck.NotSent("no token", false)), "mailpit")
+
+        ready.summary() shouldBe
+            "test API var və token qəbul olunur; poçt: imap; real-time: websocket; CAPTCHA: login (recaptcha); rate limit (429): register"
+        absent.testApi shouldBe TargetCapabilities.TestApiSupport.ABSENT
+        noToken.testApi shouldBe TargetCapabilities.TestApiSupport.GUARDED_TOKEN_MISSING
+        ProbeReportWriter.markdown(report(pages), probedAt, ready) shouldContain "A CAPTCHA blocks self-registration"
+    }
+
+    @Test
+    fun `CAPTCHA widgets are recognised by their markers`() {
+        CaptchaSigns.detect("<div class=\"g-recaptcha\" data-sitekey=\"x\">") shouldBe "recaptcha"
+        CaptchaSigns.detect("<script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js\">") shouldBe "turnstile"
+        CaptchaSigns.detect("<div class=\"h-captcha\">") shouldBe "hcaptcha"
+        CaptchaSigns.detect("<form><input name=\"email\"></form>") shouldBe null
+    }
+
+    @Test
     fun `missing elements, redirects and errors make a page not ready`() {
         val pages =
             listOf(

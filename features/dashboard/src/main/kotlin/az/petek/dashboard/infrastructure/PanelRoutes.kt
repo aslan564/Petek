@@ -47,6 +47,14 @@ internal fun Route.panelRoutes(backend: PanelBackend) {
     scenarioRoutes(backend)
     runRoutes(backend)
     manualCodeRoutes(backend)
+    accountRoutes(backend)
+}
+
+private fun Route.accountRoutes(backend: PanelBackend) {
+    get("/api/accounts") { call.answer { PanelJson.accounts(backend.accounts()) } }
+    post("/api/accounts") {
+        call.answer(HttpStatusCode.Created) { PanelJson.accounts(backend.addAccount(PanelJson.accountRequest(call.jsonBody()))) }
+    }
 }
 
 private fun Route.manualCodeRoutes(backend: PanelBackend) {

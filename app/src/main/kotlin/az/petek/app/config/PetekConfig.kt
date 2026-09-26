@@ -83,6 +83,8 @@ data class PetekConfig(
     val telemetry: Boolean = false,
     /** The sites of `targets/<name>.yaml` (`PETEK_TARGETS_DIR`), secrets resolved; a run on one of them uses its settings. */
     val targets: List<ResolvedTarget> = emptyList(),
+    /** Where target profiles live (`PETEK_TARGETS_DIR`); the panel adds accounts there. */
+    val targetsDir: Path? = null,
 ) {
     init {
         require(llmConcurrency >= 1) { "llmConcurrency must be at least 1, was $llmConcurrency" }

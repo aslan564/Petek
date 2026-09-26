@@ -9,6 +9,8 @@
 
 package az.petek.dashboard.infrastructure
 
+import az.petek.dashboard.domain.AccountRequest
+import az.petek.dashboard.domain.AccountView
 import az.petek.dashboard.domain.CapacityView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.EventView
@@ -403,6 +405,27 @@ internal object PanelJson {
         }
         return answer
     }
+
+    /** `{"target", "role", "email", "password"}` from the "Hesablar" form. */
+    fun accountRequest(body: String): AccountRequest {
+        val root = parse(body)
+        return AccountRequest(root.string("target"), root.string("role"), root.string("email"), root.string("password"))
+    }
+
+    /** The owner's accounts per site, never with a password. */
+    fun accounts(accounts: List<AccountView>): JsonElement =
+        buildJsonObject {
+            putJsonArray("accounts") {
+                accounts.forEach { account ->
+                    addJsonObject {
+                        put("site", account.site)
+                        put("role", account.role)
+                        put("email", account.email)
+                        put("passwordVariable", account.passwordVariable)
+                    }
+                }
+            }
+        }
 
     /** `{"code": "123456"}` from the owner's "Kodu daxil et" form. */
     fun manualCode(body: String): String = parse(body).string("code").trim()

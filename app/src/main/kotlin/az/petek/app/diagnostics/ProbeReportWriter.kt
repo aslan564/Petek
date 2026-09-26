@@ -20,6 +20,7 @@ object ProbeReportWriter {
     fun markdown(
         report: ProbeReport,
         probedAt: Instant,
+        capabilities: TargetCapabilities? = null,
     ): String =
         buildString {
             appendLine("# Target readiness: ${PetekConfig.masked(report.target)}")
@@ -54,6 +55,16 @@ object ProbeReportWriter {
                 else -> appendLine(realtime.transports.joinToString(", ") { it.name.lowercase() })
             }
             realtime.details.forEach { appendLine("- ${cell(it)}") }
+            if (capabilities != null) {
+                appendLine()
+                appendLine("## Capabilities")
+                appendLine()
+                appendLine(cell(capabilities.summary()))
+                if (capabilities.captcha.isNotEmpty()) {
+                    appendLine()
+                    appendLine("> A CAPTCHA blocks self-registration and scripted login; give Pətək accounts or a saved session instead.")
+                }
+            }
         }
 
     /** Writes the report atomically to `<directory>/report.md` and returns the file. */
@@ -61,12 +72,13 @@ object ProbeReportWriter {
         report: ProbeReport,
         probedAt: Instant,
         directory: Path,
+        capabilities: TargetCapabilities? = null,
     ): Path {
         Files.createDirectories(directory)
         val target = directory.resolve(FILE_NAME)
         val temporary = Files.createTempFile(directory, ".$FILE_NAME.", ".tmp")
         try {
-            Files.writeString(temporary, markdown(report, probedAt))
+            Files.writeString(temporary, markdown(report, probedAt, capabilities))
             Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } finally {
             Files.deleteIfExists(temporary)

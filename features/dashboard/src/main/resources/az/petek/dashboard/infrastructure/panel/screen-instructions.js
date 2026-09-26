@@ -331,8 +331,32 @@
       h('li', null, h('b', { text: '3' }), h('span', { text: 'Ssenari layihəsini yoxlayıb təsdiqləyin.' })),
       h('li', null, h('b', { text: '4' }), h('span', { text: 'Run edin: N tester eyni anda, sübutlu hesabatla.' }))));
 
+    // accounts the explorer may sign in with (bring your own accounts): the password goes to .env, never to the database
+    const accounts = P.card('Hesablar', { icon: 'team', sub: 'Kəşfiyyatçı bu saytda sizin test hesablarınızla daxil olsun' });
+    const accountList = h('div', 'stack');
+    const role = h('input', { class: 'input', attrs: { type: 'text', placeholder: 'admin', autocomplete: 'off', 'aria-label': 'Rol' } });
+    const email = h('input', { class: 'input', attrs: { type: 'email', placeholder: 'test@sirket.az', autocomplete: 'off', 'aria-label': 'E-poçt' } });
+    const password = h('input', { class: 'input', attrs: { type: 'password', autocomplete: 'new-password', 'aria-label': 'Parol' } });
+    function renderAccounts(list) {
+      accountList.replaceChildren(...(list.length ? list.map((a) => h('div', 'row', h('b', { text: a.role }), h('span', { text: a.email || 'sessiya faylı' }),
+        h('span', { class: 'faint', text: a.site + (a.passwordVariable ? ' · parol .env-də: ' + a.passwordVariable : '') }))) : [h('div', { class: 'faint', text: 'Hələ hesab verilməyib: kəşfiyyatçı test şirkəti, özü qeydiyyat və ya anonim yolla gedir.' })]));
+    }
+    async function loadAccounts() { const res = await P.api.get('/api/accounts'); if (res.ok) renderAccounts(res.data.accounts || []); }
+    async function addAccount(button) {
+      const res = await P.busy(button, () => P.api.post('/api/accounts', { target: form.target, role: role.value, email: email.value, password: password.value }));
+      password.value = '';
+      if (res.ok) { renderAccounts(res.data.accounts || []); P.toast('Hesab saxlanıldı; parol yalnız .env-dədir.', 'ok'); }
+      else P.toast((res.problems[0] && res.problems[0].message) || res.error, 'error');
+    }
+    P.append(accounts.body, h('div', 'form-grid',
+      h('div', 'form-grid cols-3', role, email, password),
+      P.button('Hesab əlavə et', { icon: 'plus', on: (e) => addAccount(e.currentTarget) }),
+      h('div', { class: 'help', text: 'Yalnız test hesabları, real istifadəçi hesabı heç vaxt. Parol .env faylına yazılır və bir daha göstərilmir.' }),
+      accountList));
+    loadAccounts();
+
     P.append(el, ui.flow, h('div', 'grid-main-side',
-      h('div', 'stack', what.el, team.el, budget.el),
+      h('div', 'stack', what.el, accounts.el, team.el, budget.el),
       h('div', 'stack sticky-side', actions.el, how.el)));
     if (autoSplit && form.roles.admins + form.roles.managers + form.roles.employees !== form.testers) split();
     syncTeam();

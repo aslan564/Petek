@@ -13,6 +13,7 @@ import az.petek.app.config.PetekConfig
 import az.petek.app.diagnostics.HttpProbe
 import az.petek.app.diagnostics.ProbeReport
 import az.petek.app.diagnostics.ProbeReportWriter
+import az.petek.app.diagnostics.TargetCapabilities
 import az.petek.app.diagnostics.TargetProbe
 import az.petek.app.diagnostics.TestApiProbe
 import com.github.ajalt.clikt.core.Context
@@ -47,8 +48,13 @@ class ProbeCommand : PetekSubcommand("probe") {
                     )
                 val report = probe.probe(target)
                 val directory = config.evidenceDir.resolve(PROBE_DIRECTORY)
-                val file = withContext(Dispatchers.IO) { ProbeReportWriter.write(report, container.clock.now().wall, directory) }
+                val capabilities = TargetCapabilities.of(report, config.mailSource.key)
+                val file =
+                    withContext(Dispatchers.IO) {
+                        ProbeReportWriter.write(report, container.clock.now().wall, directory, capabilities)
+                    }
                 printSummary(report)
+                echo("Capabilities: ${capabilities.summary()}")
                 echo("Report: $file")
                 if (report.ready) ExitCodes.OK else ExitCodes.FAILURE
             }

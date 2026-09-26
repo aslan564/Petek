@@ -729,21 +729,24 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   (`hansı strategiya, niyə keçildi`) `event` cədvəlinə və hesabata yazılır. Kəşfiyyatçı (`RoleSessions`) və
   `register_and_login` eyni zənciri istifadə edir.
   **Vəziyyət:** kəşfiyyatçı üçün `SignInChain` (profilin `sign_in` sırası; hər cəhd və keçid kəşfiyyat fəaliyyətində). Testerlərin `register_and_login`-i hələ kampaniyanın öz qapısı ilə gedir — Faza 18 (testerə görə qapı) bunu tamamlayır.
-- [ ] Öz hesabların (bring-your-own accounts): panelin "Təlimat" ekranında hədəf üzrə rol → e-poçt/parol (və ya hazır
+- [x] Öz hesabların (bring-your-own accounts): panelin "Təlimat" ekranında hədəf üzrə rol → e-poçt/parol (və ya hazır
   `storage_state` faylı); `Secret` ilə gəzir, LLM `{self.password}` görür (qayda 10); panel sirləri `.env`-ə yazır,
   bazaya yox.
+  **Vəziyyət:** "Təlimat" ekranında "Hesablar" kartı: parol `.env`-ə `PETEK_ACC_<SAYT>_<ROL>` kimi (`rw-------`), hesab `targets/<sayt>.yaml`-a `${VAR}` referansı ilə; bazaya heç nə düşmür. `storage_state` faylı profildə verilir.
 - [x] Saxlanan sessiyalar: hər (hədəf, kimlik) üçün `storage_state` `<evidence>/sessions/` altında; növbəti kəşfiyyat
   yenidən qeydiyyat etmir, sessiya köhnəlibsə `login` axınına düşür.
   **Vəziyyət:** sahibin hesabları üçün `<evidence>/sessions/<sayt>/<rol>.json` (`rw-------`), köhnəlibsə login formu.
 - [x] Poçt mənbələri: `TestApiMailbox` bağlanır (Faza 8); `ImapMailbox` (catch-all domen və ya `+` adresləmə;
   kitabxana seçimi — qayda 11, aşağıdakı suallar); `ManualCodeMailbox`: panel "kodu daxil et" pəncərəsi açır, SSE ilə
   agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün; sürüdə yalnız xəbərdarlıqla).
-- [ ] İmkan yoxlaması (`capability probe`, `diagnostics`): kəşfiyyatdan əvvəl hədəfin nəyi dəstəklədiyi — test API,
+- [x] İmkan yoxlaması (`capability probe`, `diagnostics`): kəşfiyyatdan əvvəl hədəfin nəyi dəstəklədiyi — test API,
   poçt mənbəyi, real-time nəqliyyat, CAPTCHA/rate limit əlamətləri — `TargetCapabilities` kimi bazaya və hesabata.
+  **Vəziyyət:** `TargetCapabilities` (`petek probe`): test API, poçt mənbəyi, real-time nəqliyyat, CAPTCHA (reCAPTCHA/hCaptcha/Turnstile) və 429 əlamətləri; hesabatda "Capabilities" bölməsi. Kəşfiyyat öncəsi bazaya ayrıca yazılmır — `petek probe` hesabatı sübutdur.
 - [x] Sübut səviyyəsi hər tapıntıda: `ORACLE_CONFIRMED` / `UI_NETWORK` / `LLM_JUDGED` (`FindingRecord.evidenceTier`);
   hesabat və panel göstərir; oracle olmayan hədəfdə `oracle` assert-ləri "SKIPPED" yox, "N/A (no oracle)" olur.
-- [ ] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
+- [x] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
+  **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake saytla e2e — Faza 13 bəndi.
 
 Hazır sayılır: iki fərqli hədəf profili (fake KadroHR + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
 paneldən seçilir; ikincidə kəşfiyyatçı sahibin hesabı ilə daxil olur, hesabat sübut səviyyələrini göstərir.

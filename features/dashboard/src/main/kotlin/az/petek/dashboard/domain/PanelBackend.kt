@@ -37,7 +37,39 @@ interface PanelBackend :
     PanelExplorer,
     PanelScenarios,
     PanelRuns,
-    PanelManualCodes
+    PanelManualCodes,
+    PanelAccounts
+
+/**
+ * Accounts the owner gives the explorer on the instruction screen ("Hesablar", bring-your-own accounts, Faza 10): a
+ * role, an e-mail and a password for a site. The password goes to `.env` as a variable the site's target profile
+ * references, never to the database, and is never shown again.
+ */
+interface PanelAccounts {
+    /** The accounts known for every site (passwords never included). */
+    fun accounts(): List<AccountView> = emptyList()
+
+    /** Stores [request]; fails with [PanelRequestException] naming the field when it cannot. */
+    suspend fun addAccount(request: AccountRequest): List<AccountView> =
+        throw PanelRequestException(listOf(FieldProblem("target", "Hesab əlavə etmək bu paneldə mümkün deyil.")))
+}
+
+data class AccountRequest(
+    val target: String,
+    val role: String,
+    val email: String,
+    val password: String,
+) {
+    override fun toString(): String = "AccountRequest($target, $role, $email, password=***)"
+}
+
+/** An account as the panel shows it: the site's profile name, the role, the e-mail and the `.env` variable holding the password. */
+data class AccountView(
+    val site: String,
+    val role: String,
+    val email: String?,
+    val passwordVariable: String?,
+)
 
 /**
  * Codes the owner types in by hand (`PETEK_MAIL_SOURCE=manual`, "Kodu daxil et"): a tester waiting for a code is

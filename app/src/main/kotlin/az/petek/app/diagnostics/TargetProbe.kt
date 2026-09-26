@@ -36,6 +36,8 @@ data class PageProbe(
     val note: String? = null,
     /** False for a page whose elements only appear within a flow (`/verify` after a sign-up): reported, not required. */
     val elementsRequired: Boolean = true,
+    /** The CAPTCHA widget the page shows (`recaptcha`, `hcaptcha`, `turnstile`, `captcha`), if any. */
+    val captcha: String? = null,
 ) {
     val ready: Boolean
         get() = http is HttpCheck.Answered && http.status in SUCCESS && error == null && (missing.isEmpty() || !elementsRequired)
@@ -145,7 +147,8 @@ class TargetProbe(
             session.navigate(path)
             val selectors = page.selectorKeys.map { TargetProfile.DEFAULT.selector(it) }
             val (present, missing) = selectors.partition { session.count(it) > 0 }
-            PageProbe(page.key, path, answer, session.currentUrl(), present, missing, null, page.note, page.elementsRequired)
+            val captcha = runCatching { CaptchaSigns.detect(session.domSnapshot()) }.getOrNull()
+            PageProbe(page.key, path, answer, session.currentUrl(), present, missing, null, page.note, page.elementsRequired, captcha)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -170,6 +170,6 @@ class SignInChainTest {
             val panel = harness { null }
             val own = OwnAccountRoleSessions(panel.panel.container, { SetupProfile(TargetProfile.DEFAULT, "contract") })
 
-            own.open(request(panel), factory) { progress += it }.note shouldBe "bu sayt üçün hədəf profili yoxdur"
+            own.open(request(panel), factory) { progress += it }.note shouldBe "sahibin hesabı verilməyib (paneldə və ya hədəf profilində)"
         }
 }

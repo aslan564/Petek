@@ -30,6 +30,8 @@ import az.petek.campaign.domain.SignInMethod
 import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.capacity.domain.LimitingFactor
 import az.petek.core.ids.ArtifactId
+import az.petek.dashboard.domain.AccountRequest
+import az.petek.dashboard.domain.AccountView
 import az.petek.dashboard.domain.CapacityLimit
 import az.petek.dashboard.domain.CapacityView
 import az.petek.dashboard.domain.ManualCodeView
@@ -46,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
@@ -73,6 +76,7 @@ internal class AppPanelBackend(
     private val scope: CoroutineScope,
     /** The desk of `PETEK_MAIL_SOURCE=manual`; null for every other mail source (nothing to answer then). */
     private val manualCodes: ManualCodeDesk? = null,
+    private val ownerAccounts: OwnerAccounts? = null,
 ) : PanelBackend,
     PanelCapacity by capacity,
     PanelExplorer by explorer,
@@ -88,6 +92,11 @@ internal class AppPanelBackend(
         id: String,
         code: String,
     ): Boolean = manualCodes?.answer(id, code) ?: false
+
+    override fun accounts(): List<AccountView> = ownerAccounts?.views().orEmpty()
+
+    override suspend fun addAccount(request: AccountRequest): List<AccountView> =
+        ownerAccounts?.let { withContext(Dispatchers.IO) { it.add(request) } } ?: super.addAccount(request)
 
     override fun close() {
         val work = scope.coroutineContext.job
@@ -119,22 +128,29 @@ internal class AppPanelBackend(
                         .resolve(AnswerBook.FILE_NAME),
                 )
             lateinit var runs: PanelRunsAdapter
+            val accounts =
+                OwnerAccounts(
+                    container.config,
+                    workingDirectory.resolve(ENV_FILE),
+                    container.config.targetsDir ?: workingDirectory.resolve(TARGETS_DIRECTORY),
+                )
             val sessions =
                 RoleSessionSource { request, factory, progress ->
-                    val source = roleSessions?.invoke(runs) ?: signInChain(container, runs)
+                    val source = roleSessions?.invoke(runs) ?: signInChain(container, runs, accounts)
                     source.open(request, factory, progress)
                 }
             val explorer = PanelExplorerAdapter(container, sessions, answers, scope)
             val scenarios = PanelScenariosAdapter(container, explorer, workingDirectory.resolve(SCENARIO_DIRECTORY), scope)
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
             val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
-            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual)
+            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts)
         }
 
         /** The explorer's way in, in the order of the site's target profile (ADR-0010). */
         private fun signInChain(
             container: AppContainer,
             runs: SetupRuns,
+            accounts: OwnerAccounts,
         ): RoleSessionSource {
             val testCompany = TestCompanyRoleSessions(container, runs)
             val profiles = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator)
@@ -142,13 +158,15 @@ internal class AppPanelBackend(
                 container,
                 mapOf(
                     SignInMethod.TEST_COMPANY to testCompany,
-                    SignInMethod.OWN_ACCOUNTS to OwnAccountRoleSessions(container, profiles),
+                    SignInMethod.OWN_ACCOUNTS to OwnAccountRoleSessions(container, profiles, accounts::accountsFor),
                     SignInMethod.SELF_REGISTER to SelfRegisterRoleSessions(container, testCompany),
                 ),
             )
         }
 
         const val SCENARIO_DIRECTORY = "scenarios"
+        const val ENV_FILE = ".env"
+        const val TARGETS_DIRECTORY = "targets"
 
         /** How long closing waits for a cancelled run's teardown and report (Ctrl+C gives the process 90 s). */
         val CLOSE_GRACE = 75.seconds

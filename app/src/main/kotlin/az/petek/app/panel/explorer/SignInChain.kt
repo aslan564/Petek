@@ -87,6 +87,13 @@ internal class SignInChain(
 internal class OwnAccountRoleSessions(
     private val container: AppContainer,
     private val profiles: SetupProfileSource,
+    /** The owner's accounts for a site: the panel's and the target profile's. */
+    private val accountsFor: (java.net.URI) -> List<ResolvedAccount> = {
+        container.config
+            .profileFor(it)
+            ?.accounts
+            .orEmpty()
+    },
     private val loginTimeout: kotlin.time.Duration = 20.seconds,
 ) : RoleSessionSource {
     override suspend fun open(
@@ -94,18 +101,24 @@ internal class OwnAccountRoleSessions(
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
     ): RoleSessions {
-        val target = container.config.profileFor(request.target) ?: return RoleSessions.none("bu sayt üçün hədəf profili yoxdur")
-        val accounts =
-            target.spec.accounts.indices
-                .map { target.accounts[it] }
-                .filter { it.password != null || it.storageState != null }
-        if (accounts.isEmpty()) return RoleSessions.none("profildə (targets/${target.spec.name}.yaml) hesab verilməyib")
+        val accounts = accountsFor(request.target).filter { (it.email != null && it.password != null) || it.storageState != null }
+        if (accounts.isEmpty()) {
+            val where =
+                container.config.profileFor(request.target)?.let { "targets/${it.spec.name}.yaml" } ?: "paneldə və ya hədəf profilində"
+            return RoleSessions.none("sahibin hesabı verilməyib ($where)")
+        }
+        val site =
+            container.config
+                .profileFor(request.target)
+                ?.spec
+                ?.name
+                ?: PanelTargets.site(request.target).substringAfter("://").replace(Regex("[^A-Za-z0-9]+"), "-")
         val profile = profiles.profile().profile
         val opened = LinkedHashMap<String, BrowserSession>()
         val failures = mutableListOf<String>()
         for (account in accounts.distinctBy { it.role }) {
             try {
-                val session = signIn(request, target.spec.name, account, profile, sessions, progress)
+                val session = signIn(request, site, account, profile, sessions, progress)
                 if (session != null) opened[account.role] = session else failures += "${account.role}: daxil ola bilmədi"
             } catch (e: CancellationException) {
                 withContext(NonCancellable) { opened.values.forEach { runCatching { it.close() } } }
