@@ -397,6 +397,14 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 12 | Skill paketi və paylanma | `petek init`, rol təlimatları, Docker/CLI dist, `petek dev`, CI rejimi | 1–2 həftə |
 | 13 | Universal hədəf modeli | Şirkət modeli isteğe bağlı, sərbəst rollar, kor test naxışları | 2 həftə |
 | 14 | Ekosistem və ödənişli modullar | Kontrakt kitləri, log körpüsü, regressiya baseline, hosted sürü | sonra |
+| 15 | Sahiblik təsdiqi və icazə qapısı | Pətək yalnız sahibliyi təsdiqlənmiş sayta yazır, qalanında yalnız oxuyur | 2–3 gün |
+| 16 | Poçt: sahibin qutusu və artı ünvan | OTP və təsdiq linki sahibin IMAP qutusundan oxunur | 3–5 gün |
+| 17 | Kəşfiyyatçı: Keçid 0 → 1 | Saytın növü, kəşfiyyatçının öz hesabı, içəridən ev xəritəsi | 1–2 həftə |
+| 18 | Qapı dalğası, hesablar və izolyasiya | Qapı bir dəfə öyrənilir, kodla keçilir; testerlər bir-birini görmür | 1–2 həftə |
+| 19 | Xırda xəta kartları | Ümumi kataloq, mağaza, xəbər və vitrin naxışları | 1–2 həftə |
+| 20 | İki qatlı, üç rəfli hesabat | Müştəri üçün sadə qat, detal qatı, JUnit XML və SARIF | 1 həftə |
+| 21 | Tutum, dalğalar və ayrı IP | Böyük sürü dalğalarla; hər testerə ayrı IP seçimi | 1 həftə |
+| 22 | Demo hədəfləri | Ghost və WooCommerce sahibin serverində, real tapıntılar | sonra |
 
 Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablanıb. Faza 8–14 "Pətək 2: universal alət" planıdır
 (aşağıda, Faza 7-dən sonra); köhnə Faza 8 ("Universal platforma") onun içində əridilib.
@@ -871,6 +879,86 @@ hesabat dövrəsini tam keçir; KadroHR kampaniyası dəyişməz nəticə verir.
 - [ ] **Rol adları:** skill fayllarında ingiliscə, UI-da Azərbaycanca? Tövsiyə: bəli.
 - [ ] **Ödənişli modulların yeri:** eyni repoda ayrı Gradle modulu (`premium/`) və ya ayrı repo? Tövsiyə: ayrı repo,
   nüvədə yalnız portlar.
+
+## Pətək 3: yalnız link ilə sürü (2026-09-26)
+
+Sahibin qərarları və bütün dizayn: [`LINK_ONLY_SWARM.md`](LINK_ONLY_SWARM.md) (bölmə 0 üstündür). Qərar:
+[ADR-0012](adr/0012-link-only-swarm.md). Tələb: [R16](requirements/R16-link-only-swarm.md). Faza 10 (giriş zənciri,
+öz hesablar, IMAP) və Faza 13 (universal model, kor naxışlar) bu fazaların bünövrəsidir: burada onların üstünə qurulur,
+təkrarlanmır. Sıra sahibin razılaşdığı tikinti sırasıdır; sahiblik təsdiqi birincidir, çünki tam test ondan asılıdır.
+
+### Faza 15 — Sahiblik təsdiqi və icazə qapısı
+
+Məqsəd: Pətək yalnız sahibliyi təsdiqlənmiş sayta yazır (run, kəşfiyyatın rollu və toxunan fazaları); təsdiqsiz saytda
+yalnız oxuyur. Beləliklə heç kim Pətəki başqasının saytına yönəldib orada hesab aça bilmir. Teardown bu qapıdan keçmir:
+o yalnız run-ın öz test datasını tokenlə qorunan test API-dən silir, onu bağlamaq saytda zibil qoyardı.
+
+- [ ] `features/ownership`: domain (`OwnershipToken`, `OwnershipChallenge`, `OwnershipRecord`, `OwnershipStatus`,
+  `LocalAddresses`), portlar (`OwnershipLedger`, `OwnershipProbe`, `HostLocality`, `OwnershipTokens`), use-case
+  `SiteOwnership` (vəziyyət, yoxlama, tam test tələbi; 30 gündən köhnə təsdiq avtomatik yenidən yoxlanır).
+- [ ] Sübut: `/.well-known/petek-verification.txt` faylı və ya `_petek-verification.<host>` DNS TXT qeydi, içində
+  `petek-verification=<token>`; token host-un identity secret altında HMAC-ıdır (eyni secret-li maşınlar eyni kodu görür).
+- [ ] Təsdiqsiz keçənlər: `localhost`, `*.localhost`, loopback, özəl şəbəkə (10/8, 172.16/12, 192.168/16, fc00::/7) və
+  link-local ünvanlar; host-un bütün ünvanları belədirsə.
+- [ ] Qapı: `petek run`, panel run-ı və MCP (exit 2 / hədəf sahəsi altında göstəriş); kəşfiyyat təsdiqsiz saytda yalnız
+  anonim fazada işləyir və səbəbini deyir.
+- [ ] `petek verify` (kod, iki yol, yoxlama; `--json`), `doctor`-da sahiblik sətri.
+- [ ] Bundle runtime-a `jdk.naming.dns` (JNDI DNS provayderi jdeps-ə görünmür).
+- [ ] İstifadə qaydası: README (EN/AZ), `SECURITY.md`, skill paketi — yalnız sahibi olduğunuz pre/stage sayt, yalnız test
+  hesabları, real istifadəçi hesabı heç vaxt.
+- [ ] Testlər: domain qaydaları, use-case fake-lərlə, HTTP və DNS sübutu, SQLite reyestri, CLI və panel imtinası.
+
+Hazır sayılır: təsdiqsiz stage-ə `petek run` exit 2 ilə imtina edir və kodu, faylın yerini, DNS qeydini göstərir; fayl
+qoyulandan sonra eyni əmr işləyir; localhost-dakı fake target ilə e2e dəyişmədən keçir.
+
+### Faza 16 — Poçt: sahibin qutusu və artı ünvan
+
+- [ ] `ImapMailbox` (Faza 10 bəndi önə çəkilir). Kitabxana seçimi qayda 11-ə görə sahibin qərarıdır (yuxarıdakı
+  "IMAP kitabxanası" sualı).
+- [ ] Artı ünvanlı kimliklər: sahibin qutusu (məs. `test@sirket.az`) verilir, hər tester `test+<run>-<agent>@sirket.az`
+  alır; məktub alan ünvana görə testerə ayrılır.
+- [ ] "+" işarəsini qəbul etməyən sayt tanınır və hesabatda deyilir; alternativ: sahibin domenində catch-all.
+- [ ] Pətəkin serverindəki qutu: sonra, ödənişli modul (Faza 14 hosted xətti).
+
+Hazır sayılır: fake target-də qeydiyyat kodu IMAP qutusundan (test IMAP serveri) oxunur, iki tester bir-birinin
+məktubunu görmür.
+
+### Faza 17 — Kəşfiyyatçı: saytın növü, öz hesabı, Keçid 0 → 1
+
+- [ ] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-da təyin olunur, sayt modelinə yazılır.
+- [ ] Qapının xəritəsi: qeydiyyat, login, qonaq girişi, OTP növü, şifrəni unutdum, CAPTCHA, dəvət; dürüst dayanma səbəbləri.
+- [ ] Kəşfiyyatçının öz hesabı: təlimatda verilibsə o, yoxdursa `self_register` (Faza 10 zənciri); testerlərlə paylaşılmır.
+- [ ] Keçid 1 default-dur; admin hesabında yalnız adında Pətək işarəsi olan obyektlər, sonda silinir.
+
+### Faza 18 — Qapı dalğası, hesablar və izolyasiya
+
+- [ ] Ssenaridə hər testerin qapısı: `register`, `login` (təlimatdakı test hesabları, parol `Secret`) və ya `guest`.
+- [ ] Qapı bir dəfə öyrənilir, qalan testerlər onu kodla keçir; qapı baryeri keçməyəni missiyaya buraxmır.
+- [ ] Həmkar siyahısı promptdan götürülür; başqa testerə aid dəyər kartda yer tutucu ilə gəlir.
+- [ ] İcazə ilə hesab dəyişdirmə, yalnız testini bitirənlər arasında; sübutda hər addımın hesabı.
+- [ ] Kəşfiyyatçı run boyu davam edir; tapdıqları növbəti run-ın ssenarisini genişləndirir.
+
+### Faza 19 — Xırda xəta kartları
+
+- [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
+- [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
+  vitrin (ölü link, dil güzgüsü, boş siyahı).
+
+### Faza 20 — İki qatlı, üç rəfli hesabat
+
+- [ ] Müştəri qatı: bir səhifə, saytın dilində qısa cümlələr; detal qatı: addımlar, sübut, hesab və qapı.
+- [ ] Rəflər: sayt xətası, alət boşluğu, ssenari səhvi (triaj artıq var). JUnit XML və SARIF çıxışı.
+
+### Faza 21 — Tutum, dalğalar və ayrı IP
+
+- [ ] Dalğalar; realtime kartları yalnız eyni dalğadakılara.
+- [ ] "Hər testerə ayrı IP": yalnız sahibliyi təsdiqlənmiş saytda, sahibin proxy ünvanları ilə (Playwright proxy, yeni
+  kitabxana yox); IP çatmırsa əvvəldən deyilir. Seçim yoxdursa IP limit cavabı tanınır, "alət boşluğu" rəfinə düşür.
+
+### Faza 22 — Demo hədəfləri
+
+- [ ] Ghost (xəbər) və WooCommerce (mağaza) sahibin serverində; hər biri üçün kampaniya və qısa video. KadroHR
+  laboratoriya qalır; fake target yalnız e2e üçündür (qayda 12).
 
 ## Sübut bazası və hesabat
 

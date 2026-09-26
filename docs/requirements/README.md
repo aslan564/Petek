@@ -23,6 +23,7 @@ Status: **Implemented** (in `develop`, covered by tests), **Partial** (core exis
 | [R13](R13-code-quality-and-architecture-protection.md) | Architecture and quality enforced by the build, not by discipline | Implemented | build-logic, e2e | 0001 | Faza 8 |
 | [R14](R14-licensing-and-intellectual-property.md) | The work is protected: BSL 1.1, headers on every file, trademark, edition boundary | Implemented | build-logic, all | 0011 | Faza 8 |
 | [R15](R15-distribution-and-monetization.md) | Installable in any project, runs beside it and in CI; paid editions possible | Planned | app, build-logic | 0009, 0011 | Faza 12, 14 |
+| [R16](R16-link-only-swarm.md) | A link in, a tested site out: verified ownership, explorer, gates, isolated cards, two-layer report | Planned | ownership, explorer, orchestration, agent, mail, reporting, app | 0012 | Faza 15–22 |
 
 Traceability is kept in three places: this table, the `## Verification` section of each document (test classes), and
 the PR template. The Konsist test in `e2e/` is the executable form of R13 and of the layer rules that R01–R12 rely on.

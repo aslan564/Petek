@@ -13,5 +13,6 @@
 | [0009](0009-product-boundary-and-tool-surface.md) | Pətək is the product; host AI is a caller — MCP, `--json`, skill pack | Accepted |
 | [0010](0010-target-profiles-and-sign-in-chain.md) | Target profiles, sign-in strategy chain and evidence tiers | Accepted |
 | [0011](0011-open-core-edition-boundary.md) | Open-core edition boundary, workspace identity, opt-in telemetry | Proposed |
+| [0012](0012-link-only-swarm.md) | Link-only swarm: verified ownership, a gate learnt once, isolated cards | Accepted |
 
 Each ADR records the forces at the time of the decision. Supersede an ADR with a new one rather than rewriting it.
