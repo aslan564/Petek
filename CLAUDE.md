@@ -57,7 +57,7 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
     docker compose up -d                                   # Mailpit :1025 / :8025
     ./gradlew build                                        # compile + unit testlər + ktlint + lisenziya başlıqları + arxitektura testləri
     ./gradlew spotlessApply                                # formatlama
-    ./gradlew :e2e:e2eTest                                 # fake target + real Chromium ilə e2e
+    ./gradlew e2eTest                                      # fake target + real Chromium ilə e2e (panel, e2e modulu, 30 sessiyalı izolyasiya sübutu)
     ./gradlew :e2e:liveTest                                # real LLM ilə (Claude planından istifadə edir)
     ./gradlew :testing:fake-target:run                     # lokal fake KadroHR: http://127.0.0.1:18080, poçt 18025
     ./gradlew :app:run --args="--env-file .env.fake-target doctor"   # fake saytla yoxlama (IntelliJ: hazır run konfiqurasiyaları)

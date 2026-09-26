@@ -18,8 +18,9 @@ welcome under the terms below; the same rules apply to people and to AI coding a
    document in `docs/requirements/` before writing code. If your change alters architecture, write or amend an ADR in
    `docs/adr/` first and wait for the owner's approval.
 3. Small, logical commits; each commit must pass `./gradlew spotlessApply build` (compile with warnings as errors,
-   unit tests, ktlint, licence headers, Konsist architecture tests, coverage). Run `./gradlew :e2e:e2eTest` when you
-   touch the browser, the agent loop, flows or the panel.
+   unit tests, ktlint, licence headers, Konsist architecture tests, coverage). Run `./gradlew e2eTest` (the panel end
+   to end in real Chromium, the e2e module, the 30-session isolation proof) when you touch the browser, the agent
+   loop, flows or the panel.
 4. Open a pull request against `develop` using the template. CI must be green. The owner reviews and merges.
 
 ## Rules the build enforces

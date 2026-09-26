@@ -26,3 +26,12 @@ listOf("classes", "testClasses").forEach { lifecycle ->
         dependsOn(moduleProjects.map { "${it.path}:$lifecycle" })
     }
 }
+
+// The browser suite in one command: the panel end to end against the fake target (app), the e2e module's own runs,
+// and the tester isolation proof with real Chromium contexts (browser). Each module keeps these out of its fast
+// `build` (Kover would otherwise pull them in); `./gradlew e2eTest` and CI's e2e job run them here.
+tasks.register("e2eTest") {
+    group = "verification"
+    description = "Every end-to-end run that needs a real Chromium: panel, e2e module, tester isolation."
+    dependsOn(":app:e2eTest", ":e2e:e2eTest", ":features:browser:isolationTest")
+}

@@ -37,3 +37,13 @@ tasks.register<Test>("isolationTest") {
     System.getProperty("petek.isolation.sessions")?.let { systemProperty("petek.isolation.sessions", it) }
     shouldRunAfter(tasks.test)
 }
+
+// Kover instruments every Test task and its verification (part of `check`) runs them all; without this `build` would
+// open thirty Chromium contexts. The proof runs with `./gradlew e2eTest` (root) and in CI's e2e job.
+kover {
+    currentProject {
+        instrumentation {
+            disabledForTestTasks.add("isolationTest")
+        }
+    }
+}

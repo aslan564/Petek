@@ -283,7 +283,7 @@ Phases 0–7 (MVP, explorer, triage, web panel) are implemented. The "Pətək 2"
 ```bash
 ./gradlew build                 # compile, unit tests, ktlint, licence headers, architecture tests, coverage
 ./gradlew spotlessApply         # format and add the licence header to new files
-./gradlew :e2e:e2eTest          # fake target + real Chromium
+./gradlew e2eTest               # fake target + real Chromium: panel end to end, e2e module, 30-session isolation proof
 ./gradlew :e2e:liveTest         # real AI provider (uses your plan or key)
 ```
 

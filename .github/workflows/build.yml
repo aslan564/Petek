@@ -104,19 +104,21 @@ jobs:
         run: |
           PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
           npx --yes "playwright@${PW}" install --with-deps chromium
-      - name: End-to-end runs against the fake target
+      - name: End-to-end runs against the fake target (panel, e2e module, 30 real Chromium contexts)
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-        run: ./gradlew :e2e:e2eTest --no-daemon --console=plain
-      - name: Isolation proofs at scale (5 000 testers through the orchestrator, 30 real Chromium contexts)
+        run: ./gradlew e2eTest --no-daemon --console=plain
+      - name: Isolation proof at scale (5 000 testers through the orchestrator)
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-        run: ./gradlew :features:orchestration:test :features:browser:isolationTest -Dpetek.isolation.testers=5000 --no-daemon --console=plain
+        run: ./gradlew :features:orchestration:test -Dpetek.isolation.testers=5000 --no-daemon --console=plain
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-reports
           path: |
+            app/build/reports/tests/
+            app/build/panel-screenshots/
             e2e/build/reports/tests/
             features/browser/build/reports/tests/
             features/orchestration/build/reports/tests/

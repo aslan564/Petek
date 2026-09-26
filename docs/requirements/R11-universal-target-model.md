@@ -37,4 +37,4 @@ functions), `orchestration` (teardown), `explorer` (`TestPatterns`, `ScenarioCom
 
 ## Open items
 
-- The riskiest refactor of the plan: done in slices, each slice keeping `./gradlew build` and `:e2e:e2eTest` green.
+- The riskiest refactor of the plan: done in slices, each slice keeping `./gradlew build` and `./gradlew e2eTest` green.

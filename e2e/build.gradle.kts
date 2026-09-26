@@ -53,3 +53,13 @@ tasks.register<Test>("liveTest") {
     useJUnitPlatform { includeTags("live") }
     maxHeapSize = "3g"
 }
+
+// Kover instruments every Test task and its verification (part of `check`) runs them all; without this `build` would
+// run the browser suite and, worse, the live suite that spends the real LLM quota. Both stay opt-in.
+kover {
+    currentProject {
+        instrumentation {
+            disabledForTestTasks.addAll("e2eTest", "liveTest")
+        }
+    }
+}

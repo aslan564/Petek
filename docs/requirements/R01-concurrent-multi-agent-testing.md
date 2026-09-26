@@ -65,7 +65,7 @@ contention, never shared state); `PER_SESSION` gives every tester its own browse
   refused; every step, wait, event and receipt attributed to the right agent; `{last_id}` never a colleague's id.
   Measured 2026-09-25: 100 testers 0.15 s, 1 000 testers 1.5 s, 5 000 testers 13 s (virtual time).
 - **`BrowserIsolationAtScaleTest`** (`features/browser`, tagged `e2e`: `./gradlew :features:browser:isolationTest
-  -Dpetek.isolation.sessions=N`, run by CI's e2e job with the default 30): N real
+  -Dpetek.isolation.sessions=N`, part of the root `e2eTest`, run by CI's e2e job with the default 30): N real
   Chromium contexts on shared servers log in as different users at once; every session — all concurrently, twice —
   is checked for its own cookie (`/api/me`), page text, localStorage and thread; saved storage states hold only the own
   cookie. Measured 2026-09-25 on a 4-core / 16 GB container: **30 sessions** pass in 20 s (2 servers), **60 sessions**
@@ -75,7 +75,9 @@ contention, never shared state); `PER_SESSION` gives every tester its own browse
 - `PlaywrightBrowserEngineTest` (ten sessions on one server, sharding, process-tree shutdown),
   `InMemorySharedRunStateTest` (5 000 concurrent publishers, one winner), `DefaultCampaignValidatorTest` (admin-only
   run functions, one emitting step per event), `DefaultCampaignRunnerTest`, `FlowRunnerTest`, `InactivityWatchdogTest`.
-- `e2e`: end-to-end runs against the fake target with real Chromium (`:e2e:e2eTest`).
+- `./gradlew e2eTest` (root): the panel end to end against the fake target in real Chromium (`:app:e2eTest`,
+  `PanelEndToEndTest`), the `e2e` module's browser runs (`:e2e:e2eTest`) and the isolation proof above. Kover keeps
+  these out of `build`, so the fast build never opens a browser and the live suite never spends LLM quota.
 
 ## Open items
 
