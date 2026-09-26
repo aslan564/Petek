@@ -151,6 +151,12 @@ enum class FailureReason(
     /** `site_health` found broken links, console or network errors, slow requests, a bad back button or layout. */
     UNHEALTHY_PAGE("unhealthy_page"),
 
+    /**
+     * The site answered `429 Too Many Requests` during the action: every tester came from one IP address. A gap of the
+     * test set-up, not a bug of the site (Faza 21); `PETEK_PROXIES` gives each tester its own address.
+     */
+    RATE_LIMITED("rate_limited"),
+
     /** `direct_url`: a page of someone else's object opened for a tester who must not see it. */
     ACCESS_NOT_REFUSED("access_not_refused"),
 }

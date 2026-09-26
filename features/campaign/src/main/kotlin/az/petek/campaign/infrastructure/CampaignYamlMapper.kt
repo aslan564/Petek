@@ -114,6 +114,7 @@ internal class CampaignYamlMapper(
                 name = name,
                 pacing = pacing,
                 tenant = tenant,
+                waveSize = fields.int("wave_size", required = false),
             )
         }
 
@@ -615,6 +616,7 @@ internal class CampaignYamlMapper(
                 "on_fail",
                 "pacing",
                 "tenant",
+                "wave_size",
             )
         val GATE_KEYS = linkedSetOf("self", "login", "guest")
         val ROLE_KEYS = linkedSetOf("admin", "manager", "employee")

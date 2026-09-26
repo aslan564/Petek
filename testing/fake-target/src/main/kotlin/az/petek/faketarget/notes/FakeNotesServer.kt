@@ -101,6 +101,15 @@ class FakeNotesServer(
     /** How many accounts exist, for test assertions. */
     val accounts: Int get() = users.size
 
+    /** An account that exists before a test, as the owner's own test account would. */
+    fun seedAccount(
+        name: String,
+        email: String,
+        password: String,
+    ) {
+        users[email.lowercase()] = User(name, email.lowercase(), PasswordHash.of(password, random))
+    }
+
     /** A note of [author] (an account that need not exist), written before a test; returns its id. */
     fun seedNote(
         author: String,

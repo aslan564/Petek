@@ -101,7 +101,9 @@ internal class OwnAccountRoleSessions(
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
     ): RoleSessions {
-        val accounts = accountsFor(request.target).filter { (it.email != null && it.password != null) || it.storageState != null }
+        val usable = accountsFor(request.target).filter { (it.email != null && it.password != null) || it.storageState != null }
+        // The explorer's own account (role `explorer`) is the one it uses when the owner gave one; testers never get it.
+        val accounts = usable.filter { it.role == AppContainer.EXPLORER_ROLE }.ifEmpty { usable }
         if (accounts.isEmpty()) {
             val where =
                 container.config.profileFor(request.target)?.let { "targets/${it.spec.name}.yaml" } ?: "paneldə və ya hədəf profilində"

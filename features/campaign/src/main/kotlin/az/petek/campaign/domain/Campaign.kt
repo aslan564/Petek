@@ -45,6 +45,12 @@ data class CampaignSettings(
     val pacing: Pacing = Pacing.NONE,
     /** Whether the site has companies (`campaign.tenant`); KadroHR-shaped campaigns keep the default. */
     val tenant: Tenant = Tenant.COMPANY,
+    /**
+     * `campaign.wave_size` (Faza 21): at most this many testers are live at once. The testers are split in agent order
+     * into waves of this size; each wave opens its browsers, runs every step with its own testers only (an event one
+     * tester emits reaches only its own wave) and closes them before the next wave starts. Null: everyone at once.
+     */
+    val waveSize: Int? = null,
 )
 
 /**

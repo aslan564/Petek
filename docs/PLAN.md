@@ -962,12 +962,14 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 - [ ] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-da təyin olunur, sayt modelinə yazılır.
 - [ ] Qapının xəritəsi: qeydiyyat, login, qonaq girişi, OTP növü, şifrəni unutdum, CAPTCHA, dəvət; dürüst dayanma səbəbləri.
-- [ ] Kəşfiyyatçının öz hesabı: təlimatda verilibsə o, yoxdursa `self_register` (Faza 10 zənciri); testerlərlə paylaşılmır.
+- [x] Kəşfiyyatçının öz hesabı: təlimatda verilibsə o, yoxdursa `self_register` (Faza 10 zənciri); testerlərlə paylaşılmır.
+  **Vəziyyət:** profildə `role: explorer` hesabı varsa kəşfiyyatçı yalnız onu işlədir; testerlərə heç vaxt verilmir.
 - [ ] Keçid 1 default-dur; admin hesabında yalnız adında Pətək işarəsi olan obyektlər, sonda silinir.
 
 ### Faza 18 — Qapı dalğası, hesablar və izolyasiya
 
-- [ ] Ssenaridə hər testerin qapısı: `register`, `login` (təlimatdakı test hesabları, parol `Secret`) və ya `guest`.
+- [x] Ssenaridə hər testerin qapısı: `register`, `login` (təlimatdakı test hesabları, parol `Secret`) və ya `guest`.
+  **Vəziyyət:** `registration: {self, login, guest}` (`tenant: none`); `login` testeri hədəf profilinin hesabını (rolu, `name`) alır, `explorer` rollu hesab heç vaxt testerə verilmir; real Chromium e2e.
 - [ ] Qapı bir dəfə öyrənilir, qalan testerlər onu kodla keçir; qapı baryeri keçməyəni missiyaya buraxmır.
 - [ ] Həmkar siyahısı promptdan götürülür; başqa testerə aid dəyər kartda yer tutucu ilə gəlir.
 - [ ] İcazə ilə hesab dəyişdirmə, yalnız testini bitirənlər arasında; sübutda hər addımın hesabı.
@@ -988,9 +990,11 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 21 — Tutum, dalğalar və ayrı IP
 
-- [ ] Dalğalar; realtime kartları yalnız eyni dalğadakılara.
-- [ ] "Hər testerə ayrı IP": yalnız sahibliyi təsdiqlənmiş saytda, sahibin proxy ünvanları ilə (Playwright proxy, yeni
+- [x] Dalğalar; realtime kartları yalnız eyni dalğadakılara.
+  **Vəziyyət:** `campaign.wave_size`: hər dalğa öz brauzerlərini açır, bütün addımları yalnız öz testerləri ilə işlədir, öz hadisə şini var; paylaşılan dəyərlər (şirkət kodu, dəvətlər) run boyu qalır.
+- [x] "Hər testerə ayrı IP": yalnız sahibliyi təsdiqlənmiş saytda, sahibin proxy ünvanları ilə (Playwright proxy, yeni
   kitabxana yox); IP çatmırsa əvvəldən deyilir. Seçim yoxdursa IP limit cavabı tanınır, "alət boşluğu" rəfinə düşür.
+  **Vəziyyət:** `PETEK_PROXIES` (run onsuz da sahiblik tələb edir); canlı testerdən az proxy varsa run başlamır və səbəbini deyir; 429 cavabı `rate_limited` (mühit problemi, "alət boşluğu").
 
 ### Faza 22 — Demo hədəfləri
 

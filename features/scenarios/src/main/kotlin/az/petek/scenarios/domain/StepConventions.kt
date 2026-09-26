@@ -27,8 +27,8 @@ import az.petek.evidence.domain.StepStatus
 internal object StepConventions {
     const val PERMISSION_DENIED = "permission_denied"
 
-    /** Keys of test-environment failures (inbox or model unreachable), mirrored from the agent's failure reasons. */
-    val ENVIRONMENT_KEYS: Set<String> = setOf("mail_unavailable", "llm_unavailable")
+    /** Keys of test-environment failures (inbox or model unreachable, one IP rate-limited), mirrored from the agent's failure reasons. */
+    val ENVIRONMENT_KEYS: Set<String> = setOf("mail_unavailable", "llm_unavailable", "rate_limited")
 
     const val NOT_RECEIVED = "not_received"
 

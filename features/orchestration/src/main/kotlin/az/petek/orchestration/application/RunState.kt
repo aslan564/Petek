@@ -12,6 +12,7 @@ package az.petek.orchestration.application
 import az.petek.agent.application.TesterAgent
 import az.petek.agent.domain.SharedRunState
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.campaign.domain.Campaign
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
@@ -33,9 +34,16 @@ internal class RunState(
     val campaign: Campaign,
     val options: RunOptions,
     val startedAt: HarnessTimestamp,
-    val bus: EventBus,
+    bus: EventBus,
     val shared: SharedRunState,
 ) {
+    /** Where events are published and awaited; each wave gets its own, so live events stay within it (Faza 21). */
+    @Volatile
+    var bus: EventBus = bus
+
+    /** The testers of the wave now running; null when everyone runs at once. */
+    @Volatile
+    var wave: Set<AgentId>? = null
     val budget: Duration = campaign.settings.budget.maxMinutes.minutes
 
     /** Every event name some step emits; `{event.<name>.id}` templates are resolved from these. */
@@ -46,6 +54,10 @@ internal class RunState(
 
     @Volatile
     var browserStarted: Boolean = false
+
+    /** The browser's session factory, started once for the run (every wave opens its sessions from it). */
+    @Volatile
+    var factory: BrowserSessionFactory? = null
 
     val sessions = ConcurrentHashMap<AgentId, BrowserSession>()
     val agents = ConcurrentHashMap<AgentId, TesterAgent>()
@@ -93,7 +105,10 @@ internal class RunState(
 
     fun isFailed(agentId: AgentId): Boolean = status(agentId) == IdentityStatus.FAILED
 
-    fun activeIdentities(): List<Identity> = identities.filterNot { isFailed(it.agentId) }
+    /** The testers of the current wave (everyone without waves). */
+    fun waveIdentities(): List<Identity> = wave?.let { members -> identities.filter { it.agentId in members } } ?: identities
+
+    fun activeIdentities(): List<Identity> = waveIdentities().filterNot { isFailed(it.agentId) }
 
     fun outcome(): RunOutcome =
         when {

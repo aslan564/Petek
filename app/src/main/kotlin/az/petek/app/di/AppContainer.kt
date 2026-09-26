@@ -38,6 +38,7 @@ import az.petek.campaign.domain.TemplateRenderer
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.UuidV7IdGenerator
+import az.petek.core.model.Role
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.sqlite.SqliteDatabase
@@ -58,6 +59,7 @@ import az.petek.explorer.infrastructure.SqliteExplorationRepository
 import az.petek.identity.application.PlanIdentitiesUseCase
 import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
+import az.petek.identity.domain.GivenAccount
 import az.petek.identity.domain.HmacPasswordDeriver
 import az.petek.identity.domain.IdentityRegistryGenerator
 import az.petek.identity.domain.IdentityRepository
@@ -136,6 +138,7 @@ import az.petek.verification.domain.DefaultAssertionEvaluator
 import com.github.ajalt.mordant.terminal.Terminal
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
+import java.net.URI
 import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = KotlinLogging.logger {}
@@ -367,6 +370,23 @@ class AppContainer(
 
     val monitor: MonitorView by lazy { overrides.monitor ?: defaultMonitor() }
 
+    /**
+     * The owner's accounts for [site] that `login` testers may take (Faza 18): its profile's accounts with an e-mail and
+     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17).
+     */
+    private fun ownAccountsFor(site: URI): List<GivenAccount> =
+        config
+            .profileFor(site)
+            ?.accounts
+            .orEmpty()
+            .filter { it.role != EXPLORER_ROLE }
+            .mapNotNull { account ->
+                val role = Role.fromKey(account.role) ?: return@mapNotNull null
+                val email = account.email ?: return@mapNotNull null
+                val password = account.password ?: return@mapNotNull null
+                GivenAccount(role, email, password, account.name)
+            }
+
     /** A runner for one `petek run`; [headless] false shows the browsers (`--headful`). */
     fun campaignRunner(headless: Boolean = config.browserHeadless): CampaignRunner =
         CountingCampaignRunner(defaultCampaignRunner(headless), telemetry, config.llmProvider.value)
@@ -396,6 +416,8 @@ class AppContainer(
                     storageRoot = config.evidenceDir.resolve(STORAGE_STATE_DIRECTORY),
                     mailbox = config.mailInbox,
                     correlationHeader = config.correlationHeader,
+                    accounts = { site -> ownAccountsFor(site) },
+                    proxies = config.proxies,
                 ),
             sharedStateFactory = ::InMemorySharedRunState,
             watchdog = watchdog,
@@ -554,6 +576,9 @@ class AppContainer(
     }
 
     companion object {
+        /** The role of the explorer's own account in a target profile; never given to a tester (Faza 17). */
+        const val EXPLORER_ROLE = "explorer"
+
         /** Per-agent browser storage state: `<evidence>/storage_state/<run>/<agent>.json`. */
         const val STORAGE_STATE_DIRECTORY = "storage_state"
 

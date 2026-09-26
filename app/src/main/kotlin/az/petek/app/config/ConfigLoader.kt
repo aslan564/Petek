@@ -10,6 +10,7 @@
 package az.petek.app.config
 
 import az.petek.app.di.LlmProviders
+import az.petek.browser.domain.BrowserProxy
 import az.petek.browser.domain.BrowserTopology
 import az.petek.campaign.domain.SecretRef
 import az.petek.campaign.domain.TargetSpecException
@@ -23,6 +24,7 @@ import az.petek.llm.infrastructure.http.StructuredMode
 import az.petek.mail.infrastructure.ImapSettings
 import java.net.URI
 import java.net.URISyntaxException
+import java.net.URLDecoder
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 
@@ -120,6 +122,7 @@ class ConfigLoader(
             val identitySecret = identitySecret()
             val telemetry = telemetry()
             val oracle = oracle()
+            val proxies = proxies()
             if (problems.isNotEmpty()) throw ConfigException(problems.toList())
             val loaded =
                 PetekConfig(
@@ -155,6 +158,7 @@ class ConfigLoader(
                     correlationHeader = flag(Keys.CORRELATION_HEADER, default = false),
                     traceLog = if (text(Keys.TRACE_LOG) != null) path(Keys.TRACE_LOG, default = null) else null,
                     oracle = oracle,
+                    proxies = proxies,
                 )
             // PETEK_TARGET naming a profile takes that profile's settings; a URL keeps the .env ones.
             return if (named != null) TargetProfileConfig.apply(loaded, named) else loaded
@@ -360,6 +364,34 @@ class ConfigLoader(
             }
         }
 
+        /**
+         * `PETEK_PROXIES`: comma-separated `scheme://[user:password@]host:port` addresses (http, https, socks5). The
+         * password becomes a [Secret]; a bad entry is a problem naming its position, never its text (it may hold one).
+         */
+        private fun proxies(): List<BrowserProxy> =
+            text(Keys.PROXIES)
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.mapIndexedNotNull { index, raw ->
+                    proxy(raw)
+                        ?: null.also { problems += "${Keys.PROXIES} entry ${index + 1} is not scheme://host:port" }
+                }.orEmpty()
+
+        private fun proxy(raw: String): BrowserProxy? {
+            val uri = runCatching { URI(raw) }.getOrNull() ?: return null
+            val scheme = uri.scheme?.lowercase()?.takeIf { it in PROXY_SCHEMES } ?: return null
+            val host = uri.host?.takeIf { it.isNotBlank() } ?: return null
+            if (uri.port !in 1..MAX_PORT) return null
+            val user = uri.rawUserInfo?.substringBefore(':')?.let { URLDecoder.decode(it, Charsets.UTF_8) }
+            val password =
+                uri.rawUserInfo
+                    ?.takeIf { ':' in it }
+                    ?.substringAfter(':')
+                    ?.let { Secret(URLDecoder.decode(it, Charsets.UTF_8)) }
+            return BrowserProxy("$scheme://$host:${uri.port}", user, password)
+        }
+
         /** `PETEK_ORACLE`: `test-api` (default) asks the test API when a token is set; `none` never does. */
         private fun oracle(): Boolean =
             when (val raw = text(Keys.ORACLE)?.lowercase() ?: "test-api") {
@@ -438,11 +470,13 @@ class ConfigLoader(
         const val DB = "PETEK_DB"
         const val TELEMETRY = "PETEK_TELEMETRY"
         const val ORACLE = "PETEK_ORACLE"
+        const val PROXIES = "PETEK_PROXIES"
     }
 
     private companion object {
         const val MAX_LLM_CONCURRENCY = 64
         const val MAX_PORT = 65_535
+        val PROXY_SCHEMES = setOf("http", "https", "socks5")
         const val DEFAULT_TARGETS_DIR = "targets"
         val MAILBOX = Regex("[a-z0-9._-]{1,48}@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
         const val AUTO = "auto"

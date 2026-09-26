@@ -9,6 +9,7 @@
 
 package az.petek.app.config
 
+import az.petek.browser.domain.BrowserProxy
 import az.petek.browser.domain.BrowserTopology
 import az.petek.core.model.WorkingLanguage
 import az.petek.core.security.Secret
@@ -93,6 +94,8 @@ data class PetekConfig(
     val oracle: Boolean = true,
     /** Where the test API answers the oracle (a profile's `test_api.paths`); empty: docs/TARGET_CONTRACT.md §4. */
     val oraclePaths: Map<String, String> = emptyMap(),
+    /** `PETEK_PROXIES`: one proxy per live tester, so the site sees each from its own IP (Faza 21). */
+    val proxies: List<BrowserProxy> = emptyList(),
 ) {
     init {
         require(llmConcurrency >= 1) { "llmConcurrency must be at least 1, was $llmConcurrency" }
@@ -147,7 +150,8 @@ data class PetekConfig(
             "llmBaseUrl=${llmBaseUrl?.let(::masked)}, llmApiKey=${setOrUnset(llmApiKey)}, llmStructured=${llmStructured.key}, " +
             "llmEffort=$effectiveLlmEffort, llmConcurrency=$llmConcurrency, language=$language, " +
             "browserHeadless=$browserHeadless, browserTopology=$browserTopology, browserIgnoreTlsErrors=$browserIgnoreTlsErrors, " +
-            "evidenceDir=$evidenceDir, dbPath=$dbPath, telemetry=${if (telemetry) "local" else "off"}, targets=${targets.map {
+            "evidenceDir=$evidenceDir, dbPath=$dbPath, proxies=${proxies.size}, " +
+            "telemetry=${if (telemetry) "local" else "off"}, targets=${targets.map {
                 it.spec.name
             }})"
 

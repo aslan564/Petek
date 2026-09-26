@@ -57,6 +57,7 @@ class RunnerFixture(
     fun runner(
         finalizer: CountingFinalizer = this.finalizer,
         monitor: MonitorView = this.monitor,
+        settings: RunnerSettings = RunnerSettings(mailDomain = "test.example.test", storageRoot = Path.of("build", "storage")),
     ): DefaultCampaignRunner =
         DefaultCampaignRunner(
             identityGenerator = generator,
@@ -76,7 +77,7 @@ class RunnerFixture(
             finalizer = finalizer,
             clock = clock,
             ids = ids,
-            settings = RunnerSettings(mailDomain = "test.example.test", storageRoot = Path.of("build", "storage")),
+            settings = settings,
             sharedStateFactory = { TestSharedRunState().also(sharedStates::add) },
             watchdog = watchdog,
             busFactory = { busFactory().also(buses::add) },

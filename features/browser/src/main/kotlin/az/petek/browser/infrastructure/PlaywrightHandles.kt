@@ -17,6 +17,7 @@ import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Request
 import com.microsoft.playwright.Response
+import com.microsoft.playwright.options.Proxy
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.time.Duration
 
@@ -116,6 +117,16 @@ internal class PlaywrightHandles private constructor(
                 .setTimezoneId(TIMEZONE)
                 .setIgnoreHTTPSErrors(ignoreTlsErrors)
                 .apply { options.storageState?.let { setStorageStatePath(it) } }
+                .apply {
+                    options.proxy?.let { proxy ->
+                        setProxy(
+                            Proxy(proxy.server).apply {
+                                proxy.username?.let(::setUsername)
+                                proxy.password?.let { setPassword(it.reveal()) }
+                            },
+                        )
+                    }
+                }
 
         /** Console errors, failed and finished requests for [HealthRecorder]; the handlers run on the session thread. */
         private fun observeHealth(

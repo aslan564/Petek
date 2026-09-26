@@ -133,7 +133,7 @@ internal class StepExecutor(
         val lastIdBeforeStep = run.bus.latestAny()?.objectId
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
-        run.executedActors[step.id] = chosen.map { it.agentId }
+        run.executedActors.merge(step.id, chosen.map { it.agentId }) { before, now -> before + now }
         if (chosen.isEmpty()) {
             evidence.system(run, null, "skip", StepStatus.SKIPPED, "no active actor matches '${step.actors.raw}'", step.id)
             return StepResult(step, emptyList(), groupFailed = false)
@@ -174,7 +174,7 @@ internal class StepExecutor(
 
     private suspend fun recordSkippedFailedActors(step: ScenarioStep) {
         resolver
-            .resolve(step.actors, run.identities)
+            .resolve(step.actors, run.waveIdentities())
             .filter { run.isFailed(it.agentId) }
             .forEach {
                 val reason = run.failureReason(it.agentId) ?: "failed"
@@ -404,7 +404,36 @@ internal class StepExecutor(
         tasks.update(actor.step.id, actor.agentId, TaskState.RUNNING, description)
         val started = clock.now()
         val outcome = if (action is StepAction.None) NOTHING_TO_DO else execute(actor, action, templates)
-        return Performed(action, description, started, clock.now(), judgeRefusal(actor.step, outcome))
+        return Performed(action, description, started, clock.now(), judgeRefusal(actor.step, rateLimited(actor, outcome, started)))
+    }
+
+    /**
+     * A failed action during which the site answered `429 Too Many Requests` failed because all testers share one IP
+     * (Faza 21): reported as `rate_limited`, a gap of the set-up, not as whatever the agent concluded.
+     */
+    private suspend fun rateLimited(
+        actor: ActorContext,
+        outcome: ActionOutcome,
+        since: HarnessTimestamp,
+    ): ActionOutcome {
+        if (outcome.succeeded) return outcome
+        val limited =
+            try {
+                actor.session.mutations(since).any { it.status == TOO_MANY_REQUESTS } ||
+                    actor.session
+                        .health(since, Duration.INFINITE)
+                        .failedRequests
+                        .any { it.endsWith("-> $TOO_MANY_REQUESTS") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+        if (!limited) return outcome
+        return outcome.copy(
+            failureReason = FailureReason.RATE_LIMITED,
+            summary = "The site answered 429 Too Many Requests: every tester comes from one IP. ${outcome.summary}",
+        )
     }
 
     /**
@@ -993,6 +1022,7 @@ internal class StepExecutor(
     }
 
     companion object {
+        private const val TOO_MANY_REQUESTS = 429
         const val NOT_RECEIVED = "not_received"
         const val TEMPLATE_ERROR = "template_error"
         const val ID_UNAVAILABLE = "id_unavailable"

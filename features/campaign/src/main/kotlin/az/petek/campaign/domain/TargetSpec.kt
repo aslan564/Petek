@@ -107,6 +107,8 @@ data class OwnAccount(
     val email: String? = null,
     val password: SecretRef? = null,
     val storageState: String? = null,
+    /** The name the site shows for the account; a tester signing in with it checks its identity against it. */
+    val name: String? = null,
 ) {
     init {
         require(role.isNotBlank()) { "an account names its role" }

@@ -228,7 +228,8 @@ class YamlTargetSpecSource {
     ): List<OwnAccount> {
         val items = reader.list(fields["accounts"], fields.pathOf("accounts")) ?: return emptyList()
         return items.mapNotNull { item ->
-            val account = reader.map(item.node, item.path, setOf("role", "email", "password", "storage_state")) ?: return@mapNotNull null
+            val account =
+                reader.map(item.node, item.path, setOf("role", "email", "password", "storage_state", "name")) ?: return@mapNotNull null
             val role = account.text("role", required = true) ?: return@mapNotNull null
             val email = account.text("email")
             val password = secret(reader, account, "password")
@@ -236,7 +237,7 @@ class YamlTargetSpecSource {
             if (!((email != null && password != null) || storageState != null)) {
                 return@mapNotNull reader.problem(item.path, "an account needs an e-mail with a password reference, or a storage_state file")
             }
-            OwnAccount(role, email, password, storageState)
+            OwnAccount(role, email, password, storageState, account.text("name")?.trim()?.ifEmpty { null })
         }
     }
 

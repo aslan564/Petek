@@ -54,6 +54,12 @@ object FailureKeys {
      */
     const val REQUEST_FAILED = "request_failed"
 
+    /**
+     * The site answered 429 because every tester came from one IP (Faza 21): a gap of the test set-up ("tool gap"
+     * shelf), with the advice to give each tester its own address (`PETEK_PROXIES`) or exempt the test IP on stage.
+     */
+    const val RATE_LIMITED = "rate_limited"
+
     /** Implied by [StepStatus.BLOCKED] when the watchdog left no key of its own. */
     const val BLOCKED = "blocked"
 
@@ -77,10 +83,17 @@ object FailureKeys {
             BLOCKED,
             LOST_RACE,
             REQUEST_FAILED,
+            RATE_LIMITED,
+            "unhealthy_page",
+            "access_not_refused",
         )
 
     /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
-    private val ENVIRONMENT_PROBLEMS: Map<String, String> = mapOf(MAIL_UNAVAILABLE to "test inbox unreachable")
+    private val ENVIRONMENT_PROBLEMS: Map<String, String> =
+        mapOf(
+            MAIL_UNAVAILABLE to "test inbox unreachable",
+            RATE_LIMITED to "the site limited requests from one IP; give each tester its own (PETEK_PROXIES) or exempt the test IP",
+        )
 
     /** Statuses that mean an action did not complete. */
     val FAILING_STATUSES: Set<StepStatus> = setOf(StepStatus.FAILED, StepStatus.ERROR, StepStatus.BLOCKED)

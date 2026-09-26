@@ -56,6 +56,8 @@ class TenantlessEndToEndTest {
     /** Runs [CAMPAIGN] against [site] with the production object graph and real Chromium. */
     private suspend fun <T> run(
         site: FakeNotesServer,
+        campaign: String = CAMPAIGN,
+        extraEnv: String = "",
         check: suspend (AppContainer, RunSummary) -> T,
     ): T {
         val env =
@@ -69,11 +71,11 @@ class TenantlessEndToEndTest {
                     PETEK_IDENTITY_SECRET=tenantless-e2e-secret
                     PETEK_BROWSER_HEADLESS=true
                     PETEK_EVIDENCE_DIR=evidence
-                    """.trimIndent() + "\n",
+                    """.trimIndent() + "\n" + extraEnv,
                 )
             }
         val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the test names its secret") }).load(env)
-        val campaignFile = dir.resolve("notes.yaml").also { Files.writeString(it, CAMPAIGN) }
+        val campaignFile = dir.resolve("notes.yaml").also { Files.writeString(it, campaign) }
         return AppContainer(config, AppOverrides(llm = scriptedLlm { done() }, monitor = NoOpMonitorView)).use { container ->
             val campaign = container.campaigns.execute(campaignFile, container.knownRunFunctions)
             check(container, container.campaignRunner(headless = true).run(campaign, RunOptions()))
@@ -118,6 +120,37 @@ class TenantlessEndToEndTest {
             }
         }
 
+    @Test
+    fun `a login tester signs in with the owner's account from the site's profile, never with the explorer's`() =
+        runBlocking<Unit> {
+            val site = site()
+            site.seedAccount("Sahibin Yazarı", "writer@owner.example", "owner-writer-pass")
+            site.seedAccount("Kəşfiyyatçı", "explorer@owner.example", "owner-explorer-pass")
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/notes.yaml"),
+                """
+                target:
+                  name: notes
+                  url: ${site.baseUrl}
+                  tenant: none
+                  test_api: {mode: none}
+                  accounts:
+                    - {role: explorer, email: explorer@owner.example, password: '${'$'}{NOTES_EXPLORER_PASSWORD}'}
+                    - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                """.trimIndent() + "\n",
+            )
+            val env = "NOTES_WRITER_PASSWORD=owner-writer-pass\nNOTES_EXPLORER_PASSWORD=owner-explorer-pass\n"
+
+            run(site, LOGIN_CAMPAIGN, env) { container, summary ->
+                summary.outcome shouldBe RunOutcome.PASSED
+                site.accounts shouldBe 3
+                val login = container.identities.findByRun(summary.runId).single { it.registration == RegistrationMode.LOGIN }
+                login.email shouldBe "writer@owner.example"
+                container.identities.findByRun(summary.runId).none { it.email == "explorer@owner.example" } shouldBe true
+            }
+        }
+
     private companion object {
         val CAMPAIGN =
             """
@@ -145,6 +178,27 @@ class TenantlessEndToEndTest {
               - id: blind-direct-url
                 actor: [writer[n=2], reader]
                 run: {function: direct_url, args: {path: /notes/1, text: Sahibin qeydi}}
+            """.trimIndent() + "\n"
+
+        /** One writer signs up, one takes the owner's writer account, the reader visits. */
+        val LOGIN_CAMPAIGN =
+            """
+            campaign:
+              name: notes-login
+              tenant: none
+              testers: 3
+              seed: 12
+              roles: {writer: 2, reader: 1}
+              registration: {self: 1, login: 1, guest: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 3}
+            setup:
+              - id: gates
+                actor: [writer[*], reader]
+                run: register_and_login
+            steps:
+              - id: who-am-i
+                actor: writer[*]
+                run: verify_identity
             """.trimIndent() + "\n"
     }
 }

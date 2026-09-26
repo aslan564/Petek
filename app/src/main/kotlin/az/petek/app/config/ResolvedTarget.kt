@@ -32,6 +32,8 @@ data class ResolvedAccount(
     val email: String?,
     val password: Secret?,
     val storageState: String?,
+    /** The name the site shows for the account (the profile's `name`). */
+    val name: String? = null,
 ) {
     override fun toString(): String = "ResolvedAccount($role, password=${if (password == null) "unset" else "set"})"
 
@@ -39,7 +41,7 @@ data class ResolvedAccount(
         fun of(
             account: OwnAccount,
             password: Secret?,
-        ) = ResolvedAccount(account.role, account.email, password, account.storageState)
+        ) = ResolvedAccount(account.role, account.email, password, account.storageState, account.name)
     }
 }
 

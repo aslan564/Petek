@@ -17,6 +17,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
+import az.petek.browser.domain.BrowserProxy
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.SessionOptions
 import az.petek.campaign.domain.Campaign
@@ -182,8 +183,24 @@ class DefaultCampaignRunner(
         val completed =
             withTimeoutOrNull(run.budget) {
                 planIdentities(run)
-                startAgents(run, board)
-                runSteps(run, board, tasks)
+                val waves =
+                    run.campaign.settings.waveSize
+                        ?.let { run.identities.chunked(it) }
+                        .orEmpty()
+                val live = waves.maxOfOrNull { it.size } ?: run.identities.size
+                if (settings.proxies.isNotEmpty() && settings.proxies.size < live) {
+                    run.abort(
+                        "each tester should come from its own IP, but $live testers are live at once and only " +
+                            "${settings.proxies.size} proxies are given (PETEK_PROXIES); give more or set a smaller campaign.wave_size",
+                    )
+                    return@withTimeoutOrNull true
+                }
+                if (waves.size <= 1) {
+                    startAgents(run, board, run.identities)
+                    runSteps(run, board, tasks)
+                } else {
+                    runWaves(run, board, tasks, waves)
+                }
                 true
             }
         if (completed == null) {
@@ -208,21 +225,59 @@ class DefaultCampaignRunner(
 
     // --- 2. browser and agents ------------------------------------------------------------------------------------
 
+    /**
+     * `campaign.wave_size` (Faza 21): each wave opens the browsers of its testers, runs every step with them only and
+     * closes them, with its own event bus, so a live event never crosses waves. What the run shares (the company code,
+     * invitation links) stays shared. The board announces every tester once, at the first wave.
+     */
+    private suspend fun runWaves(
+        run: RunState,
+        board: AgentBoard,
+        tasks: TaskBoard,
+        waves: List<List<Identity>>,
+    ) {
+        board.start(run.runId, run.identities)
+        for ((index, wave) in waves.withIndex()) {
+            if (run.aborted) break
+            run.wave = wave.map { it.agentId }.toSet()
+            if (index > 0) run.bus = busFactory()
+            val members = "${wave.first().agentId}..${wave.last().agentId}"
+            evidence.system(run, null, "wave", StepStatus.PASSED, "wave ${index + 1} of ${waves.size}: ${wave.size} testers ($members)")
+            board.message("wave ${index + 1} of ${waves.size}: $members")
+            startAgents(run, board, wave, announce = false)
+            runSteps(run, board, tasks)
+            if (index < waves.lastIndex) {
+                recordNetworkObservations(run)
+                closeSessions(run)
+                wave.forEach {
+                    run.sessions.remove(it.agentId)
+                    run.agents.remove(it.agentId)
+                    if (!run.isFailed(it.agentId)) board.update(it.agentId, AgentState.DONE, null, null)
+                }
+            }
+        }
+    }
+
     private suspend fun startAgents(
         run: RunState,
         board: AgentBoard,
+        identities: List<Identity>,
+        announce: Boolean = true,
     ) {
+        // Set first: a browser that fails half-way through starting is still stopped at the end.
         run.browserStarted = true
-        val factory = browser.start(browserConfig)
+        val factory = run.factory ?: browser.start(browserConfig).also { run.factory = it }
         // One roster for everyone: who the colleagues are, never their secrets (computed once, shared read-only).
         val colleagues = run.identities.map(Colleague::of)
         coroutineScope {
-            run.identities
-                .map { identity -> async(diagnostics.of(run.runId, identity.agentId)) { openAgent(run, factory, identity, colleagues) } }
-                .awaitAll()
+            identities
+                .mapIndexed { index, identity ->
+                    val proxy = settings.proxies.getOrNull(index)
+                    async(diagnostics.of(run.runId, identity.agentId)) { openAgent(run, factory, identity, colleagues, proxy) }
+                }.awaitAll()
         }
-        board.start(run.runId, run.identities)
-        run.identities
+        if (announce) board.start(run.runId, identities)
+        identities
             .filter { run.isFailed(it.agentId) }
             .forEach { board.update(it.agentId, AgentState.FAILED, null, "browser session could not be opened") }
     }
@@ -232,6 +287,7 @@ class DefaultCampaignRunner(
         factory: BrowserSessionFactory,
         identity: Identity,
         colleagues: List<Colleague>,
+        proxy: BrowserProxy? = null,
     ) {
         val agentId = identity.agentId
         try {
@@ -241,6 +297,7 @@ class DefaultCampaignRunner(
                     baseUrl = run.campaign.settings.target,
                     localStorage = run.campaign.target.localStorage,
                     correlationHeader = settings.correlationHeader,
+                    proxy = proxy,
                 )
             val stored = storageStatePath(run.runId, agentId)
             val session =

@@ -406,6 +406,19 @@ class ConfigLoaderTest {
     }
 
     @Test
+    fun `proxies give each tester its own IP, with the password kept secret and a bad entry named by its place`() {
+        val config = load(target, "PETEK_PROXIES" to "http://10.0.0.1:3128, socks5://qa:s%40cret@proxy.example:1080")
+
+        config.proxies.map { it.server } shouldBe listOf("http://10.0.0.1:3128", "socks5://proxy.example:1080")
+        config.proxies[1].username shouldBe "qa"
+        config.proxies[1].password?.reveal() shouldBe "s@cret"
+        config.toString() shouldContain "proxies=2"
+        config.toString() shouldNotContain "s@cret"
+        problems(target, "PETEK_PROXIES" to "http://10.0.0.1:3128,ftp://x:1,nohost") shouldContainExactlyInAnyOrder
+            listOf("PETEK_PROXIES entry 2 is not scheme://host:port", "PETEK_PROXIES entry 3 is not scheme://host:port")
+    }
+
+    @Test
     fun `the target policy refuses production hosts unless allowed`() {
         val refusing = load("PETEK_TARGET" to "https://kadrohr.com", hosts)
         val allowing = load("PETEK_TARGET" to "https://kadrohr.com", hosts, "PETEK_ALLOW_PRODUCTION" to "true")

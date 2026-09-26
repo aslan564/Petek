@@ -101,6 +101,9 @@ class DefaultCampaignValidator(
                     "campaign.budget.max_steps_per_agent must be positive, was ${settings.budget.maxStepsPerAgent}",
                 )
             }
+            settings.waveSize?.takeIf { it < 1 }?.let {
+                report("campaign.wave_size", "campaign.wave_size must be at least 1, was $it")
+            }
             if (settings.budget.maxMinutes <= 0) {
                 report("campaign.budget.max_minutes", "campaign.budget.max_minutes must be positive, was ${settings.budget.maxMinutes}")
             }

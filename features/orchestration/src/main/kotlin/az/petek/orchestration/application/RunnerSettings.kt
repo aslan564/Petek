@@ -9,6 +9,7 @@
 
 package az.petek.orchestration.application
 
+import az.petek.browser.domain.BrowserProxy
 import az.petek.identity.domain.GivenAccount
 import java.net.URI
 import java.nio.file.Path
@@ -31,6 +32,11 @@ data class RunnerSettings(
     val activatingRunFunctions: Set<String> = DEFAULT_ACTIVATING_RUN_FUNCTIONS,
     /** The owner's accounts for a target (its profile's `accounts`); `login` testers sign in with them (Faza 18). */
     val accounts: (URI) -> List<GivenAccount> = { emptyList() },
+    /**
+     * One proxy per live tester (`PETEK_PROXIES`, Faza 21): tester *n* of a wave goes out through proxy *n*. When there
+     * are fewer proxies than live testers the run does not start and says so. Empty: every tester shares the machine's IP.
+     */
+    val proxies: List<BrowserProxy> = emptyList(),
 ) {
     init {
         require(mailDomain.isNotBlank()) { "mailDomain must not be blank" }

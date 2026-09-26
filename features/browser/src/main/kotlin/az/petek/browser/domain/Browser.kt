@@ -10,6 +10,7 @@
 package az.petek.browser.domain
 
 import az.petek.core.error.PetekException
+import az.petek.core.security.Secret
 import az.petek.core.time.HarnessTimestamp
 import java.net.URI
 import java.nio.file.Path
@@ -63,6 +64,18 @@ data class Viewport(
     val height: Int = 800,
 )
 
+/**
+ * The proxy one tester's browser goes out through (Faza 21, `PETEK_PROXIES`), so the site sees each tester from its own
+ * IP address. [server] is `scheme://host:port`; the password is a [Secret] and never printed.
+ */
+data class BrowserProxy(
+    val server: String,
+    val username: String? = null,
+    val password: Secret? = null,
+) {
+    override fun toString(): String = "BrowserProxy($server${username?.let { ", user=$it" }.orEmpty()})"
+}
+
 data class SessionOptions(
     /** Owner label used for thread names and logs, e.g. `a07`. */
     val label: String,
@@ -76,6 +89,8 @@ data class SessionOptions(
      * such as "first-visit dialog dismissed" holds even after the site clears it). Other origins are left alone.
      */
     val localStorage: Map<String, String> = emptyMap(),
+    /** This tester's own proxy (Faza 21); null goes out directly, like every other tester. */
+    val proxy: BrowserProxy? = null,
     /**
      * Send `X-Petek-Correlation-Id` with every request of the session (Faza 14, `PETEK_CORRELATION_HEADER`), so the
      * target's own logs can be joined to the evidence. Off by default: a custom header makes cross-origin API calls

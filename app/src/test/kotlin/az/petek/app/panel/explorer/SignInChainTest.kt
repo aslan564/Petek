@@ -165,6 +165,28 @@ class SignInChainTest {
         }
 
     @Test
+    fun `the explorer uses its own account when the owner gave one, not the testers' accounts`() =
+        runBlocking<Unit> {
+            val panel =
+                harness {
+                    ResolvedTarget(
+                        TargetSpec("site", it),
+                        null,
+                        listOf(
+                            ResolvedAccount("admin", "owner@example.com", Secret("admin-password"), null),
+                            ResolvedAccount("explorer", "explorer@example.com", Secret("explorer-password"), null),
+                        ),
+                    )
+                }
+            val own = OwnAccountRoleSessions(panel.panel.container, { SetupProfile(TargetProfile.DEFAULT, "contract") })
+
+            val opened = own.open(request(panel), factory) { progress += it }
+
+            opened.sessions.keys shouldContainExactly listOf("explorer")
+            sessions.single().second.actions shouldContain "fillSelector [data-testid=\"login-email\"]=explorer@example.com"
+        }
+
+    @Test
     fun `a site without a profile or without accounts gives no own-account sessions`() =
         runBlocking<Unit> {
             val panel = harness { null }
