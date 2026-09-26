@@ -209,6 +209,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | Açar | Default | Məna |
 |---|---|---|
 | `PETEK_TARGET` | — | Test olunan sistem; hər kampaniyanın `campaign.target`-ini əvəz edir |
+| `PETEK_TARGETS_DIR` | `targets` | Hədəf profilləri, hər sayta bir `targets/<ad>.yaml` (URL, `api_url`, production hostlar, poçt, `${VAR}` token və hesab referansları, giriş sırası, kampaniya profili); `PETEK_TARGET` profilin adı ola bilər, panel profili olan istənilən saytda run edir (bax `targets/kadrohr.yaml`) |
 | `PETEK_PRODUCTION_HOSTS` | `kadrohr.com,www.kadrohr.com` | Hədəf kimi rədd edilən hostlar, əgər … |
 | `PETEK_ALLOW_PRODUCTION` | `false` | … bu `true` deyilsə (qayda 8) |
 | `PETEK_TEST_TOKEN` | — | Hədəfin `/test/...` API-si üçün `X-Test-Token`; boş = oracle yoxlamaları və teardown yoxdur |

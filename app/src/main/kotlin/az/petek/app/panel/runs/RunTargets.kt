@@ -11,6 +11,7 @@ package az.petek.app.panel.runs
 
 import az.petek.app.cli.TargetGuard
 import az.petek.app.config.PetekConfig
+import az.petek.app.config.TargetProfileConfig
 import az.petek.app.di.AppContainer
 import java.net.URI
 
@@ -36,7 +37,8 @@ internal class RunTargets(
 ) {
     fun lease(target: URI?): RunTarget {
         if (target == null || TargetGuard.origin(target) == TargetGuard.origin(main.config.target)) return RunTarget(main) {}
-        val own = derive(main.config.copy(target = target))
+        // A site with a target profile brings its own test API, token, production hosts and mail (Faza 10).
+        val own = derive(TargetProfileConfig.forTarget(main.config, target))
         return RunTarget(own) { own.close() }
     }
 }

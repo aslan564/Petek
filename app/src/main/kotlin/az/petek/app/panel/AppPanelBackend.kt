@@ -13,15 +13,20 @@ import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.explorer.AnswerBook
+import az.petek.app.panel.explorer.CatalogSetupProfiles
+import az.petek.app.panel.explorer.OwnAccountRoleSessions
 import az.petek.app.panel.explorer.PanelExplorerAdapter
 import az.petek.app.panel.explorer.RoleSessionSource
+import az.petek.app.panel.explorer.SelfRegisterRoleSessions
 import az.petek.app.panel.explorer.SetupRuns
+import az.petek.app.panel.explorer.SignInChain
 import az.petek.app.panel.explorer.TestCompanyRoleSessions
 import az.petek.app.panel.runs.PanelRunWatch
 import az.petek.app.panel.runs.PanelRunsAdapter
 import az.petek.app.panel.runs.RunTargets
 import az.petek.app.panel.scenarios.PanelScenariosAdapter
 import az.petek.browser.domain.BrowserEngineConfig
+import az.petek.campaign.domain.SignInMethod
 import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.capacity.domain.LimitingFactor
 import az.petek.core.ids.ArtifactId
@@ -116,7 +121,7 @@ internal class AppPanelBackend(
             lateinit var runs: PanelRunsAdapter
             val sessions =
                 RoleSessionSource { request, factory, progress ->
-                    val source = roleSessions?.invoke(runs) ?: TestCompanyRoleSessions(container, runs)
+                    val source = roleSessions?.invoke(runs) ?: signInChain(container, runs)
                     source.open(request, factory, progress)
                 }
             val explorer = PanelExplorerAdapter(container, sessions, answers, scope)
@@ -124,6 +129,23 @@ internal class AppPanelBackend(
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
             val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
             return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual)
+        }
+
+        /** The explorer's way in, in the order of the site's target profile (ADR-0010). */
+        private fun signInChain(
+            container: AppContainer,
+            runs: SetupRuns,
+        ): RoleSessionSource {
+            val testCompany = TestCompanyRoleSessions(container, runs)
+            val profiles = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator)
+            return SignInChain(
+                container,
+                mapOf(
+                    SignInMethod.TEST_COMPANY to testCompany,
+                    SignInMethod.OWN_ACCOUNTS to OwnAccountRoleSessions(container, profiles),
+                    SignInMethod.SELF_REGISTER to SelfRegisterRoleSessions(container, testCompany),
+                ),
+            )
         }
 
         const val SCENARIO_DIRECTORY = "scenarios"

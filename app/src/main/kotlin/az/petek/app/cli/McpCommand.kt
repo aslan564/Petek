@@ -60,7 +60,14 @@ class McpCommand : PetekSubcommand(NAME) {
                 workingDirectory = runtime.workingDirectory,
                 capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
             ).use { core ->
-                val settings = McpSettings(config.target.toString(), config.evidenceDir, allowWrites, PetekVersion.current)
+                val settings =
+                    McpSettings(
+                        config.target.toString(),
+                        config.evidenceDir,
+                        allowWrites,
+                        PetekVersion.current,
+                        config.targets.associate { it.spec.name to it.spec.url.toString() },
+                    )
                 McpServer(core.backend, settings, runtime.standardInput, runtime.standardOutput).serve()
             }
         return ExitCodes.OK

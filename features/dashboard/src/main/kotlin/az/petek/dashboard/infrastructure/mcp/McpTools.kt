@@ -120,6 +120,14 @@ internal class McpTools(
         ) {
             buildJsonObject {
                 put("target", settings.target)
+                putJsonArray("profiles") {
+                    settings.profiles.forEach { (name, url) ->
+                        addJsonObject {
+                            put("name", name)
+                            put("url", url)
+                        }
+                    }
+                }
                 put("allowWrites", settings.allowWrites)
                 put("evidenceDir", settings.evidenceDir.toAbsolutePath().toString())
             }

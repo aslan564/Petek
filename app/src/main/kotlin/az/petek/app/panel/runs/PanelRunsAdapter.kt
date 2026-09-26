@@ -126,15 +126,15 @@ internal class PanelRunsAdapter(
                 ?.takeIf {
                     it.isNotBlank()
                 }?.let { PanelTargets.allowed(it, container.config.targetPolicy, PanelInstructions.TARGET) }
-        // Until runs carry their own site's settings, a run goes only to the configured site: another site would get this
-        // site's test token and sign-up flows.
-        if (target != null && !PanelTargets.sameSite(target, container.config.target)) {
+        // A run goes to the configured site or to a site with a target profile (targets/<name>.yaml): only those have their
+        // own test token, test API and mail settings; any other site would get this site's token and sign-up flows.
+        if (target != null && !PanelTargets.sameSite(target, container.config.target) && container.config.profileFor(target) == null) {
             throw PanelRequestException(
                 listOf(
                     FieldProblem(
                         PanelInstructions.TARGET,
-                        "Run hələlik yalnız ${container.config.target} saytında işləyir. ${target.host} üçün \"Kəşf et\" " +
-                            "(yalnız oxuma) işləyir; o sayt üçün run tezliklə qoşulacaq.",
+                        "Run yalnız ${container.config.target} saytında və ya hədəf profili olan saytda işləyir. ${target.host} " +
+                            "üçün targets/<ad>.yaml profili yaradın (ünvan, test API, poçt); o vaxta qədər \"Kəşf et\" (yalnız oxuma) işləyir.",
                     ),
                 ),
             )
@@ -239,10 +239,20 @@ internal class PanelRunsAdapter(
         val run = container.runs.find(runId) ?: throw PanelNotFoundException("Run tapılmadı.")
         if (run.result == RunResult.RUNNING) throw PanelConflictException("Run hələ bitməyib; teardown yalnız bitmiş run üçündür.")
         val recorded = runCatching { URI(run.target) }.getOrNull()
-        if (recorded == null || !PanelTargets.sameSite(recorded, container.config.target)) {
-            throw PanelConflictException("Run başqa saytda (${run.target}) aparılıb; teardown yalnız PETEK_TARGET-dəki run üçün işləyir.")
+        if (recorded == null) throw PanelConflictException("Run-ın saytı oxunmur (${run.target}); teardown edilmədi.")
+        val own = PanelTargets.sameSite(recorded, container.config.target)
+        if (!own && container.config.profileFor(recorded) == null) {
+            throw PanelConflictException(
+                "Run başqa saytda (${run.target}) aparılıb; teardown yalnız PETEK_TARGET-dəki və ya hədəf profili olan saytın run-ı üçün işləyir.",
+            )
         }
-        val result = container.teardown.teardown(runId)
+        val lease = targets.lease(recorded)
+        val result =
+            try {
+                lease.container.teardown.teardown(runId)
+            } finally {
+                lease.close()
+            }
         return TeardownView(runId, result.removed, result.failures)
     }
 

@@ -1,0 +1,140 @@
+/*
+ * Pətək — multi-agent AI test platform. https://github.com/aslan564/Petek
+ * Copyright (c) 2026 Kodcraft. Author: Aslan Aslanov. All rights reserved.
+ *
+ * Licensed under the Business Source License 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. See the LICENSE file in the repository root. Change Date: 2030-09-25;
+ * Change License: Apache License, Version 2.0. The Licensed Work is provided "AS IS", without warranty.
+ */
+
+package az.petek.campaign.infrastructure
+
+import az.petek.campaign.domain.OwnAccount
+import az.petek.campaign.domain.SecretRef
+import az.petek.campaign.domain.SignInMethod
+import az.petek.campaign.domain.TargetMail
+import az.petek.campaign.domain.TargetSpec
+import az.petek.campaign.domain.TargetSpecException
+import az.petek.campaign.testing.repoFile
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.net.URI
+import java.nio.file.Files
+import java.nio.file.Path
+
+class YamlTargetSpecSourceTest {
+    @TempDir
+    lateinit var dir: Path
+
+    private val source = YamlTargetSpecSource()
+
+    private fun file(
+        name: String,
+        text: String,
+    ): Path = Files.writeString(dir.resolve(name), text.trimIndent())
+
+    @Test
+    fun `a full profile is read with its secret references, never values`() {
+        val spec =
+            source.load(
+                file(
+                    "kadrohr.yaml",
+                    """
+                    target:
+                      name: kadrohr
+                      url: https://staging.kadrohr.com
+                      api_url: https://api.staging.kadrohr.com
+                      production_hosts: [KadroHR.com, www.kadrohr.com]
+                      mail: {source: test-api, domain: Test.KadroHR.com}
+                      test_api: {token: '${'$'}{PETEK_TEST_TOKEN_KADROHR}'}
+                      sign_in: [own_accounts, anonymous]
+                      accounts:
+                        - {role: admin, email: owner@example.com, password: '${'$'}{PETEK_ACC_ADMIN}'}
+                        - {role: hr, storage_state: sessions/hr.json}
+                      profile: scenarios/kadrohr.yaml
+                    """,
+                ),
+            )
+
+        spec shouldBe
+            TargetSpec(
+                name = "kadrohr",
+                url = URI("https://staging.kadrohr.com"),
+                apiUrl = URI("https://api.staging.kadrohr.com"),
+                productionHosts = setOf("kadrohr.com", "www.kadrohr.com"),
+                mail = TargetMail("test-api", "test.kadrohr.com", null),
+                testToken = SecretRef("PETEK_TEST_TOKEN_KADROHR"),
+                signIn = listOf(SignInMethod.OWN_ACCOUNTS, SignInMethod.ANONYMOUS),
+                accounts =
+                    listOf(
+                        OwnAccount("admin", "owner@example.com", SecretRef("PETEK_ACC_ADMIN")),
+                        OwnAccount("hr", storageState = "sessions/hr.json"),
+                    ),
+                profile = "scenarios/kadrohr.yaml",
+            )
+    }
+
+    @Test
+    fun `a minimal profile tries every sign-in method in the default order`() {
+        val spec = source.load(file("shop.yaml", "target: {name: shop, url: 'http://localhost:8080'}"))
+
+        spec.signIn shouldBe SignInMethod.DEFAULT_CHAIN
+        spec.accounts.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a password written out, an unknown key or method and a bad URL are refused with their lines`() {
+        val error =
+            shouldThrow<TargetSpecException> {
+                source.load(
+                    file(
+                        "bad.yaml",
+                        """
+                        target:
+                          name: bad
+                          url: ftp://bad.example
+                          colour: blue
+                          sign_in: [magic]
+                          accounts:
+                            - {role: admin, email: a@b.az, password: hunter2}
+                        """,
+                    ),
+                )
+            }
+
+        val messages = error.issues.map { it.toString() }
+        messages.any { it.startsWith("line 3:") && it.contains("absolute http(s) URL") } shouldBe true
+        messages.any { it.contains("unknown key 'colour'") } shouldBe true
+        messages.any { it.contains("unknown sign_in method 'magic'") } shouldBe true
+        messages.any { it.startsWith("line 7:") && it.contains("reference to .env, never the secret itself") } shouldBe true
+        error.message shouldContain "bad.yaml"
+        (error.message ?: "").contains("hunter2") shouldBe false
+    }
+
+    @Test
+    fun `every profile of a directory is loaded by name, and two with one name are refused`() {
+        file("b.yaml", "target: {name: beta, url: 'https://b.example'}")
+        file("a.yml", "target: {name: alpha, url: 'https://a.example'}")
+        Files.writeString(dir.resolve("notes.txt"), "not a profile")
+
+        source.loadAll(dir).map { it.name } shouldContainExactly listOf("alpha", "beta")
+        source.loadAll(dir.resolve("absent")).shouldBeEmpty()
+
+        file("c.yaml", "target: {name: alpha, url: 'https://c.example'}")
+        shouldThrow<TargetSpecException> { source.loadAll(dir) }.message shouldContain "two profiles are named 'alpha'"
+    }
+
+    @Test
+    fun `the repository's KadroHR profile loads and points at the real campaign`() {
+        val spec = source.load(repoFile("targets/kadrohr.yaml"))
+
+        spec.name shouldBe "kadrohr"
+        spec.testToken shouldBe SecretRef("PETEK_TEST_TOKEN")
+        Files.exists(repoFile(checkNotNull(spec.profile))) shouldBe true
+    }
+}

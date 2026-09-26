@@ -704,7 +704,7 @@ contract-demo işlətsin.
 Məqsəd: bir Pətək bir neçə saytı tanısın; kəşfiyyatçı və testerlər hədəfə mümkün olan ən yaxşı yolla daxil olsun;
 oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
 
-- [ ] `targets/<ad>.yaml` hədəf profili (domain: `campaign` feature-ində `TargetSpec`; DTO infrastructure-da):
+- [x] `targets/<ad>.yaml` hədəf profili (domain: `campaign` feature-ində `TargetSpec`; DTO infrastructure-da):
   ```yaml
   target:
     name: kadrohr
@@ -712,26 +712,29 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
     api_url: https://api.staging.kadrohr.com     # oracle və TestApiMailbox üçün ayrıca baza (KADROHR_READINESS açıq maddəsi)
     production_hosts: [kadrohr.com, www.kadrohr.com]
     mail: {source: test-api | mailpit | imap | manual, domain: test.kadrohr.com}
-    test_api: {token: ${PETEK_TEST_TOKEN_KADROHR}}   # sirlər yalnız .env-dən referansla
+    test_api: {token: '${PETEK_TEST_TOKEN_KADROHR}'}   # sirlər yalnız .env-dən referansla (dırnaq içində)
     sign_in:                                        # giriş zənciri, sıra ilə cəhd olunur
       - test_company                                # /test API ilə şirkət + rollar (indiki yol)
       - own_accounts                                # sahibin verdiyi hesablar (aşağıda)
       - self_register                               # özü qeydiyyat + poçt/OTP
       - anonymous
     accounts:                                       # own_accounts üçün; parollar .env referansı
-      - {role: admin, email: owner@example.com, password: ${PETEK_ACC_KADROHR_ADMIN}}
+      - {role: admin, email: owner@example.com, password: '${PETEK_ACC_KADROHR_ADMIN}'}
     profile: scenarios/kadrohr.yaml#target_profile  # selektorlar və axınlar (mövcud format)
   ```
   `PETEK_TARGET` yalnız default hədəfin adı/URL-i olur; `RunTargets` `config.copy(target=…)` yerinə profili götürür;
   `PanelRunsAdapter.kt:119`-dakı "yalnız PETEK_TARGET" bloku qaldırılır.
-- [ ] Giriş zənciri (`identity` + `mail` application): `SignInStrategy` portu, zəncir dekoratoru; hər qərar
+  **Vəziyyət:** `TargetSpec` (campaign domain), `YamlTargetSpecSource`, `PETEK_TARGETS_DIR`, `PETEK_TARGET=<ad>`, `${VAR}` sirləri dırnaq içində; panel profili olan istənilən saytda run və teardown edir; MCP `list_targets` profilləri göstərir; nümunə `targets/kadrohr.yaml`.
+- [x] Giriş zənciri (`identity` + `mail` application): `SignInStrategy` portu, zəncir dekoratoru; hər qərar
   (`hansı strategiya, niyə keçildi`) `event` cədvəlinə və hesabata yazılır. Kəşfiyyatçı (`RoleSessions`) və
   `register_and_login` eyni zənciri istifadə edir.
+  **Vəziyyət:** kəşfiyyatçı üçün `SignInChain` (profilin `sign_in` sırası; hər cəhd və keçid kəşfiyyat fəaliyyətində). Testerlərin `register_and_login`-i hələ kampaniyanın öz qapısı ilə gedir — Faza 18 (testerə görə qapı) bunu tamamlayır.
 - [ ] Öz hesabların (bring-your-own accounts): panelin "Təlimat" ekranında hədəf üzrə rol → e-poçt/parol (və ya hazır
   `storage_state` faylı); `Secret` ilə gəzir, LLM `{self.password}` görür (qayda 10); panel sirləri `.env`-ə yazır,
   bazaya yox.
-- [ ] Saxlanan sessiyalar: hər (hədəf, kimlik) üçün `storage_state` `<evidence>/sessions/` altında; növbəti kəşfiyyat
+- [x] Saxlanan sessiyalar: hər (hədəf, kimlik) üçün `storage_state` `<evidence>/sessions/` altında; növbəti kəşfiyyat
   yenidən qeydiyyat etmir, sessiya köhnəlibsə `login` axınına düşür.
+  **Vəziyyət:** sahibin hesabları üçün `<evidence>/sessions/<sayt>/<rol>.json` (`rw-------`), köhnəlibsə login formu.
 - [x] Poçt mənbələri: `TestApiMailbox` bağlanır (Faza 8); `ImapMailbox` (catch-all domen və ya `+` adresləmə;
   kitabxana seçimi — qayda 11, aşağıdakı suallar); `ManualCodeMailbox`: panel "kodu daxil et" pəncərəsi açır, SSE ilə
   agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün; sürüdə yalnız xəbərdarlıqla).

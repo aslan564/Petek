@@ -25,4 +25,6 @@ data class McpSettings(
     val evidenceDir: Path,
     val allowWrites: Boolean,
     val version: String,
+    /** The other sites with a target profile (`targets/<name>.yaml`): name to URL. */
+    val profiles: Map<String, String> = emptyMap(),
 )

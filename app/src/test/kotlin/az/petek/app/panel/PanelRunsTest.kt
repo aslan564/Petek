@@ -9,6 +9,7 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.ResolvedTarget
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.RoleSessions
@@ -19,6 +20,8 @@ import az.petek.app.testing.PanelLlm
 import az.petek.app.testing.PanelWaits
 import az.petek.app.testing.PanelWaits.ended
 import az.petek.app.testing.PanelWaits.exploration
+import az.petek.campaign.domain.TargetMail
+import az.petek.campaign.domain.TargetSpec
 import az.petek.core.ids.RunId
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.dashboard.domain.ExplorationStatus
@@ -57,6 +60,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
@@ -213,6 +217,29 @@ class PanelRunsTest {
                 .runs()
                 .single()
                 .target shouldBe "http://127.0.0.1:9"
+        }
+
+    @Test
+    fun `a site with a target profile may be run, with the profile's settings`() =
+        runBlocking<Unit> {
+            val profile = TargetSpec("second", URI("http://127.0.0.2:9"), mail = TargetMail(domain = "qa.second.test"))
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    runs = FakeBrowserEngine(),
+                    scenarios = mapOf("tiny.yaml" to tinyCampaign()),
+                    targets = listOf(ResolvedTarget(profile, testToken = null, accounts = emptyList())),
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario, target = "http://127.0.0.2:9"))
+            panel.ended(started.runId)
+
+            panel.backend
+                .runs()
+                .single()
+                .target shouldBe "http://127.0.0.2:9"
         }
 
     @Test

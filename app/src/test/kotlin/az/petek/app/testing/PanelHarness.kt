@@ -10,6 +10,7 @@
 package az.petek.app.testing
 
 import az.petek.app.config.PetekConfig
+import az.petek.app.config.ResolvedTarget
 import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
@@ -59,6 +60,8 @@ internal class PanelHarness(
     reachability: TargetReachability = TargetReachability.ALWAYS,
     /** Every site counts as proved to be the tester's own unless a test says otherwise (ADR-0012). */
     ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
+    /** Target profiles the panel knows besides its own site (`targets/<name>.yaml`). */
+    targets: List<ResolvedTarget> = emptyList(),
     /** Changes the panel's overrides further, e.g. to hold its repositories at a gate. */
     decorate: (AppOverrides) -> AppOverrides = { it },
 ) : AutoCloseable {
@@ -72,6 +75,7 @@ internal class PanelHarness(
             identitySecret = Secret("panel-test-identity-secret-0123456789"),
             llmConcurrency = 4,
             evidenceDir = dir.resolve("evidence"),
+            targets = targets,
         )
 
     init {

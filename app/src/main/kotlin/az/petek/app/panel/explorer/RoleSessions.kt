@@ -147,6 +147,39 @@ internal class TestCompanyRoleSessions(
         }
     }
 
+    /**
+     * The explorer's own account (`self_register`): one owner signs up through the site's registration flow, nothing
+     * else is created. Its data is removed through the test API when the site has one; otherwise the account stays and
+     * the activity says so.
+     */
+    suspend fun registerOnly(
+        request: RoleSessionRequest,
+        sessions: BrowserSessionFactory,
+        progress: (String) -> Unit,
+    ): RoleSessions {
+        val profile = profiles.profile()
+        val campaign = campaign(request, profile.profile, ownerOnly = true)
+        progress(
+            "Kəşfiyyatçı öz hesabını açır (qeydiyyat axını: ${profile.origin}); kod ${container.config.mailSource.key} poçtundan oxunur…",
+        )
+        if (!container.oracle.isAvailable) progress("Test API yoxdur: bu hesab sonda silinə bilməyəcək və saytda qalacaq.")
+        val setup =
+            try {
+                runs.runKeepingData(campaign)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.warn(e) { "The explorer's own account could not be registered" }
+                return RoleSessions.none("Qeydiyyat alınmadı: ${e.message ?: e::class.simpleName}")
+            } ?: return RoleSessions.none("Başqa run gedir; kəşfiyyatçı öz hesabını aça bilmədi.")
+        return try {
+            sessionsOf(setup, request, sessions, progress)
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) { tearDown(setup.runId) }
+            throw e
+        }
+    }
+
     /** The logged-in sessions of [setup]'s testers; tears the company down itself unless it returns sessions. */
     private suspend fun sessionsOf(
         setup: SetupRun,
@@ -229,12 +262,13 @@ internal class TestCompanyRoleSessions(
     private fun campaign(
         request: RoleSessionRequest,
         profile: TargetProfile,
+        ownerOnly: Boolean = false,
     ): Campaign {
         val department =
             request.departments.firstOrNull { it.isNotBlank() && it.none { c -> c in DefaultActorExpressionParser.RESERVED_CHARS } }
                 ?: DEPARTMENT
         val parser = DefaultActorExpressionParser()
-        val steps =
+        val allSteps =
             listOf(
                 ScenarioStep(
                     "owner_signup",
@@ -273,17 +307,35 @@ internal class TestCompanyRoleSessions(
                     LINE_JOIN,
                 ),
             )
+        val steps = if (ownerOnly) allSteps.take(1) else allSteps
         val campaign =
             Campaign(
                 settings =
                     CampaignSettings(
                         target = container.config.target,
-                        testers = TESTERS,
+                        testers = if (ownerOnly) 1 else TESTERS,
                         seed = SEED,
                         names = emptyList(),
-                        roles = RoleQuota(admin = 1, manager = 1, employee = 1),
+                        roles =
+                            if (ownerOnly) {
+                                RoleQuota(
+                                    admin = 1,
+                                    manager = 0,
+                                    employee = 0,
+                                )
+                            } else {
+                                RoleQuota(admin = 1, manager = 1, employee = 1)
+                            },
                         departments = listOf(department),
-                        registration = RegistrationQuota(invite = 1, companyCode = 1),
+                        registration =
+                            if (ownerOnly) {
+                                RegistrationQuota(
+                                    invite = 0,
+                                    companyCode = 0,
+                                )
+                            } else {
+                                RegistrationQuota(invite = 1, companyCode = 1)
+                            },
                         budget = Budget(maxStepsPerAgent = MAX_STEPS, maxMinutes = MAX_MINUTES),
                         onFail = OnFail.ABORT,
                         name = NAME,

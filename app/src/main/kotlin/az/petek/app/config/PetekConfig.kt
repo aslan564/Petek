@@ -81,6 +81,8 @@ data class PetekConfig(
     val dbPath: Path = evidenceDir.resolve(DEFAULT_DB_FILE),
     /** `PETEK_TELEMETRY=local`: counters only, into [telemetryFile]; off by default (ADR-0011). */
     val telemetry: Boolean = false,
+    /** The sites of `targets/<name>.yaml` (`PETEK_TARGETS_DIR`), secrets resolved; a run on one of them uses its settings. */
+    val targets: List<ResolvedTarget> = emptyList(),
 ) {
     init {
         require(llmConcurrency >= 1) { "llmConcurrency must be at least 1, was $llmConcurrency" }
@@ -121,6 +123,9 @@ data class PetekConfig(
     /** Where opt-in telemetry counters are appended: `<evidenceDir>/telemetry/usage.jsonl`. */
     val telemetryFile: Path get() = evidenceDir.resolve("telemetry").resolve("usage.jsonl")
 
+    /** The profile of [site] (same scheme, host and port), if `targets/` has one. */
+    fun profileFor(site: URI): ResolvedTarget? = targets.firstOrNull { sameSite(it.spec.url, site) }
+
     /** Where the log file lives: `<evidenceDir>/logs`. */
     val logDirectory: Path get() = evidenceDir.resolve("logs")
 
@@ -132,7 +137,9 @@ data class PetekConfig(
             "llmBaseUrl=${llmBaseUrl?.let(::masked)}, llmApiKey=${setOrUnset(llmApiKey)}, llmStructured=${llmStructured.key}, " +
             "llmEffort=$effectiveLlmEffort, llmConcurrency=$llmConcurrency, language=$language, " +
             "browserHeadless=$browserHeadless, browserTopology=$browserTopology, browserIgnoreTlsErrors=$browserIgnoreTlsErrors, " +
-            "evidenceDir=$evidenceDir, dbPath=$dbPath, telemetry=${if (telemetry) "local" else "off"})"
+            "evidenceDir=$evidenceDir, dbPath=$dbPath, telemetry=${if (telemetry) "local" else "off"}, targets=${targets.map {
+                it.spec.name
+            }})"
 
     companion object {
         val DEFAULT_PRODUCTION_HOSTS: Set<String> = setOf("kadrohr.com", "www.kadrohr.com")
@@ -161,6 +168,26 @@ data class PetekConfig(
         const val DEFAULT_LLM_CONCURRENCY = 6
         const val DEFAULT_EVIDENCE_DIR = "evidence"
         const val DEFAULT_DB_FILE = "petek.db"
+
+        private fun sameSite(
+            a: URI,
+            b: URI,
+        ): Boolean =
+            a.scheme.equals(b.scheme, ignoreCase = true) &&
+                a.host
+                    .orEmpty()
+                    .trimEnd('.')
+                    .equals(b.host.orEmpty().trimEnd('.'), ignoreCase = true) &&
+                port(a) == port(b)
+
+        private fun port(url: URI): Int =
+            if (url.port != -1) {
+                url.port
+            } else if (url.scheme.equals("https", ignoreCase = true)) {
+                443
+            } else {
+                80
+            }
 
         /** Shows a URL with its user info (credentials) replaced by three asterisks. */
         fun masked(url: URI): String = url.rawUserInfo?.let { url.toString().replace("$it@", "***@") } ?: url.toString()

@@ -218,6 +218,7 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | Key | Default | Meaning |
 |---|---|---|
 | `PETEK_TARGET` | — | The system under test; replaces `campaign.target` of every campaign |
+| `PETEK_TARGETS_DIR` | `targets` | Target profiles, one `targets/<name>.yaml` per site (URL, `api_url`, production hosts, mail, `${VAR}` token and account references, sign-in order, campaign profile); `PETEK_TARGET` may name one, and the panel runs any site that has one (see `targets/kadrohr.yaml`) |
 | `PETEK_PRODUCTION_HOSTS` | `kadrohr.com,www.kadrohr.com` | Hosts refused as a target unless … |
 | `PETEK_ALLOW_PRODUCTION` | `false` | … this is `true` (rule 8) |
 | `PETEK_TEST_TOKEN` | — | `X-Test-Token` for the target's `/test/...` API; empty disables oracle checks and teardown |

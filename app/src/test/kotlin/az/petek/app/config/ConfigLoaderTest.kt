@@ -307,6 +307,50 @@ class ConfigLoaderTest {
     }
 
     @Test
+    fun `PETEK_TARGET may name a target profile, which then brings its site, test API, token and mail`() {
+        Files.createDirectories(dir.resolve("targets"))
+        Files.writeString(
+            dir.resolve("targets/shop.yaml"),
+            """
+            target:
+              name: shop
+              url: https://Stage.Shop.example
+              api_url: https://api.stage.shop.example
+              production_hosts: [shop.example]
+              mail: {source: test-api, domain: qa.shop.example}
+              test_api: {token: '${'$'}{SHOP_TOKEN}'}
+            """.trimIndent(),
+        )
+        Files.writeString(
+            dir.resolve("targets/blog.yaml"),
+            "target: {name: blog, url: 'https://blog.example', test_api: {token: '${'$'}{BLOG_TOKEN}'}}",
+        )
+
+        val config = load("PETEK_TARGET" to "shop", "SHOP_TOKEN" to "shop-token-123")
+
+        config.target shouldBe URI("https://stage.shop.example")
+        config.testApiUrl shouldBe URI("https://api.stage.shop.example")
+        config.testToken shouldBe Secret("shop-token-123")
+        config.mailSource shouldBe MailSource.TEST_API
+        config.mailDomain shouldBe "qa.shop.example"
+        config.productionHosts shouldBe setOf("kadrohr.com", "www.kadrohr.com", "shop.example")
+        config.targets.map { it.spec.name } shouldBe listOf("blog", "shop")
+        config.profileFor(URI("https://blog.example/path"))?.testToken shouldBe null
+        TargetProfileConfig.forTarget(config, URI("https://blog.example")).target shouldBe URI("https://blog.example")
+        TargetProfileConfig.forTarget(config, URI("https://other.example")).testToken shouldBe Secret("shop-token-123")
+        config.toString() shouldNotContain "shop-token-123"
+        problems("PETEK_TARGET" to "shop") shouldContainExactlyInAnyOrder listOf("SHOP_TOKEN, referenced by target 'shop', is not set")
+    }
+
+    @Test
+    fun `a broken target profile is a configuration problem with its file and line`() {
+        Files.createDirectories(dir.resolve("targets"))
+        Files.writeString(dir.resolve("targets/x.yaml"), "target:\n  name: x\n  url: nowhere\n")
+
+        problems(target).single() shouldContain "PETEK_TARGETS_DIR (x.yaml): line 3:"
+    }
+
+    @Test
     fun `the test API mail source needs the test token`() {
         problems(target, "PETEK_MAIL_SOURCE" to "test-api") shouldContainExactlyInAnyOrder
             listOf("PETEK_TEST_TOKEN is required when PETEK_MAIL_SOURCE is test-api")

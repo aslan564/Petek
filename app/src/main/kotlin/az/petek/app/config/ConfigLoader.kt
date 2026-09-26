@@ -11,6 +11,9 @@ package az.petek.app.config
 
 import az.petek.app.di.LlmProviders
 import az.petek.browser.domain.BrowserTopology
+import az.petek.campaign.domain.SecretRef
+import az.petek.campaign.domain.TargetSpecException
+import az.petek.campaign.infrastructure.YamlTargetSpecSource
 import az.petek.core.model.WorkingLanguage
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
@@ -57,7 +60,12 @@ class ConfigLoader(
         private val problems = mutableListOf<String>()
 
         fun config(): PetekConfig {
-            val target = url(Keys.TARGET, default = null)
+            val profiles = targets()
+            val targets = profiles.map { it.first }
+            val namedProfile = text(Keys.TARGET)?.let { raw -> profiles.firstOrNull { it.first.spec.name == raw.lowercase() } }
+            namedProfile?.second?.let { problems += it }
+            val named = namedProfile?.first
+            val target = if (named != null) WebUrls.canonical(named.spec.url) else url(Keys.TARGET, default = null)
             if (target == null && text(Keys.TARGET) == null) problems += "${Keys.TARGET} is required (the URL of the system under test)"
             val productionHosts = hosts(Keys.PRODUCTION_HOSTS)
             val allowProduction = flag(Keys.ALLOW_PRODUCTION, default = false)
@@ -112,35 +120,39 @@ class ConfigLoader(
             val identitySecret = identitySecret()
             val telemetry = telemetry()
             if (problems.isNotEmpty()) throw ConfigException(problems.toList())
-            return PetekConfig(
-                target = checkNotNull(target),
-                productionHosts = productionHosts,
-                allowProduction = allowProduction,
-                testToken = testToken,
-                testApiUrl = testApiUrl,
-                mailSource = checkNotNull(mailSource),
-                mailpitUrl = checkNotNull(mailpitUrl),
-                mailDomain = checkNotNull(mailDomain),
-                mailInbox = mailInbox,
-                imap = imap,
-                identitySecret = checkNotNull(identitySecret),
-                llmProvider = checkNotNull(provider),
-                llmProviderReason = checkNotNull(resolution).reason,
-                llmModel = model,
-                llmBin = bin,
-                llmBaseUrl = baseUrl,
-                llmApiKey = apiKey,
-                llmStructured = checkNotNull(structured),
-                llmEffort = effort,
-                llmConcurrency = checkNotNull(concurrency),
-                language = language,
-                browserHeadless = headless,
-                browserTopology = checkNotNull(topology),
-                browserIgnoreTlsErrors = ignoreTlsErrors,
-                evidenceDir = checkNotNull(evidenceDir),
-                dbPath = checkNotNull(dbPath),
-                telemetry = telemetry,
-            )
+            val loaded =
+                PetekConfig(
+                    target = checkNotNull(target),
+                    productionHosts = productionHosts,
+                    allowProduction = allowProduction,
+                    testToken = testToken,
+                    testApiUrl = testApiUrl,
+                    mailSource = checkNotNull(mailSource),
+                    mailpitUrl = checkNotNull(mailpitUrl),
+                    mailDomain = checkNotNull(mailDomain),
+                    mailInbox = mailInbox,
+                    imap = imap,
+                    identitySecret = checkNotNull(identitySecret),
+                    llmProvider = checkNotNull(provider),
+                    llmProviderReason = checkNotNull(resolution).reason,
+                    llmModel = model,
+                    llmBin = bin,
+                    llmBaseUrl = baseUrl,
+                    llmApiKey = apiKey,
+                    llmStructured = checkNotNull(structured),
+                    llmEffort = effort,
+                    llmConcurrency = checkNotNull(concurrency),
+                    language = language,
+                    browserHeadless = headless,
+                    browserTopology = checkNotNull(topology),
+                    browserIgnoreTlsErrors = ignoreTlsErrors,
+                    evidenceDir = checkNotNull(evidenceDir),
+                    dbPath = checkNotNull(dbPath),
+                    telemetry = telemetry,
+                    targets = targets,
+                )
+            // PETEK_TARGET naming a profile takes that profile's settings; a URL keeps the .env ones.
+            return if (named != null) TargetProfileConfig.apply(loaded, named) else loaded
         }
 
         /** The trimmed value, or null when the key is missing or blank. */
@@ -240,6 +252,33 @@ class ConfigLoader(
             if (port == null) problems += "${Keys.IMAP_PORT} must be a port number, was '$rawPort'"
             if (host == null || user == null || password == null || port == null) return null
             return ImapSettings(host, user, Secret(password), port, tls, text(Keys.IMAP_FOLDER) ?: ImapSettings.DEFAULT_FOLDER)
+        }
+
+        /**
+         * `targets/<name>.yaml` (`PETEK_TARGETS_DIR`) with every `${VAR}` they reference resolved. A variable that is not set
+         * leaves that secret empty (the site then runs without it, and `doctor` shows it); only the profile
+         * `PETEK_TARGET` names must have all of its variables, see [config].
+         */
+        private fun targets(): List<Pair<ResolvedTarget, List<String>>> {
+            val directory = path(Keys.TARGETS_DIR, DEFAULT_TARGETS_DIR) ?: return emptyList()
+            val specs =
+                try {
+                    YamlTargetSpecSource().loadAll(directory)
+                } catch (e: TargetSpecException) {
+                    problems += e.issues.map { "${Keys.TARGETS_DIR} (${e.file}): $it" }
+                    return emptyList()
+                }
+            return specs.map { spec ->
+                val missing = mutableListOf<String>()
+
+                fun resolve(ref: SecretRef?): Secret? {
+                    if (ref == null) return null
+                    val value = text(ref.variable)
+                    if (value == null) missing += "${ref.variable}, referenced by target '${spec.name}', is not set"
+                    return value?.let(::Secret)
+                }
+                ResolvedTarget(spec, resolve(spec.testToken), spec.accounts.map { ResolvedAccount.of(it, resolve(it.password)) }) to missing
+            }
         }
 
         private fun mailSource(): MailSource? {
@@ -354,6 +393,7 @@ class ConfigLoader(
         const val MAILPIT_URL = "PETEK_MAILPIT_URL"
         const val MAIL_DOMAIN = "PETEK_MAIL_DOMAIN"
         const val MAIL_INBOX = "PETEK_MAIL_INBOX"
+        const val TARGETS_DIR = "PETEK_TARGETS_DIR"
         const val IMAP_HOST = "PETEK_IMAP_HOST"
         const val IMAP_PORT = "PETEK_IMAP_PORT"
         const val IMAP_USER = "PETEK_IMAP_USER"
@@ -387,6 +427,7 @@ class ConfigLoader(
     private companion object {
         const val MAX_LLM_CONCURRENCY = 64
         const val MAX_PORT = 65_535
+        const val DEFAULT_TARGETS_DIR = "targets"
         val MAILBOX = Regex("[a-z0-9._-]{1,48}@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
         const val AUTO = "auto"
         const val MIN_SECRET_LENGTH = 16
