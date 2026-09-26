@@ -28,16 +28,17 @@ Müəllif: **Aslan Aslanov** · © 2026 **Kodcraft** · [Business Source License
 2. [Necə işləyir](#necə-işləyir)
 3. [Nə var](#nə-var)
 4. [Sürətli başlanğıc](#sürətli-başlanğıc)
-5. [Konfiqurasiya](#konfiqurasiya)
-6. [Ssenarilər](#ssenarilər)
-7. [Hədəf kontraktı](#hədəf-kontraktı)
-8. [Veb panel](#veb-panel)
-9. [Arxitektura](#arxitektura)
-10. [Təhlükəsizlik](#təhlükəsizlik)
-11. [Yol xəritəsi](#yol-xəritəsi)
-12. [Sənədlər](#sənədlər)
-13. [İnkişaf](#inkişaf)
-14. [Lisenziya, ticarət nişanı və müəllif hüququ](#lisenziya-ticarət-nişanı-və-müəllif-hüququ)
+5. [Öz saytınızda istifadə](#öz-saytınızda-istifadə)
+6. [Konfiqurasiya](#konfiqurasiya)
+7. [Ssenarilər](#ssenarilər)
+8. [Hədəf kontraktı](#hədəf-kontraktı)
+9. [Veb panel](#veb-panel)
+10. [Arxitektura](#arxitektura)
+11. [Təhlükəsizlik](#təhlükəsizlik)
+12. [Yol xəritəsi](#yol-xəritəsi)
+13. [Sənədlər](#sənədlər)
+14. [İnkişaf](#inkişaf)
+15. [Lisenziya, ticarət nişanı və müəllif hüququ](#lisenziya-ticarət-nişanı-və-müəllif-hüququ)
 
 ---
 
@@ -101,8 +102,20 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 ## Sürətli başlanğıc
 
-Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir), Mailpit üçün Docker və bir AI:
-planınızla login olmuş [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), və ya Anthropic API açarı.
+**Buraxılışdan (build lazım deyil).** [Releases](https://github.com/aslan564/Petek/releases) səhifəsindən
+`petek-<versiya>.zip` endirin, istənilən yerə açın; `PATH`-də JDK 25 və bir AI olsun: planınızla login olmuş
+[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), və ya Anthropic API açarı. Chromium-u Playwright ilk
+istifadədə özü yükləyir.
+
+```bash
+unzip petek-0.1.0.zip && cd my-site                    # istənilən qovluq: Pətək saytın yanında işləyir, build-inin içində yox
+cp ../petek-0.1.0/.env.example .env                    # PETEK_TARGET doldurun (+ tam run üçün PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET)
+../petek-0.1.0/bin/petek doctor                        # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
+../petek-0.1.0/bin/petek panel                         # veb paneli açır: http://127.0.0.1:7070
+```
+
+**Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir), Mailpit üçün Docker
+və eyni AI.
 
 ```bash
 git clone https://github.com/aslan564/Petek.git && cd Petek
@@ -134,6 +147,27 @@ Komanda sətri ilə, başdan sona:
 ```
 
 Çıxış kodları: `0` uğur, `1` tapıntı var, `2` konfiqurasiya xətası və ya dayandırılmış run, `130` kəsildi.
+
+## Öz saytınızda istifadə
+
+Pətək **kitabxana deyil, yanaşı işləyən alətdir (sidecar)**: onu saytınızın Maven, npm və ya Composer build-inə əlavə
+etmirsiniz. Alət kimi qurulur (bu gün buraxılış zip-i; Faza 12-də `petek init` və `npx petek` başladıcısı, bax R15),
+saytın yanında işə salınır və saytın URL-inə yönəldilir. **Sizin öz AI login-inizi** işlədir — BMAD layihədəki
+köməkçini necə işlədirsə, elə: `PETEK_LLM_PROVIDER=claude-cli` ilə login olduğunuz `claude` CLI-ni çağırır, modeli
+sizin planınız ödəyir; Pətək müəlliflərinə heç nə göndərilmir.
+
+Saytınızdan nə tələb olunur — testin dərinliyinə görə:
+
+| İstədiyiniz | Saytınıza lazım olan | Necə |
+|---|---|---|
+| Yalnız oxu kəşfiyyatı: səhifələr, formalar, əməliyyatlar, sayt modeli, test ideyaları, ssenari qaralaması | Heç nə. Anonim səhifələr ziyarətçi kimi oxunur. | `.env`-də `PETEK_TARGET=https://saytiniz`, sonra `petek panel` → **Kəşf et** (yazma qutusu boş) |
+| Rollarla, daxil olmuş kəşfiyyat | Verə biləcəyiniz hesablar, və ya Pətək-in tamamlaya biləcəyi özü-qeydiyyat | Qeydiyyat axını (e-poçt kodu üçün test poçtu, telefon OTP test API-dən) və ya sahibin verdiyi loginlər (Faza 10) |
+| Tam kampaniyalar: 30 tester, qeydiyyat, OTP, assertlər, real-time yoxlamalar, teardown | [Hədəf kontraktı](docs/TARGET_CONTRACT.md): `X-Test-Token` arxasında `/test/...` API, `is_test` şirkətlər, catch-all poçt (Mailpit) və ya `GET /test/emails`; `data-testid`-lər faydalıdır, məcburi deyil | `PETEK_TEST_TOKEN`, `PETEK_MAIL_SOURCE`, `PETEK_IDENTITY_SECRET` doldurulur; `petek doctor` tam yaşıl olmalıdır |
+| Production host | Açıq icazə `PETEK_ALLOW_PRODUCTION=true` (`PETEK_PRODUCTION_HOSTS`-dakı hostlar əks halda rədd edilir) | Yalnız kontraktı danışan staging ilə, və ya yalnız oxu |
+
+Sonra dövrə hər sayt üçün eynidir: `doctor` → `panel` → kəşf et → kəşfiyyatçının suallarına cavab ver → qaralamanı
+ssenarilərə göndər → təsdiqlə → run → hesabat → tapıntıların sübutlarını (`FindingBundle`, Faza 11) öz AI-nizə oxut
+və səbəbi kodunuzda düzəlt.
 
 ## Konfiqurasiya
 
@@ -291,8 +325,9 @@ Kod bazasını sağlam saxlayan qaydalar (mümkün olan yerdə build məcbur edi
 faylı lisenziya başlığı daşıyır; domain kodu framework import etmir; application kodu infrastructure import etmir;
 infrastructure-ı yalnız `app` bağlayır; mock kitabxanası yoxdur (fake-lər `testFixtures`-dadır); testlər cümlə kimi
 adlanır; yeni kitabxana sahibin təsdiqini istəyir; hər commit-dən əvvəl `./gradlew spotlessApply build` keçməlidir. Tam
-siyahı: [CONTRIBUTING.md](CONTRIBUTING.md). Branch-lar: `develop` inteqrasiya branch-ıdır; `petek-mvp` və
-`petek-mvp-o6tpsw` MVP tarixçəsi kimi saxlanır.
+siyahı: [CONTRIBUTING.md](CONTRIBUTING.md). Branch-lar: `main` buraxılış branch-ıdır (üstündəki `vX.Y.Z` teqi
+distribution-ı dərc edir); `develop` inteqrasiya branch-ıdır; `petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsi kimi
+saxlanır.
 
 ## Lisenziya, ticarət nişanı və müəllif hüququ
 

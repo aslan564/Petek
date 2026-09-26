@@ -550,6 +550,10 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
   Spotless-in məcbur etdiyi copyright başlığı (`PetekLicense.kt`); `README.md` + `README.az.md`, `SECURITY.md`,
   `CONTRIBUTING.md`, `docs/requirements/` (R01–R15), GitHub Actions CI, PR şablonu, `CODEOWNERS`.
 - [ ] Ad/marka: `petek` latın yazılışı ilə GitHub org, domen, npm/Maven adlarının tutulması (sahib).
+- [x] Buraxılış xətti (R15-in ilk addımı): `main` buraxılış branch-ı, `gradle.properties`-də `version`, `:app:distZip`
+  (`petek-<versiya>.zip`: `bin/petek`, jar-lar, LICENSE, `.env.example`, `scenarios/`, hədəf kontraktı) və
+  `vX.Y.Z` teqində GitHub Release yaradan `release.yml`. README-də "Öz saytınızda istifadə" bölməsi: sidecar, kitabxana
+  deyil; müştərinin öz AI login-i.
 - [x] Konsist arxitektura testləri `e2e/`-də (CLAUDE.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
 - [x] Tester izolyasiyası auditi və sərtləşdirmə (`docs/requirements/R01` "Isolation guarantees"): roster parolsuz
   (`Colleague`), paylaşılan dəyərlər write-once, `{last_id}` eyni addımdakı başqa agentin ID-sinə düşmür, yalnız

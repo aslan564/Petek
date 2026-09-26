@@ -13,7 +13,9 @@ welcome under the terms below; the same rules apply to people and to AI coding a
 
 ## Workflow
 
-1. Branch from `develop` (`feature/<topic>` or `fix/<topic>`). `petek-mvp` and `petek-mvp-o6tpsw` are frozen history.
+1. Branch from `develop` (`feature/<topic>` or `fix/<topic>`). `main` is the release branch: it only receives
+   `develop`, and a tag `vX.Y.Z` on it (matching `version` in `gradle.properties`) publishes the distribution through
+   `.github/workflows/release.yml`. `petek-mvp` and `petek-mvp-o6tpsw` are frozen history.
 2. Read the relevant part of `docs/PLAN.md` (the phase you touch), `docs/ARCHITECTURE.md` and the requirement
    document in `docs/requirements/` before writing code. If your change alters architecture, write or amend an ADR in
    `docs/adr/` first and wait for the owner's approval.

@@ -28,16 +28,17 @@ Author: **Aslan Aslanov** · © 2026 **Kodcraft** · Licensed under the [Busines
 2. [How it works](#how-it-works)
 3. [What is in the box](#what-is-in-the-box)
 4. [Quick start](#quick-start)
-5. [Configuration](#configuration)
-6. [Scenarios](#scenarios)
-7. [The target contract](#the-target-contract)
-8. [The web panel](#the-web-panel)
-9. [Architecture](#architecture)
-10. [Security](#security)
-11. [Roadmap](#roadmap)
-12. [Documentation](#documentation)
-13. [Development](#development)
-14. [Licence, trademark and copyright](#licence-trademark-and-copyright)
+5. [Use it on your own site](#use-it-on-your-own-site)
+6. [Configuration](#configuration)
+7. [Scenarios](#scenarios)
+8. [The target contract](#the-target-contract)
+9. [The web panel](#the-web-panel)
+10. [Architecture](#architecture)
+11. [Security](#security)
+12. [Roadmap](#roadmap)
+13. [Documentation](#documentation)
+14. [Development](#development)
+15. [Licence, trademark and copyright](#licence-trademark-and-copyright)
 
 ---
 
@@ -102,8 +103,20 @@ A run (`petek run scenarios/<campaign>.yaml`):
 
 ## Quick start
 
-Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain), Docker (for Mailpit) and an AI:
-the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) logged in with your plan, or an Anthropic API key.
+**From a release (no build).** Download `petek-<version>.zip` from the
+[releases page](https://github.com/aslan564/Petek/releases), unzip it anywhere, and have JDK 25 on `PATH` and an AI: the
+[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) logged in with your plan, or an Anthropic API key.
+Chromium is downloaded by Playwright on first use.
+
+```bash
+unzip petek-0.1.0.zip && cd my-site                    # any directory: Pətək runs next to the site, never inside its build
+cp ../petek-0.1.0/.env.example .env                    # fill PETEK_TARGET (+ PETEK_TEST_TOKEN and PETEK_IDENTITY_SECRET for full runs)
+../petek-0.1.0/bin/petek doctor                        # target policy, target, Chromium, inbox, test API, AI provider
+../petek-0.1.0/bin/petek panel                         # opens the web panel at http://127.0.0.1:7070
+```
+
+**From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain), Docker (for
+Mailpit) and the same AI.
 
 ```bash
 git clone https://github.com/aslan564/Petek.git && cd Petek
@@ -135,6 +148,27 @@ Command line, end to end:
 ```
 
 Exit codes: `0` success, `1` failures found, `2` configuration error or aborted run, `130` interrupted.
+
+## Use it on your own site
+
+Pətək is a **sidecar, not a library**: you do not add it to your site's Maven, npm or Composer build. It is installed
+like a tool (the release zip today; `petek init` and an `npx petek` launcher in Faza 12, see R15), started next to
+the site, and pointed at the site's URL. It uses **your own AI login**, the way BMAD uses whatever assistant the
+project already has: with `PETEK_LLM_PROVIDER=claude-cli` it calls the `claude` CLI you are logged into, and your plan
+pays for the model; nothing is sent to Pətək's authors.
+
+What your site needs, by depth of testing:
+
+| You want | Your site needs | How |
+|---|---|---|
+| Read-only exploration: pages, forms, actions, a site model, test ideas, a scenario draft | Nothing. Anonymous pages are read as a visitor would. | `.env` with `PETEK_TARGET=https://your-site`, then `petek panel` → **Kəşf et** with the write box unticked |
+| Logged-in exploration with roles | Accounts you can hand over, or self-registration Pətək can complete | Give Pətək the registration flow (test inbox for e-mail codes, phone OTP through the test API) or owner-provided logins (Faza 10) |
+| Full campaigns: 30 testers, registration, OTP, assertions, real-time checks, teardown | The [target contract](docs/TARGET_CONTRACT.md): a `/test/...` API behind `X-Test-Token`, `is_test` companies, a catch-all inbox (Mailpit) or `GET /test/emails`; `data-testid`s are welcome but optional | Fill `PETEK_TEST_TOKEN`, `PETEK_MAIL_SOURCE`, `PETEK_IDENTITY_SECRET`; `petek doctor` must be all green |
+| A production host | The explicit permission `PETEK_ALLOW_PRODUCTION=true` (hosts in `PETEK_PRODUCTION_HOSTS` are refused otherwise) | Only with a staging that speaks the contract, or read-only |
+
+Then the loop is the same for every site: `doctor` → `panel` → explore → answer the explorer's questions → send the
+draft to scenarios → approve → run → report → let your AI read the findings' evidence (`FindingBundle`, Faza 11) and
+fix the cause in your code.
 
 ## Configuration
 
@@ -292,8 +326,8 @@ Rules that keep the code base healthy (enforced by the build where possible): Ko
 file carries the licence header; domain code imports no framework; application code never imports infrastructure;
 only `app` wires infrastructure; no mocking library (fakes live in `testFixtures`); tests are named as sentences; new
 libraries need the owner's approval; `./gradlew spotlessApply build` must pass before every commit. The full list is in
-[CONTRIBUTING.md](CONTRIBUTING.md). Branches: `develop` is the integration branch; `petek-mvp` and
-`petek-mvp-o6tpsw` are kept as the MVP history.
+[CONTRIBUTING.md](CONTRIBUTING.md). Branches: `main` is the release branch (a `vX.Y.Z` tag on it publishes the
+distribution); `develop` is the integration branch; `petek-mvp` and `petek-mvp-o6tpsw` are kept as the MVP history.
 
 ## Licence, trademark and copyright
 

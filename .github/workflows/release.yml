@@ -1,0 +1,65 @@
+name: Release
+
+# A tag v<version> on main publishes a GitHub Release with the sidecar distribution (app/build/distributions/petek-<version>.zip
+# and .tar): the same checks as the Build workflow first, so a release is never cut from a red tree.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, test and publish the distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: true
+          cache-read-only: true
+
+      - name: Install the Chromium Playwright needs (browser tests run in the normal build)
+        run: |
+          PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
+          npx --yes "playwright@${PW}" install --with-deps chromium
+
+      - name: Check that the tag matches the version in gradle.properties
+        run: |
+          V=$(grep -E '^version=' gradle.properties | cut -d= -f2)
+          [ "v${V}" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} but gradle.properties says ${V}"; exit 1; }
+
+      - name: Build, test and bundle
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: ./gradlew build :app:distZip :app:distTar --no-daemon --console=plain
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/distributions/petek-*.zip
+            app/build/distributions/petek-*.tar
+          generate_release_notes: true
+          body: |
+            Pətək sidecar distribution. Unzip, then from any directory next to the site under test:
+
+            ```
+            petek-*/bin/petek doctor        # needs JDK 25 on PATH and the Claude Code CLI logged in (or ANTHROPIC_API_KEY)
+            petek-*/bin/petek panel         # opens the web panel at http://127.0.0.1:7070
+            ```
+
+            Configuration: copy `.env.example` from the archive to `.env` in that directory. Licence: Business Source License 1.1 (see LICENSE).

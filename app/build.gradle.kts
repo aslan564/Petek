@@ -57,6 +57,24 @@ application {
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
+// The sidecar distribution (R15): `petek-<version>.zip` with bin/petek, every jar, the licence, the configuration
+// template and the example scenarios. It runs from any directory next to the site under test; the site's own build
+// never depends on Pətək. Published by .github/workflows/release.yml on a v<version> tag.
+distributions {
+    main {
+        distributionBaseName.set("petek")
+        contents {
+            from(rootProject.file("LICENSE"))
+            from(rootProject.file("NOTICE"))
+            from(rootProject.file("README.md"))
+            from(rootProject.file("README.az.md"))
+            from(rootProject.file(".env.example"))
+            into("scenarios") { from(rootProject.file("scenarios")) }
+            into("docs") { from(rootProject.file("docs/TARGET_CONTRACT.md")) }
+        }
+    }
+}
+
 // Every way of launching main (the run task, IntelliJ's run icon next to main(), run configurations) gets the JVM
 // option that sqlite-jdbc, Playwright and JNA need on JDK 25; IntelliJ's icon creates its own JavaExec task.
 tasks.withType<JavaExec>().configureEach {

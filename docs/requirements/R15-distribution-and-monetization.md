@@ -1,6 +1,7 @@
 # R15 — Distribution and monetization: installable in any project, runs beside it and in CI; paid editions possible
 
-**Status:** Planned (Faza 12, 14) · **ADRs:** 0009, 0011
+**Status:** First step done 2026-09-26 (release zip per `vX.Y.Z` tag on `main`: `bin/petek`, licence, `.env.example`,
+scenarios, target contract; runs `doctor` from any directory), the rest planned (Faza 12, 14) · **ADRs:** 0009, 0011
 
 ## Requirement
 

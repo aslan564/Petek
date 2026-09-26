@@ -13,7 +13,9 @@ Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.
 Müəllif hüququ © 2026 Kodcraft, müəllif Aslan Aslanov; lisenziya Business Source License 1.1 (`LICENSE`, `NOTICE`;
 2030-09-25-də Apache 2.0). Hər mənbə faylı (`.kt`, `.kts`, `.js`, `.css`, `.html`) `build-logic/.../PetekLicense.kt`-dəki
 başlığı daşıyır — `spotlessApply` qoyur, `spotlessCheck` (build-in içində) yoxlayır; başqa copyright sətri əlavə etmə.
-`develop` inteqrasiya branch-ıdır; `petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsidir, dəyişdirilmir. Commit, PR və
+`main` buraxılış branch-ıdır (yalnız `develop`-dan gəlir; `vX.Y.Z` teqi `gradle.properties`-dəki `version` ilə eyni
+olmalıdır və `.github/workflows/release.yml` GitHub Release-ə `petek-X.Y.Z.zip` qoyur); `develop` inteqrasiya
+branch-ıdır; `petek-mvp` və `petek-mvp-o6tpsw` MVP tarixçəsidir, dəyişdirilmir. Commit, PR və
 kodda model/alət adı yazılmır.
 
 ## Stack (versiyalar `gradle/libs.versions.toml`-da)
