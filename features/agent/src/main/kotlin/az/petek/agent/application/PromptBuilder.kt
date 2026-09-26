@@ -14,6 +14,7 @@ import az.petek.agent.domain.Colleague
 import az.petek.agent.domain.DecisionProtocol
 import az.petek.browser.domain.PageSnapshot
 import az.petek.core.model.Role
+import az.petek.core.model.WorkingLanguage
 import az.petek.identity.domain.Identity
 
 /**
@@ -35,6 +36,8 @@ class PromptBuilder(
     private val historyLimit: Int = DEFAULT_HISTORY_LIMIT,
     /** How many people of the roster the system prompt lists at most. */
     private val rosterLimit: Int = DEFAULT_ROSTER_LIMIT,
+    /** What summaries and reported problems are written in ([WorkingLanguage.AUTO]: the task's own language). */
+    private val language: WorkingLanguage = WorkingLanguage.AUTO,
 ) {
     init {
         require(historyLimit >= 1) { "historyLimit must be at least 1, was $historyLimit" }
@@ -58,7 +61,7 @@ class PromptBuilder(
             appendLine(INTRO)
             appendLine()
             appendLine("Rules:")
-            RULES.forEachIndexed { i, rule -> appendLine("${i + 1}. $rule") }
+            (RULES + language.rule("your summaries and reported problems")).forEachIndexed { i, rule -> appendLine("${i + 1}. $rule") }
             appendLine()
             appendLine(protocol.describeTools())
             appendLine()

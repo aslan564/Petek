@@ -58,6 +58,7 @@ class PromptBuilderTest {
         system shouldContain "Role: manager of the IT department"
         system shouldContain "E-mail: ${identity.email}"
         system shouldContain "Tester id: a02"
+        system shouldContain "Write your summaries and reported problems in the language the owner's own text"
         system shouldContain "type {self.password} wherever it is needed"
         system shouldNotContain password
     }

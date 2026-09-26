@@ -10,6 +10,7 @@
 package az.petek.app.config
 
 import az.petek.browser.domain.BrowserTopology
+import az.petek.core.model.WorkingLanguage
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetVerdict
 import az.petek.llm.domain.LlmProviderId
@@ -90,6 +91,7 @@ class ConfigLoaderTest {
                 "PETEK_LLM_MODEL" to "claude-haiku-4-5",
                 "PETEK_CLAUDE_BIN" to "/opt/claude/bin/claude",
                 "PETEK_LLM_CONCURRENCY" to "3",
+                "PETEK_LANGUAGE" to "English",
                 "ANTHROPIC_API_KEY" to "sk-ant-test",
                 "PETEK_BROWSER_HEADLESS" to "false",
                 "PETEK_BROWSER_TOPOLOGY" to "per-session",
@@ -108,6 +110,7 @@ class ConfigLoaderTest {
         config.mailDomain shouldBe "qa.example.com"
         config.identitySecret shouldBe Secret("a-long-enough-identity-secret")
         config.llmProvider shouldBe LlmProviderId.ANTHROPIC_API
+        config.language shouldBe WorkingLanguage("English")
         config.llmModel shouldBe "claude-haiku-4-5"
         config.claudeBin shouldBe "/opt/claude/bin/claude"
         config.llmConcurrency shouldBe 3

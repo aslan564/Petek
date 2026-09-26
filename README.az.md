@@ -220,6 +220,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_LLM_MODEL` | `claude-sonnet-5` | Model id |
 | `PETEK_CLAUDE_BIN` | `claude` | CLI binarı |
 | `PETEK_LLM_CONCURRENCY` | `6` | Bütün agentlər üzrə eyni anda AI çağırışı (1–64) |
+| `PETEK_LANGUAGE` | `auto` | AI-ın sizin üçün nə dildə yazdığı (kəşfiyyatçının sualları və ideyaları, testerlərin xülasələri, triaj): `auto` sizin öz təlimat və ssenarilərinizin dilini izləyir, ya da `English` kimi ad |
 | `ANTHROPIC_API_KEY` | — | `anthropic-api` üçün |
 | `PETEK_BROWSER_HEADLESS` | `true` | `run --headful` bunu üstələyir |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | və ya `per-session` |

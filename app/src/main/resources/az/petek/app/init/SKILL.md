@@ -11,6 +11,12 @@ own answers, so a result is never an opinion. Pətək is the product; you are it
 hand when Pətək can run it, and you never judge a run by reading screenshots when an assertion or an oracle answer
 exists.
 
+## Language
+
+Work in the owner's language. Pətək's explorer, testers and triage write in the language of the owner's own
+instructions and scenarios (`PETEK_LANGUAGE=auto`) or in the language set in `.env`; answer the owner in the language
+they use with you.
+
 ## Setup
 
 - `.env` in the project root configures Pətək (`PETEK_TARGET` is the site under test; `.env.example` in the Pətək

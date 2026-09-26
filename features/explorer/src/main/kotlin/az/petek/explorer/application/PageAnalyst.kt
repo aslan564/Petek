@@ -62,7 +62,7 @@ internal class PageAnalyst(
         val shown = PromptRedaction.snapshot(snapshot, urlPattern)
         val request =
             LlmRequest(
-                system = PageAnalysisProtocol.system,
+                system = PageAnalysisProtocol.system(settings.language),
                 messages =
                     listOf(
                         LlmMessage(

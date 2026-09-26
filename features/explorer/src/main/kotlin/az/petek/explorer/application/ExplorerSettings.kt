@@ -9,6 +9,7 @@
 
 package az.petek.explorer.application
 
+import az.petek.core.model.WorkingLanguage
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -26,6 +27,8 @@ import kotlin.time.Duration.Companion.seconds
  * @property maxConsecutiveLlmFailures after this many failed LLM calls in a row the explorer stops asking the LLM and
  *   continues with what code finds, noting it in the summary.
  * @property liveEffectTimeout how long other roles' pages are watched for a trial touch's marker text.
+ * @property language what the analyst writes purposes, questions and ideas in ([WorkingLanguage.AUTO]: the owner's
+ *   own language, else the page's).
  */
 data class ExplorerSettings(
     val seedPaths: List<String> = listOf("/login", "/register", "/signup", "/join"),
@@ -48,6 +51,7 @@ data class ExplorerSettings(
      */
     val pageSettleTimeout: Duration = 4.seconds,
     val pageSettlePoll: Duration = 250.milliseconds,
+    val language: WorkingLanguage = WorkingLanguage.AUTO,
 ) {
     init {
         require(seedPaths.all { it.startsWith("/") && !it.startsWith("//") }) { "seed paths must be paths on the target" }

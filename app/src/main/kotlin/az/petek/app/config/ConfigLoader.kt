@@ -10,6 +10,7 @@
 package az.petek.app.config
 
 import az.petek.browser.domain.BrowserTopology
+import az.petek.core.model.WorkingLanguage
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
@@ -72,6 +73,7 @@ class ConfigLoader(
             val model = text(Keys.LLM_MODEL) ?: PetekConfig.DEFAULT_LLM_MODEL
             val claudeBin = text(Keys.CLAUDE_BIN) ?: PetekConfig.DEFAULT_CLAUDE_BIN
             val concurrency = concurrency()
+            val language = WorkingLanguage.of(text(Keys.LANGUAGE))
             val apiKey = text(Keys.ANTHROPIC_API_KEY)?.let(::Secret)
             if (provider == LlmProviderId.ANTHROPIC_API && apiKey == null) {
                 problems += "${Keys.ANTHROPIC_API_KEY} is required when ${Keys.LLM_PROVIDER} is ${LlmProviderId.ANTHROPIC_API.key}"
@@ -97,6 +99,7 @@ class ConfigLoader(
                 llmModel = model,
                 claudeBin = claudeBin,
                 llmConcurrency = checkNotNull(concurrency),
+                language = language,
                 anthropicApiKey = apiKey,
                 browserHeadless = headless,
                 browserTopology = checkNotNull(topology),
@@ -257,6 +260,7 @@ class ConfigLoader(
         const val LLM_MODEL = "PETEK_LLM_MODEL"
         const val CLAUDE_BIN = "PETEK_CLAUDE_BIN"
         const val LLM_CONCURRENCY = "PETEK_LLM_CONCURRENCY"
+        const val LANGUAGE = "PETEK_LANGUAGE"
         const val ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
         const val BROWSER_HEADLESS = "PETEK_BROWSER_HEADLESS"
         const val BROWSER_TOPOLOGY = "PETEK_BROWSER_TOPOLOGY"

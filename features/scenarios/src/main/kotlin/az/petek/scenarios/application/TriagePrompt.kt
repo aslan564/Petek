@@ -69,7 +69,7 @@ internal class TriagePrompt(
           verbatim from the YAML and occurs in it exactly once; "replace" is the new text. Keep edits minimal. Never
           rename the campaign and never change campaign settings other than budget and on_fail. Omit
           proposed_change when you are unsure and always for ${TriageCategory.SYSTEM_BUG}.
-        - Write rationale and summary in ${options.rationaleLanguage}; the rationale has at most four sentences.
+        - ${options.language.rule("rationale and summary")} The rationale has at most four sentences.
         Answer with one JSON object only.
         """.trimIndent()
 

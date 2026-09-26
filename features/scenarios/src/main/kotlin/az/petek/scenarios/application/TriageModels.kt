@@ -10,6 +10,7 @@
 package az.petek.scenarios.application
 
 import az.petek.campaign.domain.Campaign
+import az.petek.core.model.WorkingLanguage
 import az.petek.evidence.domain.RunRecord
 import az.petek.scenarios.domain.IgnoredSignal
 import az.petek.scenarios.domain.RunEvidence
@@ -23,18 +24,18 @@ import az.petek.scenarios.domain.TriageVerdict
  * - [maxQuestions]: at most this many surprises are asked about per execution (cost control); the rest are
  *   [TriageReport.deferred] and asked by the next execution.
  * - [parallelism]: questions in flight at once (the LLM client may limit further).
- * - [rationaleLanguage]: the owner reads the rationale in the panel, so it is written in the owner's language.
+ * - [language]: the owner reads the rationale in the panel, so it is written in the owner's language
+ *   ([WorkingLanguage.AUTO]: the language of the scenario and its texts).
  */
 data class TriageOptions(
     val maxQuestions: Int = 50,
     val parallelism: Int = 4,
-    val rationaleLanguage: String = "Azerbaijani",
+    val language: WorkingLanguage = WorkingLanguage.AUTO,
     val maxOutputTokens: Int = 4_096,
 ) {
     init {
         require(maxQuestions >= 0) { "maxQuestions must not be negative, was $maxQuestions" }
         require(parallelism >= 1) { "parallelism must be at least 1, was $parallelism" }
-        require(rationaleLanguage.isNotBlank()) { "rationaleLanguage must not be blank" }
         require(maxOutputTokens > 0) { "maxOutputTokens must be positive, was $maxOutputTokens" }
     }
 }

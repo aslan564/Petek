@@ -87,7 +87,9 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
   (`FakeBrowserSession`, `ScriptedLlmClient`, `InMemoryEvidence`, `FakeMailbox`, `FakeTargetOracle`, `FakeHarnessClock`).
   Test adları backtick ilə, cümlə kimi. Real brauzer tələb edən testlər `@Tag("e2e")`, real LLM `@Tag("live")`.
 - Loglarda MDC: `run_id`, `agent_id`. Sirlər heç vaxt loglanmır.
-- Kod, identifikatorlar, KDoc və commit mesajları ingiliscə; istifadəçiyə izahlar Azərbaycan dilində.
+- Kod, identifikatorlar, KDoc və commit mesajları ingiliscə; istifadəçiyə izahlar Azərbaycan dilində. Məhsulun AI-ı
+  (kəşfiyyatçı, testerlər, triaj) sahibin dilində yazır: `PETEK_LANGUAGE` (`WorkingLanguage`, default `auto`); heç bir
+  prompt dili Azərbaycan dilinə məcbur etmir.
 - Hər dəyişiklikdən sonra `./gradlew spotlessApply build` keçməlidir (warnings = errors).
 
 ## İş üsulu

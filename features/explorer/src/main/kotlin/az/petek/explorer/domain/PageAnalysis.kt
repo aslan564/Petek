@@ -10,6 +10,7 @@
 package az.petek.explorer.domain
 
 import az.petek.browser.domain.PageSnapshot
+import az.petek.core.model.WorkingLanguage
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -69,7 +70,8 @@ object PageAnalysisProtocol {
     private val CONTROL = Regex("[\\p{Cntrl}&&[^\\n\\t]]")
     private val SPACES = Regex("\\s+")
 
-    val system: String =
+    /** The system prompt; [language] decides what the purpose and the questions are written in. */
+    fun system(language: WorkingLanguage = WorkingLanguage.AUTO): String =
         """
         You are the site explorer of Pətək, a web testing platform. You are shown ONE page of a web site as a numbered
         list of interactive elements and its visible text, plus the forms code already found on it. Describe what the
@@ -78,8 +80,7 @@ object PageAnalysisProtocol {
         - Use only element numbers from the Elements list. Never invent elements, pages or data.
         - kind is one of: ${ActionKind.entries.joinToString(", ")}. CREATE makes a new object, UPDATE changes one,
           SUBMIT sends a form that is none of the other kinds, NAVIGATE only opens another page.
-        - purpose: one short sentence in the language of the page. Write every text (purpose, unknowns) in the
-          language of the page; when the page gives no clue, write in Azerbaijani. Never answer in Turkish.
+        - purpose: one short sentence. ${language.rule("every text (purpose, unknowns)")}
         - unknowns: at most a few questions for the site owner, only when something important for testing cannot be
           decided from the page (who may do what, what should happen live, what an unclear control does).
         - The owner's instructions say what matters most; list the related actions first.

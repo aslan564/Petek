@@ -221,6 +221,7 @@ Everything comes from `.env` (or `--env-file`) and the environment; real environ
 | `PETEK_LLM_MODEL` | `claude-sonnet-5` | Model id |
 | `PETEK_CLAUDE_BIN` | `claude` | The CLI binary |
 | `PETEK_LLM_CONCURRENCY` | `6` | AI calls in flight across all agents (1–64) |
+| `PETEK_LANGUAGE` | `auto` | What the AI writes for you in (explorer questions and ideas, tester summaries, triage): `auto` follows the language of your own instructions and scenarios, or a name such as `English` |
 | `ANTHROPIC_API_KEY` | — | For `anthropic-api` |
 | `PETEK_BROWSER_HEADLESS` | `true` | `--headful` on `run` overrides it |
 | `PETEK_BROWSER_TOPOLOGY` | `shared-server` | or `per-session` |

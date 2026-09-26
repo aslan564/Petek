@@ -10,6 +10,7 @@
 package az.petek.app.config
 
 import az.petek.browser.domain.BrowserTopology
+import az.petek.core.model.WorkingLanguage
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
@@ -32,6 +33,8 @@ import java.nio.file.Path
  * @property mailSource where verification mail is read from (`PETEK_MAIL_SOURCE`); the test API needs [testToken].
  * @property identitySecret key of the password derivation; from `PETEK_IDENTITY_SECRET` or `~/.petek/identity.secret`.
  * @property llmConcurrency LLM calls allowed in flight at once across all agents.
+ * @property language the language the AI writes for the owner in (`PETEK_LANGUAGE`; `auto` follows the owner's own
+ *   text), see [WorkingLanguage].
  * @property dbPath the evidence database (`PETEK_DB`, default `<evidenceDir>/petek.db`).
  */
 data class PetekConfig(
@@ -48,6 +51,7 @@ data class PetekConfig(
     val llmModel: String = DEFAULT_LLM_MODEL,
     val claudeBin: String = DEFAULT_CLAUDE_BIN,
     val llmConcurrency: Int = DEFAULT_LLM_CONCURRENCY,
+    val language: WorkingLanguage = WorkingLanguage.AUTO,
     val anthropicApiKey: Secret? = null,
     val browserHeadless: Boolean = true,
     val browserTopology: BrowserTopology = BrowserTopology.SHARED_SERVER,
@@ -84,7 +88,7 @@ data class PetekConfig(
             "testToken=${setOrUnset(testToken)}, testApiUrl=${testApiUrl?.let(::masked)}, mailSource=${mailSource.key}, " +
             "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, " +
             "identitySecret=***, llmProvider=${llmProvider.key}, llmModel=$llmModel, claudeBin=$claudeBin, " +
-            "llmConcurrency=$llmConcurrency, anthropicApiKey=${setOrUnset(anthropicApiKey)}, " +
+            "llmConcurrency=$llmConcurrency, language=$language, anthropicApiKey=${setOrUnset(anthropicApiKey)}, " +
             "browserHeadless=$browserHeadless, browserTopology=$browserTopology, browserIgnoreTlsErrors=$browserIgnoreTlsErrors, " +
             "evidenceDir=$evidenceDir, dbPath=$dbPath)"
 

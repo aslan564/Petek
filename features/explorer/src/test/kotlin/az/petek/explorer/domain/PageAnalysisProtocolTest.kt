@@ -11,6 +11,7 @@ package az.petek.explorer.domain
 
 import az.petek.browser.domain.PageElement
 import az.petek.browser.domain.PageSnapshot
+import az.petek.core.model.WorkingLanguage
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
@@ -173,5 +174,13 @@ class PageAnalysisProtocolTest {
         message shouldNotContain "Xk9pQ2mN7vB4tL8wR5yZabcd"
         message shouldNotContain "s3cr3t"
         message shouldNotContain "abcdef1234567890ghij"
+    }
+
+    @Test
+    fun `the system prompt follows the owner's language and never forces Azerbaijani`() {
+        val auto = PageAnalysisProtocol.system()
+        auto shouldContain "in the language the owner's own text"
+        auto shouldNotContain "write in Azerbaijani"
+        PageAnalysisProtocol.system(WorkingLanguage("English")) shouldContain "in English, whatever language the page"
     }
 }

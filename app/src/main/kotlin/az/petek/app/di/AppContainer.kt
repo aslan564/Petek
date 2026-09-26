@@ -91,6 +91,7 @@ import az.petek.reporting.domain.ThreeSourceJudge
 import az.petek.reporting.infrastructure.HtmlReportWriter
 import az.petek.reporting.infrastructure.MarkdownReportWriter
 import az.petek.scenarios.application.ScenarioCatalog
+import az.petek.scenarios.application.TriageOptions
 import az.petek.scenarios.application.TriageResults
 import az.petek.scenarios.application.TriageRunUseCase
 import az.petek.scenarios.domain.ScenarioIdGenerator
@@ -243,7 +244,7 @@ class AppContainer(
                 artifacts = artifacts,
                 verification = verification,
                 oracle = oracle,
-                prompts = PromptBuilder(protocol),
+                prompts = PromptBuilder(protocol, language = config.language),
                 resolver = PlaceholderResolver(),
                 clock = clock,
                 ids = ids,
@@ -376,6 +377,7 @@ class AppContainer(
             clock = clock,
             ids = scenarioIds,
             redactor = SecretRedactor(listOfNotNull(config.testToken, config.anthropicApiKey, config.identitySecret) + secrets),
+            options = TriageOptions(language = config.language),
         )
 
     val triageResults: TriageResults by lazy { TriageResults(triageStore) }

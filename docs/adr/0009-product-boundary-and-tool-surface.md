@@ -35,9 +35,12 @@ code checks assertions, the AI only picks whitelisted actions.
 ## Consequences
 - Easier: any MCP client gets explore → findings in one session; CI and scripts use `--json`; roles are documented
   once and reused by every AI.
-- Harder: the tool surface is a public contract and needs versioning and contract tests; the MCP transport needs
-  either the Kotlin MCP SDK (new dependency, rule 11) or a thin stdio JSON-RPC implementation — decision pending.
-- Role instructions are written in English (global use); the panel stays Azerbaijani.
+- Harder: the tool surface is a public contract and needs versioning and contract tests; the MCP transport is a thin
+  stdio JSON-RPC implementation of our own (decided 2026-09-26; no SDK dependency, rule 11).
+- Role instructions are written in English (global use). Every text the AI writes for the owner (explorer, testers,
+  triage) follows the owner's language (`PETEK_LANGUAGE`, default `auto`: the language of the owner's own text; the
+  owner's decision 2026-09-26, nothing is forced to Azerbaijani); the panel's own labels stay Azerbaijani until it is
+  localised.
 
 ## Action Items
 1. [x] Tool surface over `PanelBackend` (`features/dashboard/infrastructure/mcp`, 25 tools; `findings` and `teardown`

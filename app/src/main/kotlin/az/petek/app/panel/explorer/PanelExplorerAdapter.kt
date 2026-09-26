@@ -75,7 +75,7 @@ internal class PanelExplorerAdapter(
     private val roleSessions: RoleSessionSource,
     private val answers: AnswerBook,
     private val scope: CoroutineScope,
-    private val settings: ExplorerSettings = ExplorerSettings(),
+    private val settings: ExplorerSettings = ExplorerSettings(language = container.config.language),
 ) : PanelExplorer {
     /** The exploration on screen: the owner's request and its tracker. [instructions] is null for a replayed one. */
     private class Current(

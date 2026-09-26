@@ -53,6 +53,12 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
   as created / updated / kept / unchanged.
 - **`petek dev`** starts the panel once the project's app answers its health URL.
 
+- **Language.** Whatever text the AI writes for the owner follows the owner's language (`WorkingLanguage`, core
+  domain; `PETEK_LANGUAGE`, default `auto` = the language of the owner's instructions, task or scenario, the page's
+  when there is none; or a named language): the explorer's purposes and questions (`PageAnalysisProtocol.system`),
+  the testers' summaries and reported problems (`PromptBuilder`), the triage rationale (`TriageOptions.language`).
+  An owner who drives Pətək in English through their own AI gets English back; nothing is forced to Azerbaijani.
+
 ## Modules touched
 
 `dashboard` (or a `toolface` feature over `PanelBackend`), `reporting` (`FindingBundle`), `app/cli` (`--json`,
