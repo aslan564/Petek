@@ -57,7 +57,17 @@ class GenerateScenarioUseCaseTest {
     lateinit var dir: Path
 
     private val runFunctions =
-        setOf("login", "verify_identity", "read_email_code", "register_owner", "seed_company", "register_and_login", "logout")
+        setOf(
+            "login",
+            "verify_identity",
+            "read_email_code",
+            "register_owner",
+            "seed_company",
+            "register_and_login",
+            "logout",
+            "site_health",
+            "direct_url",
+        )
     private val validator = DefaultCampaignValidator(DefaultTemplateRenderer())
     private val repository = InMemoryExplorationRepository()
     private val clock = FakeHarnessClock()
@@ -312,7 +322,10 @@ class GenerateScenarioUseCaseTest {
         val reasons = composed.skipped.map { it.reason }
         reasons.any { "no observed action creates such an object" in it } shouldBe true
         reasons.any { "no campaign role (admin, manager, employee) was seen using 'cart-add' (seen: buyer)" in it } shouldBe true
-        composed.campaign.steps.shouldBeEmpty()
+        // Only the blind site-wide checks remain, which need no role difference and no creator.
+        composed.campaign.steps
+            .map { (it.action as StepAction.Run).function }
+            .toSet() shouldBe setOf("site_health")
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 

@@ -114,7 +114,8 @@ class ExplorationTrackerTest {
         announcements.reachableBy shouldContainExactly listOf("admin", "employee")
         announcements.actions.single().name shouldBe "Elan yarat"
         view.activity.first().text shouldBe "Elan yarat (yaratma) · /announcements"
-        view.ideas.map(TestIdeaView::pattern) shouldContainExactly listOf("HAPPY_PATH", "IDEMPOTENCY", "BOUNDARY")
+        view.ideas.filter { it.action != "site" }.map(TestIdeaView::pattern) shouldContainExactly
+            listOf("HAPPY_PATH", "DIRECT_URL", "IDEMPOTENCY", "BOUNDARY")
     }
 
     @Test

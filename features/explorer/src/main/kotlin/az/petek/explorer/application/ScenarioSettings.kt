@@ -24,6 +24,10 @@ data class SetupFunctions(
     val registerOwner: String = "register_owner",
     val seedCompany: String = "seed_company",
     val join: String = "register_and_login",
+    /** The blind site-wide checks (Faza 13). */
+    val siteHealth: String = "site_health",
+    /** Someone else's object opened by its address (Faza 13). */
+    val directUrl: String = "direct_url",
 )
 
 /**

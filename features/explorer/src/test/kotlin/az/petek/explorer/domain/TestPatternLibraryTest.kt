@@ -23,8 +23,20 @@ import org.junit.jupiter.params.provider.MethodSource
 class TestPatternLibraryTest {
     private val library = TestPatternLibrary()
 
+    /** The ideas about [action] itself; the site-wide ones every model gets are tested on their own. */
     private fun ideasFor(action: ActionModel): List<TestIdea> =
-        library.ideas(Models.model(listOf(Models.page("/p", reachableBy = setOf("manager"))), listOf(action)))
+        library
+            .ideas(Models.model(listOf(Models.page("/p", reachableBy = setOf("manager"))), listOf(action)))
+            .filter { it.actionId != TestPatternLibrary.SITE }
+
+    @Test
+    fun `every site gets the blind site-wide checks, even with an empty model, each naming its evidence tier`() {
+        val ideas = library.ideas(Models.model(emptyList(), emptyList()))
+
+        ideas.map { it.pattern }.toSet() shouldBe TestPattern.entries.filter { it.siteWide }.toSet()
+        ideas.all { it.actionId == TestPatternLibrary.SITE } shouldBe true
+        ideas.single { it.pattern == TestPattern.CONSOLE_ERRORS }.rationale shouldContain "(ui_network)"
+    }
 
     @ParameterizedTest(name = "{0} -> {1}")
     @MethodSource("table")
@@ -40,7 +52,7 @@ class TestPatternLibraryTest {
         val ideas = ideasFor(Models.action("a", ActionKind.CREATE, "/p", realtime = true, trial = Models.trial(setOf("employee"))))
 
         ideas.map { it.pattern } shouldContainExactlyInAnyOrder
-            listOf(TestPattern.HAPPY_PATH, TestPattern.REALTIME, TestPattern.IDEMPOTENCY, TestPattern.BOUNDARY)
+            listOf(TestPattern.HAPPY_PATH, TestPattern.REALTIME, TestPattern.IDEMPOTENCY, TestPattern.BOUNDARY, TestPattern.DIRECT_URL)
         ideas.single { it.pattern == TestPattern.REALTIME }.rationale shouldContain "employee receive it live"
     }
 
@@ -58,7 +70,7 @@ class TestPatternLibraryTest {
         observed.roles shouldContainExactly listOf("employee")
         observed.rationale shouldContain "employee were not offered it"
         create.map { it.pattern } shouldContainExactlyInAnyOrder
-            listOf(TestPattern.HAPPY_PATH, TestPattern.BOUNDARY, TestPattern.IDEMPOTENCY, TestPattern.PERMISSION)
+            listOf(TestPattern.HAPPY_PATH, TestPattern.BOUNDARY, TestPattern.IDEMPOTENCY, TestPattern.PERMISSION, TestPattern.DIRECT_URL)
     }
 
     @Test
@@ -107,7 +119,10 @@ class TestPatternLibraryTest {
         @JvmStatic
         fun table(): List<Arguments> =
             listOf(
-                Arguments.of(ActionKind.CREATE, setOf(TestPattern.HAPPY_PATH, TestPattern.BOUNDARY, TestPattern.IDEMPOTENCY)),
+                Arguments.of(
+                    ActionKind.CREATE,
+                    setOf(TestPattern.HAPPY_PATH, TestPattern.BOUNDARY, TestPattern.IDEMPOTENCY, TestPattern.DIRECT_URL),
+                ),
                 Arguments.of(ActionKind.APPROVE, setOf(TestPattern.RACE, TestPattern.PERMISSION)),
                 Arguments.of(ActionKind.REJECT, setOf(TestPattern.RACE, TestPattern.PERMISSION)),
                 Arguments.of(ActionKind.DELETE, setOf(TestPattern.PERMISSION, TestPattern.IDEMPOTENCY)),

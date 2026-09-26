@@ -15,6 +15,7 @@ import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
+import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.domain.WaitOutcome
@@ -37,6 +38,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -84,6 +86,7 @@ internal class PlaywrightBrowserSession private constructor(
     private val traffic: RealtimeTrafficRecorder,
     private val dialogs: DialogRecorder,
     private val mutations: MutationRecorder,
+    private val health: HealthRecorder,
     private val onClosed: (PlaywrightBrowserSession) -> Unit,
 ) : BrowserSession {
     private val closed = AtomicBoolean(false)
@@ -286,6 +289,50 @@ internal class PlaywrightBrowserSession private constructor(
             mutations.since(since)
         }
 
+    override suspend fun health(
+        since: HarnessTimestamp,
+        slowAfter: Duration,
+    ): PageHealth =
+        perform("read the page's health") {
+            // As above: the round trip dispatches events already received, so they are recorded first.
+            runCatching { page.title() }
+            health.since(since, slowAfter) { SecretRedactor.redactText(it, typedSecrets) }
+        }
+
+    override suspend fun links(): List<String> =
+        perform("read the page's links") {
+            surviveNavigation {
+                @Suppress("UNCHECKED_CAST")
+                val hrefs = page.evaluate(LINKS_SCRIPT) as? List<String> ?: emptyList()
+                val base = URI(page.url())
+                hrefs
+                    .mapNotNull { href -> runCatching { base.resolve(href.trim()) }.getOrNull() }
+                    .filter { sameOrigin(it, options.baseUrl) }
+                    .map { (it.rawPath.orEmpty().ifEmpty { "/" }) + (it.rawQuery?.let { query -> "?$query" } ?: "") }
+                    .distinct()
+            }
+        }
+
+    override suspend fun goBack(): Boolean = perform("go back") { page.goBack() != null }
+
+    override suspend fun clearCookies() {
+        perform("clear cookies") { handles.context.clearCookies() }
+    }
+
+    override suspend fun horizontalOverflow(
+        width: Int,
+        height: Int,
+    ): Int? =
+        perform("measure at ${width}x$height") {
+            val own = page.viewportSize()
+            page.setViewportSize(width, height)
+            try {
+                (page.evaluate(OVERFLOW_SCRIPT) as? Number)?.toInt()
+            } finally {
+                if (own != null) page.setViewportSize(own.width, own.height)
+            }
+        }
+
     /**
      * Idempotent. Releases the context, the browser connection (or own browser) and the Playwright driver once the
      * call already running on the session thread (if any) has finished; calls still queued fail as closed.
@@ -451,6 +498,29 @@ internal class PlaywrightBrowserSession private constructor(
         /** How often a wait re-checks the page: the resolution of every measured latency (t1). */
         const val PROBE_POLLING_INTERVAL_MS = 50.0
 
+        private const val LINKS_SCRIPT =
+            "() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href'))" +
+                ".filter(h => h && !/^(mailto|tel|javascript|data):/i.test(h) && !h.startsWith('#'))"
+        private const val OVERFLOW_SCRIPT =
+            "() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)"
+
+        private fun sameOrigin(
+            address: URI,
+            base: URI,
+        ): Boolean {
+            fun port(uri: URI) =
+                if (uri.port >= 0) {
+                    uri.port
+                } else if (uri.scheme.equals("https", true)) {
+                    443
+                } else {
+                    80
+                }
+            return address.scheme.equals(base.scheme, ignoreCase = true) &&
+                address.host.equals(base.host, ignoreCase = true) &&
+                port(address) == port(base)
+        }
+
         private val URL_SCHEME = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*):")
         private val WEB_SCHEMES = setOf("http", "https")
         private const val BLANK_PAGE = "about:blank"
@@ -482,9 +552,10 @@ internal class PlaywrightBrowserSession private constructor(
             val traffic = RealtimeTrafficRecorder()
             val dialogs = DialogRecorder()
             val mutations = MutationRecorder(options.baseUrl)
+            val health = HealthRecorder(options.baseUrl)
             val handles =
                 try {
-                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock) }
+                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock, health) }
                 } catch (e: BrowserActionException) {
                     thread.close()
                     throw e
@@ -493,7 +564,7 @@ internal class PlaywrightBrowserSession private constructor(
                     val reason = if (e is PlaywrightException) PlaywrightFailures.reasonOf(e.message.orEmpty()) else e.message
                     throw BrowserActionException("could not open browser session '${options.label}': $reason", e)
                 }
-            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, onClosed)
+            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, health, onClosed)
             try {
                 currentCoroutineContext().ensureActive()
             } catch (e: CancellationException) {

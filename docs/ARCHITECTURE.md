@@ -164,6 +164,8 @@ by name; the `run` functions execute them through the agent's `FlowRunner`:
 | `register_owner` | `register_owner`, then (test API) the company id and code published for everyone; `login` when the page shows nobody signed in; `verify_identity` unless a flow asserted the identity; the storage state saved unless a flow saved it |
 | `register_and_login` | `join_by_invite` or `join_by_code` by the identity's registration mode, then as above; up to 3 attempts, and once the flow passed `account_created` a retry signs in with `login` instead of registering again. On a site without companies the tester's gate decides: `self` follows `sign_up` (name, e-mail, password), `login` signs in with the owner's account it was given, `guest` only opens the home page |
 | `login` / `verify_identity` | `login` / `verify_identity` |
+| `site_health` | no flow: blind checks decided by code from what the browser saw (links, console/network errors, slow requests, back button, phone width, session expiry, then `login` again) over `pages` |
+| `direct_url` | no flow: opens someone else's object by its `path`; passes when the site refuses (401/403/404, another page, or the object's `text` not shown) |
 
 The defaults (`TargetProfile.DEFAULT_FLOWS`) are the contract flows, written against the profile's selector keys, so the
 fake target needs no flows and a campaign that overrides a selector changes them too. A flow is a list of steps

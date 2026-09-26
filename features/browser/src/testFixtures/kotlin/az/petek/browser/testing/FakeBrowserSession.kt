@@ -16,12 +16,14 @@ import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
+import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
 import az.petek.core.time.HarnessTimestamp
 import java.nio.file.Path
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
 
@@ -182,6 +184,41 @@ class FakeBrowserSession(
     override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> {
         mutationsFailure?.let { throw it }
         return observedMutations.filter { it.at.monotonicNanos >= since.monotonicNanos }
+    }
+
+    /** What [health] reports, whatever the window; tests set it to play a broken page. */
+    @Volatile
+    var pageHealth: PageHealth = PageHealth.NONE
+
+    /** The links of the page, per URL; [links] answers those of the current [url]. */
+    val pageLinks = ConcurrentHashMap<String, List<String>>()
+
+    /** Overflow reported by [horizontalOverflow]; null plays a session that cannot measure. */
+    @Volatile
+    var overflow: Int? = 0
+
+    override suspend fun health(
+        since: HarnessTimestamp,
+        slowAfter: Duration,
+    ): PageHealth = pageHealth.copy(slowResponses = pageHealth.slowResponses.filter { it.millis >= slowAfter.inWholeMilliseconds })
+
+    override suspend fun links(): List<String> = pageLinks[url].orEmpty()
+
+    override suspend fun goBack(): Boolean {
+        record("back")
+        val previous = actions.filter { it.startsWith("navigate ") }.dropLast(1).lastOrNull() ?: return false
+        url = previous.removePrefix("navigate ")
+        return true
+    }
+
+    override suspend fun clearCookies() = record("clearCookies")
+
+    override suspend fun horizontalOverflow(
+        width: Int,
+        height: Int,
+    ): Int? {
+        record("viewport ${width}x$height")
+        return overflow
     }
 
     override suspend fun close() {

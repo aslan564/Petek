@@ -107,7 +107,9 @@ internal class ScenarioComposer(
         ideas.forEach { idea ->
             val action = model.action(idea.actionId)
             val outcome =
-                if (action == null) {
+                if (idea.pattern.siteWide) {
+                    siteHealth(idea.pattern)
+                } else if (action == null) {
                     Outcome.Skipped("the action is not in site model v${model.version}")
                 } else {
                     ideaSteps(idea, action)
@@ -148,7 +150,86 @@ internal class ScenarioComposer(
             TestPattern.RACE -> race(action, page)
             TestPattern.IDEMPOTENCY -> idempotency(action, page)
             TestPattern.BOUNDARY -> boundary(action)
+            TestPattern.DIRECT_URL -> directUrl(action, page)
+            else -> siteHealth(idea.pattern)
         }
+    }
+
+    /**
+     * A site-wide blind check (Faza 13): one `site_health` step of the least privileged tester over the pages the
+     * explorer saw without an object id (at most [MAX_HEALTH_PAGES]; the home page when it saw none).
+     */
+    private fun siteHealth(pattern: TestPattern): Outcome {
+        val check = HEALTH_CHECKS[pattern] ?: return Outcome.Skipped("${pattern.name.lowercase()} is not a site-wide check")
+        val role = healthRole() ?: return Outcome.Skipped("the campaign has no tester to run site-wide checks")
+        val pages =
+            model.pages
+                .map { it.urlPattern }
+                .filter { UrlPatterns.ID !in it && it.startsWith("/") && literal(it) }
+                .distinct()
+                .take(MAX_HEALTH_PAGES)
+                .ifEmpty { listOf("home") }
+        val id = Slugs.firstFree("site-$check") { it !in stepIds }
+        steps +=
+            step(
+                id = id,
+                phase = StepPhase.MAIN,
+                actor = single(role),
+                action = StepAction.Run(settings.setup.siteHealth, mapOf("checks" to check, "pages" to pages.joinToString(","))),
+            )
+        return Outcome.Covered(listOf(id))
+    }
+
+    private fun healthRole(): Role? =
+        if (settings.tenant == Tenant.NONE) {
+            settings.team.roles.firstOrNull()
+        } else {
+            PREFERENCE.firstOrNull { settings.team.count(it) > 0 }
+        }
+
+    /**
+     * What [action] creates, opened by its address by a second tester who did not create it: the same role's second
+     * tester when there is one, else another role's. Needs the object's own page (`/notes/{id}`) in the model or seen
+     * after the trial touch.
+     */
+    private fun directUrl(
+        action: ActionModel,
+        page: PageModel,
+    ): Outcome {
+        val role = actorRole(action) ?: return noRole(action)
+        val resource = createdResource(action, page)
+        val objectPattern =
+            model.pages.map { it.urlPattern }.firstOrNull { pattern ->
+                pattern.split('/').count { it == UrlPatterns.ID } == 1 && objectOf(pattern) == resource
+            } ?: action.trial?.urlPatternAfter?.takeIf { pattern -> pattern.split('/').count { it == UrlPatterns.ID } == 1 }
+                ?: return Outcome.Skipped("no page of one ${site(resource)} object was seen, so there is no address to type")
+        val other =
+            when {
+                settings.team.count(role) >= 2 -> {
+                    "${role.key}[n=2]"
+                }
+
+                else -> {
+                    settings.team.roles
+                        .firstOrNull { it != role }
+                        ?.let(::single)
+                        ?: return Outcome.Skipped("a second tester is needed to open someone else's ${site(resource)}")
+                }
+            }
+        val creator = creator(action, page, role) ?: return noCreator(action, page)
+        val id = stepId(action, "direct-url")
+        steps +=
+            step(
+                id = id,
+                phase = StepPhase.MAIN,
+                actor = other,
+                action =
+                    StepAction.Run(
+                        settings.setup.directUrl,
+                        mapOf("path" to withObject(objectPattern, creator.event), "text" to creator.marker),
+                    ),
+            )
+        return Outcome.Covered(creator.steps + id)
     }
 
     private fun happyPath(
@@ -538,6 +619,18 @@ internal class ScenarioComposer(
         val PREFERENCE = listOf(Role.EMPLOYEE, Role.MANAGER, Role.ADMIN)
         val WRITE_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
         const val ITEM_SUFFIX = "-item"
+        const val MAX_HEALTH_PAGES = 5
+
+        /** The `site_health` check of each site-wide pattern. */
+        val HEALTH_CHECKS: Map<TestPattern, String> =
+            mapOf(
+                TestPattern.BROKEN_LINKS to "links",
+                TestPattern.CONSOLE_ERRORS to "console",
+                TestPattern.SLOW_ENDPOINTS to "slow",
+                TestPattern.BACK_BUTTON to "back",
+                TestPattern.MOBILE_VIEWPORT to "mobile",
+                TestPattern.SESSION_EXPIRY to "session",
+            )
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
 

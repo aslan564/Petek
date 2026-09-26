@@ -130,8 +130,37 @@ internal object ExplorerTexts {
                     val deletes = kind == ActionKind.DELETE
                     if (deletes) "iki dəfə silmək zərər verməməlidir." else "iki dəfə göndərmək iki obyekt yaratmamalıdır."
                 }
+
+                TestPattern.DIRECT_URL -> {
+                    "yaradılan obyekt ünvanı yazan başqa testerə açılmamalıdır."
+                }
+
+                TestPattern.BROKEN_LINKS -> {
+                    "səhifələrin bütün linkləri cavab verməlidir (4xx/5xx olmadan)."
+                }
+
+                TestPattern.CONSOLE_ERRORS -> {
+                    "konsolda xəta və uğursuz sorğu olmamalıdır."
+                }
+
+                TestPattern.SLOW_ENDPOINTS -> {
+                    "heç bir sorğu yavaş olmamalıdır."
+                }
+
+                TestPattern.BACK_BUTTON -> {
+                    "geri düyməsi gəlinən səhifəyə qaytarmalıdır."
+                }
+
+                TestPattern.MOBILE_VIEWPORT -> {
+                    "səhifələr telefon ekranına sığmalıdır."
+                }
+
+                TestPattern.SESSION_EXPIRY -> {
+                    "vaxtı bitmiş sessiya daxil olmuş istifadəçini göstərməməlidir."
+                }
             }
         val matched = if (idea.rationale.endsWith(MATCHES_INSTRUCTIONS)) " Təlimatınıza uyğundur." else ""
+        if (idea.pattern.siteWide) return "Bütün sayt: $why$matched"
         return "'$actionName'" + (kind?.let { " (${kind(it)})" } ?: "") + ": " + why + matched
     }
 

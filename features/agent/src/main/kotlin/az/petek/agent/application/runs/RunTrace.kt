@@ -155,6 +155,9 @@ internal class RunTrace(
 
     suspend fun currentUrl(): String = session.currentUrl()
 
+    /** Harness time now, for windows of what the page reported ([az.petek.browser.domain.BrowserSession.health]). */
+    fun now(): HarnessTimestamp = evidence.now()
+
     /** The selector [ref] stands for (see the class KDoc). */
     fun selector(ref: String): String = target.resolveSelector(ref)
 

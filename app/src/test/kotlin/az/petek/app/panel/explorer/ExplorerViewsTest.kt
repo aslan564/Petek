@@ -90,7 +90,10 @@ class ExplorerViewsTest {
                         ),
                     ),
             )
-        val ideas = ExplorerViews.ideas(model, "təsdiq axınını yoxla")
+        val all = ExplorerViews.ideas(model, "təsdiq axınını yoxla")
+        // The site-wide blind checks come after the action's own ideas; they are explained for the whole site.
+        all.single { it.pattern == "CONSOLE_ERRORS" }.rationale shouldBe "Bütün sayt: konsolda xəta və uğursuz sorğu olmamalıdır."
+        val ideas = all.filter { it.action != "site" }
 
         ideas.map { it.pattern } shouldContainExactly listOf("PERMISSION", "RACE")
         ideas.map { it.priority } shouldContainExactly listOf(1, 1)

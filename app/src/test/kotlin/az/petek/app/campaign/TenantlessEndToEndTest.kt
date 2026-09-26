@@ -16,13 +16,17 @@ import az.petek.app.di.AppOverrides
 import az.petek.app.testing.CliHarness.Companion.done
 import az.petek.app.testing.scriptedLlm
 import az.petek.core.model.RegistrationMode
+import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.faketarget.notes.FakeNotesServer
+import az.petek.faketarget.notes.NotesBug
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
+import az.petek.orchestration.domain.RunSummary
 import az.petek.orchestration.infrastructure.NoOpMonitorView
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
@@ -42,35 +46,47 @@ class TenantlessEndToEndTest {
     @TempDir
     lateinit var dir: Path
 
-    private val site = FakeNotesServer().start()
+    private val sites = mutableListOf<FakeNotesServer>()
 
     @AfterEach
-    fun stop() = site.close()
+    fun stop() = sites.forEach { it.close() }
+
+    private fun site(vararg bugs: NotesBug) = FakeNotesServer(bugs.toSet()).start().also { sites += it }
+
+    /** Runs [CAMPAIGN] against [site] with the production object graph and real Chromium. */
+    private suspend fun <T> run(
+        site: FakeNotesServer,
+        check: suspend (AppContainer, RunSummary) -> T,
+    ): T {
+        val env =
+            dir.resolve("notes.env").also {
+                Files.writeString(
+                    it,
+                    """
+                    PETEK_TARGET=${site.baseUrl}
+                    PETEK_ORACLE=none
+                    PETEK_MAILPIT_URL=http://127.0.0.1:9
+                    PETEK_IDENTITY_SECRET=tenantless-e2e-secret
+                    PETEK_BROWSER_HEADLESS=true
+                    PETEK_EVIDENCE_DIR=evidence
+                    """.trimIndent() + "\n",
+                )
+            }
+        val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the test names its secret") }).load(env)
+        val campaignFile = dir.resolve("notes.yaml").also { Files.writeString(it, CAMPAIGN) }
+        return AppContainer(config, AppOverrides(llm = scriptedLlm { done() }, monitor = NoOpMonitorView)).use { container ->
+            val campaign = container.campaigns.execute(campaignFile, container.knownRunFunctions)
+            check(container, container.campaignRunner(headless = true).run(campaign, RunOptions()))
+        }
+    }
 
     @Test
-    fun `a site without companies is tested with its own roles, self sign-up and a visitor, without an oracle`() =
+    fun `a site without companies is tested with its own roles, self sign-up, a visitor and blind checks, without an oracle`() =
         runBlocking<Unit> {
-            val env =
-                dir.resolve("notes.env").also {
-                    Files.writeString(
-                        it,
-                        """
-                        PETEK_TARGET=${site.baseUrl}
-                        PETEK_ORACLE=none
-                        PETEK_MAILPIT_URL=http://127.0.0.1:9
-                        PETEK_IDENTITY_SECRET=tenantless-e2e-secret
-                        PETEK_BROWSER_HEADLESS=true
-                        PETEK_EVIDENCE_DIR=evidence
-                        """.trimIndent() + "\n",
-                    )
-                }
-            val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the test names its secret") }).load(env)
-            val campaignFile = dir.resolve("notes.yaml").also { Files.writeString(it, CAMPAIGN) }
-            AppContainer(config, AppOverrides(llm = scriptedLlm { done() }, monitor = NoOpMonitorView)).use { container ->
-                val campaign = container.campaigns.execute(campaignFile, container.knownRunFunctions)
+            val site = site()
+            site.seedNote("owner@example.com", "Sahibin qeydi")
 
-                val summary = container.campaignRunner(headless = true).run(campaign, RunOptions())
-
+            run(site) { container, summary ->
                 summary.outcome shouldBe RunOutcome.PASSED
                 site.accounts shouldBe 2
                 val identities = container.identities.findByRun(summary.runId)
@@ -79,6 +95,26 @@ class TenantlessEndToEndTest {
                 identities.map { it.department }.toSet() shouldBe setOf(null)
                 val assertions = container.evidenceQuery.assertions(summary.runId)
                 assertions.filter { it.type == "oracle" }.map { it.verdict } shouldBe List(2) { Verdict.NOT_APPLICABLE }
+                val steps = container.evidenceQuery.steps(summary.runId)
+                steps.single { it.action == "run site_health" }.status shouldBe StepStatus.PASSED
+                steps.filter { it.action == "run direct_url" }.map { it.status }.toSet() shouldBe setOf(StepStatus.PASSED)
+            }
+        }
+
+    @Test
+    fun `someone else's note shown by its address is found by the blind direct-url check`() =
+        runBlocking<Unit> {
+            val site = site(NotesBug.FOREIGN_NOTE_VISIBLE)
+            site.seedNote("owner@example.com", "Sahibin qeydi")
+
+            run(site) { container, summary ->
+                summary.outcome shouldBe RunOutcome.FAILED
+                val refused =
+                    container.evidenceQuery
+                        .steps(summary.runId)
+                        .filter { it.action == "run direct_url" && it.status == StepStatus.FAILED }
+                refused.map { it.agentId?.value } shouldBe listOf("a02")
+                refused.first().detail.orEmpty() shouldContain "access_not_refused"
             }
         }
 
@@ -103,6 +139,12 @@ class TenantlessEndToEndTest {
                 run: verify_identity
                 assert:
                   - oracle: {path: /test/notes/latest, field: author, equals: "{self.email}"}
+              - id: blind-health
+                actor: writer[n=1]
+                run: {function: site_health, args: {pages: "home,/register"}}
+              - id: blind-direct-url
+                actor: [writer[n=2], reader]
+                run: {function: direct_url, args: {path: /notes/1, text: Sahibin qeydi}}
             """.trimIndent() + "\n"
     }
 }

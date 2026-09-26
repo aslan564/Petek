@@ -27,10 +27,12 @@ object RunFunctions {
     const val SEED_COMPANY = "seed_company"
     const val REGISTER_AND_LOGIN = "register_and_login"
     const val LOGOUT = "logout"
+    const val SITE_HEALTH = "site_health"
+    const val DIRECT_URL = "direct_url"
 
     /** Every built-in name; the campaign validator accepts exactly these (plus any custom additions). */
     val NAMES: Set<String> =
-        setOf(LOGIN, VERIFY_IDENTITY, READ_EMAIL_CODE, REGISTER_OWNER, SEED_COMPANY, REGISTER_AND_LOGIN, LOGOUT)
+        setOf(LOGIN, VERIFY_IDENTITY, READ_EMAIL_CODE, REGISTER_OWNER, SEED_COMPANY, REGISTER_AND_LOGIN, LOGOUT, SITE_HEALTH, DIRECT_URL)
 
     /**
      * Builds the registry with every built-in function. The functions share nothing but their stateless
@@ -59,6 +61,8 @@ object RunFunctions {
                 SeedCompanyRunFunction(engine, flows, oracle, settings),
                 RegisterAndLoginRunFunction(engine, runner, settings),
                 LogoutRunFunction(engine, settings),
+                SiteHealthRunFunction(engine, runner),
+                DirectUrlRunFunction(engine),
             ),
         )
     }

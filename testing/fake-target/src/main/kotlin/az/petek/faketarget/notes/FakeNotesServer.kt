@@ -101,6 +101,16 @@ class FakeNotesServer(
     /** How many accounts exist, for test assertions. */
     val accounts: Int get() = users.size
 
+    /** A note of [author] (an account that need not exist), written before a test; returns its id. */
+    fun seedNote(
+        author: String,
+        title: String,
+    ): Long {
+        val id = nextNote.getAndIncrement()
+        notes[id] = Note(id, author.lowercase(), title, "")
+        return id
+    }
+
     fun start(port: Int = 0): FakeNotesServer {
         check(server == null) { "FakeNotesServer can be started only once" }
         val engine = embeddedServer(CIO, port = port, host = HOST) { routes(this) }.start(wait = false)

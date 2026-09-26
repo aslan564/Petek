@@ -44,7 +44,17 @@ class SessionRunFunctionsTest {
     fun `the standard registry offers every built-in function`() {
         fixture.registry.names shouldBe RunFunctions.NAMES
         RunFunctions.NAMES shouldBe
-            setOf("login", "verify_identity", "read_email_code", "register_owner", "seed_company", "register_and_login", "logout")
+            setOf(
+                "login",
+                "verify_identity",
+                "read_email_code",
+                "register_owner",
+                "seed_company",
+                "register_and_login",
+                "logout",
+                "site_health",
+                "direct_url",
+            )
     }
 
     @Test

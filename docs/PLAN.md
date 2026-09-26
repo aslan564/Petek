@@ -840,10 +840,14 @@ ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
 - [x] Oracle adapteri konfiqurasiya ilə: `/test/...` yolları və resurslar profildə (`ScenarioSettings.oracleResources`
   başlanğıcdır); `none` rejimi birinci dərəcəli.
   **Vəziyyət:** `PETEK_ORACLE=none`, profildə `test_api: {mode: none}` və `test_api.paths` (`OraclePaths`); nəticə "N/A (no oracle)".
-- [ ] Kor test naxışları (`TestPatterns` genişlənir; site model boş olsa da işləyir): forma validasiyası (boş/uzun/yanlış
+- [x] Kor test naxışları (`TestPatterns` genişlənir; site model boş olsa da işləyir): forma validasiyası (boş/uzun/yanlış
   giriş), ikiqat submit (idempotentlik), birbaşa URL ilə icazə (rol A-nın səhifəsi rol B ilə), yarış (iki agent eyni
   obyekt), sessiya bitməsi, geri düyməsi, qırıq linklər, konsol/şəbəkə xətaları, yavaş endpoint-lər, mobil viewport.
   Hər naxış hansı sübut səviyyəsini verə bildiyini bildirir.
+  **Vəziyyət:** `TestPattern` hər naxışın sübut səviyyəsini daşıyır; sayt boyu naxışlar (qırıq linklər, konsol/şəbəkə
+  xətaları, yavaş sorğular, geri düyməsi, mobil görünüş, sessiyanın bitməsi) boş modeldə də `site_health` addımıdır;
+  birbaşa URL `direct_url`-dur; forma validasiyası `BOUNDARY`, ikiqat submit `IDEMPOTENCY`, yarış `RACE`. Hamısı kodla
+  qərar verilir, ikinci fake saytda real Chromium ilə sübut olunub (qəsdən qoyulmuş icazə xətası tapılır).
 - [x] Kəşfiyyatçı draftları şirkətsiz setup ilə (yalnız login və ya anonim); seed yolları və açar sözlər profildə.
   **Vəziyyət:** `ScenarioSettings.forSiteWithoutCompanies`: görülən rollar, hər birinə 2 tester, qapı `self` (yalnız anonim görülübsə `guest`).
 - [x] KadroHR default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → `targets/kadrohr.yaml`.

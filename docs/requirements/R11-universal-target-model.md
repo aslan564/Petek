@@ -1,6 +1,6 @@
 # R11 — Universal target model: tenant-optional core, free-form roles, blind test patterns
 
-**Status:** Planned (Faza 13) · **ADRs:** 0010
+**Status:** Implemented (Faza 13) · **ADRs:** 0010
 
 ## Requirement
 
@@ -30,10 +30,13 @@ The engine (browser, agent loop, assertions, realtime, explorer) is generic; the
 `core/domain` (`Roles.kt`), `campaign` (`Campaign`, `CampaignSettings`, validator), `agent` (`PromptBuilder`, run
 functions), `orchestration` (teardown), `explorer` (`TestPatterns`, `ScenarioComposer`, `ScenarioSettings`), `app`.
 
-## Verification (planned)
+## Verification
 
-- A second fake site without a company concept runs explore → draft → run → report end to end; the KadroHR campaign
-  produces unchanged results; a Konsist rule keeps HR concepts out of `core/domain`.
+- `TenantlessEndToEndTest` (real Chromium): a `tenant: none` campaign against `FakeNotesServer` (no companies, no test
+  API) signs testers up, keeps a visitor anonymous, reports oracle checks as "N/A (no oracle)", passes `site_health`
+  and `direct_url` on a correct site and finds the deliberate `FOREIGN_NOTE_VISIBLE` hole. Explorer drafts for such a
+  site are covered by `GenerateScenarioUseCaseTest`; the KadroHR campaign files and the panel e2e are unchanged.
+- `ArchitectureTest` fails when a declaration of `az.petek.core` is named after an HR concept.
 
 ## Open items
 

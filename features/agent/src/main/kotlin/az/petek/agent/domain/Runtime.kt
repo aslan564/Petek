@@ -147,6 +147,12 @@ enum class FailureReason(
     LLM_UNAVAILABLE("llm_unavailable"),
     BROWSER_ERROR("browser_error"),
     MISSING_PREREQUISITE("missing_prerequisite"),
+
+    /** `site_health` found broken links, console or network errors, slow requests, a bad back button or layout. */
+    UNHEALTHY_PAGE("unhealthy_page"),
+
+    /** `direct_url`: a page of someone else's object opened for a tester who must not see it. */
+    ACCESS_NOT_REFUSED("access_not_refused"),
 }
 
 data class ActionOutcome(

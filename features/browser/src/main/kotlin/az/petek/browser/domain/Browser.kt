@@ -151,6 +151,35 @@ data class ObservedMutation(
 }
 
 /**
+ * What went wrong on the pages a session loaded, as the browser itself saw it (Faza 13 blind patterns: console and
+ * network errors, slow endpoints). Only the target's origin counts for requests; texts are redacted like the rest of
+ * the session's output.
+ */
+data class PageHealth(
+    /** `console.error` messages and uncaught page exceptions, oldest first. */
+    val consoleErrors: List<String>,
+    /** Requests to the target that failed: `GET /api/x -> 500`, or `GET /x -> net::ERR_…` when no answer came. */
+    val failedRequests: List<String>,
+    /** Requests to the target that took at least the asked threshold. */
+    val slowResponses: List<SlowResponse>,
+) {
+    val isHealthy: Boolean get() = consoleErrors.isEmpty() && failedRequests.isEmpty() && slowResponses.isEmpty()
+
+    companion object {
+        val NONE: PageHealth = PageHealth(emptyList(), emptyList(), emptyList())
+    }
+}
+
+/** One slow request to the target: `GET /api/reports` answered in [millis] ms (browser-measured, request to end). */
+data class SlowResponse(
+    val method: String,
+    val path: String,
+    val millis: Long,
+) {
+    fun describe(): String = "$method $path took $millis ms"
+}
+
+/**
  * One isolated browser context owned by one agent (own cookies, localStorage, sessionStorage).
  * Implementations confine every underlying browser call to the session's own thread (CLAUDE.md rule 9);
  * callers may invoke these suspend functions from any coroutine.
@@ -258,6 +287,33 @@ interface BrowserSession {
      * after the action. Sessions that cannot see network traffic keep the default: none.
      */
     suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> = emptyList()
+
+    /**
+     * Console errors, failed requests to the target and requests that took at least [slowAfter], seen at or after
+     * [since]. Sessions that cannot see them keep the default: nothing seen.
+     */
+    suspend fun health(
+        since: HarnessTimestamp,
+        slowAfter: Duration,
+    ): PageHealth = PageHealth.NONE
+
+    /** Paths of the links on the current page that stay on the target's origin (no `mailto:`, no other hosts). */
+    suspend fun links(): List<String> = emptyList()
+
+    /** The browser's back button; false when there was no page to go back to (or the session cannot). */
+    suspend fun goBack(): Boolean = false
+
+    /** Forgets the session's cookies, as an expired session would; sessions that cannot keep the default no-op. */
+    suspend fun clearCookies() = Unit
+
+    /**
+     * Shows the current page at [width] × [height] (a phone), measures how many pixels it is wider than the screen
+     * and restores the session's own viewport; null when the session cannot measure.
+     */
+    suspend fun horizontalOverflow(
+        width: Int,
+        height: Int,
+    ): Int? = null
 
     suspend fun close()
 }

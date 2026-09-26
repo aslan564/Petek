@@ -66,6 +66,7 @@ internal class PlaywrightHandles private constructor(
             dialogs: DialogRecorder,
             mutations: MutationRecorder,
             clock: HarnessClock,
+            health: HealthRecorder? = null,
         ): PlaywrightHandles {
             val playwright = Playwright.create()
             try {
@@ -77,6 +78,7 @@ internal class PlaywrightHandles private constructor(
                 observeRealtimeTraffic(page, traffic, clock)
                 observeMutations(page, mutations, clock)
                 acceptDialogs(page, dialogs, clock)
+                if (health != null) observeHealth(page, health, clock)
                 return PlaywrightHandles(playwright, browser, context, page)
             } catch (e: Exception) {
                 runCatching { playwright.close() }
@@ -114,6 +116,22 @@ internal class PlaywrightHandles private constructor(
                 .setTimezoneId(TIMEZONE)
                 .setIgnoreHTTPSErrors(ignoreTlsErrors)
                 .apply { options.storageState?.let { setStorageStatePath(it) } }
+
+        /** Console errors, failed and finished requests for [HealthRecorder]; the handlers run on the session thread. */
+        private fun observeHealth(
+            page: Page,
+            health: HealthRecorder,
+            clock: HarnessClock,
+        ) {
+            page.onConsoleMessage { message -> if (message.type() == "error") health.consoleError(message.text(), clock.now()) }
+            page.onPageError { error -> health.consoleError("uncaught: $error", clock.now()) }
+            page.onResponse { response -> health.answered(response.request().method(), response.url(), response.status(), clock.now()) }
+            page.onRequestFailed { request -> health.failed(request.method(), request.url(), request.failure(), clock.now()) }
+            page.onRequestFinished { request ->
+                val end = request.timing().responseEnd
+                health.finished(request.method(), request.url(), if (end >= 0) end.toLong() else -1, clock.now())
+            }
+        }
 
         /** Registered at page creation; Playwright invokes the handlers on the session thread as well. */
         private fun observeRealtimeTraffic(
