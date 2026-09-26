@@ -9,7 +9,10 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.PetekConfig
 import az.petek.app.config.WebUrls
+import az.petek.app.diagnostics.TargetAnswer
+import az.petek.app.diagnostics.TargetReachability
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.dashboard.domain.FieldProblem
@@ -33,6 +36,29 @@ internal object PanelTargets {
         val verdict = policy.verify(target)
         if (verdict is TargetVerdict.Refused) throw PanelRequestException(listOf(FieldProblem(field, refusal(target, policy, verdict))))
         return target
+    }
+
+    /**
+     * Looks at [target] with [reachability] before anything is tested (rule 12): a site that does not answer is a
+     * [PanelRequestException] for [field] naming the reason, never a run against something else.
+     */
+    suspend fun reachable(
+        target: URI,
+        reachability: TargetReachability,
+        field: String,
+    ) {
+        val answer = reachability.check(target)
+        if (answer is TargetAnswer.Unreachable) {
+            throw PanelRequestException(
+                listOf(
+                    FieldProblem(
+                        field,
+                        "Verilən sayt cavab vermir, ona görə heç nə test edilmədi: ${PetekConfig.masked(target)} (${answer.reason}). " +
+                            "Ünvanı, şəbəkəni və saytın işlədiyini yoxlayın, sonra yenidən cəhd edin.",
+                    ),
+                ),
+            )
+        }
     }
 
     /** The canonical URL of [text], or a [PanelRequestException] for [field]. */

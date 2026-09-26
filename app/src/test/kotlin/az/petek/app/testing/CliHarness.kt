@@ -14,6 +14,7 @@ import az.petek.app.cli.PetekCommand
 import az.petek.app.config.IdentitySecretSource
 import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
+import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
@@ -44,6 +45,8 @@ class CliHarness(
     environment: Map<String, String> = emptyMap(),
     var llm: LlmClient = scriptedLlm { done() },
     var browser: FakeBrowserEngine = FakeBrowserEngine(),
+    /** The fake browser plays the site, so the target is never contacted unless a test says otherwise. */
+    var reachability: TargetReachability = TargetReachability.ALWAYS,
 ) {
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
@@ -61,7 +64,9 @@ class CliHarness(
                 environment = { env.toMap() },
                 workingDirectory = workingDirectory,
                 identitySecrets = IdentitySecretSource { error("tests must set PETEK_IDENTITY_SECRET instead of using ~/.petek") },
-                containers = { config -> AppContainer(config, AppOverrides(llm = llm, monitor = NoOpMonitorView, browser = browser)) },
+                containers = { config ->
+                    AppContainer(config, AppOverrides(llm = llm, monitor = NoOpMonitorView, browser = browser, reachability = reachability))
+                },
                 configureLogging = { loggingRequests += it },
                 observationWindow = Duration.ZERO,
                 standardInput = standardInput,

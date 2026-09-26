@@ -9,6 +9,7 @@
 
 package az.petek.app.panel
 
+import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.RoleSessions
 import az.petek.app.testing.FakeBrowserEngine
@@ -210,6 +211,29 @@ class PanelRunsTest {
                 .runs()
                 .single()
                 .target shouldBe "http://127.0.0.1:9"
+        }
+
+    @Test
+    fun `a site that does not answer is reported under the target field and no tester starts`() =
+        runBlocking<Unit> {
+            val runs = FakeBrowserEngine()
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    runs = runs,
+                    scenarios = mapOf("tiny.yaml" to tinyCampaign()),
+                    reachability = { TargetAnswer.Unreachable("HTTP 503") },
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val refused = shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }
+
+            refused.problems.single().field shouldBe PanelInstructions.TARGET
+            refused.problems.single().message shouldContain
+                "Verilən sayt cavab vermir, ona görə heç nə test edilmədi: http://127.0.0.1:9 (HTTP 503)"
+            runs.options.shouldBeEmpty()
+            panel.backend.runs().shouldBeEmpty()
         }
 
     @Test

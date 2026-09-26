@@ -144,6 +144,7 @@ internal class PanelRunsAdapter(
             try {
                 load(version, lease, request.testers).also {
                     PanelTargets.allowed(it.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
+                    PanelTargets.reachable(it.settings.target, lease.container.reachability, PanelInstructions.TARGET)
                 }
             } catch (e: Exception) {
                 lease.close()

@@ -72,3 +72,8 @@ repository's source. Propose the fix as a change for the owner to review; do not
 3. Tester agents act only through Pətək's whitelisted actions; new actions are code changes, not prompts.
 4. Every result cites its evidence (`run_id`, `agent_id`, `step_id`); no evidence, no claim.
 5. Secrets (`PETEK_TEST_TOKEN`, API keys, test passwords) never appear in prompts, logs or commit messages.
+6. Only the site named in `PETEK_TARGET` is tested. Never invent pages, screens, screenshots or results, and never
+   substitute another site, a mock or a local stand-in. When Pətək reports that the site does not answer (down,
+   blocked, wrong address), tell the owner exactly that and stop. When no site is configured (`petek mcp` answers
+   every tool with "Test olunacaq sayt verilməyib"), ask the owner which site to test and wait for the answer before
+   doing anything else.

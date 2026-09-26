@@ -9,6 +9,8 @@
 
 package az.petek.app.cli
 
+import az.petek.app.diagnostics.TargetAnswer
+import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.testing.CliHarness
 import az.petek.app.testing.CliHarness.Companion.done
 import az.petek.app.testing.CliHarness.Companion.tinyCampaign
@@ -61,6 +63,22 @@ class RunCommandTest {
             Files.isRegularFile(Path.of(report)) shouldBe true
             Files.isRegularFile(Path.of(report).resolveSibling("report.md")) shouldBe true
             cli.evidence { it.evidence.latest() }?.result shouldBe RunResult.PASSED
+        }
+
+    @Test
+    fun `a site that does not answer is reported and nothing is tested in its place`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(dir, reachability = TargetReachability { TargetAnswer.Unreachable("ConnectException: Connection refused") })
+            cli.write("tiny.yaml", tinyCampaign())
+
+            val result = cli.run("run", "tiny.yaml")
+
+            result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            result.stderr shouldContain "The site under test does not answer, so nothing was tested: ${CliHarness.UNUSED_TARGET}"
+            result.stderr shouldContain "Connection refused"
+            cli.browser.options.shouldBeEmpty()
+            cli.evidence { it.evidence.latest() } shouldBe null
         }
 
     @Test

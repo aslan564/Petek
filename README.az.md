@@ -150,12 +150,13 @@ cp .env.example .env                                   # PETEK_TARGET, PETEK_TES
 ./gradlew :app:run                                     # veb paneli açır: http://127.0.0.1:7070
 ```
 
-Hədəf yoxdur? `.env` olmayanda (və ya `--demo` ilə) panel **lokal fake KadroHR** qaldırır — bütün dövrə (kəşf et →
-layihə → təsdiq → run → hesabat) heç bir xarici sistem olmadan maşınınızda işləyir:
+Pətək yalnız sizin verdiyiniz saytı test edir. `.env` olmayanda panel və MCP serveri hansı saytın test olunacağını
+soruşur və heç nə başlatmır; cavab verməyən sayt (işləmir, bloklanıb, ünvan səhvdir) heç bir tester başlamazdan əvvəl
+olduğu kimi bildirilir, başqa bir şeylə əvəz edilmir; heç bir ekran və ya nəticə uydurulmur. Pətəkin öz kontrakt saytı
+(`testing/fake-target`, e2e dəstinin əvəzedicisi) Pətəkin özünü inkişaf etdirmək üçündür və yalnız açıq
+konfiqurasiya ilə açılır:
 
 ```bash
-./gradlew :app:run --args="panel --demo"
-# və ya fake saytı ayrıca işlədib .env-i ona yönəldin
 ./gradlew :testing:fake-target:run                     # http://127.0.0.1:18080, poçt API :18025
 ./gradlew :app:run --args="--env-file .env.fake-target doctor"
 ./gradlew :app:run --args="--env-file .env.fake-target run scenarios/contract-demo.yaml --testers 6"

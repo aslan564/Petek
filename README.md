@@ -151,12 +151,13 @@ cp .env.example .env                                   # fill PETEK_TARGET, PETE
 ./gradlew :app:run                                     # opens the web panel at http://127.0.0.1:7070
 ```
 
-No target yet? The panel starts a **local fake KadroHR** when there is no `.env` (or with `--demo`), so the whole
-loop (explore → draft → approve → run → report) works on your machine without any external system:
+Pətək tests only the site you name. Without a `.env` the panel and the MCP server ask which site to test and start
+nothing; a site that does not answer (down, blocked, wrong address) is reported as such before any tester starts,
+never tested against something else; no screen or result is ever invented. Pətək's own contract site
+(`testing/fake-target`, the stand-in of its e2e suite) is for developing Pətək itself and is reached only through an
+explicit configuration:
 
 ```bash
-./gradlew :app:run --args="panel --demo"
-# or run the fake site on its own and point a .env at it
 ./gradlew :testing:fake-target:run                     # http://127.0.0.1:18080, mail API :18025
 ./gradlew :app:run --args="--env-file .env.fake-target doctor"
 ./gradlew :app:run --args="--env-file .env.fake-target run scenarios/contract-demo.yaml --testers 6"

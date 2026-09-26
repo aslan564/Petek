@@ -67,6 +67,9 @@ class RunCommand : PetekSubcommand("run") {
             val loaded = withContext(Dispatchers.IO) { container.campaigns.execute(session.resolve(file), container.knownRunFunctions) }
             val campaign = agents?.let { scaled(container, loaded, it) } ?: loaded
             TargetGuard.requireAllowed(config.targetPolicy, campaign.settings.target)
+            // The site that was given must answer before a single tester starts (rule 12): a site that is down or
+            // blocked is reported as such, never tested against something else.
+            container.reachability.require(campaign.settings.target)
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(

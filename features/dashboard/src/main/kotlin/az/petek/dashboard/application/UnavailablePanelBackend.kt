@@ -35,10 +35,13 @@ import java.nio.file.Path
 
 /**
  * The panel backend of a process that only watches: the live board works, every other screen shows that it is empty,
- * and every action explains that it is not available here. The default of `DashboardServer`, so the board can be
- * served before the rest of the panel is wired.
+ * and every action explains that it is not available here, with [reason]. The default of `DashboardServer`, so the
+ * board can be served before the rest of the panel is wired; `petek mcp` serves it without a configured site, with
+ * [NO_TARGET] as the reason, so the host AI asks the owner which site to test instead of testing anything else.
  */
-class UnavailablePanelBackend : PanelBackend {
+class UnavailablePanelBackend(
+    private val reason: String = MESSAGE,
+) : PanelBackend {
     override suspend fun capacity(testers: Int): CapacityView = unavailable()
 
     override suspend fun startExploration(instructions: PanelInstructions): ExplorationView = unavailable()
@@ -93,9 +96,15 @@ class UnavailablePanelBackend : PanelBackend {
 
     override suspend fun teardown(runId: RunId): TeardownView = unavailable()
 
-    private fun unavailable(): Nothing = throw PanelUnavailableException(MESSAGE)
+    private fun unavailable(): Nothing = throw PanelUnavailableException(reason)
 
-    private companion object {
+    companion object {
         const val MESSAGE = "Bu əməliyyat bu prosesdə qoşulmayıb: panel yalnız canlı lövhəni göstərir."
+
+        /** No site under test was given: nothing can be explored or run until the owner names one. */
+        const val NO_TARGET =
+            "Test olunacaq sayt verilməyib. Sahibdən soruşun: hansı sayt test olunsun? Cavab gələnə qədər gözləyin; " +
+                "sayt `.env`-də PETEK_TARGET kimi (və ya `petek init --target <url>` ilə) yazılandan sonra `petek mcp`-ni " +
+                "yenidən başladın. Başqa sayt, saxta səhifə və ya uydurma nəticə ilə əvəz etməyin."
     }
 }

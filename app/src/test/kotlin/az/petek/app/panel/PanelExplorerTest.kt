@@ -9,6 +9,7 @@
 
 package az.petek.app.panel
 
+import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.RoleSessions
 import az.petek.app.testing.PanelHarness
@@ -80,6 +81,26 @@ class PanelExplorerTest {
 
             refusal.problems.single().field shouldBe PanelInstructions.TARGET
             refusal.problems.single().message shouldContain "'kadrohr.com' istehsal ünvanıdır"
+            panel.backend.exploration().shouldBeNull()
+            panel.site.startCount shouldBe 0
+        }
+
+    @Test
+    fun `a site that does not answer is reported under the target field and nothing is explored in its place`() =
+        runBlocking<Unit> {
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    reachability = { TargetAnswer.Unreachable("UnknownHostException: site.example") },
+                ).also { open += it }
+
+            val refusal =
+                shouldThrow<PanelRequestException> { panel.backend.startExploration(PanelHarness.instructions(panel.site.base.toString())) }
+
+            refusal.problems.single().field shouldBe PanelInstructions.TARGET
+            refusal.problems.single().message shouldContain "Verilən sayt cavab vermir, ona görə heç nə test edilmədi"
+            refusal.problems.single().message shouldContain "UnknownHostException: site.example"
             panel.backend.exploration().shouldBeNull()
             panel.site.startCount shouldBe 0
         }

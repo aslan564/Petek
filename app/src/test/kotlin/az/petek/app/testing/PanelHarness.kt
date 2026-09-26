@@ -12,6 +12,7 @@ package az.petek.app.testing
 import az.petek.app.config.PetekConfig
 import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
+import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.panel.WebPanel
 import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.SetupRuns
@@ -51,6 +52,8 @@ internal class PanelHarness(
     allowProduction: Boolean = false,
     testToken: String? = "dev-token",
     roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
+    /** The fake engines play the site, so the target is never contacted unless a test says otherwise. */
+    reachability: TargetReachability = TargetReachability.ALWAYS,
     /** Changes the panel's overrides further, e.g. to hold its repositories at a gate. */
     decorate: (AppOverrides) -> AppOverrides = { it },
 ) : AutoCloseable {
@@ -78,7 +81,10 @@ internal class PanelHarness(
                 config,
                 overrides,
                 ->
-                AppContainer(config, decorate(overrides.copy(llm = llm.client, browser = runs, explorerBrowser = site)))
+                AppContainer(
+                    config,
+                    decorate(overrides.copy(llm = llm.client, browser = runs, explorerBrowser = site, reachability = reachability)),
+                )
             },
             workingDirectory = dir,
             capacityAdvice = RecommendCapacityUseCase({ HostResources(16L shl 30, 8L shl 30, 8) }),

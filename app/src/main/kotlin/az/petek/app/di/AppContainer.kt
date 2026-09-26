@@ -21,6 +21,9 @@ import az.petek.agent.domain.ConsecutiveLoopDetector
 import az.petek.agent.domain.JsonDecisionProtocol
 import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
+import az.petek.app.diagnostics.HttpProbe
+import az.petek.app.diagnostics.HttpTargetReachability
+import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.MdcDiagnosticContext
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
@@ -221,6 +224,12 @@ class AppContainer(
 
     fun browserConfig(headless: Boolean = config.browserHeadless): BrowserEngineConfig =
         BrowserEngineConfig(headless = headless, topology = config.browserTopology, ignoreTlsErrors = config.browserIgnoreTlsErrors)
+
+    /**
+     * The look at the site under test before a run or an exploration opens a browser (rule 12): the site that was
+     * given must answer, otherwise nothing is tested and the reason is reported.
+     */
+    val reachability: TargetReachability by lazy { overrides.reachability ?: HttpTargetReachability(resources.track(HttpProbe())) }
 
     // --- agents, verification, orchestration, reporting ---------------------------------------------------------
 

@@ -30,7 +30,9 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     (`PanelJson`) as text plus `structuredContent`; a panel failure is an `isError` result with the Azerbaijani
     message, a protocol mistake a JSON-RPC error (-32700, -32600, -32601, -32602). `McpSettings.allowWrites`
     (`--allow-writes`) gates `cancel_exploration`, `approve_scenario`, `freeze_scenario`, `run_campaign`, `cancel_run`,
-    `teardown` and `explore_site` with `allowWrites`; `explore_site` and `run_campaign` take `wait`. `PanelRuns` gained
+    `teardown` and `explore_site` with `allowWrites`; `explore_site` and `run_campaign` take `wait`. Without a `.env`
+    the server still answers the handshake, but every tool returns `UnavailablePanelBackend.NO_TARGET`: the host AI
+    asks the owner which site to test and waits (rule 12, R06). `PanelRuns` gained
     `findings(runId)` (the judged findings with A/B/C and artifact ids, whose artifacts `get_evidence` then resolves
     to absolute paths) and `teardown(runId)` (finished runs of the configured site only).
   - `petek --json <command>` (`CliSession.json`, `PetekSubcommand.emitJson`): one document on stdout for `doctor`
@@ -50,7 +52,8 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
   (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json` with its `servers` key; other servers
   kept; a file that is not JSON is left alone and reported) and, for Claude Code, `.claude/skills/petek/SKILL.md`.
   Files Pətək owns are rewritten only with `--force`; `.gitignore` gains `.env` and `evidence/`. Every file is reported
-  as created / updated / kept / unchanged.
+  as created / updated / kept / unchanged. Rule 6 of `SKILL.md` binds the host AI to the configured site: no invented
+  screens or results, no stand-in; a site that does not answer is reported; without a site it asks the owner and waits.
 - **`petek dev`** starts the panel once the project's app answers its health URL.
 
 - **Language.** Whatever text the AI writes for the owner follows the owner's language (`WorkingLanguage`, core

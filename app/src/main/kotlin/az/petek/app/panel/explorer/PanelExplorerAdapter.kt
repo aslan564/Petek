@@ -121,6 +121,7 @@ internal class PanelExplorerAdapter(
                 ),
             )
         }
+        PanelTargets.reachable(target, container.reachability, PanelInstructions.TARGET)
         val grounding = answers.grounding(target, own, ExplorationRequest.MAX_INSTRUCTION_CHARS)
         val budget =
             ExplorationBudget(

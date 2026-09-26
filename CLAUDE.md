@@ -58,6 +58,11 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 10. Sirlər (`PETEK_TEST_TOKEN`, API açarları, test parolları) `Secret` ilə gəzir, loga və LLM-ə düşmür;
     agent parolu `{self.password}` placeholder-i ilə yazır, harness əvəz edir.
 11. Yeni kitabxana əlavə etməzdən əvvəl soruş (version catalog-dakılar təsdiqlənib).
+12. Saxta ekran, saxta səhifə, uydurma nəticə qəti qadağandır: yalnız verilən sayt (`PETEK_TARGET`) test olunur.
+    Sayt cavab vermirsə və ya bloklanıbsa run və kəşfiyyat başlamır, səbəb olduğu kimi bildirilir
+    (`TargetReachability`); sayt verilməyibsə panel, MCP və CLI sahibdən soruşur və cavab gələnə qədər heç nə etmir.
+    Fake target (`testing/fake-target`) yalnız Pətəkin öz e2e testləri üçündür (`--env-file .env.fake-target` ilə
+    açıq şəkildə) və heç vaxt sahibin nəticəsi kimi təqdim edilmir.
 
 ## Əmrlər
     docker compose up -d                                   # Mailpit :1025 / :8025

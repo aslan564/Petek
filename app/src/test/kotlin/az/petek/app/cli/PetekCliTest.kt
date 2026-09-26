@@ -11,6 +11,7 @@ package az.petek.app.cli
 
 import az.petek.app.testing.CliHarness
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -43,6 +44,16 @@ class PetekCliTest {
         PetekCli.effectiveArguments(emptyList()) shouldBe listOf(PanelCommand.NAME)
         PetekCli.effectiveArguments(listOf("doctor")) shouldBe listOf("doctor")
     }
+
+    @Test
+    fun `the panel without a site to test asks for one and starts nothing`() =
+        runBlocking<Unit> {
+            val result = CliHarness(dir).run("panel", "--no-open")
+
+            result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            result.stderr shouldContain PanelCommand.NO_TARGET
+            result.stdout shouldBe ""
+        }
 
     @Test
     fun `help of a command exits with 0`() =

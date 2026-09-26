@@ -11,7 +11,6 @@ package az.petek.app.panel
 
 import az.petek.app.config.ConfigLoader
 import az.petek.app.config.IdentitySecretSource
-import az.petek.app.demo.DemoTarget
 import az.petek.app.di.AppContainer
 import az.petek.app.testing.PanelLlm
 import az.petek.capacity.application.RecommendCapacityUseCase
@@ -44,6 +43,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
@@ -79,7 +79,7 @@ class PanelEndToEndTest {
     fun `the owner explores the demo site, approves the draft, runs it with 6 testers and triages the run from the page`() =
         runBlocking<Unit> {
             val llm = PanelLlm(failingSteps = emptySet())
-            val file = dir.resolve("demo.env").also { Files.writeString(it, DemoTarget.environment(target.baseUrl, target.mailpitUrl)) }
+            val file = dir.resolve("demo.env").also { Files.writeString(it, environment(target.baseUrl, target.mailpitUrl)) }
             val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the demo configuration names its secret") }).load(file)
             panel =
                 WebPanel.start(
@@ -261,5 +261,26 @@ class PanelEndToEndTest {
         const val TRIAGE_MILLIS = 120_000.0
         const val SETTLE_MILLIS = 600.0
         val SHOTS: Path = Path.of("build", "panel-screenshots")
+
+        /** Same values as `.env.fake-target`, pointing at this test's own fake site; its token only unlocks that site. */
+        fun environment(
+            target: URI,
+            mailpit: URI,
+        ): String =
+            """
+            PETEK_TARGET=$target
+            PETEK_PRODUCTION_HOSTS=kadrohr.com,www.kadrohr.com
+            PETEK_ALLOW_PRODUCTION=true
+            PETEK_TEST_TOKEN=dev-token
+            PETEK_MAILPIT_URL=$mailpit
+            PETEK_MAIL_DOMAIN=test.kadrohr.com
+            PETEK_IDENTITY_SECRET=local-demo-secret
+            PETEK_LLM_PROVIDER=claude-cli
+            PETEK_LLM_MODEL=claude-sonnet-5
+            PETEK_LLM_CONCURRENCY=6
+            PETEK_BROWSER_HEADLESS=true
+            PETEK_EVIDENCE_DIR=evidence
+            PETEK_DB=evidence/petek.db
+            """.trimIndent() + "\n"
     }
 }

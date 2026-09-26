@@ -89,4 +89,51 @@ class McpCommandTest {
                     .jsonPrimitive.content
             targets shouldContain "\"allowWrites\":false"
         }
+
+    @Test
+    fun `without a site to test the server answers the handshake and every tool asks the owner for one`() =
+        runBlocking<Unit> {
+            val requests =
+                listOf(
+                    """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""",
+                    """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_targets"}}""",
+                    """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"explore_site","arguments":{"target":"https://site.example"}}}""",
+                )
+            val output = ByteArrayOutputStream()
+            val cli =
+                CliHarness(dir).apply {
+                    standardInput = ByteArrayInputStream((requests.joinToString("\n") + "\n").toByteArray())
+                    standardOutput = output
+                }
+
+            val result = cli.run("mcp")
+
+            result.statusCode shouldBe 0
+            val answers =
+                output
+                    .toString(Charsets.UTF_8)
+                    .lines()
+                    .filter { it.isNotBlank() }
+                    .map { Json.parseToJsonElement(it).jsonObject }
+            answers.map { it["id"]!!.jsonPrimitive.content } shouldBe listOf("1", "2", "3")
+            val targets =
+                answers[1]["result"]!!
+                    .jsonObject["content"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["text"]!!
+                    .jsonPrimitive.content
+            targets shouldContain McpCommand.NO_TARGET
+            val explore = answers[2]["result"]!!.jsonObject
+            explore["isError"]!!.jsonPrimitive.content shouldBe "true"
+            val text =
+                explore["content"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["text"]!!
+                    .jsonPrimitive.content
+            text shouldContain "Test olunacaq sayt verilməyib"
+            text shouldContain "Sahibdən soruşun"
+            Files.exists(dir.resolve("evidence")) shouldBe false
+        }
 }

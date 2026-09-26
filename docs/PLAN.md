@@ -618,6 +618,14 @@ yeni Konsist qaydası ilə keçir; `LICENSE` repodadır.
   davranışı promptda "əvvəl dialoqu bağla" qaydası ilə qısaltmaq açıq maddədir; (3) a02 `/register/employee`-yə
   keçəndən sonra köhnə (login) snapshot-u gördü və "form login formu ilə eynidir" dedi — URL dəyişəndən sonra
   yenidən çəkmə (stale snapshot) açıq maddədir.
+- **Saxta test yoxdur (sahibin qərarı, 2026-09-26, CLAUDE.md qayda 12):** yalnız verilən sayt test olunur; saxta
+  ekran, saxta səhifə, uydurma nəticə qəti qadağandır. `TargetReachability` (`app/diagnostics`,
+  `AppContainer.reachability`) `petek run`, paneldən run və kəşfiyyat brauzer açmazdan əvvəl sayta baxır: cavab
+  yoxdursa və ya 5xx-dirsə `TargetUnreachableException` (çıxış kodu 2) / hədəf sahəsi altında
+  `PanelRequestException`, heç nə test edilmir. `.env` olmayanda `petek panel` saytı soruşub 2 ilə çıxır, `petek mcp`
+  `UnavailablePanelBackend(NO_TARGET)` ilə cavab verir (host AI sahibdən soruşur və gözləyir). Əvvəlki
+  "`.env` yoxdursa fake KadroHR" fallback-i və `--demo` silindi (`DemoTarget`, `app`-ın fake-target runtime
+  asılılığı); fake target yalnız `--env-file .env.fake-target` ilə, Pətəkin öz e2e testləri üçün.
 - **Dil (sahibin qərarı, 2026-09-26):** AI-ın sahib üçün yazdığı heç bir mətn Azərbaycan dilinə məcbur edilmir.
   `PETEK_LANGUAGE` (default `auto` = sahibin öz təlimatının/ssenarisinin dili, yoxdursa səhifənin dili; ya da ad,
   məsələn `English`) `WorkingLanguage` (core domain) kimi kəşfiyyatçının promptuna (`PageAnalysisProtocol.system`),
@@ -733,8 +741,9 @@ Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-c
   `freeze_scenario`, `run_campaign` (`wait`), `cancel_run`, `list_runs`, `get_run_status`, `get_findings`,
   `get_evidence`, `get_triage`, `run_triage`, `get_stability`, `teardown`. Giriş JSON Schema, çıxış `PanelJson`
   (mətn + `structuredContent`). `PanelRuns`-a `findings(runId)` və `teardown(runId)` əlavə olundu.
-- [x] `petek mcp [--allow-writes] [--demo]` (stdio): nazik JSON-RPC implementasiyası, SDK-sız (qərar verildi;
-  R10-da qeyd). Yazan alətlər `--allow-writes` tələb edir; hədəf siyasəti eynidir; `.env` yoxdursa fake KadroHR.
+- [x] `petek mcp [--allow-writes]` (stdio): nazik JSON-RPC implementasiyası, SDK-sız (qərar verildi;
+  R10-da qeyd). Yazan alətlər `--allow-writes` tələb edir; hədəf siyasəti eynidir; `.env` yoxdursa hər alət
+  sahibdən saytı soruşur və heç nə test edilmir (qayda 12).
   `PanelCore` = panelin HTTP serversiz obyekt qrafı (WebPanel ondan istifadə edir).
 - [x] `--json`: `doctor`, `init`, `plan`, `run`, `report`, `teardown` (stdout bir JSON sənəd, loglar stderr,
   uğursuzluq `{"error":...}` + adi çıxış kodu). Qalır: `capacity`, `probe`, `smoke` (CI rejimi ilə birlikdə).
@@ -777,7 +786,8 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   doctor`-un Chromium sətrinin yaşıl olduğunu `jq` ilə yoxlayır). Panel loopback-ə bağlı qaldığından Docker-da
   `--network host` lazımdır (Linux); əsas istifadə CI-dır. CI şablonu: `docs/ci/github-actions.yml` (Mailpit servisi,
   `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə),
-  Mailpit companion compose faylı image üçün. `:app`-dan `fake-target` runtime asılılığı ayrılır (`petek demo` ayrıca dist).
+  Mailpit companion compose faylı image üçün. `:app`-ın `fake-target` runtime asılılığı 2026-09-26-da qayda 12 ilə
+  silindi (demo yoxdur; fake target yalnız test asılılığıdır).
 - [ ] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
 - [ ] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; ~~GitHub
   Action şablonu~~ (`docs/ci/github-actions.yml`, image + `--json run` ilə, çıxış kodları sənədlənib) hazırdır,

@@ -29,8 +29,6 @@ dependencies {
     implementation(project(":features:dashboard"))
     implementation(project(":features:explorer"))
     implementation(project(":features:scenarios"))
-    // The start menu's demo runs the local fake KadroHR in-process; it is a test stand-in, never a production target.
-    implementation(project(":testing:fake-target"))
     implementation(libs.clikt)
     // The explorer's stored answers (a small JSON file next to the evidence).
     implementation(libs.kotlinx.serialization.json)
