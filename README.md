@@ -117,10 +117,10 @@ have an AI, any one: an AI command-line tool you are logged in to, or an API key
 (see `.env.example`). Chromium is downloaded by Playwright on first use.
 
 ```bash
-tar xzf petek-0.1.0-linux-x64.tar.gz && cd my-site     # any directory: Pətək runs next to the site, never inside its build
-cp ../petek-0.1.0-linux-x64/.env.example .env          # fill PETEK_TARGET (+ PETEK_TEST_TOKEN and PETEK_IDENTITY_SECRET for full runs)
-../petek-0.1.0-linux-x64/bin/petek doctor              # target policy, target, Chromium, inbox, test API, AI provider
-../petek-0.1.0-linux-x64/bin/petek panel               # opens the web panel at http://127.0.0.1:7070
+tar xzf petek-0.2.0-linux-x64.tar.gz && cd my-site     # any directory: Pətək runs next to the site, never inside its build
+cp ../petek-0.2.0-linux-x64/.env.example .env          # fill PETEK_TARGET (+ PETEK_TEST_TOKEN and PETEK_IDENTITY_SECRET for full runs)
+../petek-0.2.0-linux-x64/bin/petek doctor              # target policy, target, Chromium, inbox, test API, AI provider
+../petek-0.2.0-linux-x64/bin/petek panel               # opens the web panel at http://127.0.0.1:7070
 ```
 
 On Windows the launcher is `bin\petek.cmd`. Extra JVM options go in `PETEK_OPTS`.
@@ -141,9 +141,9 @@ and `evidence/` is written back). The panel binds loopback only, so it needs `--
 commands and `--json`. A ready workflow for the project under test is in `docs/ci/github-actions.yml`.
 
 ```bash
-docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 doctor
-docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml
-docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.1.0 panel --no-open
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.2.0 doctor
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.2.0 --json run scenarios/my-site.yaml
+docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.2.0 panel --no-open
 ```
 
 **From source.** Prerequisites: JDK 21+ to run Gradle (the build downloads its own JDK 25 toolchain) and the same AI;

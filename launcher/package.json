@@ -1,6 +1,6 @@
 {
   "name": "petek",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Launcher for Pətək, the multi-agent AI test platform: downloads the release bundle for this machine once and runs it. No JDK needed.",
   "license": "Apache-2.0",
   "author": "Aslan Aslanov (Kodcraft)",

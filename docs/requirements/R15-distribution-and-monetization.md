@@ -3,7 +3,7 @@
 **Status:** Distribution done 2026-09-26 (the Release workflow, started by hand on `main`, publishes platform bundles with a jlink runtime and the
 platform's Playwright driver, `petek-<v>-<platform>.tar.gz|zip`, the generic `petek-<v>-any-jdk25.zip`, `SHA256SUMS`,
 the Docker image `ghcr.io/aslan564/petek:<v>` for linux/amd64 and linux/arm64, and the npm launcher `petek` when
-`NPM_TOKEN` is set; `petek init` prepares a project; v0.1.0 is published), the rest planned (CI mode, `petek dev`,
+`NPM_TOKEN` is set; `petek init` prepares a project; releases up to v0.2.0 are published), the rest planned (CI mode, `petek dev`,
 Faza 14) · **ADRs:** 0009, 0011
 
 ## Requirement

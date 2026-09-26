@@ -12,7 +12,7 @@
 # Build context: docker/ with context/<arch>/ holding an extracted bundle (docker/prepare-context.sh puts it there);
 # buildx sets TARGETARCH to amd64 or arm64 per platform, so one build produces both images without emulation.
 #
-#   docker/prepare-context.sh app/build/distributions/petek-0.1.0-linux-x64.tar.gz amd64
+#   docker/prepare-context.sh app/build/distributions/petek-0.2.0-linux-x64.tar.gz amd64
 #   docker build -f docker/Dockerfile -t petek docker/
 #   docker run --rm -v "$PWD:/work" --env-file .env petek doctor
 #   docker run --rm -v "$PWD:/work" --env-file .env petek run docs/examples/company-portal.yaml --json

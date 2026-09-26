@@ -116,10 +116,10 @@ olsun: login olduğunuz AI CLI və ya OpenAI-uyğun bir xidmətin API açarı (b
 istifadədə özü yükləyir.
 
 ```bash
-tar xzf petek-0.1.0-linux-x64.tar.gz && cd my-site     # istənilən qovluq: Pətək saytın yanında işləyir, build-inin içində yox
-cp ../petek-0.1.0-linux-x64/.env.example .env          # PETEK_TARGET doldurun (+ tam run üçün PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET)
-../petek-0.1.0-linux-x64/bin/petek doctor              # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
-../petek-0.1.0-linux-x64/bin/petek panel               # veb paneli açır: http://127.0.0.1:7070
+tar xzf petek-0.2.0-linux-x64.tar.gz && cd my-site     # istənilən qovluq: Pətək saytın yanında işləyir, build-inin içində yox
+cp ../petek-0.2.0-linux-x64/.env.example .env          # PETEK_TARGET doldurun (+ tam run üçün PETEK_TEST_TOKEN, PETEK_IDENTITY_SECRET)
+../petek-0.2.0-linux-x64/bin/petek doctor              # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
+../petek-0.2.0-linux-x64/bin/petek panel               # veb paneli açır: http://127.0.0.1:7070
 ```
 
 Windows-da başladıcı `bin\petek.cmd`-dir. Əlavə JVM seçimləri `PETEK_OPTS`-a yazılır.
@@ -140,9 +140,9 @@ image-i üstündə qurulmuş halıdır: Chromium və kitabxanaları içindədir;
 CI əmrlərdən və `--json`-dan istifadə edir. Test olunan layihə üçün hazır workflow: `docs/ci/github-actions.yml`.
 
 ```bash
-docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 doctor
-docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml
-docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.1.0 panel --no-open
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.2.0 doctor
+docker run --rm -v "$PWD:/work" --env-file .env ghcr.io/aslan564/petek:0.2.0 --json run scenarios/my-site.yaml
+docker run --rm -v "$PWD:/work" --env-file .env --network host ghcr.io/aslan564/petek:0.2.0 panel --no-open
 ```
 
 **Mənbədən.** Tələblər: Gradle-ı işlətmək üçün JDK 21+ (build öz JDK 25 toolchain-ini yükləyir) və eyni AI; Docker

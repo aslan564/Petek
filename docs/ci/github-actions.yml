@@ -36,14 +36,14 @@ jobs:
         run: >
           docker run --rm --network host -v "$PWD:/work"
           -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
-          ghcr.io/aslan564/petek:0.1.0 --json doctor
+          ghcr.io/aslan564/petek:0.2.0 --json doctor
 
       - name: Run the campaign
         run: >
           docker run --rm --network host -v "$PWD:/work"
           -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
           -e GITHUB_STEP_SUMMARY -v "$GITHUB_STEP_SUMMARY:$GITHUB_STEP_SUMMARY"
-          ghcr.io/aslan564/petek:0.1.0 --json run scenarios/my-site.yaml --testers 10 --ci
+          ghcr.io/aslan564/petek:0.2.0 --json run scenarios/my-site.yaml --testers 10 --ci
 
       - name: Test results (JUnit XML)
         if: always()

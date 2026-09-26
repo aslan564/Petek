@@ -8,7 +8,7 @@
 petek:
   stage: test
   image:
-    name: ghcr.io/aslan564/petek:0.1.0
+    name: ghcr.io/aslan564/petek:0.2.0
     entrypoint: [""]
   services:
     - name: axllent/mailpit

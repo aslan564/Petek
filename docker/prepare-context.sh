@@ -12,8 +12,8 @@
 # Puts a platform bundle where docker/Dockerfile copies it from: docker/context/<arch>/ with bin/, lib/, runtime/ ...
 # at its root (the archive's single top-level directory is stripped).
 #
-#   docker/prepare-context.sh app/build/distributions/petek-0.1.0-linux-x64.tar.gz amd64
-#   docker/prepare-context.sh app/build/distributions/petek-0.1.0-linux-arm64.tar.gz arm64
+#   docker/prepare-context.sh app/build/distributions/petek-0.2.0-linux-x64.tar.gz amd64
+#   docker/prepare-context.sh app/build/distributions/petek-0.2.0-linux-arm64.tar.gz arm64
 
 set -eu
 
