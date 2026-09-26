@@ -20,6 +20,7 @@ import az.petek.dashboard.domain.PanelNotFoundException
 import az.petek.dashboard.domain.ScenarioSource
 import az.petek.dashboard.domain.ScenarioStatus
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -81,7 +82,14 @@ class PanelScenariosTest {
         runBlocking<Unit> {
             harness(mapOf("tiny.yaml" to tinyCampaign())).backend.scenarios()
             val panel = restart(mapOf("tiny.yaml" to tinyCampaign(step = "Open the home page")))
-            val (draft, approved) = panel.backend.scenarios()
+            val versions = panel.backend.scenarios()
+            // Chosen by status, and the whole catalog named on a mismatch: CI once saw the first version still a draft.
+            withClue("catalog after the restart: ${versions.map { "${it.name} v${it.version} ${it.status}" }}") {
+                versions.map { it.version to it.status } shouldContainExactly
+                    listOf(2 to ScenarioStatus.DRAFT, 1 to ScenarioStatus.APPROVED)
+            }
+            val draft = versions.single { it.status == ScenarioStatus.DRAFT }
+            val approved = versions.single { it.status == ScenarioStatus.APPROVED }
 
             panel.backend
                 .scenario(draft.id)

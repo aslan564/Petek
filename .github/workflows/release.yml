@@ -1,11 +1,13 @@
 name: Release
 
 # Publishes a GitHub Release with the sidecar distribution (app/build/distributions/petek-<version>.zip and .tar).
-# Two ways in: push a tag v<version> to main, or run the workflow by hand on main with the version (the release then
-# creates the tag). Either way the tree is built and tested first, so a release is never cut from a red tree, and the
-# version must match gradle.properties.
+# Three ways in: a push to main whose `version` in gradle.properties has no release yet (main only receives develop,
+# so a version bump on main is the release), a tag v<version> pushed to main, or a manual run on main with the
+# version. The tree is built and tested first, so a release is never cut from a red tree; the version must match
+# gradle.properties, and a version that already has its tag is left alone.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -32,38 +34,49 @@ jobs:
         id: version
         run: |
           FILE=$(grep -E '^version=' gradle.properties | cut -d= -f2)
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            V="${{ inputs.version }}"
-          else
-            V="${GITHUB_REF_NAME#v}"
-          fi
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+            workflow_dispatch:*) V="${{ inputs.version }}" ;;
+            push:refs/tags/*)    V="${GITHUB_REF_NAME#v}" ;;
+            push:refs/heads/*)   V="$FILE" ;;
+          esac
           [ "$V" = "$FILE" ] || { echo "release version '$V' but gradle.properties says '$FILE'"; exit 1; }
-          [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ] || [ "${GITHUB_REF_NAME}" = "main" ] || { echo "releases are cut from main, not ${GITHUB_REF_NAME}"; exit 1; }
+          case "${GITHUB_REF}" in refs/tags/*|refs/heads/main) ;; *) echo "releases are cut from main, not ${GITHUB_REF_NAME}"; exit 1 ;; esac
+          if git ls-remote --exit-code --tags origin "refs/tags/v${V}" > /dev/null && [ "${GITHUB_REF}" != "refs/tags/v${V}" ]; then
+            echo "v${V} is already released; bump version in gradle.properties to release again"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 25
+        if: steps.version.outputs.skip == 'false'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
+        if: steps.version.outputs.skip == 'false'
         uses: gradle/actions/setup-gradle@v4
         with:
           validate-wrappers: true
           cache-read-only: true
 
       - name: Install the Chromium Playwright needs (browser tests run in the normal build)
+        if: steps.version.outputs.skip == 'false'
         run: |
           PW=$(grep -m1 -E '^playwright = "' gradle/libs.versions.toml | cut -d'"' -f2)
           npx --yes "playwright@${PW}" install --with-deps chromium
 
       - name: Build, test and bundle
+        if: steps.version.outputs.skip == 'false'
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: ./gradlew build :app:distZip :app:distTar --no-daemon --console=plain
 
       - name: Publish the release (creates the tag when it does not exist yet)
+        if: steps.version.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
