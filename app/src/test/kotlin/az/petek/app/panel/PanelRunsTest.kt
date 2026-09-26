@@ -81,7 +81,9 @@ class PanelRunsTest {
     private suspend fun PanelHarness.approved(): String {
         val versions = backend.scenarios()
         return versions.singleOrNull { it.status == ScenarioStatus.APPROVED }?.id
-            ?: error("no approved scenario after the start-up import; catalog: ${versions.map { "${it.name} v${it.version} ${it.status}" }}")
+            ?: error(
+                "no approved scenario after the start-up import; catalog: ${versions.map { "${it.name} v${it.version} ${it.status}" }}",
+            )
     }
 
     @Test
