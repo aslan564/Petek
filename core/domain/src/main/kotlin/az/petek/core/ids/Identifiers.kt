@@ -9,6 +9,27 @@
 
 package az.petek.core.ids
 
+/**
+ * The workspace a record belongs to (ADR-0011): always [LOCAL] on the owner's machine; a hosted edition sets one per
+ * account. It joins the other ids of CLAUDE.md rule 4 so a shared store never mixes two owners' runs.
+ */
+@JvmInline
+value class WorkspaceId(
+    val value: String,
+) {
+    init {
+        require(PATTERN.matches(value)) { "WorkspaceId must be lower-case letters, digits and '-' (1-64), was '$value'" }
+    }
+
+    override fun toString(): String = value
+
+    companion object {
+        private val PATTERN = Regex("[a-z0-9][a-z0-9-]{0,63}")
+
+        val LOCAL = WorkspaceId("local")
+    }
+}
+
 /** Every entity the harness records carries an id (CLAUDE.md rule 4). Values are opaque strings. */
 @JvmInline
 value class RunId(

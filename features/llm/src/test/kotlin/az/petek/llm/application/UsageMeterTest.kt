@@ -9,6 +9,7 @@
 
 package az.petek.llm.application
 
+import az.petek.core.telemetry.UsageSink
 import az.petek.llm.LlmTestData
 import az.petek.llm.domain.TokenUsage
 import io.kotest.matchers.doubles.plusOrMinus
@@ -129,5 +130,22 @@ class UsageMeterTest {
 
         meter.snapshot().mapValues { it.value.calls } shouldBe mapOf("a0" to 10_000L, "a1" to 10_000L, "a2" to 10_000L)
         meter.total().tokens.inputTokens shouldBe 3_000_000L
+    }
+
+    @Test
+    fun `the telemetry sink gets counters only, never the label`() {
+        val counted = mutableListOf<Triple<String, Long, UsageSink.Tags>>()
+        val meter = UsageMeter { name, amount, tags -> counted += Triple(name, amount, tags) }
+
+        meter.record("a07/announce", LlmTestData.response(usage))
+        meter.recordFailure("a07/announce")
+
+        counted shouldBe
+            listOf(
+                Triple("llm.calls", 1L, UsageSink.Tags.NONE),
+                Triple("llm.input_tokens", 107L, UsageSink.Tags.NONE),
+                Triple("llm.output_tokens", 20L, UsageSink.Tags.NONE),
+                Triple("llm.failed_calls", 1L, UsageSink.Tags.NONE),
+            )
     }
 }

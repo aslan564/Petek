@@ -88,6 +88,13 @@ class ArchitectureTest {
     }
 
     @Test
+    fun `the open core never imports a paid edition module, whether one exists or not`() {
+        scope.files.assertFalse(testName = "open core imports a paid module (ADR-0011)") { file ->
+            file.hasImport { import -> PAID_EDITION_PREFIXES.any { import.name.startsWith(it) } }
+        }
+    }
+
+    @Test
     fun `every feature keeps its three layers under its own package root`() {
         (domainFiles + applicationFiles + infrastructureFiles).assertTrue { file ->
             LAYER_PACKAGE.matches(file.packagee?.name.orEmpty())
@@ -97,6 +104,9 @@ class ArchitectureTest {
     private fun featureOf(packageName: String): String = packageName.removePrefix("az.petek.").substringBefore('.')
 
     private companion object {
+        /** Paid implementations live in a separate repository behind the core's ports (ADR-0011). */
+        val PAID_EDITION_PREFIXES = listOf("az.petek.premium", "az.petek.enterprise", "az.petek.hosted", "az.petek.cloud")
+
         val FRAMEWORK_PREFIXES =
             listOf(
                 "io.ktor",

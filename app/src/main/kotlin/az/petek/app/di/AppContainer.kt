@@ -26,6 +26,8 @@ import az.petek.app.diagnostics.HttpProbe
 import az.petek.app.diagnostics.HttpTargetReachability
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.MdcDiagnosticContext
+import az.petek.app.telemetry.CountingCampaignRunner
+import az.petek.app.telemetry.LocalFileUsageSink
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.browser.infrastructure.PlaywrightBrowserEngine
@@ -39,6 +41,7 @@ import az.petek.core.ids.UuidV7IdGenerator
 import az.petek.core.security.Secret
 import az.petek.core.security.TargetPolicy
 import az.petek.core.sqlite.SqliteDatabase
+import az.petek.core.telemetry.UsageSink
 import az.petek.core.time.HarnessClock
 import az.petek.core.time.SystemHarnessClock
 import az.petek.evidence.domain.ArtifactStore
@@ -209,8 +212,13 @@ class AppContainer(
 
     val verification: AwaitVerificationUseCase by lazy { DefaultAwaitVerificationUseCase(mailbox, DefaultVerificationExtractor()) }
 
+    /** Opt-in telemetry (ADR-0011): counters only, into a local file; [UsageSink.NONE] unless `PETEK_TELEMETRY=local`. */
+    val telemetry: UsageSink by lazy {
+        if (config.telemetry) resources.track(LocalFileUsageSink(config.telemetryFile, clock)) else UsageSink.NONE
+    }
+
     /** LLM usage per agent since the last flush (see [finalizer]). */
-    val usageMeter: UsageMeter = UsageMeter()
+    val usageMeter: UsageMeter by lazy { UsageMeter(telemetry) }
 
     private val llmProvider: LlmClient by lazy { overrides.llm ?: resources.track(LlmProviders.create(config)) }
 
@@ -319,6 +327,9 @@ class AppContainer(
 
     /** A runner for one `petek run`; [headless] false shows the browsers (`--headful`). */
     fun campaignRunner(headless: Boolean = config.browserHeadless): CampaignRunner =
+        CountingCampaignRunner(defaultCampaignRunner(headless), telemetry, config.llmProvider.value)
+
+    private fun defaultCampaignRunner(headless: Boolean): CampaignRunner =
         DefaultCampaignRunner(
             identityGenerator = identityGenerator,
             identities = identities,

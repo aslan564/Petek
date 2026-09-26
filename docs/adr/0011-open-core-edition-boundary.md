@@ -19,6 +19,12 @@ Bring-your-own-AI (ADR-0008) already keeps the model cost off Pətək.
   always `local`; hosted editions set it per account.
 - **Telemetry** is a port, opt-in, off by default, counters only (features used, provider kind, tester count), never
   content, never secrets. The local implementation writes a file the owner can read.
+- **Ports in the code (2026-09-26):** `RunRepository` (evidence domain, SQLite), `ReportStore` (reporting domain,
+  `ReportStore.LOCAL` keeps the report in the run's directory), `CampaignRunner` (orchestration application: the
+  Orchestrator/AgentScheduler port; the default schedules every agent on this machine), `UsageSink`
+  (`core/telemetry`, `PETEK_TELEMETRY=off|local`, `LocalFileUsageSink`). `WorkspaceId` is on `run`, `identity` and
+  `finding` rows and on the report model; older databases gain the column with `local`
+  (`SqliteDatabase.createMissing`). Konsist rule: no file imports `az.petek.premium|enterprise|hosted|cloud`.
 - **Licence**: Business Source License 1.1 (owner's decision, 2026-09-25). Licensor Kodcraft (Aslan Aslanov);
   Additional Use Grant: production use to test software you own or operate, no Competing Offering; Change Date
   2030-09-25; Change License Apache 2.0. Every source file carries the header from `PetekLicense.kt`, enforced by

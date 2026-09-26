@@ -10,6 +10,7 @@
 package az.petek.evidence.infrastructure
 
 import az.petek.core.ids.RunId
+import az.petek.core.ids.WorkspaceId
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.AssertionRecord
@@ -175,6 +176,7 @@ private fun ResultRow.toFindingRecord() =
         c = this[FindingTable.c],
         note = this[FindingTable.note],
         artifactIds = this[FindingTable.artifactIds],
+        workspaceId = WorkspaceId(this[FindingTable.workspaceId]),
     )
 
 private fun ResultRow.toUsageRecord() =

@@ -576,12 +576,12 @@ Məqsəd: real KadroHR-da kəşfiyyat işləsin; sonradan dəyişməsi baha olan
   admin `register_owner`/`seed_company`, hər hadisənin bir emit addımı, sessiya faylları `rw-------`. Sübut:
   `TesterIsolationAtScaleTest` (100 / 1 000 / 5 000 tester, real orkestrator) və `BrowserIsolationAtScaleTest`
   (30 default, 60 ölçülüb; 100 bu maşının həddini aşdı — sessiya başına ≈135 MiB).
-- [ ] `workspace_id` ID sisteminə əlavə olunur (qayda 4): `run`, `identity`, `finding` cədvəlləri və `ReportModel`;
+- [x] `workspace_id` ID sisteminə əlavə olunur (qayda 4): `run`, `identity`, `finding` cədvəlləri və `ReportModel`;
   lokal rejimdə həmişə `local`. Migrasiya `core/sqlite`-də.
-- [ ] Edition sərhədi ADR-i (ADR-0011): ödənişli implementasiyaların port arxasında ayrı modulda yaşayacağı portlar
+- [x] Edition sərhədi ADR-i (ADR-0011): ödənişli implementasiyaların port arxasında ayrı modulda yaşayacağı portlar
   adlandırılır (`RunRepository`, `ReportStore`, `Orchestrator`/`AgentScheduler`, `UsageSink`). Kodda yalnız portlar;
   Konsist testi "açıq nüvə ödənişli modulu import etmir" qaydasını əlavə edir (modul mövcud olmasa da qayda dayanır).
-- [ ] Telemetriya portu `UsageSink` (opt-in, default söndürülü, yalnız sayğaclar, məzmun yoxdur); `UsageMeter` ona
+- [x] Telemetriya portu `UsageSink` (opt-in, default söndürülü, yalnız sayğaclar, məzmun yoxdur); `UsageMeter` ona
   yazır; hazırda tək implementasiya lokal fayldır.
 
 Hazır sayılır: `petek panel` real KadroHR-da (test API açıq) rol-əsaslı kəşfiyyatı tamamlayır; `./gradlew build`

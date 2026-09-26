@@ -74,6 +74,8 @@ data class PetekConfig(
     val browserIgnoreTlsErrors: Boolean = false,
     val evidenceDir: Path,
     val dbPath: Path = evidenceDir.resolve(DEFAULT_DB_FILE),
+    /** `PETEK_TELEMETRY=local`: counters only, into [telemetryFile]; off by default (ADR-0011). */
+    val telemetry: Boolean = false,
 ) {
     init {
         require(llmConcurrency >= 1) { "llmConcurrency must be at least 1, was $llmConcurrency" }
@@ -110,6 +112,9 @@ data class PetekConfig(
     /** [llmEffort], else `low` for the providers that take it (fast, cheap agent decisions). */
     val effectiveLlmEffort: String? get() = llmEffort ?: DEFAULT_EFFORT.takeIf { llmProvider in EFFORT_PROVIDERS }
 
+    /** Where opt-in telemetry counters are appended: `<evidenceDir>/telemetry/usage.jsonl`. */
+    val telemetryFile: Path get() = evidenceDir.resolve("telemetry").resolve("usage.jsonl")
+
     /** Where the log file lives: `<evidenceDir>/logs`. */
     val logDirectory: Path get() = evidenceDir.resolve("logs")
 
@@ -121,7 +126,7 @@ data class PetekConfig(
             "llmBaseUrl=${llmBaseUrl?.let(::masked)}, llmApiKey=${setOrUnset(llmApiKey)}, llmStructured=${llmStructured.key}, " +
             "llmEffort=$effectiveLlmEffort, llmConcurrency=$llmConcurrency, language=$language, " +
             "browserHeadless=$browserHeadless, browserTopology=$browserTopology, browserIgnoreTlsErrors=$browserIgnoreTlsErrors, " +
-            "evidenceDir=$evidenceDir, dbPath=$dbPath)"
+            "evidenceDir=$evidenceDir, dbPath=$dbPath, telemetry=${if (telemetry) "local" else "off"})"
 
     companion object {
         val DEFAULT_PRODUCTION_HOSTS: Set<String> = setOf("kadrohr.com", "www.kadrohr.com")

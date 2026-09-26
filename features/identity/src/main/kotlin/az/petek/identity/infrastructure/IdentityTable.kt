@@ -31,6 +31,9 @@ internal object IdentityTable : Table("identity") {
     val statusReason = text("status_reason").nullable()
     val storageStatePath = text("storage_state_path").nullable()
 
+    /** Added after the first release; older databases get it with the default (`SqliteDatabase.createMissing`). */
+    val workspaceId = text("workspace_id").default("local")
+
     override val primaryKey = PrimaryKey(runId, agentId, name = "identity_run_agent_pk")
 
     init {

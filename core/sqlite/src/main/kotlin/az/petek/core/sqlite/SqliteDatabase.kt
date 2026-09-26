@@ -54,9 +54,31 @@ class SqliteDatabase private constructor(
     /** Runs [block] in a read transaction. */
     suspend fun <T> read(block: JdbcTransaction.() -> T): T = withContext(Dispatchers.IO) { transaction(database) { block() } }
 
-    /** Creates missing tables and indexes (idempotent). Called once per repository at start-up. */
+    /**
+     * Creates missing tables and indexes and adds columns a newer Pətək declares to tables an older one created
+     * (idempotent). Called once per repository at start-up. An added column must be nullable or have a default, as
+     * SQLite's `ALTER TABLE ... ADD COLUMN` requires.
+     */
     fun createMissing(vararg tables: Table) {
-        setUp { SchemaUtils.create(*tables) }
+        setUp {
+            SchemaUtils.create(*tables)
+            tables.forEach { table -> addMissingColumns(table) }
+        }
+    }
+
+    private fun JdbcTransaction.addMissingColumns(table: Table) {
+        val existing = mutableSetOf<String>()
+        exec("PRAGMA table_info(\"${table.tableName}\")") { rows ->
+            while (rows.next()) existing += rows.getString("name").lowercase()
+        }
+        table.columns
+            .filter { it.name.lowercase() !in existing }
+            .forEach { column ->
+                require(column.columnType.nullable || column.defaultValueFun != null) {
+                    "column ${table.tableName}.${column.name} cannot be added to an existing table: it needs a default"
+                }
+                exec("ALTER TABLE \"${table.tableName}\" ADD COLUMN ${column.descriptionDdl()}")
+            }
     }
 
     /**

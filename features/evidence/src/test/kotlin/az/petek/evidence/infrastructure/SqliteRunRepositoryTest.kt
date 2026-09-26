@@ -10,6 +10,7 @@
 package az.petek.evidence.infrastructure
 
 import az.petek.core.ids.RunId
+import az.petek.core.ids.WorkspaceId
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.infrastructure.EvidenceFixtures.OTHER_RUN
 import az.petek.evidence.infrastructure.EvidenceFixtures.RUN
@@ -46,6 +47,17 @@ class SqliteRunRepositoryTest {
             store.find(RUN) shouldBe created
             created.result shouldBe RunResult.RUNNING
             created.endedAt shouldBe null
+        }
+
+    @Test
+    fun `a run keeps its workspace, local unless a hosted edition sets another`() =
+        withStore(dir) { store, _ ->
+            run().workspaceId shouldBe WorkspaceId.LOCAL
+            val hosted = run().copy(workspaceId = WorkspaceId("acme-team"))
+
+            store.create(hosted)
+
+            store.find(RUN)?.workspaceId shouldBe WorkspaceId("acme-team")
         }
 
     @Test

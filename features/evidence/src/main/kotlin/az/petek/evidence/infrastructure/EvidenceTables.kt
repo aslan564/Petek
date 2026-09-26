@@ -17,6 +17,7 @@ import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
 import az.petek.core.ids.StepId
+import az.petek.core.ids.WorkspaceId
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.FindingClass
@@ -56,6 +57,9 @@ internal object RunTable : Table("run") {
     val result = enumName<RunResult>("result")
     val repeatGroup = text("repeat_group").nullable()
     val repeatIndex = integer("repeat_index").nullable()
+
+    /** Added after the first release; older databases get it with the default (`SqliteDatabase.createMissing`). */
+    val workspaceId = text("workspace_id").default(WorkspaceId.LOCAL.value)
 
     override val primaryKey = PrimaryKey(seq)
 
@@ -192,6 +196,7 @@ internal object FindingTable : Table("finding") {
     val c = text("c").nullable()
     val note = text("note")
     val artifactIds = artifactIds("artifact_ids")
+    val workspaceId = text("workspace_id").default(WorkspaceId.LOCAL.value)
 
     override val primaryKey = PrimaryKey(seq)
 

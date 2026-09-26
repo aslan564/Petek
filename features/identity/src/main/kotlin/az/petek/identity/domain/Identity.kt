@@ -13,6 +13,7 @@ import az.petek.core.error.PetekException
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
+import az.petek.core.ids.WorkspaceId
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
 import az.petek.core.security.Secret
@@ -58,6 +59,8 @@ data class IdentitySpec(
 data class IdentityPlan(
     val runTag: RunTag,
     val identities: List<Identity>,
+    /** Always [WorkspaceId.LOCAL] on the owner's machine (ADR-0011). */
+    val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
 )
 
 /** A registry that cannot be built (duplicate names, impossible quotas). The run must not start. */

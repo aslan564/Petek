@@ -17,6 +17,7 @@ import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
 import az.petek.core.ids.StepId
+import az.petek.core.ids.WorkspaceId
 import java.time.Instant
 
 /*
@@ -39,6 +40,8 @@ data class RunRecord(
     /** Runs started together by `--repeat N` share a group id. */
     val repeatGroup: String? = null,
     val repeatIndex: Int? = null,
+    /** Always [WorkspaceId.LOCAL] on the owner's machine (ADR-0011). */
+    val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
 )
 
 /** External objects a run created on the target (e.g. the test company) so teardown can remove them. */
@@ -159,6 +162,7 @@ data class FindingRecord(
     val c: String?,
     val note: String,
     val artifactIds: List<ArtifactId>,
+    val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
 )
 
 /** Token and cost accounting per agent (LLM usage is reported, never estimated by the LLM). */

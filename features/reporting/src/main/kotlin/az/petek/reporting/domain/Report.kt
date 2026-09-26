@@ -9,12 +9,15 @@
 
 package az.petek.reporting.domain
 
+import az.petek.core.ids.RunId
+import az.petek.core.ids.WorkspaceId
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
+import java.net.URI
 import java.nio.file.Path
 
 /**
@@ -136,7 +139,29 @@ data class ReportModel(
     val artifactLinks: Map<String, String>,
     /** Token and cost accounting per agent, as recorded by the LLM metering (never estimated). */
     val usage: List<UsageRecord> = emptyList(),
-)
+) {
+    /** The workspace the run belongs to (ADR-0011); `local` on the owner's machine. */
+    val workspaceId: WorkspaceId get() = run.workspaceId
+}
+
+/**
+ * Where a written report is kept for its readers (ADR-0011 edition port): the open core keeps it in the run's own
+ * report directory ([LOCAL]); a hosted edition may upload it and answer with a shared address.
+ */
+fun interface ReportStore {
+    /** Keeps the report written into [directory] for [runId] and returns where it can be opened. */
+    suspend fun publish(
+        runId: RunId,
+        directory: Path,
+    ): URI
+
+    companion object {
+        /** The report stays where it was written; its HTML file is the address. */
+        val LOCAL: ReportStore = ReportStore { _, directory -> directory.resolve(LOCAL_ENTRY).toUri() }
+
+        const val LOCAL_ENTRY = "index.html"
+    }
+}
 
 /** Writes one report format into [directory] and returns the written file. */
 interface ReportWriter {

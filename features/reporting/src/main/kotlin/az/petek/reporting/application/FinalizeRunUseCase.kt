@@ -21,6 +21,7 @@ import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResult
 import az.petek.reporting.domain.Judge
 import az.petek.reporting.domain.ReportModel
+import az.petek.reporting.domain.ReportStore
 import az.petek.reporting.domain.ReportWriter
 import az.petek.reporting.domain.RunNotFoundException
 import kotlinx.coroutines.CancellationException
@@ -51,6 +52,8 @@ class FinalizeRunUseCase(
     private val judge: Judge,
     private val builder: BuildReportUseCase,
     private val writers: List<ReportWriter>,
+    /** Where the written report is kept for its readers; the run's own directory unless an edition says otherwise. */
+    private val store: ReportStore = ReportStore.LOCAL,
     /** Writers do blocking file I/O. */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -79,6 +82,7 @@ class FinalizeRunUseCase(
                 Files.createDirectories(directory)
                 writeAll(model, directory)
             }
+            store.publish(runId, directory)
             directory
         }
 

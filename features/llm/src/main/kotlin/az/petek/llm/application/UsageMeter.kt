@@ -10,6 +10,7 @@
 package az.petek.llm.application
 
 import az.petek.core.ids.AgentId
+import az.petek.core.telemetry.UsageSink
 import az.petek.llm.domain.LlmResponse
 import java.util.TreeMap
 
@@ -20,7 +21,10 @@ import java.util.TreeMap
  * Totals are cumulative until [drain] hands them over; draining at the end of each run makes every flush carry only
  * that run's usage, which matters because the evidence store adds a flush to the totals it already has.
  */
-class UsageMeter {
+class UsageMeter(
+    /** Receives counters only (calls, failures, tokens), never labels or content; off unless the owner opts in. */
+    private val sink: UsageSink = UsageSink.NONE,
+) {
     private val lock = Any()
     private val totals = HashMap<String, UsageTotals>()
 
@@ -28,10 +32,18 @@ class UsageMeter {
     fun record(
         label: String,
         response: LlmResponse,
-    ) = add(label, UsageTotals(calls = 1, tokens = response.usage, costUsd = response.costUsd))
+    ) {
+        add(label, UsageTotals(calls = 1, tokens = response.usage, costUsd = response.costUsd))
+        sink.count("llm.calls", 1, UsageSink.Tags.NONE)
+        sink.count("llm.input_tokens", response.usage.inputTokens + response.usage.cacheReadTokens, UsageSink.Tags.NONE)
+        sink.count("llm.output_tokens", response.usage.outputTokens, UsageSink.Tags.NONE)
+    }
 
     /** Counts one call that ended in an error (after any retries). */
-    fun recordFailure(label: String) = add(label, UsageTotals(failedCalls = 1))
+    fun recordFailure(label: String) {
+        add(label, UsageTotals(failedCalls = 1))
+        sink.count("llm.failed_calls", 1, UsageSink.Tags.NONE)
+    }
 
     /** Current totals per agent id, sorted by agent number (`a99` before `a100`), other labels after them. */
     fun snapshot(): Map<String, UsageTotals> = synchronized(lock) { sorted(totals) }

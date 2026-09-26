@@ -10,6 +10,7 @@
 package az.petek.evidence.infrastructure
 
 import az.petek.core.ids.RunId
+import az.petek.core.ids.WorkspaceId
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
@@ -52,6 +53,7 @@ internal class SqliteRunRepository(
                         it[result] = run.result
                         it[repeatGroup] = run.repeatGroup
                         it[repeatIndex] = run.repeatIndex
+                        it[workspaceId] = run.workspaceId.value
                     }.insertedCount
             }
         require(inserted == 1) { "Run ${run.runId} already exists" }
@@ -162,6 +164,7 @@ private fun ResultRow.toRunRecord() =
         result = this[RunTable.result],
         repeatGroup = this[RunTable.repeatGroup],
         repeatIndex = this[RunTable.repeatIndex],
+        workspaceId = WorkspaceId(this[RunTable.workspaceId]),
     )
 
 private fun ResultRow.toRunResource() =

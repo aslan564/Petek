@@ -107,6 +107,7 @@ class ConfigLoader(
             val evidenceDir = path(Keys.EVIDENCE_DIR, PetekConfig.DEFAULT_EVIDENCE_DIR)
             val dbPath = if (text(Keys.DB) != null) path(Keys.DB, default = null) else evidenceDir?.resolve(PetekConfig.DEFAULT_DB_FILE)
             val identitySecret = identitySecret()
+            val telemetry = telemetry()
             if (problems.isNotEmpty()) throw ConfigException(problems.toList())
             return PetekConfig(
                 target = checkNotNull(target),
@@ -133,6 +134,7 @@ class ConfigLoader(
                 browserIgnoreTlsErrors = ignoreTlsErrors,
                 evidenceDir = checkNotNull(evidenceDir),
                 dbPath = checkNotNull(dbPath),
+                telemetry = telemetry,
             )
         }
 
@@ -281,6 +283,14 @@ class ConfigLoader(
             }
         }
 
+        /** `off` (default) or `local`; nothing else, so no typo ever turns counting on. */
+        private fun telemetry(): Boolean =
+            when (val raw = text(Keys.TELEMETRY)?.lowercase() ?: "off") {
+                "off" -> false
+                "local" -> true
+                else -> false.also { problems += "${Keys.TELEMETRY} must be off or local, was '$raw'" }
+            }
+
         private fun identitySecret(): Secret? {
             val explicit = values[Keys.IDENTITY_SECRET]?.trim().orEmpty()
             if (explicit.isNotEmpty()) {
@@ -331,6 +341,7 @@ class ConfigLoader(
         const val BROWSER_IGNORE_TLS_ERRORS = "PETEK_BROWSER_IGNORE_TLS_ERRORS"
         const val EVIDENCE_DIR = "PETEK_EVIDENCE_DIR"
         const val DB = "PETEK_DB"
+        const val TELEMETRY = "PETEK_TELEMETRY"
     }
 
     private companion object {

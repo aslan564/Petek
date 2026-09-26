@@ -134,4 +134,53 @@ class SqliteDatabaseTest {
             db.createMissing(Items)
         }
     }
+
+    private object ItemsV2 : Table("items") {
+        val id = integer("id")
+        val name = varchar("name", 64)
+        val workspace = text("workspace_id").default("local")
+        val note = text("note").nullable()
+        override val primaryKey = PrimaryKey(id)
+    }
+
+    private object ItemsWithRequiredColumn : Table("items") {
+        val id = integer("id")
+        val required = text("required")
+        override val primaryKey = PrimaryKey(id)
+    }
+
+    @Test
+    fun `a column a newer version declares is added to a table an older one created, keeping its rows`(
+        @TempDir dir: Path,
+    ) = runBlocking<Unit> {
+        SqliteDatabase.open(dir.resolve("petek.db")).use { db ->
+            db.createMissing(Items)
+            db.write {
+                Items.insert {
+                    it[id] = 1
+                    it[name] = "old"
+                }
+            }
+
+            db.createMissing(ItemsV2)
+            db.createMissing(ItemsV2)
+
+            val row = db.read { ItemsV2.selectAll().single() }
+            row[ItemsV2.name] shouldBe "old"
+            row[ItemsV2.workspace] shouldBe "local"
+            row[ItemsV2.note] shouldBe null
+        }
+    }
+
+    @Test
+    fun `a required column without a default is refused instead of breaking an existing table`(
+        @TempDir dir: Path,
+    ) {
+        SqliteDatabase.open(dir.resolve("petek.db")).use { db ->
+            db.createMissing(Items)
+
+            shouldThrow<IllegalArgumentException> { db.createMissing(ItemsWithRequiredColumn) }.message shouldBe
+                "column items.required cannot be added to an existing table: it needs a default"
+        }
+    }
 }

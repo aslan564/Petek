@@ -77,6 +77,7 @@ class SqliteIdentityRepository(
                     this[IdentityTable.status] = identity.status.key
                     this[IdentityTable.statusReason] = null
                     this[IdentityTable.storageStatePath] = identity.storageStatePath
+                    this[IdentityTable.workspaceId] = plan.workspaceId.value
                 }
             }
         } catch (e: SQLException) {
