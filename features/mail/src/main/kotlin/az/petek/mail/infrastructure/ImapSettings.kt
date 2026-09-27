@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * The owner's own inbox over IMAP (`PETEK_MAIL_SOURCE=imap`): a catch-all domain or a box whose `+` addresses reach
- * it (`test+r1-a01@company.az` lands in `test@company.az`). The password travels as a [Secret] and is never logged.
+ * it (`test+r1-a01@company.example` lands in `test@company.example`). The password travels as a [Secret] and is never logged.
  */
 data class ImapSettings(
     val host: String,

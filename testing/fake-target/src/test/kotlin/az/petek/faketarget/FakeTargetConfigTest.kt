@@ -52,7 +52,7 @@ class FakeTargetConfigTest {
             FakeTargetOptions.fromEnvironment(
                 mapOf(
                     "PETEK_TEST_TOKEN" to "tok",
-                    "PETEK_MAIL_DOMAIN" to "qa.example.az",
+                    "PETEK_MAIL_DOMAIN" to "qa.example.test",
                     "FAKE_TARGET_PORT" to "9090",
                     "FAKE_TARGET_MAIL_PORT" to "9025",
                     "FAKE_TARGET_PHONE_OTP" to "FALSE",
@@ -65,7 +65,7 @@ class FakeTargetConfigTest {
         options.port shouldBe 9090
         options.mailPort shouldBe 9025
         options.config.testToken shouldBe "tok"
-        options.config.testMailDomain shouldBe "qa.example.az"
+        options.config.testMailDomain shouldBe "qa.example.test"
         options.config.requirePhoneOtp shouldBe false
         options.config.notificationDelay shouldBe 250.milliseconds
         options.config.bugs shouldBe setOf(FakeBug.RACE_DOUBLE_APPROVE, FakeBug.DROP_NOTIFICATION_FOR_ONE_USER)

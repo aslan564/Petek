@@ -377,8 +377,8 @@ class MailpitMailboxTest {
 
         runBlocking {
             shouldThrow<IllegalArgumentException> { mailbox.findLatest("", SINCE) }
-            shouldThrow<IllegalArgumentException> { mailbox.findLatest("eli\"@x.az", SINCE) }
-            shouldThrow<IllegalArgumentException> { mailbox.findLatest("eli @x.az", SINCE) }
+            shouldThrow<IllegalArgumentException> { mailbox.findLatest("eli\"@x.example", SINCE) }
+            shouldThrow<IllegalArgumentException> { mailbox.findLatest("eli @x.example", SINCE) }
             shouldThrow<IllegalArgumentException> { mailbox.findRecent(ELI, SINCE, limit = 0) }
             shouldThrow<IllegalArgumentException> { mailbox.markRead(" ") }
         }

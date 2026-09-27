@@ -258,11 +258,11 @@ class AnnouncementTest {
             email: String,
             role: UserRole,
         ) = User("u", "c", email, email, "+994500000000", role, null, emailVerified = true, phoneVerified = true, createdAt = Instant.EPOCH)
-        val manager = user("a.manager@x.az", UserRole.MANAGER)
-        val employeeB = user("b.employee@x.az", UserRole.EMPLOYEE)
-        val employeeC = user("c.employee@x.az", UserRole.EMPLOYEE)
-        AnnouncementService.dropVictim(listOf(employeeC, manager, employeeB)) shouldBe "b.employee@x.az"
-        AnnouncementService.dropVictim(listOf(manager)) shouldBe "a.manager@x.az"
+        val manager = user("a.manager@x.example", UserRole.MANAGER)
+        val employeeB = user("b.employee@x.example", UserRole.EMPLOYEE)
+        val employeeC = user("c.employee@x.example", UserRole.EMPLOYEE)
+        AnnouncementService.dropVictim(listOf(employeeC, manager, employeeB)) shouldBe "b.employee@x.example"
+        AnnouncementService.dropVictim(listOf(manager)) shouldBe "a.manager@x.example"
         AnnouncementService.dropVictim(emptyList()) shouldBe null
     }
 }

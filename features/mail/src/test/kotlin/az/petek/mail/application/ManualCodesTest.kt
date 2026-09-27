@@ -34,27 +34,27 @@ class ManualCodesTest {
     @Test
     fun `a waiting tester is listed once until the owner types its code, which then reads as a message`() =
         runBlocking<Unit> {
-            mailbox.findLatest("Test+A01@company.az", since).shouldBeNull()
-            mailbox.findLatest("test+a01@company.az", since).shouldBeNull()
+            mailbox.findLatest("Test+A01@company.example", since).shouldBeNull()
+            mailbox.findLatest("test+a01@company.example", since).shouldBeNull()
             val request = desk.pending().single()
-            request.to shouldBe "test+a01@company.az"
+            request.to shouldBe "test+a01@company.example"
 
             now = now.plusSeconds(30)
             desk.answer(request.id, " 123456 ") shouldBe true
 
             desk.pending().shouldBeEmpty()
-            val message = mailbox.findLatest("test+a01@company.az", since).shouldNotBeNull()
+            val message = mailbox.findLatest("test+a01@company.example", since).shouldNotBeNull()
             message.text shouldBe "123456"
             message.receivedAt shouldBe now
             mailbox.markRead(message.id)
-            mailbox.findLatest("test+a01@company.az", since).shouldBeNull()
+            mailbox.findLatest("test+a01@company.example", since).shouldBeNull()
             desk.pending() shouldHaveSize 1
         }
 
     @Test
     fun `an unknown request or a code with spaces or symbols is refused`() {
         desk.answer("m99", "123456") shouldBe false
-        val request = desk.ask("test+a02@company.az")
+        val request = desk.ask("test+a02@company.example")
         desk.answer(request.id, "12 34") shouldBe false
         desk.answer(request.id, "<script>") shouldBe false
         desk.pending() shouldHaveSize 1
@@ -79,8 +79,8 @@ class ManualCodesTest {
                 }
             val patient = PatientVerification(base)
 
-            patient.await("a@b.az", since, MailPurpose.CODE, 60.seconds)
-            patient.await("a@b.az", since, MailPurpose.CODE, 10.minutes)
+            patient.await("a@b.example", since, MailPurpose.CODE, 60.seconds)
+            patient.await("a@b.example", since, MailPurpose.CODE, 10.minutes)
 
             waits shouldBe listOf(5.minutes, 10.minutes)
         }

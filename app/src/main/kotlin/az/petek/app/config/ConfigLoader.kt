@@ -259,7 +259,7 @@ class ConfigLoader(
         private fun mailInbox(): String? {
             val raw = text(Keys.MAIL_INBOX)?.lowercase() ?: return null
             if (!MAILBOX.matches(raw)) {
-                problems += "${Keys.MAIL_INBOX} must be a plain e-mail address such as test@company.az (without '+')"
+                problems += "${Keys.MAIL_INBOX} must be a plain e-mail address such as test@company.example (without '+')"
                 return null
             }
             return raw

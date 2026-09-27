@@ -19,7 +19,7 @@ class ContactsTest {
     fun `e-mail addresses keep only their domain and everything else stays`() {
         Contacts.masked("a01: emit -> FAILED: oracle: GET /test/tickets/latest?by=tural.18mc.a01@test.portal.example answered 404") shouldBe
             "a01: emit -> FAILED: oracle: GET /test/tickets/latest?by=***@test.portal.example answered 404"
-        Contacts.masked("eli+qa@portal.test, vəli@x.az və mətn") shouldBe "***@portal.test, ***@x.az və mətn"
+        Contacts.masked("eli+qa@portal.test, vəli@x.example və mətn") shouldBe "***@portal.test, ***@x.example və mətn"
         Contacts.masked("heç bir ünvan yoxdur @ burada") shouldBe "heç bir ünvan yoxdur @ burada"
     }
 }

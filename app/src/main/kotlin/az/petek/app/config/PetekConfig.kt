@@ -64,7 +64,7 @@ data class PetekConfig(
     val mailSource: MailSource = MailSource.MAILPIT,
     val mailpitUrl: URI = URI(DEFAULT_MAILPIT_URL),
     val mailDomain: String = DEFAULT_MAIL_DOMAIN,
-    /** The owner's own box (`PETEK_MAIL_INBOX`, e.g. `test@company.az`): testers get its `+` addresses (Faza 16). */
+    /** The owner's own box (`PETEK_MAIL_INBOX`, e.g. `test@company.example`): testers get its `+` addresses (Faza 16). */
     val mailInbox: String? = null,
     /** How to read the owner's box when [mailSource] is IMAP (`PETEK_IMAP_*`). */
     val imap: ImapSettings? = null,

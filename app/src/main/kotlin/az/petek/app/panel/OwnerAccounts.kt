@@ -73,7 +73,7 @@ internal class OwnerAccounts(
         return views()
     }
 
-    /** The profile's name for [site], else a name made from its host (`staging.shop.az` → `staging-shop-az`). */
+    /** The profile's name for [site], else a name made from its host (`staging.shop.example` → `staging-shop-az`). */
     private fun siteName(site: URI): String =
         config.profileFor(site)?.spec?.name
             ?: site.host

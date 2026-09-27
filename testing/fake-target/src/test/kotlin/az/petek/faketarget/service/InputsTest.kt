@@ -37,12 +37,12 @@ class InputsTest {
 
     @Test
     fun `profiles are validated field by field`() {
-        Inputs.validateProfile("Əli", "a@b.az", "+994501234567", "12345678") shouldBe null
-        Inputs.validateProfile("", "a@b.az", "+994501234567", "12345678") shouldBe Failure.NAME_REQUIRED
-        Inputs.validateProfile("x".repeat(101), "a@b.az", "+994501234567", "12345678") shouldBe Failure.NAME_REQUIRED
+        Inputs.validateProfile("Əli", "a@b.example", "+994501234567", "12345678") shouldBe null
+        Inputs.validateProfile("", "a@b.example", "+994501234567", "12345678") shouldBe Failure.NAME_REQUIRED
+        Inputs.validateProfile("x".repeat(101), "a@b.example", "+994501234567", "12345678") shouldBe Failure.NAME_REQUIRED
         Inputs.validateProfile("Əli", "a@b", "+994501234567", "12345678") shouldBe Failure.EMAIL_INVALID
-        Inputs.validateProfile("Əli", "a@b.az", "994501234567", "12345678") shouldBe Failure.PHONE_INVALID
-        Inputs.validateProfile("Əli", "a@b.az", "+994501234567", "1234567") shouldBe Failure.PASSWORD_TOO_SHORT
+        Inputs.validateProfile("Əli", "a@b.example", "994501234567", "12345678") shouldBe Failure.PHONE_INVALID
+        Inputs.validateProfile("Əli", "a@b.example", "+994501234567", "1234567") shouldBe Failure.PASSWORD_TOO_SHORT
     }
 
     @Test

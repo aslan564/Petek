@@ -193,10 +193,10 @@ class HttpTargetOracleTest {
     fun `characters that are illegal in a URL are escaped while valid escapes are kept`() {
         val server = server { StubResponse(body = "{}") }
 
-        runBlocking { oracle(server).get("/test/announcements/latest?by=əli@x.az&q=a b&r=50%&s=%2B1") }
+        runBlocking { oracle(server).get("/test/announcements/latest?by=əli@x.example&q=a b&r=50%&s=%2B1") }
 
         val request = server.requests.single()
-        request.query["by"] shouldBe listOf("əli@x.az")
+        request.query["by"] shouldBe listOf("əli@x.example")
         request.query["q"] shouldBe listOf("a b")
         request.query["r"] shouldBe listOf("50%")
         request.query["s"] shouldBe listOf("+1")
@@ -628,7 +628,7 @@ class HttpTargetOracleTest {
             listOf("/test/../../admin", "../admin", "/test/./x", "/test/%2e%2E/admin", "/a/..", ".").forEach { path ->
                 shouldThrow<IllegalArgumentException> { oracle.get(path) }
             }
-            oracle.get("/test/tickets/latest?by=a..b@x.az")
+            oracle.get("/test/tickets/latest?by=a..b@x.example")
         }
         server.requests.map { it.path } shouldContainExactly listOf("/staging/test/tickets/latest")
     }

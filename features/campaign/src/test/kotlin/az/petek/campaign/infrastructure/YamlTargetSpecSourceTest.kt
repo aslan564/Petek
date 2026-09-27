@@ -103,7 +103,7 @@ class YamlTargetSpecSourceTest {
                           colour: blue
                           sign_in: [magic]
                           accounts:
-                            - {role: admin, email: a@b.az, password: hunter2}
+                            - {role: admin, email: a@b.example, password: hunter2}
                         """,
                     ),
                 )
@@ -149,7 +149,7 @@ class YamlTargetSpecSourceTest {
                           name: bad
                           url: https://staging.hr.example
                           accounts:
-                            - {role: admin, email: a@b.az, password: '${'$'}{PETEK_ACC_ADMIN}', fields: {Company-Code: X}}
+                            - {role: admin, email: a@b.example, password: '${'$'}{PETEK_ACC_ADMIN}', fields: {Company-Code: X}}
                         """,
                     ),
                 )

@@ -117,7 +117,7 @@ class TeardownCommandTest {
     fun `a company that is not flagged as test data is never deleted`() =
         runBlocking<Unit> {
             val cli = cli()
-            val realCompany = FakeTargets.registerOwner(target, "boss@real-customer.az")
+            val realCompany = FakeTargets.registerOwner(target, "boss@real-customer.example")
             recordRun(cli, "run_1", realCompany)
 
             val result = cli.run("teardown")

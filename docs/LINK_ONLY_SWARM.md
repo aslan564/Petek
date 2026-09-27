@@ -133,7 +133,7 @@ hər poçt ünvanı yalnız bir testerə məxsusdur
 
 | Yol | Nə vaxt | Nə vaxt tikilir |
 |---|---|---|
-| Sahibin poçt qutusu + "artı ünvan", IMAP ilə | default: qutu `test@sirket.az`-dirsə, testerlər `test+b7@sirket.az` alır, hamısı bir qutuya düşür, Pətək alan ünvana görə ayırır | indi |
+| Sahibin poçt qutusu + "artı ünvan", IMAP ilə | default: qutu `test@sirket.example`-dirsə, testerlər `test+b7@sirket.example` alır, hamısı bir qutuya düşür, Pətək alan ünvana görə ayırır | indi |
 | Lokal Mailpit | developer, saytın SMTP-si ora yönəlibsə | var |
 | Sahibin domenində catch-all + IMAP | sayt "+" işarəsini qəbul etmirsə | indi |
 | Saytın test API-si | "turbo": kontraktı olan saytlar | var |

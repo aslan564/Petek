@@ -4,7 +4,7 @@ The npm launcher of [Pətək](https://github.com/aslan564/Petek), the multi-agen
 agents test a web application at once, each in its own browser session, and report with evidence.
 
 ```bash
-npx petek init --target https://staging.your-site.com   # .env, .petek/, skill pack and MCP entry for your AI agent
+npx petek init --target https://staging.example.com   # .env, .petek/, skill pack and MCP entry for your AI agent
 npx petek doctor                                         # target policy, target, Chromium, inbox, test API, AI provider
 npx petek panel                                          # the web panel at http://127.0.0.1:7070
 ```

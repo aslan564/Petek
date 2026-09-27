@@ -38,7 +38,7 @@ class DefaultVerificationExtractorTest {
 
     @Test
     fun `CODE is not satisfied by a mail that only has a link`() {
-        extractor.extract(mail(text = "Dəvət: https://x.az/invite/abc"), MailPurpose.CODE).shouldBeNull()
+        extractor.extract(mail(text = "Dəvət: https://x.example/invite/abc"), MailPurpose.CODE).shouldBeNull()
     }
 
     @Test
@@ -49,17 +49,18 @@ class DefaultVerificationExtractorTest {
     @Test
     fun `ANY is satisfied by a code alone or by a link alone`() {
         extractor.extract(mail(text = "Kod: 482913"), MailPurpose.ANY) shouldBe VerificationCode("482913", null, "m1")
-        extractor.extract(mail(text = "https://x.az/invite/abc"), MailPurpose.ANY)?.link?.toString() shouldBe "https://x.az/invite/abc"
+        extractor.extract(mail(text = "https://x.example/invite/abc"), MailPurpose.ANY)?.link?.toString() shouldBe
+            "https://x.example/invite/abc"
     }
 
     @Test
     fun `everything found is returned together with the message id`() {
-        val message = mail(id = "msg-42", text = "Təsdiq kodu: 482913\nvə ya keçid: https://x.az/verify?t=abc")
+        val message = mail(id = "msg-42", text = "Təsdiq kodu: 482913\nvə ya keçid: https://x.example/verify?t=abc")
 
         val result = extractor.extract(message, MailPurpose.CODE)
 
         result?.code shouldBe "482913"
-        result?.link?.toString() shouldBe "https://x.az/verify?t=abc"
+        result?.link?.toString() shouldBe "https://x.example/verify?t=abc"
         result?.messageId shouldBe "msg-42"
     }
 
@@ -70,10 +71,10 @@ class DefaultVerificationExtractorTest {
 
     @Test
     fun `empty hrefs are skipped instead of failing the whole extraction`() {
-        val html = "<a href=\"\">Bax</a><a href=''>Ləğv et</a><a href=\"https://x.az/invite/t1\">Qəbul et</a>"
+        val html = "<a href=\"\">Bax</a><a href=''>Ləğv et</a><a href=\"https://x.example/invite/t1\">Qəbul et</a>"
 
         extractor.extract(mail(text = "Kod: 482913", html = html), MailPurpose.CODE)?.code shouldBe "482913"
-        extractor.extract(mail(html = html), MailPurpose.LINK)?.link?.toString() shouldBe "https://x.az/invite/t1"
+        extractor.extract(mail(html = html), MailPurpose.LINK)?.link?.toString() shouldBe "https://x.example/invite/t1"
         extractor.extract(mail(html = "<a href=\"\">x</a>"), MailPurpose.ANY).shouldBeNull()
     }
 
@@ -222,9 +223,9 @@ class DefaultVerificationExtractorTest {
                 ),
                 case(
                     "an HTML anchor is preferred over a text URL",
-                    "https://x.az/invite/from-html",
-                    text = "https://x.az/invite/from-text",
-                    html = "<a href=\"https://x.az/invite/from-html\">Qəbul et</a>",
+                    "https://x.example/invite/from-html",
+                    text = "https://x.example/invite/from-text",
+                    html = "<a href=\"https://x.example/invite/from-html\">Qəbul et</a>",
                 ),
                 case(
                     "links that are not about verification are ignored",
@@ -233,10 +234,14 @@ class DefaultVerificationExtractorTest {
                 ),
                 case(
                     "a non-ASCII dəvət path is percent-encoded",
-                    "https://x.az/d%C9%99v%C9%99t/abc",
-                    text = "Keçid: https://x.az/dəvət/abc",
+                    "https://x.example/d%C9%99v%C9%99t/abc",
+                    text = "Keçid: https://x.example/dəvət/abc",
                 ),
-                case("a percent-encoded dəvət path matches", "https://x.az/d%C9%99v%C9%99t/abc", text = "https://x.az/d%C9%99v%C9%99t/abc"),
+                case(
+                    "a percent-encoded dəvət path matches",
+                    "https://x.example/d%C9%99v%C9%99t/abc",
+                    text = "https://x.example/d%C9%99v%C9%99t/abc",
+                ),
                 case(
                     "matching is case-insensitive",
                     "HTTPS://X.COM/Account/VERIFY?t=1",
@@ -245,29 +250,31 @@ class DefaultVerificationExtractorTest {
                 case(
                     "non-http schemes are ignored",
                     null,
-                    html = "<a href=\"mailto:verify@x.az\">m</a><a href=\"javascript:confirm()\">j</a><a href=\"ftp://x.az/verify\">f</a>",
+                    html =
+                        "<a href=\"mailto:verify@x.example\">m</a><a href=\"javascript:confirm()\">j</a>" +
+                            "<a href=\"ftp://x.example/verify\">f</a>",
                 ),
                 case(
                     "markdown parentheses are not part of the URL",
-                    "https://x.az/confirm/abc",
-                    text = "[Təsdiqlə](https://x.az/confirm/abc)",
+                    "https://x.example/confirm/abc",
+                    text = "[Təsdiqlə](https://x.example/confirm/abc)",
                 ),
                 case(
                     "a relative href falls back to a text URL",
-                    "https://x.az/activate/abc",
-                    text = "https://x.az/activate/abc",
+                    "https://x.example/activate/abc",
+                    text = "https://x.example/activate/abc",
                     html = "<a href=\"/invite/abc\">Qəbul et</a>",
                 ),
                 case(
                     "a tracking redirect that wraps an invite link",
-                    "https://click.mail.az/r?u=https%3A%2F%2Fx.az%2Finvite%2Fabc",
-                    text = "https://click.mail.az/r?u=https%3A%2F%2Fx.az%2Finvite%2Fabc",
+                    "https://click.mail.example/r?u=https%3A%2F%2Fx.az%2Finvite%2Fabc",
+                    text = "https://click.mail.example/r?u=https%3A%2F%2Fx.az%2Finvite%2Fabc",
                 ),
-                case("a stray percent sign is escaped", "https://x.az/verify?d=50%25", text = "https://x.az/verify?d=50%"),
+                case("a stray percent sign is escaped", "https://x.example/verify?d=50%25", text = "https://x.example/verify?d=50%"),
                 case(
                     "a link written only in the HTML text is found",
-                    "https://x.az/invite/t1",
-                    html = "<p>Keçid: https://x.az/invite/t1</p>",
+                    "https://x.example/invite/t1",
+                    html = "<p>Keçid: https://x.example/invite/t1</p>",
                 ),
             )
     }

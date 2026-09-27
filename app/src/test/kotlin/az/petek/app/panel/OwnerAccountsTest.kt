@@ -119,18 +119,19 @@ class OwnerAccountsTest {
     fun `a production site is refused before anything is written`() {
         val accounts = OwnerAccounts(config, env, targets)
 
-        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://portal.example", "admin", "a@b.az", "x")) }
+        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://portal.example", "admin", "a@b.example", "x")) }
         Files.exists(env) shouldBe false
     }
 
     @Test
     fun `a hand-edited profile the patch would break is put back as it was and nothing is added`() {
         Files.createDirectories(targets)
-        val broken = "target:\n  name: stage-shop-example\n  url: https://stage.shop.example\n  accounts: [{role: admin, email: 'a@b.az'"
+        val broken =
+            "target:\n  name: stage-shop-example\n  url: https://stage.shop.example\n  accounts: [{role: admin, email: 'a@b.example'"
         Files.writeString(targets.resolve("shop.yaml"), broken)
         val accounts = OwnerAccounts(config, env, targets)
 
-        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://stage.shop.example", "editor", "e@b.az", "pw-1")) }
+        shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://stage.shop.example", "editor", "e@b.example", "pw-1")) }
 
         Files.readString(targets.resolve("shop.yaml")) shouldBe broken
         Files.exists(env) shouldBe false

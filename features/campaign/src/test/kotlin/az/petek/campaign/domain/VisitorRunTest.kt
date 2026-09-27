@@ -43,7 +43,7 @@ class VisitorRunTest {
                 "seen",
                 actor = "visitor[n=1]",
                 action = StepAction.None,
-                assertions = listOf(AssertionSpec.VisibleText("Lyrics", 5.seconds), AssertionSpec.HttpStatus("/", "GET", 200)),
+                assertions = listOf(AssertionSpec.VisibleText("Welcome", 5.seconds), AssertionSpec.HttpStatus("/", "GET", 200)),
             )
 
         VisitorRun.problems(campaign(health, readOnly, setup = listOf(gates), settings = visitors)).shouldBeEmpty()

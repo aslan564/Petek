@@ -299,15 +299,15 @@ class ConfigLoaderTest {
             load(
                 target,
                 "PETEK_MAIL_SOURCE" to "imap",
-                "PETEK_MAIL_INBOX" to "Test@Company.az",
-                "PETEK_IMAP_HOST" to "imap.company.az",
+                "PETEK_MAIL_INBOX" to "Test@Company.Example",
+                "PETEK_IMAP_HOST" to "imap.company.example",
                 "PETEK_IMAP_PASSWORD" to "imap-secret-123",
             )
 
         config.mailSource shouldBe MailSource.IMAP
-        config.mailInbox shouldBe "test@company.az"
-        config.mailDomain shouldBe "company.az"
-        config.imap shouldBe ImapSettings("imap.company.az", "test@company.az", Secret("imap-secret-123"), 993, true, "INBOX")
+        config.mailInbox shouldBe "test@company.example"
+        config.mailDomain shouldBe "company.example"
+        config.imap shouldBe ImapSettings("imap.company.example", "test@company.example", Secret("imap-secret-123"), 993, true, "INBOX")
         config.toString() shouldNotContain "imap-secret-123"
         load(target, "PETEK_MAIL_SOURCE" to "manual").mailSource shouldBe MailSource.MANUAL
     }
@@ -326,8 +326,8 @@ class ConfigLoaderTest {
                 "PETEK_IMAP_PASSWORD is required when PETEK_MAIL_SOURCE is imap",
                 "PETEK_IMAP_PORT must be a port number, was 'x'",
             )
-        problems(target, "PETEK_MAIL_INBOX" to "test+a@company.az") shouldContainExactlyInAnyOrder
-            listOf("PETEK_MAIL_INBOX must be a plain e-mail address such as test@company.az (without '+')")
+        problems(target, "PETEK_MAIL_INBOX" to "test+a@company.example") shouldContainExactlyInAnyOrder
+            listOf("PETEK_MAIL_INBOX must be a plain e-mail address such as test@company.example (without '+')")
     }
 
     @Test

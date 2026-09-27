@@ -57,8 +57,8 @@ data class IdentitySpec(
     /** Catch-all test domain, e.g. `test.portal.example`. */
     val mailDomain: String,
     /**
-     * The owner's own inbox, e.g. `test@company.az` (Faza 16): when set, every tester gets its `+` address,
-     * `test+<runTag>-<agentId>@company.az`, instead of an address of [mailDomain]; mail is routed back to the tester by
+     * The owner's own inbox, e.g. `test@company.example` (Faza 16): when set, every tester gets its `+` address,
+     * `test+<runTag>-<agentId>@company.example`, instead of an address of [mailDomain]; mail is routed back to the tester by
      * that exact address.
      */
     val mailbox: String? = null,

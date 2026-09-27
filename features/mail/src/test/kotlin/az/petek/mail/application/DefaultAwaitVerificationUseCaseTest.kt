@@ -112,7 +112,7 @@ class DefaultAwaitVerificationUseCaseTest {
     @Test
     fun `a wrong-purpose mail is never consumed and the right mail is used when it arrives`() =
         runTest {
-            mailbox.fake.deliver(mail("invite", "Dəvət", "Qəbul et: https://x.az/invite/tok", at = SINCE.plusSeconds(1)))
+            mailbox.fake.deliver(mail("invite", "Dəvət", "Qəbul et: https://x.example/invite/tok", at = SINCE.plusSeconds(1)))
             launch {
                 delay(3_000)
                 mailbox.fake.deliver(codeMail("code", "553311", at = SINCE.plusSeconds(4)))
@@ -125,7 +125,7 @@ class DefaultAwaitVerificationUseCaseTest {
             mailbox.fake.messages
                 .single { it.id == "invite" }
                 .read shouldBe false
-            useCase.await(ELI, SINCE, MailPurpose.LINK).link.toString() shouldBe "https://x.az/invite/tok"
+            useCase.await(ELI, SINCE, MailPurpose.LINK).link.toString() shouldBe "https://x.example/invite/tok"
         }
 
     @Test
@@ -179,12 +179,18 @@ class DefaultAwaitVerificationUseCaseTest {
         runTest {
             mailbox.fake.deliver(codeMail("code", "482913", at = SINCE.plusSeconds(2)))
             mailbox.fake.deliver(
-                mail("invite", "Dəvət", "<p>x</p>", html = "<a href=\"https://x.az/invite/abc\">Qəbul et</a>", at = SINCE.plusSeconds(1)),
+                mail(
+                    "invite",
+                    "Dəvət",
+                    "<p>x</p>",
+                    html = "<a href=\"https://x.example/invite/abc\">Qəbul et</a>",
+                    at = SINCE.plusSeconds(1),
+                ),
             )
 
             val result = useCase.await(ELI, SINCE, MailPurpose.LINK)
 
-            result.link.toString() shouldBe "https://x.az/invite/abc"
+            result.link.toString() shouldBe "https://x.example/invite/abc"
             result.messageId shouldBe "invite"
             mailbox.fake.messages
                 .single { it.id == "code" }

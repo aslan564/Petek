@@ -100,7 +100,7 @@ class CdnErrorPageTest {
     private companion object {
         val CLOUDFLARE_ERROR_1000 =
             """
-            <!DOCTYPE html><html><head><title>DNS points to prohibited IP | kodcraftlab.com | Cloudflare</title></head>
+            <!DOCTYPE html><html><head><title>DNS points to prohibited IP | site.example | Cloudflare</title></head>
             <body><div id="cf-wrapper"><div id="cf-error-details"><h1><span class="inline-block">Error</span>
             <span class="code-label">Error 1000</span></h1><h2>DNS points to prohibited IP</h2></div></div></body></html>
             """.trimIndent()

@@ -35,7 +35,7 @@ import java.util.Date
 import java.util.Properties
 
 class ImapMailboxTest {
-    private val settings = ImapSettings("imap.company.az", "test@company.az", Secret("imap-password-123"))
+    private val settings = ImapSettings("imap.company.example", "test@company.example", Secret("imap-password-123"))
     private val start = Instant.parse("2026-09-26T10:00:00Z")
 
     private class FakeGateway(
@@ -79,21 +79,21 @@ class ImapMailboxTest {
             val gateway =
                 FakeGateway(
                     listOf(
-                        message("1", "test+r1-a01@company.az", start.plusSeconds(5)),
-                        message("2", "test+r1-a02@company.az", start.plusSeconds(6)),
-                        message("3", "test@company.az", start.plusSeconds(7)),
-                        message("4", "TEST+R1-A01@company.az", start.plusSeconds(9)),
-                        message("5", "test+r1-a01@company.az", start.minusSeconds(60)),
-                        message("6", "test+r1-a01@company.az", start.plusSeconds(8), read = true),
+                        message("1", "test+r1-a01@company.example", start.plusSeconds(5)),
+                        message("2", "test+r1-a02@company.example", start.plusSeconds(6)),
+                        message("3", "test@company.example", start.plusSeconds(7)),
+                        message("4", "TEST+R1-A01@company.example", start.plusSeconds(9)),
+                        message("5", "test+r1-a01@company.example", start.minusSeconds(60)),
+                        message("6", "test+r1-a01@company.example", start.plusSeconds(8), read = true),
                     ),
                 )
 
-            val found = mailbox(gateway).findRecent("test+r1-a01@company.az", start)
+            val found = mailbox(gateway).findRecent("test+r1-a01@company.example", start)
 
             found.map { it.id } shouldContainExactly listOf("4", "1")
-            mailbox(gateway).findRecent("test+r1-a01@company.az", start, unreadOnly = false).map { it.id } shouldContainExactly
+            mailbox(gateway).findRecent("test+r1-a01@company.example", start, unreadOnly = false).map { it.id } shouldContainExactly
                 listOf("4", "6", "1")
-            gateway.searched.first() shouldBe "test+r1-a01@company.az"
+            gateway.searched.first() shouldBe "test+r1-a01@company.example"
         }
 
     @Test
@@ -114,9 +114,9 @@ class ImapMailboxTest {
         runBlocking<Unit> {
             val gateway = FakeGateway(failure = MessagingException("AUTHENTICATIONFAILED"))
 
-            val error = shouldThrow<MailboxException> { mailbox(gateway).findLatest("test+a01@company.az", start) }
+            val error = shouldThrow<MailboxException> { mailbox(gateway).findLatest("test+a01@company.example", start) }
 
-            error.message shouldContain "test@company.az@imap.company.az"
+            error.message shouldContain "test@company.example@imap.company.example"
             error.message shouldContain "AUTHENTICATIONFAILED"
             error.message shouldNotContain "imap-password-123"
             settings.toString() shouldNotContain "imap-password-123"
@@ -125,9 +125,9 @@ class ImapMailboxTest {
     @Test
     fun `a MIME message is read with its recipients, Delivered-To, text, html and seen flag`() {
         val mime = MimeMessage(Session.getInstance(Properties()))
-        mime.setRecipient(Message.RecipientType.TO, InternetAddress("Tester <test+r1-a01@company.az>"))
-        mime.setRecipient(Message.RecipientType.CC, InternetAddress("copy@company.az"))
-        mime.addHeader("Delivered-To", "test@company.az")
+        mime.setRecipient(Message.RecipientType.TO, InternetAddress("Tester <test+r1-a01@company.example>"))
+        mime.setRecipient(Message.RecipientType.CC, InternetAddress("copy@company.example"))
+        mime.addHeader("Delivered-To", "test@company.example")
         mime.subject = "Təsdiq kodu"
         mime.sentDate = Date.from(start)
         val text = MimeBodyPart().apply { setText("Kodunuz: 654321", "UTF-8") }
@@ -139,7 +139,7 @@ class ImapMailboxTest {
         val read = MimeMail.read("17", mime)
 
         read.id shouldBe "17"
-        read.to shouldContainExactly listOf("test+r1-a01@company.az", "copy@company.az", "test@company.az")
+        read.to shouldContainExactly listOf("test+r1-a01@company.example", "copy@company.example", "test@company.example")
         read.subject shouldBe "Təsdiq kodu"
         read.text shouldBe "Kodunuz: 654321"
         read.html shouldBe "<p>Kodunuz: <b>654321</b></p>"
@@ -150,7 +150,7 @@ class ImapMailboxTest {
     @Test
     fun `an html-only message gets its text from the html`() {
         val mime = MimeMessage(Session.getInstance(Properties()))
-        mime.setRecipient(Message.RecipientType.TO, InternetAddress("test+a01@company.az"))
+        mime.setRecipient(Message.RecipientType.TO, InternetAddress("test+a01@company.example"))
         mime.setContent("<style>p{}</style><p>Kod:&nbsp;<b>111222</b></p>", "text/html; charset=UTF-8")
         mime.saveChanges()
 

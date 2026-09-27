@@ -337,7 +337,7 @@
     const accounts = P.card('Hesablar', { icon: 'team', sub: 'Kəşfiyyatçı bu saytda sizin test hesablarınızla daxil olsun' });
     const accountList = h('div', 'stack');
     const role = h('input', { class: 'input', attrs: { type: 'text', placeholder: 'admin', autocomplete: 'off', 'aria-label': 'Rol' } });
-    const email = h('input', { class: 'input', attrs: { type: 'email', placeholder: 'test@sirket.az', autocomplete: 'off', 'aria-label': 'E-poçt' } });
+    const email = h('input', { class: 'input', attrs: { type: 'email', placeholder: 'test@sirket.example', autocomplete: 'off', 'aria-label': 'E-poçt' } });
     const password = h('input', { class: 'input', attrs: { type: 'password', autocomplete: 'new-password', 'aria-label': 'Parol' } });
     function renderAccounts(list) {
       accountList.replaceChildren(...(list.length ? list.map((a) => h('div', 'row', h('b', { text: a.role }), h('span', { text: a.email || 'sessiya faylı' }),

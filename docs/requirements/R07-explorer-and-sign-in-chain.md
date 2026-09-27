@@ -29,7 +29,7 @@ must be able to register, read the OTP, and fall back to provided credentials if
   leaked error text, and what the browser itself saw go wrong on each page since it started loading (script errors
   and uncaught exceptions, failed requests to the site: `CONSOLE_ERROR`, `FAILED_REQUEST`), plus the page measured at
   a phone's width (375×812, `MOBILE_OVERFLOW`). All of it is reading, so an anonymous exploration of a site whose
-  ownership is not proved already catches these small bugs (first seen on www.joeinthestudio.com, 2026-09-26: a
+  ownership is not proved already catches these small bugs (first seen on a real site, 2026-09-26: a
   home page 12 px wider than a phone and 4.4 s to load). The expired-session test idea is proposed only where people
   sign in.
 - Unknowns are questions; answers live in `AnswerBook` and ground later explorations and drafts.

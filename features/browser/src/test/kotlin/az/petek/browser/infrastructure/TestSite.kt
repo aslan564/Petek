@@ -171,7 +171,7 @@ internal class TestSite : AutoCloseable {
             """
             <!doctype html><html><body>
             <a href="/me">Profil</a> <a href="/missing?x=1">Yoxdur</a> <a href="https://example.org/">Kənar</a>
-            <a href="mailto:a@b.az">Poçt</a> <a href="#top">Yuxarı</a>
+            <a href="mailto:a@b.example">Poçt</a> <a href="#top">Yuxarı</a>
             <div style="width: 2000px">Geniş</div>
             <script>console.error("Pətək sınağı"); fetch("/api/broken");</script>
             </body></html>

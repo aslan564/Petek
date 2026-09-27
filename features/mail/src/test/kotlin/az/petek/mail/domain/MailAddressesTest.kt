@@ -18,20 +18,20 @@ import org.junit.jupiter.api.Test
 class MailAddressesTest {
     @Test
     fun `a plus address is built from the owner's box and a tag, lower case`() {
-        MailAddresses.plus("Test@Company.AZ", "r1ab-a01") shouldBe "test+r1ab-a01@company.az"
-        MailAddresses.plus("test+old@company.az", "a02") shouldBe "test+a02@company.az"
+        MailAddresses.plus("Test@Company.EXAMPLE", "r1ab-a01") shouldBe "test+r1ab-a01@company.example"
+        MailAddresses.plus("test+old@company.example", "a02") shouldBe "test+a02@company.example"
     }
 
     @Test
     fun `addresses compare whole, so a plus address never matches the box or another tester`() {
-        MailAddresses.same(" TEST+a01@company.az", "test+a01@company.az") shouldBe true
-        MailAddresses.same("test+a01@company.az", "test@company.az") shouldBe false
-        MailAddresses.same("test+a01@company.az", "test+a02@company.az") shouldBe false
+        MailAddresses.same(" TEST+a01@company.example", "test+a01@company.example") shouldBe true
+        MailAddresses.same("test+a01@company.example", "test@company.example") shouldBe false
+        MailAddresses.same("test+a01@company.example", "test+a02@company.example") shouldBe false
     }
 
     @Test
     fun `only a single bare address and a plain tag are accepted`() {
-        shouldThrow<IllegalArgumentException> { MailAddresses.normalize("Test <test@company.az>") }
-        shouldThrow<IllegalArgumentException> { MailAddresses.plus("test@company.az", "a b") }
+        shouldThrow<IllegalArgumentException> { MailAddresses.normalize("Test <test@company.example>") }
+        shouldThrow<IllegalArgumentException> { MailAddresses.plus("test@company.example", "a b") }
     }
 }

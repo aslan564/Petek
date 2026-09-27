@@ -232,7 +232,7 @@ class PageHeuristicsTest {
             inspect("https://site.test/tickets/t7") {
                 form("/tickets/t7/in-progress") { submit("İcraya götür", testId = "ticket-set-in-progress") }
                 form("/tickets/t7/assign") {
-                    select("İcraçı", "email", listOf("hr@x.az"), testId = "ticket-assignee")
+                    select("İcraçı", "email", listOf("hr@x.example"), testId = "ticket-assignee")
                     submit("Təyin et", testId = "ticket-assign")
                 }
                 form("/tickets/t7/approve") { submit("Təsdiqlə", testId = "ticket-approve") }

@@ -36,10 +36,10 @@ class DefaultJsonFieldSelectorTest {
               "approved": false,
               "assignee": {"email": "rena@test.portal.example", "name": "Rəna"},
               "history": [
-                {"from": "open", "to": "in_progress", "by": "a@x.az"},
-                {"from": "in_progress", "to": "approved", "by": "b@x.az"}
+                {"from": "open", "to": "in_progress", "by": "a@x.example"},
+                {"from": "in_progress", "to": "approved", "by": "b@x.example"}
               ],
-              "receipts": [{"email": "1@x.az"}, {"email": "2@x.az"}, {"email": "3@x.az"}],
+              "receipts": [{"email": "1@x.example"}, {"email": "2@x.example"}, {"email": "3@x.example"}],
               "matrix": [[1, 2], [3, 4]],
               "nothing": null,
               "first name": "Əli"
@@ -55,11 +55,11 @@ class DefaultJsonFieldSelectorTest {
         "approved, false",
         "assignee.email, rena@test.portal.example",
         "history[0].to, in_progress",
-        "history[1].by, b@x.az",
+        "history[1].by, b@x.example",
         "history[-1].to, approved",
         "history[-2].from, open",
-        "receipts[2].email, 3@x.az",
-        "receipts.1.email, 2@x.az",
+        "receipts[2].email, 3@x.example",
+        "receipts.1.email, 2@x.example",
         "matrix[1][0], 3",
         "first name, Əli",
         "'  assignee.name  ', Rəna",
@@ -93,7 +93,7 @@ class DefaultJsonFieldSelectorTest {
 
     @Test
     fun `an element selects whole objects and arrays`() {
-        selector.select(ticket, "receipts[2]") shouldBe Json.parseToJsonElement("""{"email": "3@x.az"}""")
+        selector.select(ticket, "receipts[2]") shouldBe Json.parseToJsonElement("""{"email": "3@x.example"}""")
         selector.select(ticket, "matrix[0]") shouldBe Json.parseToJsonElement("[1, 2]")
     }
 
@@ -110,10 +110,10 @@ class DefaultJsonFieldSelectorTest {
 
     @Test
     fun `a root array is indexed with a leading index`() {
-        val receipts = Json.parseToJsonElement("""[{"email": "a@x.az"}, {"email": "b@x.az"}]""")
+        val receipts = Json.parseToJsonElement("""[{"email": "a@x.example"}, {"email": "b@x.example"}]""")
 
-        (selector.select(receipts, "[1].email") as JsonPrimitive).content shouldBe "b@x.az"
-        (selector.select(receipts, "[-1].email") as JsonPrimitive).content shouldBe "b@x.az"
+        (selector.select(receipts, "[1].email") as JsonPrimitive).content shouldBe "b@x.example"
+        (selector.select(receipts, "[-1].email") as JsonPrimitive).content shouldBe "b@x.example"
         selector.select(receipts, "email").shouldBeNull()
     }
 

@@ -13,8 +13,8 @@ package az.petek.mail.domain
 
 /**
  * E-mail address rules the inboxes share. A tester's address is compared whole and case-insensitively: a `+` address
- * (`test+r1-a01@company.az`) is its own recipient, never the same as `test@company.az` or another tester's
- * `test+r1-a02@company.az`, so testers sharing the owner's box still never read each other's mail.
+ * (`test+r1-a01@company.example`) is its own recipient, never the same as `test@company.example` or another tester's
+ * `test+r1-a02@company.example`, so testers sharing the owner's box still never read each other's mail.
  */
 object MailAddresses {
     private val ADDRESS = Regex("[^\\s@<>\"]+@[^\\s@<>\"]+")
@@ -31,7 +31,7 @@ object MailAddresses {
         b: String,
     ): Boolean = a.trim().equals(b.trim(), ignoreCase = true)
 
-    /** The `+` sub-address of [box] for [tag], e.g. `test@company.az` + `r1-a01` → `test+r1-a01@company.az`. */
+    /** The `+` sub-address of [box] for [tag], e.g. `test@company.example` + `r1-a01` → `test+r1-a01@company.example`. */
     fun plus(
         box: String,
         tag: String,

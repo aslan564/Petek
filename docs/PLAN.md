@@ -961,7 +961,7 @@ qoyulandan sonra eyni əmr işləyir; localhost-dakı fake target ilə e2e dəyi
 
 - [x] `ImapMailbox` (Faza 10 bəndi önə çəkilir). Kitabxana seçimi qayda 11-ə görə sahibin qərarıdır (yuxarıdakı
   "IMAP kitabxanası" sualı).
-- [x] Artı ünvanlı kimliklər: sahibin qutusu (məs. `test@sirket.az`) verilir, hər tester `test+<run>-<agent>@sirket.az`
+- [x] Artı ünvanlı kimliklər: sahibin qutusu (məs. `test@sirket.example`) verilir, hər tester `test+<run>-<agent>@sirket.example`
   alır; məktub alan ünvana görə testerə ayrılır.
 - [x] "+" işarəsini qəbul etməyən sayt tanınır və hesabatda deyilir; alternativ: sahibin domenində catch-all.
 - [ ] Pətəkin serverindəki qutu: sonra, ödənişli modul (Faza 14 hosted xətti). — **sahib/ödənişli modul:** ayrı repo (ADR-0011), açıq nüvədə yalnız `Mailbox` portu.

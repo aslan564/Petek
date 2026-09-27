@@ -103,7 +103,7 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 ## Sürətli başlanğıc
 
-**Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.my-site.com` (`.env`,
+**Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.example.com` (`.env`,
 `.petek/`, skill paketi və AI-nızın MCP qeydi), `npx petek verify` (staging saytın sizin olduğunu təsdiqləyir), sonra
 `npx petek dev`: tətbiqin health ünvanını (`.petek/petek.yaml`-da `health_url`) gözləyir və paneli yanında açır. AI
 layihənizin artıq istifadə etdiyidir (`PETEK_LLM_PROVIDER=auto`).
@@ -129,7 +129,7 @@ Windows-da başladıcı `bin\petek.cmd`-dir. Əlavə JVM seçimləri `PETEK_OPTS
 
 ```bash
 cd my-site
-npx petek init --target https://staging.my-site.com   # .env, .petek/, skill paketi + AI agentiniz üçün MCP qeydi
+npx petek init --target https://staging.example.com   # .env, .petek/, skill paketi + AI agentiniz üçün MCP qeydi
 npx petek doctor
 npx petek panel
 ```
@@ -233,7 +233,7 @@ gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
 | `PETEK_ALLOW_PRODUCTION` | `false` | … bu `true` deyilsə (qayda 8) |
 | `PETEK_TEST_TOKEN` | — | Hədəfin `/test/...` API-si üçün `X-Test-Token`; boş = oracle yoxlamaları və teardown yoxdur |
 | `PETEK_TEST_API_URL` | hədəf | `/test/...` API hədəfin origin-ində deyilsə onun baza ünvanı |
-| `PETEK_MAIL_INBOX` | — | Sizin qutunuz (`test@sirket.az`): hər tester `test+<run>-<agent>@sirket.az` ilə qeydiyyatdan keçir; `PETEK_MAIL_DOMAIN`-i əvəz edir; `+`-u qəbul etməyən sayt hesabatda deyilir |
+| `PETEK_MAIL_INBOX` | — | Sizin qutunuz (`test@sirket.example`): hər tester `test+<run>-<agent>@sirket.example` ilə qeydiyyatdan keçir; `PETEK_MAIL_DOMAIN`-i əvəz edir; `+`-u qəbul etməyən sayt hesabatda deyilir |
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / qutu / — / `true` / `INBOX` | `imap` mənbəyi o qutunu necə oxuyur (Jakarta Mail/Angus); parol `Secret`-dir |
 | `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün) |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |

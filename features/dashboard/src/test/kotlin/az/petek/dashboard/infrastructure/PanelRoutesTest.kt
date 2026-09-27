@@ -132,7 +132,7 @@ class PanelRoutesTest {
                     { awaitCancellation() },
                     root,
                 ) { _, _ -> runGate.await() }
-            val waiting = mutableListOf(ManualCodeView("m1", "test+r1-a01@company.az", Instant.parse("2026-09-26T10:00:00Z")))
+            val waiting = mutableListOf(ManualCodeView("m1", "test+r1-a01@company.example", Instant.parse("2026-09-26T10:00:00Z")))
             val given = mutableListOf<String>()
             val backend =
                 object : PanelBackend by demo {
@@ -157,7 +157,7 @@ class PanelRoutesTest {
                     .jsonArray
                     .single()
                     .jsonObject
-            listed["address"]!!.jsonPrimitive.content shouldBe "test+r1-a01@company.az"
+            listed["address"]!!.jsonPrimitive.content shouldBe "test+r1-a01@company.example"
             h.post("/api/manual-codes/m1", "{\"code\":\"12\"}").status.value shouldBe 403
             h.post("/api/manual-codes/m1", "{\"code\":\"12\"}", token).status.value shouldBe 400
             h.post("/api/manual-codes/m1", "{\"code\":\"123456\"}", token).status.value shouldBe 200
@@ -214,7 +214,7 @@ class PanelRoutesTest {
             bad.status.value shouldBe 400
             problems shouldBe listOf("target", "roles")
             h.post("/api/exploration", "not json", token).status.value shouldBe 400
-            h.post("/api/exploration", "{\"target\":\"https://x.az\"}", token).status.value shouldBe 400
+            h.post("/api/exploration", "{\"target\":\"https://x.example\"}", token).status.value shouldBe 400
 
             val started = h.post("/api/exploration", instructions, token)
             val view = json(started.bodyAsText()).jsonObject

@@ -47,7 +47,7 @@ data class SiteOrigin(
 
 /**
  * The key site model versions are counted under: origin plus path without a trailing slash, so
- * `https://Site.az/` and `https://site.az` are the same target while `https://site.az/app` is another.
+ * `https://Site.example/` and `https://site.example` are the same target while `https://site.example/app` is another.
  */
 object TargetKey {
     fun of(target: URI): String {

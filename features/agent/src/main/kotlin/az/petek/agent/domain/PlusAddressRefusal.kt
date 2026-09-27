@@ -13,7 +13,7 @@ package az.petek.agent.domain
 
 /**
  * Recognises a site that refuses `+` e-mail addresses (Faza 16): the tester registered with the owner's
- * `test+r1-a01@company.az` and the page answers with an e-mail validation error. The report then says so plainly and
+ * `test+r1-a01@company.example` and the page answers with an e-mail validation error. The report then says so plainly and
  * names the alternative (a catch-all domain), instead of a bare "registration failed".
  */
 object PlusAddressRefusal {

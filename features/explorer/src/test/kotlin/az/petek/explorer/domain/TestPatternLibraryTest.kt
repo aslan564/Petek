@@ -44,7 +44,7 @@ class TestPatternLibraryTest {
 
     @Test
     fun `a site where nobody signs in gets no expired-session idea, one with a sign-in form does`() {
-        val visitorsOnly = Models.model(listOf(Models.page("/lyrics")), emptyList(), roles = listOf("anonymous"))
+        val visitorsOnly = Models.model(listOf(Models.page("/docs")), emptyList(), roles = listOf("anonymous"))
         val withLogin =
             Models.model(
                 listOf(Models.page("/login", Models.form(ActionKind.LOGIN, "login-submit", "/login", Models.field("email", "email")))),
