@@ -38,7 +38,9 @@ class CustomerSummaryWriter(
         val t = if (english) EN else AZ
         val run = model.run
         val s = model.summary
-        val byShelf = model.findings.groupBy(Shelf::of)
+        // The same problem seen by several testers is one line, with how many saw it.
+        val byShelf = model.findings.groupBy(Shelf::of).mapValues { (_, findings) -> findings.groupBy(t::sentence) }
+        val problems = byShelf.values.sumOf { it.size }
         return buildString {
             append("<!DOCTYPE html>\n<html lang=\"").append(if (english) "en" else "az").append("\"><head><meta charset=\"utf-8\">")
             append(
@@ -59,7 +61,7 @@ class CustomerSummaryWriter(
                         "bad"
                     },
                 ).append("\">")
-            append(esc(t.verdict(model.findings.size, s.stepsPassed, s.stepsPassed + s.stepsFailed))).append("</p>")
+            append(esc(t.verdict(problems, s.stepsPassed, s.stepsPassed + s.stepsFailed))).append("</p>")
             Shelf.entries.forEach { shelf ->
                 val findings = byShelf[shelf].orEmpty()
                 if (findings.isEmpty()) return@forEach
@@ -68,7 +70,10 @@ class CustomerSummaryWriter(
                     .append(" (")
                     .append(findings.size)
                     .append(")</h2><ul>")
-                findings.forEach { append("<li>").append(esc(t.sentence(it))).append("</li>") }
+                findings.forEach { (sentence, seen) ->
+                    val testers = seen.mapNotNull { it.agentId }.distinct().size
+                    append("<li>").append(esc(sentence + if (testers > 1) t.seenBy(testers) else "")).append("</li>")
+                }
                 append("</ul></section>")
             }
             append("<p class=\"more\"><a href=\"index.html\">").append(esc(t.details)).append("</a></p>")
@@ -95,6 +100,9 @@ class CustomerSummaryWriter(
         fun shelf(shelf: Shelf): String
 
         fun sentence(finding: FindingRecord): String
+
+        /** Added to a sentence when several testers saw the same problem. */
+        fun seenBy(testers: Int): String
 
         val details: String
     }
@@ -132,11 +140,14 @@ class CustomerSummaryWriter(
             return when (finding.findingClass) {
                 FindingClass.BACKEND -> "$step addımında sayt dəyişikliyi düzgün saxlamadı və ya gözlənilən cavabı vermədi."
                 FindingClass.DELIVERY_UI -> "$step addımında dəyişiklik saxlanıldı, amma istifadəçilər onu ekranda görmədi."
+                FindingClass.SITE_CHECK -> "$step addımında kodun yoxlaması saytda problem tapdı: ${checkSaw(finding)}"
                 FindingClass.INVESTIGATE -> "$step addımında mənbələr uyğun gəlmir; səbəbi aydınlaşdırılmalıdır."
                 FindingClass.FLAKY -> "$step addımı təkrar run-larda gah keçir, gah keçmir."
                 FindingClass.AGENT_FAILURE -> "$step addımında tester işini bitirə bilmədi."
             }
         }
+
+        override fun seenBy(testers: Int) = " ($testers tester gördü)"
 
         override val details = "Bütün addımlar, sübutlar və screenshot-lar: ətraflı hesabat"
     }
@@ -174,11 +185,14 @@ class CustomerSummaryWriter(
             return when (finding.findingClass) {
                 FindingClass.BACKEND -> "In step $step the site did not store the change correctly or answered wrongly."
                 FindingClass.DELIVERY_UI -> "In step $step the change was stored, but users did not see it on screen."
+                FindingClass.SITE_CHECK -> "In step $step a check made by code found a problem on the site: ${checkSaw(finding)}"
                 FindingClass.INVESTIGATE -> "In step $step the sources disagree; the cause needs a closer look."
                 FindingClass.FLAKY -> "Step $step passes in some runs and fails in others."
                 FindingClass.AGENT_FAILURE -> "In step $step a tester could not finish its task."
             }
         }
+
+        override fun seenBy(testers: Int) = " (seen by $testers testers)"
 
         override val details = "Every step, its proof and screenshots: the detailed report"
     }
@@ -191,6 +205,16 @@ class CustomerSummaryWriter(
             .replace("\"", "&quot;")
 
     private companion object {
+        /** The failure key and problem count a site check writes before what it saw. */
+        val CHECK_PREFIX = Regex("^[a-z_]+:\\s*(\\d+ problem\\(s\\):\\s*)?")
+
+        /** What a site check saw, in its own words: `unhealthy_page: 1 problem(s): / is …` becomes `/ is …`. */
+        fun checkSaw(finding: FindingRecord): String =
+            finding.b
+                .orEmpty()
+                .replace(CHECK_PREFIX, "")
+                .ifBlank { finding.note }
+
         const val CSS =
             ":root{color-scheme:light dark;--fg:#1f2937;--bg:#fff;--ok:#15803d;--bad:#b91c1c;--muted:#6b7280}" +
                 "@media (prefers-color-scheme: dark){:root{--fg:#e5e7eb;--bg:#111827;--ok:#4ade80;--bad:#f87171;--muted:#9ca3af}}" +

@@ -117,7 +117,7 @@ class SarifReportWriter : ReportWriter {
 
     private fun level(findingClass: FindingClass): String =
         when (findingClass) {
-            FindingClass.BACKEND, FindingClass.DELIVERY_UI -> "error"
+            FindingClass.BACKEND, FindingClass.DELIVERY_UI, FindingClass.SITE_CHECK -> "error"
             FindingClass.INVESTIGATE, FindingClass.AGENT_FAILURE -> "warning"
             FindingClass.FLAKY -> "note"
         }

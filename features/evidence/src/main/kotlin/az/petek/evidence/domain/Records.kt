@@ -153,7 +153,12 @@ data class AssertionRecord(
     val artifactIds: List<ArtifactId>,
 )
 
-enum class FindingClass { BACKEND, DELIVERY_UI, INVESTIGATE, FLAKY, AGENT_FAILURE }
+/**
+ * What a finding is about. [SITE_CHECK]: a deterministic check of the site itself (blind `site_health`, `direct_url`)
+ * saw it go wrong — a page wider than a phone, a script error, a broken link, a page open to a role that must not
+ * see it; the check's own words say what.
+ */
+enum class FindingClass { BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE }
 
 /**
  * How strong a finding's proof is (Faza 10), shown next to every finding: the target's own test API confirmed it

@@ -117,7 +117,7 @@
     role: { admin: 'Admin', manager: 'Menecer', employee: 'İşçi' },
     registration: { owner: 'şirkəti yaradır', invite: 'dəvətlə', company_code: 'şirkət kodu ilə' },
     timelineKind: { STEP: 'Addım', EVENT: 'Hadisə', RECEIPT: 'Qəbz', ASSERTION: 'Təsdiq', FINDING: 'Tapıntı', MESSAGE: 'Mesaj', DIALOG: 'Fikir' },
-    findingClass: { BACKEND: 'Backend', DELIVERY_UI: 'Çatdırılma / UI', INVESTIGATE: 'Araşdırılmalı', FLAKY: 'Qeyri-sabit', AGENT_FAILURE: 'Agent xətası' },
+    findingClass: { BACKEND: 'Backend', DELIVERY_UI: 'Çatdırılma / UI', SITE_CHECK: 'Sayt yoxlaması', INVESTIGATE: 'Araşdırılmalı', FLAKY: 'Qeyri-sabit', AGENT_FAILURE: 'Agent xətası' },
     evidenceTier: { ORACLE_CONFIRMED: 'Oracle təsdiqlədi', UI_NETWORK: 'Ekran / şəbəkə', LLM_JUDGED: 'Model hökmü' },
     taskState: { PENDING: 'Növbədə', WAITING_EVENT: 'Hadisə gözləyir', RUNNING: 'İcra olunur', PASSED: 'Keçdi', FAILED: 'Uğursuz', BLOCKED: 'Bloklanıb', SKIPPED: 'Buraxıldı', LOST_RACE: 'Yarışı uduzdu' },
     taskStates: ['RUNNING', 'WAITING_EVENT', 'PASSED', 'FAILED', 'BLOCKED', 'LOST_RACE', 'SKIPPED', 'PENDING'],

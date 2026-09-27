@@ -448,7 +448,7 @@ class ThreeSourceJudgeTest {
 
             val findings = judge.findings(run, emptyList(), steps)
 
-            findings.map { it.findingClass } shouldContainExactly listOf(FindingClass.DELIVERY_UI, FindingClass.BACKEND)
+            findings.map { it.findingClass } shouldContainExactly listOf(FindingClass.SITE_CHECK, FindingClass.SITE_CHECK)
             findings.map { Shelf.of(it) } shouldContainExactly listOf(Shelf.SITE_BUG, Shelf.SITE_BUG)
             findings.first().note shouldContain "The site failed a check that code made on what the browser saw (unhealthy_page)"
             findings.first().evidenceTier shouldBe EvidenceTier.UI_NETWORK

@@ -21,10 +21,12 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
 - **Ids.** `core/domain` generates UUIDv7-based ids with prefixes (`run_`, `scn_`, …); agent ids are `a01…` without an
   upper bound (rule 4). `workspace_id` joins them in Faza 8 (ADR-0011).
 - **Judge.** `features/reporting` `ThreeSourceJudge` folds A/B/C into `FindingRecord`s classified `BACKEND`,
-  `DELIVERY_UI`, `INVESTIGATE`, `FLAKY` or `AGENT_FAILURE`. A step that failed with a key becomes a finding of its
-  own: a site defect a deterministic check saw (`unhealthy_page` from `site_health`: `DELIVERY_UI`; `access_not_refused`
-  from `direct_url`: `BACKEND`) is about the site, never a tool gap, and a finding without evidence of its own links
-  its step's last screenshot, which `site_health` takes on the first page that went wrong (2026-09-27).
+  `DELIVERY_UI`, `SITE_CHECK`, `INVESTIGATE`, `FLAKY` or `AGENT_FAILURE`. A step that failed with a key becomes a
+  finding of its own: a site defect a deterministic check saw (`unhealthy_page` from `site_health`,
+  `access_not_refused` from `direct_url`) is `SITE_CHECK`, a finding about the site told in the check's own words,
+  never a tool gap; a finding without evidence of its own links its step's last screenshot, which `site_health`
+  takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
+  many saw it (2026-09-27).
 - **Expected outcomes.** `ExpectedOutcomes` is the one place that decides which failing-looking records the test
   expected: a lost race (`lost_race`) and an expected refusal (`permission_denied`), each together with the agent's
   own records of that action (same correlation id). Which step is a permission test is decided by code in the

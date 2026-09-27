@@ -34,8 +34,8 @@ import az.petek.evidence.domain.Verdict
  * The step overload adds one finding per (scenario step, agent, failure key) for agent actions that failed with a
  * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), `request_failed` INVESTIGATE (the target
  * turned down a racer's own request although its agent claimed success), a site defect a deterministic check saw
- * ([SITE_DEFECTS]: `unhealthy_page` DELIVERY_UI, `access_not_refused` BACKEND) a finding about the site, with the
- * check's own words, any other key AGENT_FAILURE. An environment
+ * ([SITE_DEFECTS]: `unhealthy_page`, `access_not_refused`) a SITE_CHECK finding about the site, with the check's own
+ * words, any other key AGENT_FAILURE. An environment
  * problem such as `mail_unavailable` (the test inbox was unreachable) is an AGENT_FAILURE whose note says so, never a
  * finding about the target. An expected refusal (`permission_denied` in a forbidden-action test) and a lost race
  * (`lost_race`, including the loser agent's own records of that action) are not failures and yield none
@@ -226,13 +226,13 @@ class ThreeSourceJudge(
         val WHITESPACE = Regex("\\s+")
 
         /**
-         * Failure keys of deterministic checks that saw the site itself go wrong, with the class of the finding: a blind
-         * `site_health` problem (a page wider than a phone, a script error, a broken link, a slow request, a back button
-         * that leads elsewhere) is on the page, a page `direct_url` found open to a role that must not see it is the
-         * back end's access control. The agent only carried the check, so these are never a tool gap.
+         * Failure keys of deterministic checks that saw the site itself go wrong: a blind `site_health` problem (a page
+         * wider than a phone, a script error, a broken link, a slow request, a back button that leads elsewhere) and a
+         * page `direct_url` found open to a role that must not see it. The agent only carried the check, so these are
+         * never a tool gap.
          */
         val SITE_DEFECTS: Map<String, FindingClass> =
-            mapOf("unhealthy_page" to FindingClass.DELIVERY_UI, "access_not_refused" to FindingClass.BACKEND)
+            mapOf("unhealthy_page" to FindingClass.SITE_CHECK, "access_not_refused" to FindingClass.SITE_CHECK)
         const val SITE_DEFECT_NOTE = "The site failed a check that code made on what the browser saw"
 
         /**

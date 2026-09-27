@@ -11,6 +11,8 @@
 
 package az.petek.reporting.infrastructure
 
+import az.petek.evidence.domain.FindingClass
+import az.petek.reporting.ReportTestData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -102,5 +104,30 @@ class CiReportWritersTest {
         en shouldContain "To fix on the site (2)"
         en shouldContain "In step &quot;join&quot; the site did not store the change correctly"
         az shouldNotContain "<script"
+    }
+
+    @Test
+    fun `a site check says what it saw, once, with how many testers saw it`() {
+        val seen =
+            listOf("a01", "a02", "a03").mapIndexed { i, agent ->
+                ReportTestData.finding(
+                    "fnd_m$i",
+                    "mobile",
+                    agent,
+                    FindingClass.SITE_CHECK,
+                    b = "unhealthy_page: 1 problem(s): / is 12 px wider than a 375px screen",
+                    c = null,
+                    note = "The site failed a check that code made on what the browser saw (unhealthy_page).",
+                )
+            }
+        val model = SampleReport.model().copy(findings = seen)
+
+        val az = CustomerSummaryWriter().render(model)
+        val en = CustomerSummaryWriter(english = true).render(model)
+
+        az shouldContain "1 problem tapıldı"
+        az shouldContain "Saytda düzəldilməli (1)"
+        az shouldContain "„mobile“ addımında kodun yoxlaması saytda problem tapdı: / is 12 px wider than a 375px screen (3 tester gördü)"
+        en shouldContain "a check made by code found a problem on the site: / is 12 px wider than a 375px screen (seen by 3 testers)"
     }
 }

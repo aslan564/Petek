@@ -47,6 +47,7 @@ internal object ReportFormat {
         when (value) {
             FindingClass.BACKEND -> "Backend xətası"
             FindingClass.DELIVERY_UI -> "Çatdırılma / UI xətası"
+            FindingClass.SITE_CHECK -> "Sayt yoxlaması"
             FindingClass.INVESTIGATE -> "Araşdırılmalı"
             FindingClass.FLAKY -> "Qeyri-sabit (flaky)"
             FindingClass.AGENT_FAILURE -> "Agent xətası"

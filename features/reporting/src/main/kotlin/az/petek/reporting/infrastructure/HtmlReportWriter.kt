@@ -399,7 +399,7 @@ class HtmlReportWriter : ReportWriter {
 
     private fun findingTone(value: FindingClass): String =
         when (value) {
-            FindingClass.BACKEND, FindingClass.DELIVERY_UI -> "bad"
+            FindingClass.BACKEND, FindingClass.DELIVERY_UI, FindingClass.SITE_CHECK -> "bad"
             FindingClass.INVESTIGATE, FindingClass.FLAKY -> "warn"
             FindingClass.AGENT_FAILURE -> "info"
         }
