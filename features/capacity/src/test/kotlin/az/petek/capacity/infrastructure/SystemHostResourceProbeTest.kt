@@ -80,7 +80,8 @@ class SystemHostResourceProbeTest {
     private fun probe(
         jvm: MemoryFigures? = null,
         cores: Int = 8,
-    ) = SystemHostResourceProbe(proc, cgroup, { jvm }, { cores })
+        vmStat: String? = null,
+    ) = SystemHostResourceProbe(proc, cgroup, { jvm }, { cores }, { vmStat })
 
     @Test
     fun `memory comes from MemTotal and MemAvailable of proc meminfo`() =
@@ -161,6 +162,31 @@ class SystemHostResourceProbeTest {
             meminfo(totalKib = 16 * 1024 * 1024, availableKib = null)
 
             probe(jvm = MemoryFigures(total = 16 * GIB, available = 4 * GIB)).probe() shouldBe HostResources(16 * GIB, 4 * GIB, 8)
+        }
+
+    @Test
+    fun `on macOS the inactive and speculative pages of vm_stat count as available, as the file cache does on Linux`() =
+        runTest {
+            val vmStat =
+                """
+                Mach Virtual Memory Statistics: (page size of 16384 bytes)
+                Pages free:                                    44439.
+                Pages active:                                 311599.
+                Pages inactive:                               313092.
+                Pages speculative:                              5343.
+                Pages wired down:                             155090.
+                """.trimIndent()
+
+            val resources = probe(jvm = MemoryFigures(total = 18 * GIB, available = 700 * MIB), vmStat = vmStat).probe()
+
+            resources.availableMemoryBytes shouldBe (44_439L + 313_092 + 5_343) * 16_384
+        }
+
+    @Test
+    fun `an unreadable vm_stat leaves the JVM's free memory`() =
+        runTest {
+            probe(jvm = MemoryFigures(total = 16 * GIB, available = 4 * GIB), vmStat = "vm_stat: not available").probe() shouldBe
+                HostResources(16 * GIB, 4 * GIB, 8)
         }
 
     @Test

@@ -21,6 +21,7 @@ import java.io.IOException
 import java.lang.management.ManagementFactory
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.isDirectory
 import kotlin.io.path.readText
 import com.sun.management.OperatingSystemMXBean as SunOperatingSystemMXBean
@@ -35,22 +36,33 @@ private val logger = KotlinLogging.logger {}
  * cache included, unlike "free"). Inside cgroup v2 memory limits (a container, a systemd slice) total is lowered to
  * the smallest limit on the way from this process's cgroup to the root and available to the smallest headroom under
  * any of them (see [cgroupLimit]), because the kernel stops the processes at those limits, not at the machine's. Where
- * `/proc/meminfo` is missing (macOS, Windows) the JVM's `OperatingSystemMXBean` is used: its free memory leaves out
- * the page cache, so the advice there is on the safe side. Cores are [Runtime.availableProcessors], which already
- * respects container CPU limits.
+ * `/proc/meminfo` is missing (macOS, Windows) the JVM's `OperatingSystemMXBean` gives the total. Its free memory leaves
+ * out the file cache, which on macOS is most of the memory a busy machine can still use, so there `vm_stat` is read as
+ * well: free, inactive and speculative pages, what the system hands out without swapping, as `MemAvailable` does on
+ * Linux (first seen 2026-09-27: 0.7 GiB "free" and one tester advised on an 18 GiB machine with 5.9 GiB available).
+ * Cores are [Runtime.availableProcessors], which already respects container CPU limits.
  */
 class SystemHostResourceProbe internal constructor(
     private val procRoot: Path,
     private val cgroupRoot: Path,
     private val jvmMemory: () -> MemoryFigures?,
     private val cores: () -> Int,
+    /** The output of macOS `vm_stat`, or null where there is none. */
+    private val vmStat: () -> String? = { null },
 ) : HostResourceProbe {
-    constructor() : this(Path.of("/proc"), Path.of("/sys/fs/cgroup"), { osBeanMemory() }, { Runtime.getRuntime().availableProcessors() })
+    constructor() : this(
+        Path.of("/proc"),
+        Path.of("/sys/fs/cgroup"),
+        { osBeanMemory() },
+        { Runtime.getRuntime().availableProcessors() },
+        { runVmStat() },
+    )
 
     override suspend fun probe(): HostResources =
         withContext(Dispatchers.IO) {
             val machine =
-                meminfo() ?: jvmMemory() ?: throw IllegalStateException("neither /proc/meminfo nor the JVM reports this machine's memory")
+                meminfo() ?: jvmMemory()?.let(::withVmStat)
+                    ?: throw IllegalStateException("neither /proc/meminfo nor the JVM reports this machine's memory")
             val limited = cgroupLimit()?.let(machine::within) ?: machine
             HostResources(
                 totalMemoryBytes = limited.total,
@@ -58,6 +70,12 @@ class SystemHostResourceProbe internal constructor(
                 cpuCores = cores().coerceAtLeast(1),
             )
         }
+
+    /** The JVM's figures with what `vm_stat` says can be used, when it says more than the JVM's free memory. */
+    private fun withVmStat(jvm: MemoryFigures): MemoryFigures {
+        val available = vmStat()?.let(::vmStatAvailable) ?: return jvm
+        return jvm.copy(available = maxOf(jvm.available, available.coerceAtMost(jvm.total)))
+    }
 
     /** `MemTotal` and `MemAvailable` in bytes, or null when the file or either field is missing. */
     private fun meminfo(): MemoryFigures? {
@@ -133,8 +151,38 @@ class SystemHostResourceProbe internal constructor(
         fun within(limit: MemoryFigures): MemoryFigures = MemoryFigures(minOf(total, limit.total), minOf(available, limit.available))
     }
 
-    private companion object {
+    internal companion object {
         val MEMINFO_LINE = Regex("""(\w+):\s+(\d+)\s+kB""")
+        private val VM_STAT_PAGE_SIZE = Regex("""page size of (\d+) bytes""")
+        private val VM_STAT_LINE = Regex("""Pages (free|inactive|speculative):\s+(\d+)\.?""")
+        private val VM_STAT = Path.of("/usr/bin/vm_stat")
+        private const val VM_STAT_SECONDS = 3L
+
+        /** Free, inactive and speculative pages of `vm_stat` [output] in bytes, or null when it has none of them. */
+        fun vmStatAvailable(output: String): Long? {
+            val pageSize =
+                VM_STAT_PAGE_SIZE
+                    .find(output)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toLongOrNull() ?: return null
+            val pages = VM_STAT_LINE.findAll(output).map { it.groupValues[2].toLong() }.toList()
+            return if (pages.isEmpty()) null else pages.sum() * pageSize
+        }
+
+        /** Runs macOS `vm_stat` when it is there; null elsewhere or when it fails. */
+        private fun runVmStat(): String? {
+            if (!Files.isExecutable(VM_STAT)) return null
+            return try {
+                val process = ProcessBuilder(VM_STAT.toString()).redirectErrorStream(true).start()
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                if (process.waitFor(VM_STAT_SECONDS, TimeUnit.SECONDS) && process.exitValue() == 0) output else null
+            } catch (e: IOException) {
+                logger.debug { "could not run vm_stat: ${e.message}" }
+                null
+            }
+        }
+
         const val CGROUP_V2_PREFIX = "0::"
         const val INACTIVE_FILE = "inactive_file "
 
