@@ -18,6 +18,7 @@ import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.EvidenceQuery
+import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.StepKind
@@ -72,12 +73,30 @@ class BuildReportUseCase(
             steps = stepRows(tableSteps, steps, artifactRecords, names, expected),
             assertions = assertions,
             latency = LatencyStatistics.compute(query.events(runId), query.receipts(runId)),
-            findings = query.findings(runId),
+            findings = withStepEvidence(query.findings(runId), steps, artifactRecords),
             failedAgents = failedAgents(steps, names, expected),
             stability = stability(run),
             artifactLinks = artifactLinks(runId, artifactRecords),
             usage = usage,
         )
+    }
+
+    /**
+     * A finding made from a step's failure names no artifact of its own; it gets that step's last screenshot, so every
+     * finding points at its evidence (AGENTS.md rule 5).
+     */
+    private fun withStepEvidence(
+        findings: List<FindingRecord>,
+        steps: List<StepRecord>,
+        artifactRecords: List<ArtifactRecord>,
+    ): List<FindingRecord> {
+        val screenshots = Screenshots(steps, artifactRecords)
+        val byId = steps.associateBy { it.stepId }
+        return findings.map { finding ->
+            if (finding.artifactIds.isNotEmpty()) return@map finding
+            val shot = finding.stepId?.let(byId::get)?.let(screenshots::lastFor) ?: return@map finding
+            finding.copy(artifactIds = listOf(shot.artifactId))
+        }
     }
 
     private fun stepRows(

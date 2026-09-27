@@ -23,6 +23,7 @@ import az.petek.evidence.domain.EvidenceSource.HARNESS
 import az.petek.evidence.domain.EvidenceSource.ORACLE
 import az.petek.evidence.domain.EvidenceSource.RECEIVER
 import az.petek.evidence.domain.EvidenceSource.SENDER
+import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict.FAILED
@@ -45,6 +46,7 @@ import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
@@ -316,6 +318,31 @@ class BuildReportUseCaseTest {
                 .failedAgents
                 .single()
                 .reason shouldBe "error"
+        }
+
+    @Test
+    fun `a finding made from a failed step points at that step's screenshot, one with its own evidence keeps it`() =
+        runTest {
+            seedRun()
+            evidence.step(
+                step(
+                    "mobile",
+                    "a01",
+                    StepStatus.FAILED,
+                    StepKind.RUN,
+                    detail = "unhealthy_page: / is 12 px wider",
+                    stepId = "stp_mobile_a01",
+                ),
+            )
+            val shot = artifact("stp_mobile_a01", "a01")
+            evidence.finding(finding("fnd_2", "mobile", "a01", FindingClass.DELIVERY_UI))
+            evidence.finding(finding("fnd_3", "mobile", "a01", FindingClass.DELIVERY_UI, artifacts = listOf("art_own")))
+
+            val findings = useCase.build(RUN_ID).findings.associateBy { it.findingId.value }
+
+            findings.getValue("fnd_2").artifactIds shouldContainExactly listOf(shot.artifactId)
+            findings.getValue("fnd_3").artifactIds.map { it.value } shouldContainExactly listOf("art_own")
+            findings.getValue("fnd_1").artifactIds.shouldBeEmpty()
         }
 
     @Test

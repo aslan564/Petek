@@ -427,6 +427,34 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a site defect a deterministic check saw is a finding about the site, never a tool gap`() {
+            val steps =
+                listOf(
+                    step(
+                        "mobile",
+                        "a01",
+                        StepStatus.FAILED,
+                        StepKind.RUN,
+                        detail = "unhealthy_page: 1 problem(s): / is 12 px wider than a 375px screen",
+                    ),
+                    step(
+                        "foreign",
+                        "a02",
+                        StepStatus.FAILED,
+                        StepKind.RUN,
+                        detail = "access_not_refused: /notes/n1 shows another tester's note",
+                    ),
+                )
+
+            val findings = judge.findings(run, emptyList(), steps)
+
+            findings.map { it.findingClass } shouldContainExactly listOf(FindingClass.DELIVERY_UI, FindingClass.BACKEND)
+            findings.map { Shelf.of(it) } shouldContainExactly listOf(Shelf.SITE_BUG, Shelf.SITE_BUG)
+            findings.first().note shouldContain "The site failed a check that code made on what the browser saw (unhealthy_page)"
+            findings.first().evidenceTier shouldBe EvidenceTier.UI_NETWORK
+        }
+
+        @Test
         fun `a racer whose own request the target turned down is investigated, not blamed on the agent`() {
             val detail = "request_failed: POST /tickets/t2/approve -> 500; agent: Ticket approved"
             val steps = listOf(step("race", "a03", StepStatus.FAILED, detail = detail, action = "do: Eyni ticketi approve et"))

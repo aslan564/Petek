@@ -18,6 +18,7 @@ import az.petek.agent.testing.RunFunctionFixture
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.SlowResponse
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -65,6 +66,24 @@ class BlindCheckRunFunctionsTest {
             outcome.summary shouldContain "GET /api/report took 4200 ms"
             outcome.summary shouldNotContain "/api/fast"
             outcome.summary shouldContain "120 px wider than a 375px screen"
+        }
+
+    @Test
+    fun `the browser ends on the first page that went wrong, so the evidence shows it`() =
+        runTest {
+            browser.onAction = { action ->
+                if (action.startsWith("navigate ")) browser.overflow = if (action == "navigate /about") 120 else 0
+            }
+
+            val outcome = fixture.run("site_health", mapOf("checks" to "mobile", "pages" to "/about,/"))
+
+            outcome.failureReason shouldBe FailureReason.UNHEALTHY_PAGE
+            val shots =
+                fixture.artifacts.contents.values
+                    .map { String(it) }
+                    .filter { it.startsWith("png:") }
+            shots.shouldNotBeEmpty()
+            shots.forEach { it shouldContain "/about" }
         }
 
     @Test

@@ -35,7 +35,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * - `session`: with the cookies gone (an expired session) the page no longer shows the signed-in user; the tester then
  *   signs in again with the `login` flow. Visitors and signed-out testers skip it.
  *
- * Every problem is listed in the outcome (`unhealthy_page`) with a screenshot; a clean site passes.
+ * Every problem is listed in the outcome (`unhealthy_page`); the browser ends on the first page that went wrong, so
+ * the step's screenshot shows it. A clean site passes.
  */
 internal class SiteHealthRunFunction(
     private val engine: RunEngine,
@@ -63,9 +64,11 @@ internal class SiteHealthRunFunction(
             val maxLinks = args["max_links"]?.toIntOrNull() ?: DEFAULT_MAX_LINKS
             val problems = mutableListOf<String>()
             val session = runtime.session
+            var firstFailing: String? = null
             for (ref in pages) {
                 val path = runtime.target.resolvePath(ref)
                 val since = now()
+                val before = problems.size
                 open(ref)
                 val links = if ("links" in checks || "back" in checks) act("read the links of $path") { session.links() } else emptyList()
                 if ("links" in checks) {
@@ -86,11 +89,14 @@ internal class SiteHealthRunFunction(
                     health.failedRequests.forEach { problems += "$path: request failed: $it" }
                 }
                 if ("slow" in checks) health.slowResponses.forEach { problems += "$path: ${it.describe()}" }
+                if (problems.size > before && firstFailing == null) firstFailing = ref
             }
             if ("session" in checks) checkSessionExpiry(pages.first(), problems)
             if (problems.isEmpty()) {
                 succeeded("Checked ${pages.size} page(s) for ${checks.sorted().joinToString()}: nothing wrong.")
             } else {
+                // The step's evidence is the page the browser ends on: the first page that went wrong.
+                firstFailing?.takeIf { it != pages.last() }?.let { open(it) }
                 captureScreenshot()
                 note("problems found", StepStatus.FAILED, problems.joinToString("; "))
                 failed(FailureReason.UNHEALTHY_PAGE, "${problems.size} problem(s): " + problems.take(MAX_LISTED).joinToString("; "))
