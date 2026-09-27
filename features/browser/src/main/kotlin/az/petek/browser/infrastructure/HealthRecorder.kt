@@ -39,10 +39,37 @@ internal class HealthRecorder(
         val value: T,
     )
 
+    /**
+     * A console error of the page. [source] is where the browser says it came from; a resource that failed to load names
+     * no address in its text, so the address is added (scheme, host and path only: a query may carry tokens).
+     */
     fun consoleError(
         message: String,
         at: HarnessTimestamp,
-    ) = add(console, Timed(at, message.take(MAX_TEXT)))
+        source: String? = null,
+    ) {
+        val address = source?.takeIf { message.startsWith(FAILED_RESOURCE) }?.let(::withoutQuery)
+        add(console, Timed(at, (message + address?.let { " ($it)" }.orEmpty()).take(MAX_TEXT)))
+    }
+
+    private fun withoutQuery(url: String): String? =
+        try {
+            val address = URI(url)
+            val scheme = address.scheme?.lowercase()
+            val host = address.host
+            if (scheme == null || host == null) {
+                null
+            } else {
+                val port =
+                    address.port
+                        .takeUnless { it == -1 || it == DEFAULT_PORTS[scheme] }
+                        ?.let { ":$it" }
+                        .orEmpty()
+                "$scheme://$host$port${address.rawPath.orEmpty()}"
+            }
+        } catch (_: URISyntaxException) {
+            null
+        }
 
     fun answered(
         method: String,
@@ -111,6 +138,9 @@ internal class HealthRecorder(
         const val DEFAULT_CAPACITY = 500
         const val FIRST_ERROR = 400
         const val MAX_TEXT = 300
+
+        /** How Chromium starts the console error of a resource that did not load. */
+        const val FAILED_RESOURCE = "Failed to load resource"
         private val DEFAULT_PORTS = mapOf("http" to 80, "https" to 443)
 
         fun originOf(address: URI): String? {

@@ -59,6 +59,7 @@ internal class PlaywrightHandles private constructor(
         const val TIMEZONE = "Asia/Baku"
 
         private const val EVENT_STREAM = "text/event-stream"
+        private val LINE_COLUMN = Regex(":\\d+:\\d+$")
         private val FETCH_TYPES = setOf("xhr", "fetch")
 
         /** Must run on the session thread. Releases whatever was created when a later step fails. */
@@ -136,7 +137,14 @@ internal class PlaywrightHandles private constructor(
             health: HealthRecorder,
             clock: HarnessClock,
         ) {
-            page.onConsoleMessage { message -> if (message.type() == "error") health.consoleError(message.text(), clock.now()) }
+            page.onConsoleMessage { message ->
+                // `location()` is `url:line:column`; a resource that failed to load is named by its url only there.
+                if (message.type() ==
+                    "error"
+                ) {
+                    health.consoleError(message.text(), clock.now(), message.location().replace(LINE_COLUMN, ""))
+                }
+            }
             page.onPageError { error -> health.consoleError("uncaught: $error", clock.now()) }
             page.onResponse { response -> health.answered(response.request().method(), response.url(), response.status(), clock.now()) }
             page.onRequestFailed { request -> health.failed(request.method(), request.url(), request.failure(), clock.now()) }
