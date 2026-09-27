@@ -28,6 +28,8 @@ data class SetupFunctions(
     val join: String = "register_and_login",
     /** The blind site-wide checks (Faza 13). */
     val siteHealth: String = "site_health",
+    /** What a visitor sees on each page, checked by code (Faza 19). */
+    val pageChecks: String = "page_checks",
     /** Someone else's object opened by its address (Faza 13). */
     val directUrl: String = "direct_url",
 )
@@ -70,32 +72,72 @@ data class ScenarioSettings(
     fun gateOf(role: Role): RegistrationMode = gates[role] ?: RegistrationMode.SELF
 
     /**
-     * The frame for a site without companies: every role the explorer saw signed in gets [perRole] testers (two, so a
-     * race has its pair) who sign up on their own ([signUp] false: sign in with the owner's accounts); a site seen only
-     * anonymously gets [perRole] visitors. No departments,
-     * no company setup (Faza 13).
+     * The frame for a site without companies (Faza 13), with [testers] testers when the owner chose a count:
+     *
+     * - a site seen only anonymously: every tester is a visitor ([perRole] without a count);
+     * - a site with a sign-up: every tester signs up ([signUp]), the testers shared evenly among the roles the explorer
+     *   saw signed in ([perRole] each without a count, two so a race has its pair);
+     * - a site with a sign-in but no sign-up: [perRole] testers of each such role sign in with the owner's accounts
+     *   (the `login` gate), and the rest of the count are visitors, since each account serves one tester.
+     *
+     * No departments, no company setup.
      */
     fun forSiteWithoutCompanies(
         seenRoles: Collection<String>,
         perRole: Int = PER_ROLE,
         signUp: Boolean = true,
+        testers: Int? = null,
     ): ScenarioSettings {
+        require(testers == null || testers >= 1) { "a draft needs at least one tester, was $testers" }
         val signedIn =
             seenRoles
                 .filter { it != VISITOR.key }
                 .mapNotNull(Role::fromKey)
                 .distinct()
                 .sortedBy { it.key }
-        val roles = signedIn.ifEmpty { listOf(VISITOR) }
-        // A site with a sign-in but no sign-up is entered with the owner's accounts (the `login` gate).
-        val gate = if (signUp) RegistrationMode.SELF else RegistrationMode.LOGIN
-        return copy(
-            team = RoleQuota.of(roles.associateWith { perRole }),
-            departments = emptyList(),
-            tenant = Tenant.NONE,
-            gates = if (signedIn.isEmpty()) mapOf(VISITOR to RegistrationMode.GUEST) else signedIn.associateWith { gate },
-        )
+        val counts: Map<Role, Int>
+        val gates: Map<Role, RegistrationMode>
+        when {
+            signedIn.isEmpty() -> {
+                counts = mapOf(VISITOR to (testers ?: perRole))
+                gates = mapOf(VISITOR to RegistrationMode.GUEST)
+            }
+
+            signUp -> {
+                counts = evenly(testers ?: (perRole * signedIn.size), signedIn)
+                gates = signedIn.associateWith { RegistrationMode.SELF }
+            }
+
+            else -> {
+                val signing = minOf(testers ?: Int.MAX_VALUE, perRole * signedIn.size)
+                val visitors = (testers ?: signing) - signing
+                counts = evenly(signing, signedIn) + (if (visitors > 0) mapOf(VISITOR to visitors) else emptyMap())
+                gates = signedIn.associateWith { RegistrationMode.LOGIN } + (VISITOR to RegistrationMode.GUEST)
+            }
+        }
+        return copy(team = RoleQuota.of(counts), departments = emptyList(), tenant = Tenant.NONE, gates = gates)
     }
+
+    /**
+     * This frame with [testers] testers on a site with companies: the one admin, the managers it has (fewer when the
+     * count leaves no room) and every other tester an employee.
+     */
+    fun withTesters(testers: Int): ScenarioSettings {
+        require(testers >= 1) { "a draft needs at least one tester, was $testers" }
+        if (tenant != Tenant.COMPANY || testers == team.total) return this
+        val managers = minOf(team.manager, testers - 1)
+        return copy(team = RoleQuota(admin = 1, manager = managers, employee = testers - 1 - managers))
+    }
+
+    /** [total] testers shared evenly among [roles] (the first ones get the rest); a role left without one is not listed. */
+    private fun evenly(
+        total: Int,
+        roles: List<Role>,
+    ): Map<Role, Int> =
+        roles
+            .mapIndexed { index, role -> role to total / roles.size + if (index < total % roles.size) 1 else 0 }
+            .filter { it.second > 0 }
+            .toMap()
 
     companion object {
         const val PER_ROLE = 2
@@ -115,13 +157,17 @@ data class ScenarioRequest(
     val name: String? = null,
     /** `none`: the site has no companies; the draft signs its testers up (or lets them visit) instead of seeding one. */
     val tenant: Tenant = Tenant.COMPANY,
+    /** How many testers the draft has (the owner's choice); null keeps the frame's own team. */
+    val testers: Int? = null,
 ) {
     init {
         require(maxIdeas in 1..MAX_IDEAS) { "maxIdeas must be in 1..$MAX_IDEAS, was $maxIdeas" }
         require(name == null || name.isNotBlank()) { "a draft name must not be blank" }
+        require(testers == null || testers in 1..MAX_TESTERS) { "testers must be in 1..$MAX_TESTERS, was $testers" }
     }
 
     companion object {
         const val MAX_IDEAS = 50
+        const val MAX_TESTERS = 999
     }
 }

@@ -50,7 +50,7 @@ class VisitorRunTest {
     }
 
     @Test
-    fun `an AI step, a function that writes, a check that writes and too many testers are named`() {
+    fun `an AI step, a function that writes and a check that writes are named, however many testers there are`() {
         val problems =
             VisitorRun.problems(
                 campaign(
@@ -69,7 +69,6 @@ class VisitorRunTest {
 
         problems shouldContainAll
             listOf(
-                "it asks for 5 testers, a visitor run takes at most 3",
                 "step 'ask' is a `do` step, where an AI agent may click and type",
                 "step 'buy' runs `register_owner`, which does not only read",
                 "step 'approve' checks `http_status`, which writes or needs the site's test API",
@@ -90,5 +89,15 @@ class VisitorRunTest {
         val example = YamlCampaignSource().load(companyPortalScenario())
 
         VisitorRun.problems(example) shouldContain "it has companies (tenant: company)"
+    }
+
+    @Test
+    fun `thirty visitors are a visitor run too`() {
+        val many = visitors.copy(testers = 30, roles = RoleQuota(0, 0, 0, mapOf(checkNotNull(Role.fromKey("visitor")) to 30)))
+
+        VisitorRun
+            .problems(
+                campaign(health, setup = listOf(gates), settings = many.copy(registration = RegistrationQuota(0, 0, guest = 30))),
+            ).shouldBeEmpty()
     }
 }

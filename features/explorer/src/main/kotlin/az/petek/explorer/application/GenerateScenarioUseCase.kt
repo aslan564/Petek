@@ -105,12 +105,15 @@ class GenerateScenarioUseCase(
         model: SiteModel,
         request: ScenarioRequest,
     ): ComposedScenario {
-        val ideas = patterns.ideas(model, request.instructions).take(request.maxIdeas)
+        val all = patterns.ideas(model, request.instructions)
+        // The site-wide checks are done together by every tester; they never take an action idea's place.
+        val ideas = all.filterNot { it.pattern.siteWide }.take(request.maxIdeas) + all.filter { it.pattern.siteWide }
         val settings = frameFor(model, request)
         val composer = ScenarioComposer(model, settings, request.testApi, templates, actorParser)
-        val setup = composer.setupSteps()
         val (covered, skipped) = composer.compose(ideas)
-        val name = request.name ?: "explorer-${Slugs.of(model.target.host.orEmpty()).ifEmpty { "site" }}-v${model.version}"
+        val setup = composer.setupSteps()
+        // One name per site: each exploration's draft is the next version of the same scenario, so versions compare.
+        val name = request.name ?: "explorer-${Slugs.of(model.target.host.orEmpty()).ifEmpty { "site" }}"
         val draft =
             Campaign(
                 settings = campaignSettings(model, name, settings),
@@ -141,9 +144,10 @@ class GenerateScenarioUseCase(
             settings.forSiteWithoutCompanies(
                 model.actions.flatMap { it.allowedRoles },
                 signUp = gate.register != null || gate.login == null,
+                testers = request.testers,
             )
         } else {
-            settings
+            request.testers?.let(settings::withTesters) ?: settings
         }
 
     /**
@@ -193,7 +197,9 @@ class GenerateScenarioUseCase(
                 tenant = Tenant.NONE,
             )
         }
-        val invite = team.manager + team.employee / 2
+        // Half of those who join by invitation (the odd one too), the other half by the company code; managers always invited.
+        val joining = team.manager + team.employee
+        val invite = minOf(joining, maxOf(team.manager, (joining + 1) / 2))
         return CampaignSettings(
             target = model.target,
             testers = team.total,

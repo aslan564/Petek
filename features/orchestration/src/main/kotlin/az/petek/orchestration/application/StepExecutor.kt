@@ -14,6 +14,7 @@ package az.petek.orchestration.application
 import az.petek.agent.application.TesterAgent
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
+import az.petek.agent.domain.ActorShare
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
@@ -145,6 +146,13 @@ internal class StepExecutor(
         // A step without an action only checks the page: nothing reaches the target that pacing would spread out.
         val pacing = if (step.parallel || step.action is StepAction.None) Pacing.NONE else run.campaign.settings.pacing
         val raced = ConcurrentLinkedQueue<ActorRun.Raced>()
+        // Each actor's place among the step's actors, for run functions that share the step's work out.
+        val shares =
+            chosen
+                .map { it.agentId }
+                .sorted()
+                .withIndex()
+                .associate { (position, agentId) -> agentId to ActorShare(position, chosen.size) }
         val runs =
             try {
                 coroutineScope {
@@ -153,7 +161,15 @@ internal class StepExecutor(
                         chosen
                             .map { identity ->
                                 async(services.diagnostics.of(run.runId, identity.agentId)) {
-                                    runActor(step, identity, barrier, race, pacer, lastIdBeforeStep).also {
+                                    runActor(
+                                        step,
+                                        identity,
+                                        shares.getValue(identity.agentId),
+                                        barrier,
+                                        race,
+                                        pacer,
+                                        lastIdBeforeStep,
+                                    ).also {
                                         if (it is ActorRun.Raced) {
                                             raced +=
                                                 it
@@ -189,6 +205,7 @@ internal class StepExecutor(
     private suspend fun runActor(
         step: ScenarioStep,
         identity: Identity,
+        share: ActorShare,
         barrier: StartBarrier?,
         race: AssertionSpec.OnlyOneSucceeds?,
         pacer: StartPacer,
@@ -196,7 +213,8 @@ internal class StepExecutor(
     ): ActorRun {
         var arrived = false
         try {
-            val actor = ActorContext(step, identity, run.sessions.getValue(identity.agentId), run.agents.getValue(identity.agentId))
+            val actor =
+                ActorContext(step, identity, run.sessions.getValue(identity.agentId), run.agents.getValue(identity.agentId), share)
             // The step's requests carry its correlation id when the owner turned the header on (Faza 14).
             actor.session.setCorrelationId(actor.correlationId.value)
             val waited =
@@ -506,6 +524,7 @@ internal class StepExecutor(
                 templates = templates,
                 maxSteps = run.campaign.settings.budget.maxStepsPerAgent,
                 timeout = remainingBudget(),
+                share = actor.share,
             )
         return try {
             services.watchdog.guard(actor.agentId, run.options.inactivityTimeout) { actor.agent.perform(action, context) }
@@ -965,6 +984,7 @@ internal class StepExecutor(
         val identity: Identity,
         val session: BrowserSession,
         val agent: TesterAgent,
+        val share: ActorShare,
     ) {
         val agentId = identity.agentId
         val stepId: StepId = ids.stepId()

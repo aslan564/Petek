@@ -211,8 +211,8 @@ faylı, ya da `_petek-verification.<host>` DNS TXT qeydi kimi dərc edirsiniz (h
 sonra yoxlayır. Kod dəqiq host üçündür (kiçik hərflə): `www.example.com` və `example.com` iki ayrı hostdur; fayl həmin
 origin-dən başqa hosta yönləndirmə olmadan verilməlidir. Sübut 30 gün yadda qalır, `petek verify` onu yenidən yoxlayır.
 `localhost`, loopback və daxili şəbəkə ünvanları təsdiq istəmir. Təsdiqlənməmiş sayt yalnız anonim ziyarətçi kimi
-oxunur: kəşfiyyatçı və yalnız oxuyan, ən çox 3 ziyarətçi testerli **ziyarətçi run** (girişi olmayan sayt üçün
-kəşfiyyatçı özü belə ssenari hazırlayır); `petek verify` sübut yoxdursa 1, `petek run` başqa kampaniyanı rədd edəndə 2
+oxunur: kəşfiyyatçı və yalnız oxuyan **ziyarətçi run** — seçdiyiniz qədər ziyarətçi tester, hamısı eyni anda
+(girişi olmayan sayt üçün kəşfiyyatçı özü belə ssenari hazırlayır); `petek verify` sübut yoxdursa 1, `petek run` başqa kampaniyanı rədd edəndə 2
 kodu ilə çıxır və nəyin onu ziyarətçi run etmədiyini deyir. Pətəki öz pre-production
 və ya staging nüsxənizə yönəldin, yalnız test hesabları işlədin, real istifadəçinin hesabını heç vaxt verməyin (ADR-0012).
 

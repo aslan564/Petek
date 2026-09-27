@@ -19,6 +19,9 @@ internal object BundledScripts {
     /** Page function numbering visible interactive elements; returns the shape [SnapshotParser] reads. */
     val pageIndexer: String = load("page-indexer.js")
 
+    /** Page function returning what a visitor can check without acting ([az.petek.browser.domain.PageFacts]). */
+    val pageFacts: String = load("page-facts.js")
+
     /** Page function returning `page.content()`-equivalent HTML with secret input values blanked. */
     val domSnapshot: String = load("dom-snapshot.js")
 

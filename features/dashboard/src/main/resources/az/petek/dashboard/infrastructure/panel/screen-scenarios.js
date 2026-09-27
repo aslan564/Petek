@@ -64,7 +64,15 @@
     const actions = h('div', 'row wrap');
     if (v.status === 'DRAFT') actions.append(P.button('Təsdiqlə', { kind: 'primary small', icon: 'check', on: (e) => transition(e.currentTarget, v, 'approve', 'Təsdiqləndi') }));
     if (v.status === 'APPROVED') actions.append(P.button('Dondur', { kind: 'small', icon: 'lock', on: (e) => transition(e.currentTarget, v, 'freeze', 'Donduruldu') }));
-    if (v.runnable) actions.append(P.button('Run et', { kind: 'dark small', icon: 'play', on: (e) => run(e.currentTarget, v) }));
+    if (v.runnable) {
+      // The run takes this many testers; empty keeps the scenario's own count.
+      const count = h('input', {
+        class: 'input num',
+        attrs: { type: 'number', min: 1, max: 999, step: 1, inputmode: 'numeric', placeholder: 'ssenaridəki', title: 'Tester sayı (boş: ssenaridəki say)', 'aria-label': 'Tester sayı' },
+        style: { width: '120px' },
+      });
+      actions.append(count, P.button('Run et', { kind: 'dark small', icon: 'play', on: (e) => run(e.currentTarget, v, count.value) }));
+    }
     const tabs = h('div', { class: 'segmented', attrs: { role: 'tablist' } },
       ['yaml', 'diff', 'plan'].map((t) => h('button', {
         text: { yaml: 'YAML', diff: 'Fərq', plan: 'Plan' }[t], attrs: { type: 'button', role: 'tab', 'aria-selected': String(tab === t) },
@@ -87,11 +95,15 @@
   }
 
   async function renderDiff(body, v, parent) {
-    const others = versions.filter((x) => x.name === v.name && x.id !== v.id).sort((a, b) => b.version - a.version);
-    if (!others.length) { body.append(h('div', { class: 'empty-inline', text: 'Müqayisə üçün başqa versiya yoxdur.' })); return; }
-    const fallback = parent || others.find((x) => x.version < v.version) || others[0];
+    // The scenario's own versions first (newest first), then every other scenario's, so two drafts can always be compared.
+    const own = versions.filter((x) => x.name === v.name && x.id !== v.id).sort((a, b) => b.version - a.version);
+    const foreign = versions.filter((x) => x.name !== v.name).sort((a, b) => b.createdAtMs - a.createdAtMs);
+    if (!own.length && !foreign.length) { body.append(h('div', { class: 'empty-inline', text: 'Müqayisə üçün başqa ssenari və ya versiya yoxdur.' })); return; }
+    const fallback = parent || own.find((x) => x.version < v.version) || own[0] || foreign[0];
+    const option = (x) => h('option', { text: (x.name === v.name ? '' : x.name + ' · ') + 'v' + x.version + ' · ' + L.scenarioStatus[x.status], attrs: { value: x.id } });
     const select = h('select', { class: 'select', attrs: { 'aria-label': 'Müqayisə olunan versiya' } },
-      others.map((x) => h('option', { text: 'v' + x.version + ' · ' + L.scenarioStatus[x.status], attrs: { value: x.id } })));
+      own.length ? h('optgroup', { attrs: { label: 'Bu ssenarinin versiyaları' } }, own.map(option)) : null,
+      foreign.length ? h('optgroup', { attrs: { label: 'Başqa ssenarilər' } }, foreign.map(option)) : null);
     select.value = fallback.id;
     const stats = h('span', 'help');
     const out = h('div');
@@ -109,7 +121,7 @@
         : h('div', { class: 'empty-inline', text: 'Fərq yoxdur.' }));
     };
     select.addEventListener('change', load);
-    body.append(h('div', 'stack', h('div', 'row wrap', h('span', { class: 'kicker', text: 'Müqayisə' }), h('div', { style: { width: '220px' } }, select), stats), out));
+    body.append(h('div', 'stack', h('div', 'row wrap', h('span', { class: 'kicker', text: 'Müqayisə' }), h('div', { style: { width: '320px', 'max-width': '100%' } }, select), stats), out));
     load();
   }
 
@@ -140,8 +152,10 @@
     await reload();
   }
 
-  async function run(button, v) {
-    const res = await P.busy(button, () => P.api.post('/api/runs', { scenarioId: v.id, testers: null, headful: false }));
+  async function run(button, v, count) {
+    const n = parseInt(count, 10);
+    const testers = Number.isFinite(n) && n > 0 ? n : null;
+    const res = await P.busy(button, () => P.api.post('/api/runs', { scenarioId: v.id, testers, headful: false }));
     if (!res.ok) { P.toast(res.error, 'error'); return; }
     P.toast('Run başladı: ' + res.data.runId, 'ok');
     P.go('agentler');
@@ -163,8 +177,11 @@
     const t = res.ok ? res.data : null;
     ui.triageBtn.hidden = !!t;
     if (!t) { P.fill(ui.triage, h('div', { class: 'empty-inline', text: res.ok ? 'Bu run hələ triaj olunmayıb. "Triaj et" hər sürprizi təsnif edəcək.' : res.error })); return; }
-    if (!t.verdicts.length) { P.fill(ui.triage, h('div', { class: 'empty-inline', text: 'Bu run-da sürpriz yoxdur.' })); return; }
-    P.fill(ui.triage, h('div', 'verdicts', t.verdicts.map((v) => {
+    // Surprises without a verdict yet (no AI to ask, or it failed): what to do about them.
+    const note = t.note ? h('div', { class: 'callout warn', text: t.note }) : null;
+    if (t.note) ui.triageBtn.hidden = false;
+    if (!t.verdicts.length) { P.fill(ui.triage, note || h('div', { class: 'empty-inline', text: 'Bu run-da sürpriz yoxdur.' })); return; }
+    P.fill(ui.triage, note, h('div', 'verdicts', t.verdicts.map((v) => {
       const cat = P.badge('slate', L.triage[v.category] || v.category, { dot: true });
       cat.classList.add('tc-' + v.category);
       const proposal = v.proposalScenarioId ? versions.find((x) => x.id === v.proposalScenarioId) : null;

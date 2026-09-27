@@ -20,6 +20,7 @@ import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResult
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
+import az.petek.scenarios.domain.CodeTriage
 import az.petek.scenarios.domain.EvidenceRef
 import az.petek.scenarios.domain.EvidenceRefType
 import az.petek.scenarios.domain.ProposalStatus
@@ -63,8 +64,9 @@ private val logger = KotlinLogging.logger {}
  * 1. Finds the scenario version the run executed (by the run's campaign hash, or the version named by the caller)
  *    and collects the run's surprises with [SurpriseCollector]: `report_problem` steps, failed concluding steps and
  *    findings; expected refusals, lost races and environment failures are listed as ignored, never asked about.
- * 2. Asks the LLM ONE structured question per surprise not decided yet (with [TriageOptions.maxQuestions] per
- *    execution), showing the surprise's redacted evidence facts and the scenario YAML. The answer is validated in
+ * 2. Decides by code what code already decided ([CodeTriage]: a check made by code on what the browser saw failed, a
+ *    defect of the site), and asks the LLM ONE structured question per other surprise not decided yet (with
+ *    [TriageOptions.maxQuestions] per execution), showing the surprise's redacted evidence facts and the scenario YAML. The answer is validated in
  *    code ([TriageAnswerParser]); an invalid answer or an unreachable model is stored as a [TriageFailure] and retried
  *    by the next execution. After [LlmException.Unavailable] no further question is sent.
  * 3. Stores each verdict with the evidence it is based on: the ids the model cited that the question showed, plus
@@ -129,7 +131,10 @@ class TriageRunUseCase(
         triage.addSurprises(collection.surprises)
         val decided = triage.verdicts(runId).mapTo(HashSet()) { it.surpriseId }
         val open = collection.surprises.filter { retriage || it.id !in decided }
-        val asked = open.take(options.maxQuestions)
+        // What code already decided (a site check that failed) needs no model; only the rest is asked.
+        val (byCode, forModel) = open.partition { CodeTriage.decides(it, context.evidence) }
+        byCode.forEach { triage.saveVerdict(CodeTriage.verdict(it, context.version.id, clock.now().wall)) }
+        val asked = forModel.take(options.maxQuestions)
         ask(context, asked)
         val draft = compose(context, triage.surprises(runId))
         val report =
@@ -139,7 +144,7 @@ class TriageRunUseCase(
                 items = results.forRun(runId),
                 ignored = collection.ignored,
                 asked = asked.size,
-                deferred = open.size - asked.size,
+                deferred = forModel.size - asked.size,
                 draft = draft,
             )
         logger.info {

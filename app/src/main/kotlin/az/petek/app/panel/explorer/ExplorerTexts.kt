@@ -219,6 +219,26 @@ internal object ExplorerTexts {
                 TestPattern.SESSION_EXPIRY -> {
                     "vaxtı bitmiş sessiya daxil olmuş istifadəçini göstərməməlidir."
                 }
+
+                TestPattern.PAGE_ANCHORS -> {
+                    "səhifədaxili keçidlər (#bölmə) mövcud hissəyə aparmalıdır."
+                }
+
+                TestPattern.BROKEN_IMAGES -> {
+                    "bütün şəkillər yüklənməlidir."
+                }
+
+                TestPattern.IMAGE_ALT -> {
+                    "hər şəklin ekran oxuyucusu üçün alt mətni olmalıdır."
+                }
+
+                TestPattern.PAGE_META -> {
+                    "hər səhifənin başlığı, bir əsas başlığı (h1), təsviri və dili olmalıdır; iki səhifənin başlığı eyni olmamalıdır."
+                }
+
+                TestPattern.OUTBOUND_LINKS -> {
+                    "başqa saytlara keçidlər cavab verməlidir."
+                }
             }
         val matched = if (idea.rationale.endsWith(MATCHES_INSTRUCTIONS)) " Təlimatınıza uyğundur." else ""
         if (idea.pattern.siteWide) return "Bütün sayt: $why$matched"

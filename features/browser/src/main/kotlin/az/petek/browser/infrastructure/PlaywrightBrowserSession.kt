@@ -17,9 +17,11 @@ import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
+import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.SessionOptions
+import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
 import az.petek.core.time.HarnessTimestamp
@@ -376,6 +378,15 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun goBack(): Boolean = perform("go back") { page.goBack() != null }
 
+    override suspend fun pageFacts(): PageFacts? =
+        perform("read the page's facts") {
+            surviveNavigation {
+                (page.evaluate(BundledScripts.pageFacts) as? Map<*, *>)?.let {
+                    PageFactsReading.of(it) { text -> SecretRedactor.redactText(text, typedSecrets) }
+                }
+            }
+        }
+
     override suspend fun clearCookies() {
         perform("clear cookies") { handles.context.clearCookies() }
     }
@@ -392,6 +403,16 @@ internal class PlaywrightBrowserSession private constructor(
             } finally {
                 if (own != null) page.setViewportSize(own.width, own.height)
             }
+        }
+
+    override suspend fun resizeViewport(
+        width: Int,
+        height: Int,
+    ): Viewport? =
+        perform("show pages at ${width}x$height") {
+            val own = page.viewportSize()
+            page.setViewportSize(width, height)
+            own?.let { Viewport(it.width, it.height) }
         }
 
     /**

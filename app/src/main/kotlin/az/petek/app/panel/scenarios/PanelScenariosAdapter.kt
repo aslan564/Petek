@@ -87,7 +87,7 @@ internal class PanelScenariosAdapter(
 
     private suspend fun generate(): ScenarioView {
         val source = explorer.draftSource()
-        val settings = DraftSettings.of(source.departments)
+        val settings = DraftSettings.of(source.departments, source.team)
         val draft =
             try {
                 container
@@ -98,6 +98,7 @@ internal class PanelScenariosAdapter(
                             source.grounding?.ifBlank { null },
                             testApi = explorer.testApi(source.target),
                             tenant = explorer.tenant(source.target),
+                            testers = source.testers?.takeIf { it in 1..ScenarioRequest.MAX_TESTERS },
                         ),
                         explorer.observerFor(source.explorationId),
                     )

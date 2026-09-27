@@ -114,8 +114,11 @@
     agentState: { WORKING: 'İşləyir', WAITING: 'Gözləyir', BLOCKED: 'Bloklanıb', FAILED: 'Xəta', IDLE: 'Boş', DONE: 'Bitib' },
     agentStates: ['WORKING', 'WAITING', 'BLOCKED', 'FAILED', 'IDLE', 'DONE'],
     stateVar: { WORKING: '--blue', WAITING: '--amber', BLOCKED: '--violet', FAILED: '--red', IDLE: '--slate', DONE: '--green' },
-    role: { admin: 'Admin', manager: 'Menecer', employee: 'İşçi' },
-    registration: { owner: 'şirkəti yaradır', invite: 'dəvətlə', company_code: 'şirkət kodu ilə' },
+    role: { admin: 'Admin', manager: 'Menecer', employee: 'İşçi', anonymous: 'Ziyarətçi', visitor: 'Ziyarətçi', guest: 'Qonaq',
+      user: 'İstifadəçi', member: 'Üzv', customer: 'Müştəri', buyer: 'Alıcı', seller: 'Satıcı', author: 'Müəllif', editor: 'Redaktor',
+      moderator: 'Moderator', student: 'Tələbə', teacher: 'Müəllim' },
+    registration: { owner: 'şirkəti yaradır', invite: 'dəvətlə', company_code: 'şirkət kodu ilə', self: 'özü qeydiyyatdan keçir',
+      login: 'hesabla daxil olur', guest: 'girişsiz ziyarətçi' },
     timelineKind: { STEP: 'Addım', EVENT: 'Hadisə', RECEIPT: 'Qəbz', ASSERTION: 'Təsdiq', FINDING: 'Tapıntı', MESSAGE: 'Mesaj', DIALOG: 'Fikir' },
     findingClass: { BACKEND: 'Backend', DELIVERY_UI: 'Çatdırılma / UI', SITE_CHECK: 'Sayt yoxlaması', INVESTIGATE: 'Araşdırılmalı', FLAKY: 'Qeyri-sabit', AGENT_FAILURE: 'Agent xətası' },
     evidenceTier: { ORACLE_CONFIRMED: 'Oracle təsdiqlədi', UI_NETWORK: 'Ekran / şəbəkə', LLM_JUDGED: 'Model hökmü' },
@@ -130,7 +133,9 @@
     exploreFinding: { BROKEN_LINK: 'Qırıq keçid', HTTP_ERROR: 'HTTP xətası', CONSOLE_ERROR: 'Konsol xətası', FAILED_REQUEST: 'Uğursuz sorğu', MOBILE_OVERFLOW: 'Mobil ekrana sığmır', SLOW_PAGE: 'Yavaş səhifə', ACCESSIBILITY: 'Əlçatanlıq', UNEXPECTED_UI: 'Gözlənilməz UI' },
     pattern: { HAPPY_PATH: 'Uğurlu yol', PERMISSION: 'İcazə', RACE: 'Yarış', REALTIME: 'Real-time', BOUNDARY: 'Sərhəd', IDEMPOTENCY: 'Təkrar göndərmə',
       DIRECT_URL: 'Birbaşa ünvan', BROKEN_LINKS: 'Qırıq linklər', CONSOLE_ERRORS: 'Konsol xətaları', SLOW_ENDPOINTS: 'Yavaş sorğular',
-      BACK_BUTTON: 'Geri düyməsi', MOBILE_VIEWPORT: 'Mobil görünüş', SESSION_EXPIRY: 'Sessiyanın bitməsi' },
+      BACK_BUTTON: 'Geri düyməsi', MOBILE_VIEWPORT: 'Mobil görünüş', SESSION_EXPIRY: 'Sessiyanın bitməsi',
+      PAGE_ANCHORS: 'Səhifədaxili keçidlər', BROKEN_IMAGES: 'Qırıq şəkillər', IMAGE_ALT: 'Şəkil alt mətni', PAGE_META: 'Başlıq və meta',
+      OUTBOUND_LINKS: 'Xarici keçidlər' },
     actionKind: { REGISTER: 'Qeydiyyat', LOGIN: 'Giriş', CREATE: 'Yaratma', UPDATE: 'Yeniləmə', DELETE: 'Silmə', APPROVE: 'Təsdiq', REJECT: 'Rədd', ASSIGN: 'Təyin', SUBMIT: 'Göndərmə', NAVIGATE: 'Keçid', OTHER: 'Digər' },
     scenarioStatus: { DRAFT: 'Qaralama', APPROVED: 'Təsdiqlənib', FROZEN: 'Dondurulub', SUPERSEDED: 'Köhnəlib' },
     scenarioSource: { USER: 'İstifadəçi', EXPLORER: 'Kəşfiyyatçı', TRIAGE: 'Triaj' },
@@ -148,6 +153,15 @@
       PHASE_STARTED: ['Faza', 'blue'], PAGE_VISITED: ['Səhifə', 'slate'], ACTION_DISCOVERED: ['Əməliyyat', 'cyan'], FINDING_RECORDED: ['Tapıntı', 'red'],
       UNKNOWN_RAISED: ['Sual', 'amber'], MODEL_UPDATED: ['Model', 'violet'], DRAFT_READY: ['Layihə', 'green'], FINISHED: ['Bitdi', 'green'], FAILED: ['Xəta', 'red'],
     },
+  };
+
+  /** A role as the owner reads it: a known one in Azerbaijani, a site's own role by its name (`seller` -> Seller). */
+  P.roleLabel = (role) => {
+    if (!role) return 'Rol məlum deyil';
+    const known = P.L.role[role];
+    if (known) return known;
+    const words = String(role).replace(/[_-]+/g, ' ');
+    return words.charAt(0).toLocaleUpperCase('az') + words.slice(1);
   };
 
   // ---------- formatting ----------

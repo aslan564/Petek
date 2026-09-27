@@ -18,8 +18,10 @@ import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
+import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
 import az.petek.core.time.HarnessTimestamp
@@ -215,6 +217,20 @@ class FakeBrowserSession(
 
     override suspend fun clearCookies() = record("clearCookies")
 
+    /** The viewport [resizeViewport] set last; starts as a desktop browser's. */
+    @Volatile
+    var viewport: Viewport = Viewport(1280, 720)
+
+    override suspend fun resizeViewport(
+        width: Int,
+        height: Int,
+    ): Viewport {
+        record("resize ${width}x$height")
+        val before = viewport
+        viewport = Viewport(width, height)
+        return before
+    }
+
     override suspend fun horizontalOverflow(
         width: Int,
         height: Int,
@@ -222,6 +238,12 @@ class FakeBrowserSession(
         record("viewport ${width}x$height")
         return overflow
     }
+
+    /** Facts of the page at each address; [facts] for any other. */
+    val pageFactsByUrl = ConcurrentHashMap<String, PageFacts>()
+    var facts: PageFacts? = null
+
+    override suspend fun pageFacts(): PageFacts? = pageFactsByUrl[url] ?: facts
 
     override suspend fun close() {
         closed = true

@@ -24,12 +24,12 @@
     registration: { invite: 15, companyCode: 14 },
     budget: { maxMinutes: 30, maxStepsPerAgent: 40, maxPages: 40 },
     allowWrites: false,
+    autoSplit: true,
   };
 
   let ui = null;
   let visible = false;
   let form = load();
-  let autoSplit = true;
   let capacityTimer = null;
   let scenarios = [];
 
@@ -46,14 +46,26 @@
   }
   function save() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)); } catch (e) { /* storage blocked */ } }
 
-  /** One admin, a manager per six testers (at most one per department), half of the rest by invitation. */
-  function split() {
-    const n = Math.max(1, form.testers);
-    const managers = Math.min(Math.max(form.departments.length, 0), Math.max(0, Math.ceil((n - 1) / 6)));
-    const employees = Math.max(0, n - 1 - managers);
-    const joining = managers + employees;
-    const invite = Math.max(managers, Math.ceil(joining / 2));
-    form.roles = { admins: n >= 1 ? 1 : 0, managers, employees };
+  /** Managers of the automatic split: one per department, about one per six testers. */
+  function autoManagers(n) { return Math.min(form.departments.length, Math.max(0, Math.ceil((n - 1) / 6))); }
+
+  /**
+   * The team always adds up to the tester count: exactly one admin (a run creates one company and its admin, who
+   * oversees everyone, creates it), the managers (automatic, or as the owner typed them), and every other tester an
+   * employee; so a change to any number moves the employees. The joiners are then split in half ([halve]).
+   */
+  function balance() {
+    const n = Math.max(1, form.testers || 0);
+    const wanted = form.autoSplit ? autoManagers(n) : form.roles.managers;
+    const managers = Math.min(Math.max(0, wanted || 0), n - 1);
+    form.roles = { admins: 1, managers, employees: n - 1 - managers };
+    halve();
+  }
+
+  /** Half of the joiners by invitation (the odd one too), the other half by the company code; managers always by invitation. */
+  function halve() {
+    const joining = form.roles.managers + form.roles.employees;
+    const invite = Math.min(joining, Math.max(form.roles.managers, Math.ceil(joining / 2)));
     form.registration = { invite, companyCode: joining - invite };
   }
 
@@ -64,10 +76,12 @@
     ui.fields[key] = { box, error };
     return box;
   }
+  /** A number field; [onChange] gets every typed value, and leaving the field shows the value the form kept. */
   function numberInput(value, min, max, onChange) {
     const input = h('input', { class: 'input num', attrs: { type: 'number', min, max, step: 1, inputmode: 'numeric' } });
     input.value = String(value);
     input.addEventListener('input', () => { const v = parseInt(input.value, 10); onChange(Number.isFinite(v) ? v : 0); });
+    input.addEventListener('change', () => { if (ui && ui.admins) syncTeam(true); });
     return input;
   }
   function clearErrors() { for (const f of Object.values(ui.fields)) { f.box.classList.remove('invalid'); f.error.textContent = ''; } }
@@ -85,12 +99,17 @@
     if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function syncTeam() {
-    ui.admins.value = String(form.roles.admins);
-    ui.managers.value = String(form.roles.managers);
-    ui.employees.value = String(form.roles.employees);
-    ui.invite.value = String(form.registration.invite);
-    ui.companyCode.value = String(form.registration.companyCode);
+  /** Shows the team; the field being typed in keeps its text until it is left ([all] shows every field). */
+  function syncTeam(all) {
+    const show = (input, value) => { if (all || document.activeElement !== input) input.value = String(value); };
+    show(ui.testers, form.testers);
+    ui.range.value = String(Math.min(Math.max(form.testers, 1), 200));
+    show(ui.admins, form.roles.admins);
+    show(ui.managers, form.roles.managers);
+    show(ui.employees, form.roles.employees);
+    show(ui.invite, form.registration.invite);
+    show(ui.companyCode, form.registration.companyCode);
+    ui.auto.checked = !!form.autoSplit;
     const roleSum = form.roles.admins + form.roles.managers + form.roles.employees;
     ui.roleSum.textContent = 'Cəmi ' + roleSum + ' / ' + form.testers + ' tester';
     ui.roleSum.classList.toggle('bad', roleSum !== form.testers);
@@ -103,9 +122,7 @@
 
   function setTesters(n) {
     form.testers = n;
-    ui.testers.value = String(n);
-    ui.range.value = String(Math.min(n, 200));
-    if (autoSplit) split();
+    balance();
     syncTeam();
     save();
     scheduleCapacity();
@@ -256,26 +273,52 @@
     ui.range.value = String(Math.min(form.testers, 200));
     ui.range.addEventListener('input', () => setTesters(parseInt(ui.range.value, 10)));
     ui.capacity = h('div', 'capacity unknown', P.icon('cpu', 'sm'), h('div', { text: 'Tutum yoxlanılır…' }));
-    const onRole = (key) => (v) => { form.roles[key] = v; autoSplit = false; ui.auto.checked = false; syncTeam(); save(); };
-    ui.admins = numberInput(form.roles.admins, 0, 999, onRole('admins'));
-    ui.managers = numberInput(form.roles.managers, 0, 999, onRole('managers'));
-    ui.employees = numberInput(form.roles.employees, 0, 999, onRole('employees'));
+    // Typing managers keeps them (the employees make up the rest); typing employees changes the tester count.
+    const onManagers = (v) => { form.autoSplit = false; form.roles.managers = v; balance(); syncTeam(); save(); };
+    const onEmployees = (v) => {
+      form.autoSplit = false;
+      form.testers = Math.min(999, form.roles.admins + form.roles.managers + Math.max(0, v));
+      balance();
+      syncTeam();
+      save();
+      scheduleCapacity();
+    };
+    ui.admins = numberInput(1, 1, 1, () => { syncTeam(true); });
+    ui.admins.readOnly = true;
+    ui.admins.title = 'Hər run-da bir şirkət var və onu bir admin yaradır; admin hamıya nəzarət edir.';
+    ui.managers = numberInput(form.roles.managers, 0, 998, onManagers);
+    ui.employees = numberInput(form.roles.employees, 0, 998, onEmployees);
     ui.roleSum = h('div', 'sum-line');
     const departments = h('input', { class: 'input', attrs: { type: 'text', placeholder: 'Satış, Maliyyə, IT', autocomplete: 'off' } });
     departments.value = form.departments.join(', ');
     departments.addEventListener('input', () => {
       form.departments = departments.value.split(',').map((d) => d.trim()).filter(Boolean);
-      if (autoSplit) split();
+      balance();
       syncTeam();
       save();
     });
     ui.deptChips = h('div', 'dept-chips');
-    const onReg = (key) => (v) => { form.registration[key] = v; autoSplit = false; ui.auto.checked = false; syncTeam(); save(); };
-    ui.invite = numberInput(form.registration.invite, 0, 999, onReg('invite'));
-    ui.companyCode = numberInput(form.registration.companyCode, 0, 999, onReg('companyCode'));
+    // One of the two registration numbers typed: the other one makes up the joiners; invitations never below the managers.
+    const onInvite = (v) => {
+      const joining = form.roles.managers + form.roles.employees;
+      const invite = Math.min(joining, Math.max(form.roles.managers, v));
+      form.registration = { invite, companyCode: joining - invite };
+      syncTeam();
+      save();
+    };
+    const onCompanyCode = (v) => {
+      const joining = form.roles.managers + form.roles.employees;
+      const code = Math.min(joining - form.roles.managers, Math.max(0, v));
+      form.registration = { invite: joining - code, companyCode: code };
+      syncTeam();
+      save();
+    };
+    ui.invite = numberInput(form.registration.invite, 0, 998, onInvite);
+    ui.companyCode = numberInput(form.registration.companyCode, 0, 998, onCompanyCode);
     ui.regSum = h('div', 'sum-line');
-    ui.auto = h('input', { attrs: { type: 'checkbox', checked: true } });
-    ui.auto.addEventListener('change', () => { autoSplit = ui.auto.checked; if (autoSplit) { split(); syncTeam(); save(); } });
+    ui.auto = h('input', { attrs: { type: 'checkbox' } });
+    ui.auto.checked = !!form.autoSplit;
+    ui.auto.addEventListener('change', () => { form.autoSplit = ui.auto.checked; balance(); syncTeam(true); save(); });
 
     const team = P.card('Komanda', { icon: 'team', sub: 'Neçə tester, hansı rollarla və necə qoşulsunlar' });
     team.actions.append(h('label', 'switch', ui.auto, h('span', { text: 'Avtomatik bölgü' })));
@@ -286,14 +329,16 @@
       field('roles', 'Rollar', h('div', 'form-grid cols-3',
         h('div', 'field', h('span', { class: 'label hint', text: 'Admin' }), ui.admins),
         h('div', 'field', h('span', { class: 'label hint', text: 'Menecer' }), ui.managers),
-        h('div', 'field', h('span', { class: 'label hint', text: 'İşçi' }), ui.employees)), null),
+        h('div', 'field', h('span', { class: 'label hint', text: 'İşçi' }), ui.employees)),
+      'Admin həmişə 1-dir: şirkəti o yaradır və hamıya nəzarət edir. Menecer istənilən sayda ola bilər (hərəsi bir bölməyə baxır); qalan testerlər işçidir. Birini dəyişsəniz, işçi sayı avtomatik uyğunlaşır.'),
       ui.roleSum,
       field('departments', 'Şöbələr', h('div', 'stack', departments, ui.deptChips), 'Vergüllə ayırın. Hər şöbəyə bir menecer düşür.'),
       field('registration', 'Qeydiyyat', h('div', 'form-grid cols-2',
         h('div', 'field', h('span', { class: 'label hint', text: 'Dəvətlə' }), ui.invite),
         h('div', 'field', h('span', { class: 'label hint', text: 'Şirkət kodu ilə' }), ui.companyCode)),
-      'Menecerlər həmişə dəvətlə qoşulur; qalan dəvətlər işçilərə düşür.'),
-      ui.regSum));
+      'Admindən başqa hamı avtomatik yarı-yarıya bölünür: yarısı dəvətlə, yarısı şirkət kodu ilə (tək qalan dəvətə düşür). Menecerlər həmişə dəvətlə qoşulur.'),
+      ui.regSum,
+      h('div', { class: 'help', text: 'Giriş olmayan saytlarda (vizit kartı, bloq, vitrin) rol və qeydiyyat tətbiq olunmur: bütün testerlər ziyarətçidir və kəşfiyyatçının tapdığı səhifələri hərəsi öz ayrı brauzerində yoxlayır. Orada yalnız tester sayı vacibdir.' })));
 
     const budget = P.card('Büdcə', { icon: 'wallet', sub: 'Vaxt, addım və kəşfiyyat limitləri' });
     const minutes = numberInput(form.budget.maxMinutes, 1, 480, (v) => { form.budget.maxMinutes = v; save(); });
@@ -360,8 +405,8 @@
     P.append(el, ui.flow, h('div', 'grid-main-side',
       h('div', 'stack', what.el, accounts.el, team.el, budget.el),
       h('div', 'stack sticky-side', actions.el, how.el)));
-    if (autoSplit && form.roles.admins + form.roles.managers + form.roles.employees !== form.testers) split();
-    syncTeam();
+    balance();
+    syncTeam(true);
     P.onRun(() => { if (visible) renderJobs(); });
   }
 

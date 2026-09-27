@@ -23,6 +23,11 @@ tool (R11) and a sellable product (R15).
   container per profile (`TargetProfileConfig.forTarget`: the profile's URL, test API, token, production hosts and
   mail over the panel's configuration, sharing the panel's database); the oracle, mailbox and policy follow the
   profile. The panel runs any site that has a profile; MCP `list_targets` lists them.
+- A scenario runs on its own site (its `campaign.target`), or on the "Hədəf sayt" when the owner gives one; never on
+  the site the panel happened to be opened for (first seen 2026-09-27: a draft for one site ran against another). An
+  explorer draft only runs on the site it was written for. A site without a profile gets the panel's settings without
+  anything of the panel's own site (no test API, token or oracle); there a visitor run (only reads) may start, like the
+  explorer, while a run that writes still needs `PETEK_TARGET` or a profile.
 - Secrets in profiles are `${ENV}` references resolved from `.env`; the panel writes secrets to `.env`, never to the
   database (rule 10). Accounts carry non-secret login `fields` (R07).
 - Capability probe per target records what it supports; evidence tiers say what each verdict rests on.
@@ -37,7 +42,8 @@ tool (R11) and a sellable product (R15).
 - `campaign`: `YamlTargetSpecSourceTest` (parsing, validation with lines, secret references, accounts and fields,
   the example target profile).
 - `app`: `ConfigLoaderTest` (`PETEK_TARGET` naming a profile, a broken profile reported with its file and line),
-  `PanelRunsTest` (a site with a profile runs with its settings; any other address is refused), `OwnerAccountsTest`.
+  `PanelRunsTest` (a site with a profile runs with its settings; a scenario runs on its own site; a scenario that
+  writes is refused on another site without a profile), `OwnerAccountsTest`.
 - Open: an e2e run against a second fake site in the same panel (Faza 13).
 
 ## Open items

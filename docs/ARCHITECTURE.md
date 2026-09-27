@@ -165,7 +165,8 @@ by name; the `run` functions execute them through the agent's `FlowRunner`:
 | `register_owner` | `register_owner`, then (test API) the company id and code published for everyone; `login` when the page shows nobody signed in; `verify_identity` unless a flow asserted the identity; the storage state saved unless a flow saved it |
 | `register_and_login` | `join_by_invite` or `join_by_code` by the identity's registration mode, then as above; up to 3 attempts, and once the flow passed `account_created` a retry signs in with `login` instead of registering again. On a site without companies the tester's gate decides: `self` follows `sign_up` (name, e-mail, password), `login` signs in with the owner's account it was given, `guest` only opens the home page |
 | `login` / `verify_identity` | `login` / `verify_identity` |
-| `site_health` | no flow: blind checks decided by code from what the browser saw (links, console/network errors, slow requests, back button, phone width, session expiry, then `login` again) over `pages` |
+| `site_health` | no flow: blind checks decided by code from what the browser saw (links, console/network errors, slow requests, back button, phone width, session expiry, then `login` again) over `pages`; `share: pages` deals the pages out among the step's testers, `share: links` has each tester check every page but ask about only its share of the links |
+| `page_checks` | no flow: what a visitor sees on each page, checked by code (in-page anchors, broken images, alt texts, title, one `h1`, description and language, duplicate titles, links to other sites asked once) over `pages`; `share` as for `site_health` |
 | `direct_url` | no flow: opens someone else's object by its `path`; passes when the site refuses (401/403/404, another page, or the object's `text` not shown) |
 
 The defaults (`TargetProfile.DEFAULT_FLOWS`) are the contract flows, written against the profile's selector keys, so the
@@ -192,7 +193,8 @@ describes the company portal.
 `features/capacity` answers "how many testers can this machine run?" and nothing ever enforces the answer.
 `SystemHostResourceProbe` reads total and available memory (`/proc/meminfo` `MemAvailable`; under cgroup v2 memory
 limits the smallest `memory.max` and the smallest headroom `memory.max − (memory.current − inactive_file)` on the way
-to the root; the JVM's `OperatingSystemMXBean` elsewhere) and the usable cores. `CapacityAdvisor` keeps a
+to the root; the JVM's `OperatingSystemMXBean` elsewhere, with macOS `vm_stat` free, inactive and speculative pages as
+the available memory, since the JVM's "free" leaves out the file cache) and the usable cores. `CapacityAdvisor` keeps a
 reserve of `max(2 GiB, 15 % of total)` free, fits testers into the rest at `bytesPerSession` each plus one
 `bytesPerBrowser` per `contextsPerBrowser` sessions (browsers counted whole), bounds the CPU at 6 sessions per core
 (agents mostly wait for the LLM and the network), and recommends the smaller bound, at least 1. Without a

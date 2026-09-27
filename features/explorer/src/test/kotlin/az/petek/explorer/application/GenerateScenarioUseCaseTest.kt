@@ -68,6 +68,7 @@ class GenerateScenarioUseCaseTest {
             "register_and_login",
             "logout",
             "site_health",
+            "page_checks",
             "direct_url",
         )
     private val validator = DefaultCampaignValidator(DefaultTemplateRenderer())
@@ -100,7 +101,9 @@ class GenerateScenarioUseCaseTest {
         validator.validate(campaign, runFunctions).shouldBeEmpty()
         campaign.settings.tenant shouldBe Tenant.NONE
         campaign.settings.departments.shouldBeEmpty()
-        campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly listOf("register_and_login")
+        // People sign in here: every tester checks the pages a visitor sees before the gates.
+        campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly
+            listOf("site_health", "page_checks", "register_and_login")
         campaign.allSteps.none { (it.action as? StepAction.Run)?.function in setOf("register_owner", "seed_company") } shouldBe true
         // The portal model shows a sign-in but no sign-up form: its testers take the owner's accounts.
         campaign.settings.registration.login shouldBe campaign.settings.testers
@@ -112,15 +115,53 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `a site without sign-in gets the owner's count of visitors, and every one checks every page`() {
+        val site = Models.model(listOf(Models.page("/"), Models.page("/about")), emptyList(), roles = listOf("anonymous"))
+
+        val composed = useCase().compose(site, request().copy(tenant = Tenant.NONE, testers = 30))
+
+        val campaign = composed.campaign
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+        campaign.settings.testers shouldBe 30
+        campaign.settings.registration.guest shouldBe 30
+        campaign.setup.map { it.id } shouldContainExactly listOf("gates")
+        campaign.steps.map { it.id } shouldContainExactly listOf("site-pages", "site-content")
+        campaign.steps.forEach { step ->
+            step.actors.raw shouldBe "anonymous[*]"
+            val args = (step.action as StepAction.Run).args
+            args["pages"] shouldBe "/,/about"
+            args["share"] shouldBe "work"
+            args["devices"] shouldBe "phone,tablet,desktop"
+        }
+        (campaign.step("site-pages").action as StepAction.Run).args["checks"] shouldBe "console,slow,links,back,mobile"
+        (campaign.step("site-content").action as StepAction.Run).args["checks"] shouldBe "anchors,images,alt,meta,outbound"
+        composed.skipped.shouldBeEmpty()
+    }
+
+    @Test
+    fun `where people sign in the visitor pages are checked before the gates and each role's own pages after the scenario`() {
+        val campaign = useCase().compose(Models.portal(), request()).campaign
+
+        campaign.setup.takeWhile { it.id != "owner_signup" }.forEach { step ->
+            step.actors.raw shouldBe "admin | manager[*] | employee[*]"
+            (step.action as StepAction.Run).args["share"] shouldBe "work"
+        }
+        val roleChecks = campaign.steps.filter { it.id.endsWith("-pages") || it.id.endsWith("-content") }
+        roleChecks.map { it.id }.first() shouldBe "admin-pages"
+        (roleChecks.first().action as StepAction.Run).args["checks"] shouldContain "session"
+        campaign.steps.takeLast(roleChecks.size) shouldBe roleChecks
+    }
+
+    @Test
     fun `a draft from the portal model validates and covers the top ideas with code-checkable steps`() {
         val composed = useCase().compose(Models.portal(), request())
 
         val campaign = composed.campaign
         validator.validate(campaign, runFunctions).shouldBeEmpty()
-        campaign.setup.map { it.id } shouldContainExactly listOf("owner_signup", "seed", "join")
+        campaign.setup.map { it.id } shouldContainExactly listOf("public-pages", "public-content", "owner_signup", "seed", "join")
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly
-            listOf("register_owner", "seed_company", "register_and_login")
-        campaign.steps.map { it.id } shouldContainExactly
+            listOf("site_health", "page_checks", "register_owner", "seed_company", "register_and_login")
+        campaign.steps.map { it.id }.filterNot { it.endsWith("-pages") || it.endsWith("-content") } shouldContainExactly
             listOf(
                 "announcement-submit-watch",
                 "announcement-submit-happy",
@@ -132,13 +173,13 @@ class GenerateScenarioUseCaseTest {
                 "ticket-approve-permission",
                 "ticket-reject-permission",
             )
-        composed.covered.map { it.idea.pattern to it.idea.actionId } shouldHaveSize 7
-        composed.skipped
-            .single()
-            .idea.actionId shouldBe "login-submit"
-        composed.skipped.single().reason shouldContain "setup run functions"
+        composed.covered.filterNot { it.idea.pattern.siteWide } shouldHaveSize 7
+        val skipped = composed.skipped.filterNot { it.idea.pattern.siteWide }
+        skipped.single().idea.actionId shouldBe "login-submit"
+        skipped.single().reason shouldContain "setup run functions"
         campaign.settings.roles.total shouldBe campaign.settings.testers
-        campaign.settings.name shouldBe "explorer-portal-test-v1"
+        // One name per site, so every exploration's draft becomes the next version of the same scenario.
+        campaign.settings.name shouldBe "explorer-portal-test"
     }
 
     @Test
@@ -234,9 +275,7 @@ class GenerateScenarioUseCaseTest {
         skipped.getValue("ticket-submit" to TestPattern.BOUNDARY) shouldContain "input rules"
         skipped.getValue("login-submit" to TestPattern.BOUNDARY) shouldContain "setup run functions"
         composed.covered.flatMap { it.stepIds }.toSet() shouldBe
-            composed.campaign.steps
-                .map { it.id }
-                .toSet()
+            (composed.campaign.steps.map { it.id } + listOf("public-pages", "public-content")).toSet()
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 
@@ -281,6 +320,7 @@ class GenerateScenarioUseCaseTest {
         val composed = useCase().compose(Models.portal(), request(maxIdeas = 1, instructions = "müraciət göndər"))
 
         composed.covered
+            .filterNot { it.idea.pattern.siteWide }
             .single()
             .idea.actionId shouldBe "ticket-submit"
     }
@@ -329,7 +369,7 @@ class GenerateScenarioUseCaseTest {
         // Only the blind site-wide checks remain, which need no role difference and no creator.
         composed.campaign.steps
             .map { (it.action as StepAction.Run).function }
-            .toSet() shouldBe setOf("site_health")
+            .toSet() shouldBe setOf("site_health", "page_checks")
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 
@@ -468,6 +508,7 @@ class GenerateScenarioUseCaseTest {
             draft.id shouldBe "drf_1"
             draft.modelVersion shouldBe 1
             draft.covered
+                .filterNot { it.idea.pattern.siteWide }
                 .single()
                 .idea.actionId shouldBe "ticket-submit"
             repository.drafts(ExplorationId("exp_1")) shouldContainExactly listOf(draft)

@@ -91,31 +91,61 @@ internal object PanelTargets {
     }
 
     /**
-     * Refuses a run of [campaign] unless its site's owner proved it is theirs (ADR-0012) or the campaign is a visitor
-     * run ([VisitorRun]: a few visitors that only read): a [PanelRequestException] for [field], in Azerbaijani, with the
-     * proof to publish and why the campaign is not a visitor run. Nothing is written before.
+     * The run of [campaign] as it may start: on a site whose owner proved it is theirs (ADR-0012) or a local one any
+     * campaign, on any other site a visitor run ([VisitorRun]: visitors that only read, as many as the owner chose).
+     * Any other campaign is refused with a [PanelRequestException] for [field], in Azerbaijani, with the proof to
+     * publish and why the campaign is not a visitor run. Nothing is written before.
      */
-    suspend fun runAllowed(
+    suspend fun runnable(
         campaign: Campaign,
         ownership: SiteOwnership,
         field: String,
-    ) {
+    ): Campaign {
         val status = ownership.check(campaign.settings.target)
-        if (status !is OwnershipStatus.Unverified) return
-        val problems = VisitorRun.problems(campaign)
-        if (problems.isEmpty()) return
+        if (status !is OwnershipStatus.Unverified) return campaign
+        val problems = VisitorRun.findProblems(campaign)
+        if (problems.isEmpty()) return campaign
         throw PanelRequestException(
             listOf(
                 FieldProblem(
                     field,
                     "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır, ona görə ${status.host} üzərində heç nə test " +
-                        "edilmədi. Təsdiqsiz saytda yalnız ziyarətçi run başlaya bilər: ən çox ${VisitorRun.MAX_TESTERS} tester, " +
-                        "hamısı qonaq, yalnız oxuyan `run` addımları, `do` addımı yox. Bu kampaniya belə deyil: " +
-                        "${problems.joinToString("; ")}. ${proofHowTo(status)} Sonra yenidən başladın.",
+                        "edilmədi. Təsdiqsiz saytda yalnız ziyarətçi run başlaya bilər: hamısı qonaq olan istənilən sayda tester, " +
+                        "yalnız oxuyan `run` addımları, `do` addımı yox. Bu kampaniya belə deyil: " +
+                        "${problems.joinToString("; ", transform = ::inAzerbaijani)}. " +
+                        "${proofHowTo(status)} Sonra yenidən başladın.",
                 ),
             ),
         )
     }
+
+    /** Why a campaign is not a visitor run, said to the owner. */
+    private fun inAzerbaijani(problem: VisitorRun.Problem): String =
+        when (problem) {
+            VisitorRun.Problem.Companies -> {
+                "şirkətlidir (tenant: company)"
+            }
+
+            is VisitorRun.Problem.NotAllVisitors -> {
+                "testerlərin hamısı qonaq deyil (registration: {guest: ${problem.testers}} olmalıdır)"
+            }
+
+            is VisitorRun.Problem.AiStep -> {
+                "'${problem.step}' addımı `do` addımıdır, orada AI agent klikləyə və yaza bilər"
+            }
+
+            is VisitorRun.Problem.WritingFunction -> {
+                "'${problem.step}' addımı `${problem.function}` işlədir, o yalnız oxumur"
+            }
+
+            is VisitorRun.Problem.WritingCheck -> {
+                "'${problem.step}' addımı `${problem.check}` yoxlayır, o yazır və ya saytın test API-sini istəyir"
+            }
+
+            is VisitorRun.Problem.CreatedObject -> {
+                "'${problem.step}' addımı yaradılmış obyekti saytın test API-si ilə oxuyur"
+            }
+        }
 
     /** Why an exploration of an unproved site only reads, and how to change that; shown under "Sessiyalar". */
     fun readOnlyExploration(status: OwnershipStatus.Unverified): String =

@@ -143,7 +143,7 @@ class ExplorerNotesSiteIntegrationTest {
                     GenerateScenarioUseCase(
                         DefaultCampaignValidator(DefaultTemplateRenderer()),
                         DefaultTemplateRenderer(),
-                        setOf("register_and_login", "login", "verify_identity", "site_health", "direct_url"),
+                        setOf("register_and_login", "login", "verify_identity", "site_health", "page_checks", "direct_url"),
                         repository,
                         clock,
                         UuidV7IdGenerator(),

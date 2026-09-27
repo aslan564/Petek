@@ -12,6 +12,7 @@
 package az.petek.agent.testing
 
 import az.petek.agent.application.InMemorySharedRunState
+import az.petek.agent.domain.ActorShare
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariables
 import az.petek.agent.domain.Colleague
@@ -90,12 +91,14 @@ object AgentTestData {
         scenarioStep: String = "announce",
         maxSteps: Int = 20,
         timeout: Duration = 10.minutes,
+        share: ActorShare = ActorShare.ALONE,
     ) = StepContext(
         scenarioStep = scenarioStep,
         correlationId = CORRELATION_ID,
         templates = TemplateContext(lastId = null, self = emptyMap(), eventIds = emptyMap()),
         maxSteps = maxSteps,
         timeout = timeout,
+        share = share,
     )
 
     /** `[data-testid="…"]` selector of a target profile key, as the run functions address it. */

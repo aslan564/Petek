@@ -17,8 +17,10 @@ import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
+import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessTimestamp
 import kotlinx.coroutines.sync.Mutex
@@ -175,6 +177,13 @@ internal class RestoringBrowserSession(
         width: Int,
         height: Int,
     ): Int? = guarded { it.horizontalOverflow(width, height) }
+
+    override suspend fun resizeViewport(
+        width: Int,
+        height: Int,
+    ): Viewport? = guarded { it.resizeViewport(width, height) }
+
+    override suspend fun pageFacts(): PageFacts? = guarded { it.pageFacts() }
 
     override suspend fun close() = current.close()
 

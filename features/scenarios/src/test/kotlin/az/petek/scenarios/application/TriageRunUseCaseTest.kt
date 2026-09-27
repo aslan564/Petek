@@ -22,6 +22,7 @@ import az.petek.evidence.testing.InMemoryEvidence
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.testing.ScriptedLlmClient
+import az.petek.scenarios.domain.CodeTriage
 import az.petek.scenarios.domain.EvidenceRef
 import az.petek.scenarios.domain.EvidenceRefType
 import az.petek.scenarios.domain.IgnoreReason
@@ -500,6 +501,32 @@ class TriageRunUseCaseTest {
                 .shouldNotBeNull()
                 .reason shouldBe "LLM call failed (Timeout): no answer within 120s"
             report.items[1].verdict.shouldNotBeNull()
+        }
+
+    @Test
+    fun `a failed site check is a defect of the site decided by code, without a model`() =
+        runTest {
+            givenRun(RunStories.siteCheckFailed("a05"), RunStories.problemReported("a03"))
+            val llm = ScriptedLlmClient { throw LlmException.Unavailable("no model configured") }
+
+            val report = useCase(llm).execute(RUN)
+
+            val byCode =
+                report.items
+                    .single { it.surprise.id == srp("read_announce", "a05") }
+                    .verdict
+                    .shouldNotBeNull()
+            byCode.category shouldBe TriageCategory.SYSTEM_BUG
+            byCode.model shouldBe CodeTriage.MODEL
+            byCode.confidence shouldBe 1.0
+            byCode.proposedChange shouldBe null
+            byCode.basedOn.map { it.id }.contains("fnd_a05_health") shouldBe true
+            // Only the agent's own report needed the model, which was not there.
+            llm.requests.map { surpriseOf(it) } shouldBe listOf(srp("read_announce", "a03"))
+            report.items
+                .single { it.surprise.id == srp("read_announce", "a03") }
+                .failure
+                .shouldNotBeNull()
         }
 
     @Test

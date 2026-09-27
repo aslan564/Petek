@@ -486,6 +486,8 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .capacity.warn { background: color-mix(in srgb, var(--amber) 10%, var(--surface-2)); border-color: color-mix(in srgb, var(--amber) 35%, var(--border)); }
 .capacity.warn svg { color: var(--amber); }
 .capacity.unknown { background: var(--surface-2); border-color: var(--border); }
+.callout { padding: 10px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 12px; }
+.callout.warn { background: color-mix(in srgb, var(--amber) 10%, var(--surface-2)); border-color: color-mix(in srgb, var(--amber) 35%, var(--border)); }
 .capacity.unknown svg { color: var(--faint); }
 .capacity b { color: var(--text); }
 .tester-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: center; }

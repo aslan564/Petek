@@ -44,8 +44,8 @@ trusted.
   phases) only on a site whose owner published the code `petek verify` prints, as `/.well-known/petek-verification.txt`
   or as the DNS TXT record `_petek-verification.<host>`. The code is an HMAC of the host under the identity secret; a
   proof older than 30 days is checked again. Loopback, `*.localhost`, private and link-local addresses are exempt. An
-  unproved site is only read anonymously: the explorer, and a visitor run (`VisitorRun`: at most 3 visiting testers,
-  only read-only `run` steps, no AI step, no check that writes or needs the test API); `petek run`, the panel and MCP
+  unproved site is only read anonymously: the explorer, and a visitor run (`VisitorRun`: visiting testers only, as many
+  as the owner chooses, only read-only `run` steps, no AI step, no check that writes or needs the test API); `petek run`, the panel and MCP
   refuse every other campaign there. Use it only on a
   pre-production or staging site you own, with test accounts only — never a real user's account.
 - `TargetPolicy` refuses hosts in `PETEK_PRODUCTION_HOSTS` unless `PETEK_ALLOW_PRODUCTION=true`; the refusal names

@@ -944,9 +944,11 @@ o yalnız run-ın öz test datasını tokenlə qorunan test API-dən silir, onu 
   link-local ünvanlar; host-un bütün ünvanları belədirsə.
 - [x] Qapı: `petek run`, panel run-ı və MCP (exit 2 / hədəf sahəsi altında göstəriş); kəşfiyyat təsdiqsiz saytda yalnız
   anonim fazada işləyir və səbəbini deyir.
-- [x] Ziyarətçi run (sahibin qərarı, 2026-09-27): təsdiqsiz saytda yalnız oxuyan kampaniya da başlaya bilər — ən çox 3
-  tester, hamısı qonaq (`tenant: none`, `guest`), `do` addımı yox, yalnız `register_and_login` və `site_health`, test
-  API-yə və ya yazmağa ehtiyac duyan yoxlama yox (`VisitorRun`, campaign domain). CLI, panel və MCP bunu tətbiq edir,
+- [x] Ziyarətçi run (sahibin qərarı, 2026-09-27): təsdiqsiz saytda yalnız oxuyan kampaniya da başlaya bilər — hamısı
+  qonaq (`tenant: none`, `guest`), `do` addımı yox, yalnız `register_and_login`, `site_health` və `page_checks`, test
+  API-yə və ya yazmağa ehtiyac duyan yoxlama yox (`VisitorRun`, campaign domain). Tester sayı sahibin seçimidir və
+  hamısı eyni anda işləyir (əvvəl ən çox 3 idi; sahibin qərarı, 2026-09-27: "nə qədər tester seçilibsə, kompüterin gücü
+  və AI planı çatırsa, hamısı işləməlidir; sayta görə limit olmaz"). CLI, panel və MCP bunu tətbiq edir,
   başqa kampaniyanı rədd edəndə nəyin mane olduğunu deyir; kəşfiyyatçının girişsiz sayt üçün qaralaması elə belədir.
 - [x] `petek verify` (kod, iki yol, yoxlama; `--json`), `doctor`-da sahiblik sətri.
 - [x] Bundle runtime-a `jdk.naming.dns` (JNDI DNS provayderi jdeps-ə görünmür).
@@ -999,6 +1001,16 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 19 — Xırda xəta kartları
 
+- [x] Vitrin kartları kodla (`page_checks`, yalnız oxuyur): səhifədaxili keçid (`#bölmə`) mövcud hissəyə aparır,
+  şəkillər yüklənir, hər şəklin alt mətni var, hər səhifənin başlığı, bir `h1`-i, təsviri və dili var, iki səhifənin
+  başlığı eyni deyil, başqa saytlara keçidlər cavab verir (404/410 və ya cavabsızlıq ölü keçiddir; 401/403/429/5xx
+  avtomatik ziyarətçini rədd edən sayt kimi qeyd olunur, xəta sayılmır). Naxışlar: `PAGE_ANCHORS`, `BROKEN_IMAGES`,
+  `IMAGE_ALT`, `PAGE_META`, `OUTBOUND_LINKS`.
+- [x] Bütün testerlər işləyir (sahibin qərarı, 2026-09-27): kəşfiyyatçının layihəsində sayt yoxlamalarını bütün
+  testerlər hərəsi öz brauzerində bütün səhifələrdə edir, linklər isə bölünür (`share: links`, hər linki bir tester
+  soruşur; `share: pages` səhifələri böləndə). Giriş varsa ziyarətçinin gördüyü səhifələr girişdən əvvəl (setup),
+  hər rolun öz səhifələri ssenaridən sonra yoxlanır; giriş yoxdursa hamı ziyarətçidir. Layihə sahibin tester sayı ilə
+  yazılır və sayt başına bir adı var (`explorer-<host>`), hər yeni kəşfiyyat onun növbəti versiyasıdır.
 - [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
 - [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
   vitrin (ölü link, dil güzgüsü, boş siyahı).

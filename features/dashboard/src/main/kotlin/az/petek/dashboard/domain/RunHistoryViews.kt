@@ -71,9 +71,9 @@ data class RunRequest(
     val testers: Int? = null,
     val headful: Boolean = false,
     /**
-     * The "Hədəf sayt" of the instruction screen. Null or blank runs against the scenario's own target (the configured
-     * `PETEK_TARGET`); another absolute http(s) URL runs against that site as if it were `PETEK_TARGET`, still subject to
-     * the backend's target policy.
+     * The "Hədəf sayt" of the instruction screen. Null or blank runs against the scenario's own target (its
+     * `campaign.target`, else the configured `PETEK_TARGET`); another absolute http(s) URL runs against that site as if
+     * it were `PETEK_TARGET`, still subject to the backend's target policy.
      */
     val target: String? = null,
 ) {

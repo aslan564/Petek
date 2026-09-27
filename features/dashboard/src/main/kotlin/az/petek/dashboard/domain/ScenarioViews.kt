@@ -81,6 +81,8 @@ data class TriageView(
     val runId: RunId,
     val scenarioId: String?,
     val verdicts: List<TriageVerdictView>,
+    /** What the owner should know about surprises that have no verdict yet (in Azerbaijani); null when every one has. */
+    val note: String? = null,
 )
 
 data class TriageVerdictView(

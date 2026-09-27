@@ -17,6 +17,7 @@ import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.core.ids.RunTags
+import az.petek.core.model.Role
 import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
 import az.petek.identity.domain.HmacPasswordDeriver
@@ -68,6 +69,35 @@ class CampaignScalerTest {
                 )
             }
         return YamlCampaignSource(URI("https://staging.portal.test")).load(file)
+    }
+
+    /** An explorer draft of a site without sign-in: two visitors who only look ([VisitorRun]). */
+    private fun visitors(registration: String = "{guest: 2}"): Campaign {
+        val file =
+            dir.resolve("visitors.yaml").also {
+                Files.writeString(
+                    it,
+                    """
+                    campaign:
+                      name: explorer-site
+                      testers: 2
+                      seed: 42
+                      tenant: none
+                      roles: {anonymous: 2}
+                      registration: $registration
+                      budget: {max_steps_per_agent: 40, max_minutes: 20}
+                    setup:
+                      - id: gates
+                        actor: anonymous[*]
+                        run: register_and_login
+                    steps:
+                      - id: site-health
+                        actor: anonymous[*]
+                        run: {function: site_health, args: {pages: "/,/about", share: pages}}
+                    """.trimIndent(),
+                )
+            }
+        return YamlCampaignSource(URI("https://site.example")).load(file)
     }
 
     @Test
@@ -248,5 +278,34 @@ class CampaignScalerTest {
         resized.settings.name shouldBe "portal-core"
         CampaignScaler.resize(campaign, 30) shouldBeSameInstanceAs campaign
         shouldThrow<ScalingException> { CampaignScaler.resize(campaign, 0) }
+    }
+
+    @Test
+    fun `a site without companies grows to the asked count with its own roles and gates`() {
+        val resized = CampaignScaler.resize(visitors(), 30)
+
+        resized.settings.testers shouldBe 30
+        resized.settings.roles.total shouldBe 30
+        resized.settings.roles.count(checkNotNull(Role.fromKey("anonymous"))) shouldBe 30
+        resized.settings.registration shouldBe RegistrationQuota(invite = 0, companyCode = 0, guest = 30)
+        resized.settings.name shouldBe "explorer-site"
+        DefaultCampaignValidator().validate(resized, setOf("register_and_login", "site_health")).shouldBeEmpty()
+    }
+
+    @Test
+    fun `testers who sign in with the owner's accounts never outnumber the accounts`() {
+        val resized = CampaignScaler.resize(visitors(registration = "{login: 1, self: 1}"), 10)
+
+        resized.settings.registration shouldBe RegistrationQuota(invite = 0, companyCode = 0, self = 9, login = 1)
+        shouldThrow<ScalingException> { CampaignScaler.resize(visitors(registration = "{login: 2}"), 5) }.message shouldContain
+            "need more accounts"
+    }
+
+    @Test
+    fun `a site without companies shrinks too`() {
+        val resized = CampaignScaler.resize(CampaignScaler.resize(visitors(), 30), 1)
+
+        resized.settings.registration shouldBe RegistrationQuota(invite = 0, companyCode = 0, guest = 1)
+        resized.settings.roles.total shouldBe 1
     }
 }

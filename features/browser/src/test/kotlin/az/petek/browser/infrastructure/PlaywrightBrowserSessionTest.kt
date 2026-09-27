@@ -19,6 +19,7 @@ import az.petek.browser.domain.BrowserTopology
 import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.browser.domain.SessionOptions
+import az.petek.browser.domain.Viewport
 import az.petek.core.time.SystemHarnessClock
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -545,6 +546,28 @@ class PlaywrightBrowserSessionTest {
             (session.horizontalOverflow(375, 812) ?: 0) shouldBeGreaterThan 1000
             session.goBack() shouldBe true
             session.currentUrl() shouldEndWith "/form"
+        }
+
+    @Test
+    fun `what a visitor sees is read from the page, and the screen can be changed and put back`() =
+        withSession { session ->
+            session.navigate("/facts")
+
+            val facts = checkNotNull(session.pageFacts())
+
+            facts.title shouldBe "Fakt səhifəsi"
+            facts.headings shouldBe listOf("Başlıq", "İkinci başlıq")
+            facts.description shouldBe "Pətək sınağı"
+            facts.language shouldBe "az"
+            facts.missingAnchors shouldBe listOf("#yoxdur")
+            facts.images.single { it.src.endsWith("/missing.png") }.loaded shouldBe false
+            facts.images.single { it.src.startsWith("data:") }.let {
+                it.loaded shouldBe true
+                it.alt shouldBe null
+            }
+            facts.links.map { it.url } shouldContain "https://example.org/x"
+            val own = checkNotNull(session.resizeViewport(375, 812))
+            session.resizeViewport(own.width, own.height) shouldBe Viewport(375, 812)
         }
 
     @Test

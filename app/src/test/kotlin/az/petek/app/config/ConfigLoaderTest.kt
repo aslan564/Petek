@@ -361,7 +361,12 @@ class ConfigLoaderTest {
         config.targets.map { it.spec.name } shouldBe listOf("blog", "shop")
         config.profileFor(URI("https://blog.example/path"))?.testToken shouldBe null
         TargetProfileConfig.forTarget(config, URI("https://blog.example")).target shouldBe URI("https://blog.example")
-        TargetProfileConfig.forTarget(config, URI("https://other.example")).testToken shouldBe Secret("shop-token-123")
+        // A site without a profile takes nothing of the shop's own: its token and test API stay with the shop.
+        val other = TargetProfileConfig.forTarget(config, URI("https://other.example"))
+        other.target shouldBe URI("https://other.example")
+        other.testToken shouldBe null
+        other.testApiUrl shouldBe null
+        other.mailSource shouldBe MailSource.MAILPIT
         config.toString() shouldNotContain "shop-token-123"
         problems("PETEK_TARGET" to "shop") shouldContainExactlyInAnyOrder listOf("SHOP_TOKEN, referenced by target 'shop', is not set")
     }

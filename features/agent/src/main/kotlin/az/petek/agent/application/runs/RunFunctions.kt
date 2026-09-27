@@ -31,10 +31,22 @@ object RunFunctions {
     const val LOGOUT = "logout"
     const val SITE_HEALTH = "site_health"
     const val DIRECT_URL = "direct_url"
+    const val PAGE_CHECKS = "page_checks"
 
     /** Every built-in name; the campaign validator accepts exactly these (plus any custom additions). */
     val NAMES: Set<String> =
-        setOf(LOGIN, VERIFY_IDENTITY, READ_EMAIL_CODE, REGISTER_OWNER, SEED_COMPANY, REGISTER_AND_LOGIN, LOGOUT, SITE_HEALTH, DIRECT_URL)
+        setOf(
+            LOGIN,
+            VERIFY_IDENTITY,
+            READ_EMAIL_CODE,
+            REGISTER_OWNER,
+            SEED_COMPANY,
+            REGISTER_AND_LOGIN,
+            LOGOUT,
+            SITE_HEALTH,
+            DIRECT_URL,
+            PAGE_CHECKS,
+        )
 
     /**
      * Builds the registry with every built-in function. The functions share nothing but their stateless
@@ -64,6 +76,7 @@ object RunFunctions {
                 RegisterAndLoginRunFunction(engine, runner, settings),
                 LogoutRunFunction(engine, settings),
                 SiteHealthRunFunction(engine, runner),
+                PageChecksRunFunction(engine),
                 DirectUrlRunFunction(engine),
             ),
         )

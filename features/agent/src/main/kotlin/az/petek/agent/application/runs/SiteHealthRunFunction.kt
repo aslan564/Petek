@@ -35,6 +35,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * - `session`: with the cookies gone (an expired session) the page no longer shows the signed-in user; the tester then
  *   signs in again with the `login` flow. Visitors and signed-out testers skip it.
  *
+ * With `share: work` the step's testers split the pages and devices between them (each job a page on a phone, tablet
+ * or desktop), with `share: pages` the pages, and with `share: links` each checks every page but asks about only its
+ * share of the links ([PageShare]).
+ *
  * Every problem is listed in the outcome (`unhealthy_page`); the browser ends on the first page that went wrong, so
  * the step's screenshot shows it. A clean site passes.
  */
@@ -58,61 +62,99 @@ internal class SiteHealthRunFunction(
                     "site_health knows ${ALL_CHECKS.joinToString()}, not ${unknown.joinToString()}",
                 )
             }
-            val pages = list(args["pages"]).ifEmpty { listOf("home") }
+            PageShare.problem(args)?.let { throw RunFailure(FailureReason.MISSING_PREREQUISITE, "site_health: $it") }
+            val jobs = PageShare.jobs(list(args["pages"]).ifEmpty { listOf("home") }, args, step.share)
             val slow = (args["slow_ms"]?.toLongOrNull() ?: DEFAULT_SLOW_MS).milliseconds
             val width = args["width"]?.toIntOrNull() ?: DEFAULT_WIDTH
             val maxLinks = args["max_links"]?.toIntOrNull() ?: DEFAULT_MAX_LINKS
             val problems = mutableListOf<String>()
             val session = runtime.session
-            var firstFailing: String? = null
-            for (ref in pages) {
-                val path = runtime.target.resolvePath(ref)
-                val since = now()
-                val before = problems.size
-                open(ref)
-                val links = if ("links" in checks || "back" in checks) act("read the links of $path") { session.links() } else emptyList()
-                if ("links" in checks) {
-                    // Only paths on the site itself: links() never gives another origin, and a full URL is not followed.
-                    links.filter { it.startsWith("/") && !it.startsWith("//") }.take(maxLinks).forEach { link ->
-                        val status = probe("check link $link", { session.request("GET", link).status }) { it < BROKEN }
-                        if (status >= BROKEN) problems += "$path links to $link, which answers $status"
+            val screens = Screens(this)
+            var firstFailing: PageShare.Job? = null
+            try {
+                for (job in jobs) {
+                    screens.show(job.device)
+                    val ref = job.page
+                    val path = runtime.target.resolvePath(ref)
+                    val where = job.where(path)
+                    val since = now()
+                    val before = problems.size
+                    open(ref)
+                    val links =
+                        if ("links" in checks ||
+                            "back" in checks
+                        ) {
+                            act("read the links of $path") { session.links() }
+                        } else {
+                            emptyList()
+                        }
+                    if ("links" in checks && job.asksLinks) {
+                        // Only paths on the site itself: links() never gives another origin, and a full URL is not followed.
+                        val own = links.filter { it.startsWith("/") && !it.startsWith("//") }.take(maxLinks)
+                        PageShare.links(own, args, step.share).forEach { link ->
+                            val status = probe("check link $link", { session.request("GET", link).status }) { it < BROKEN }
+                            if (status >= BROKEN) problems += "$path links to $link, which answers $status"
+                        }
                     }
+                    if ("back" in checks) {
+                        // Where the browser really is: the site may have redirected the page (`/docs` to `/docs/`).
+                        val landed = pathOf(currentUrl())
+                        links.firstOrNull { !samePath(pathOf(it), landed) }?.let { next -> checkBack(landed, next, where, problems) }
+                    }
+                    if ("mobile" in checks) checkWidth(job, path, where, width, problems)
+                    val health = act("read what the page reported") { session.health(since, slow) }
+                    if ("console" in checks) {
+                        health.consoleErrors.forEach { problems += "$where: console error: $it" }
+                        health.failedRequests.forEach { problems += "$where: request failed: $it" }
+                    }
+                    if ("slow" in checks) health.slowResponses.forEach { problems += "$where: ${it.describe()}" }
+                    if (problems.size > before && firstFailing == null) firstFailing = job
                 }
-                if ("back" in checks) links.firstOrNull { pathOf(it) != path }?.let { next -> checkBack(path, next, problems) }
-                if ("mobile" in checks) {
-                    val overflow = act("measure $path at ${width}px") { session.horizontalOverflow(width, PHONE_HEIGHT) }
-                    if (overflow != null && overflow > TOLERANCE_PX) problems += "$path is $overflow px wider than a ${width}px screen"
+                if ("session" in checks) checkSessionExpiry(jobs.first().page, problems)
+                if (problems.isEmpty()) {
+                    succeeded("Checked ${jobs.size} page(s) for ${checks.sorted().joinToString()}: nothing wrong.")
+                } else {
+                    // The step's evidence is the page the browser ends on: the first page that went wrong, on its screen.
+                    firstFailing?.takeIf { it != jobs.last() }?.let { job ->
+                        screens.show(job.device)
+                        open(job.page)
+                    }
+                    captureScreenshot()
+                    note("problems found", StepStatus.FAILED, problems.joinToString("; "))
+                    failed(FailureReason.UNHEALTHY_PAGE, "${problems.size} problem(s): " + problems.take(MAX_LISTED).joinToString("; "))
                 }
-                val health = act("read what the page reported") { session.health(since, slow) }
-                if ("console" in checks) {
-                    health.consoleErrors.forEach { problems += "$path: console error: $it" }
-                    health.failedRequests.forEach { problems += "$path: request failed: $it" }
-                }
-                if ("slow" in checks) health.slowResponses.forEach { problems += "$path: ${it.describe()}" }
-                if (problems.size > before && firstFailing == null) firstFailing = ref
-            }
-            if ("session" in checks) checkSessionExpiry(pages.first(), problems)
-            if (problems.isEmpty()) {
-                succeeded("Checked ${pages.size} page(s) for ${checks.sorted().joinToString()}: nothing wrong.")
-            } else {
-                // The step's evidence is the page the browser ends on: the first page that went wrong.
-                firstFailing?.takeIf { it != pages.last() }?.let { open(it) }
-                captureScreenshot()
-                note("problems found", StepStatus.FAILED, problems.joinToString("; "))
-                failed(FailureReason.UNHEALTHY_PAGE, "${problems.size} problem(s): " + problems.take(MAX_LISTED).joinToString("; "))
+            } finally {
+                screens.restore()
             }
         }
+
+    /** The page's width on a phone or tablet: at the job's device, or at `width` without one; a desktop is not measured. */
+    private suspend fun RunTrace.checkWidth(
+        job: PageShare.Job,
+        path: String,
+        where: String,
+        width: Int,
+        problems: MutableList<String>,
+    ) {
+        val device = job.device
+        if (device == Device.DESKTOP) return
+        val screen = device?.width ?: width
+        val overflow = act("measure $path at ${screen}px") { runtime.session.horizontalOverflow(screen, device?.height ?: PHONE_HEIGHT) }
+        if (overflow != null && overflow > TOLERANCE_PX) problems += "$where is $overflow px wider than a ${screen}px screen"
+    }
 
     private suspend fun RunTrace.checkBack(
         path: String,
         next: String,
+        where: String,
         problems: MutableList<String>,
     ) {
         openUrl(next)
         val went = act("press the back button") { runtime.session.goBack() }
         val back = pathOf(currentUrl())
-        if (went && back != path) problems += "the back button from $next leads to $back, not $path"
-        if (!went) problems += "the back button from $next did nothing"
+        val on = where.removePrefix(path)
+        if (went && !samePath(back, path)) problems += "the back button from $next$on leads to $back, not $path"
+        if (!went) problems += "the back button from $next$on did nothing"
     }
 
     private suspend fun RunTrace.checkSessionExpiry(
@@ -139,6 +181,12 @@ internal class SiteHealthRunFunction(
             .split(',')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+
+    /** One page, whether or not the address ends with a slash (`/docs` and `/docs/`). */
+    private fun samePath(
+        a: String,
+        b: String,
+    ): Boolean = a.trimEnd('/') == b.trimEnd('/')
 
     private fun pathOf(url: String): String =
         runCatching { URI(url).rawPath }.getOrNull()?.ifEmpty { "/" }

@@ -61,6 +61,21 @@ enum class TestPattern(
 
     /** A session whose cookies are gone no longer shows the signed-in user. */
     SESSION_EXPIRY(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** In-page links (`#section`) name an element that exists. */
+    PAGE_ANCHORS(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** Every image of the pages loads. */
+    BROKEN_IMAGES(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** Every image has an alt text (an empty one marks a decorative image). */
+    IMAGE_ALT(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** Every page has a title, one main heading, a description and a language, and no two pages share a title. */
+    PAGE_META(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** The links to other sites answer. */
+    OUTBOUND_LINKS(EvidenceTier.UI_NETWORK, siteWide = true),
 }
 
 /**
@@ -232,6 +247,11 @@ class TestPatternLibrary {
                 TestPattern.SLOW_ENDPOINTS to 25,
                 TestPattern.BACK_BUTTON to 20,
                 TestPattern.MOBILE_VIEWPORT to 20,
+                TestPattern.BROKEN_IMAGES to 30,
+                TestPattern.PAGE_ANCHORS to 25,
+                TestPattern.OUTBOUND_LINKS to 25,
+                TestPattern.PAGE_META to 20,
+                TestPattern.IMAGE_ALT to 15,
             )
 
         private val SITE_RATIONALE: Map<TestPattern, String> =
@@ -242,6 +262,11 @@ class TestPatternLibrary {
                 TestPattern.BACK_BUTTON to "the back button must return to the page",
                 TestPattern.MOBILE_VIEWPORT to "the pages must fit a phone's screen",
                 TestPattern.SESSION_EXPIRY to "an expired session must not show the signed-in user",
+                TestPattern.PAGE_ANCHORS to "every in-page link must lead to a part of the page",
+                TestPattern.BROKEN_IMAGES to "every image must load",
+                TestPattern.IMAGE_ALT to "every image needs an alt text for screen readers",
+                TestPattern.PAGE_META to "every page needs a title, one main heading, a description and a language",
+                TestPattern.OUTBOUND_LINKS to "links to other sites must answer",
             )
 
         private val NO_IDEAS = setOf(ActionKind.NAVIGATE, ActionKind.OTHER)

@@ -59,6 +59,7 @@ internal class TestSite : AutoCloseable {
                 get("/session-login") { call.respondText(SESSION_LOGIN_PAGE, ContentType.Text.Html) }
                 get("/session-me") { call.respondText(SESSION_ME_PAGE, ContentType.Text.Html) }
                 get("/health") { call.respondText(HEALTH_PAGE, ContentType.Text.Html) }
+                get("/facts") { call.respondText(FACTS_PAGE, ContentType.Text.Html) }
                 get("/api/broken") { call.respondText("boom", status = HttpStatusCode.InternalServerError) }
                 get("/dynamic") { call.respondText(DYNAMIC_PAGE, ContentType.Text.Html) }
                 get("/secret") {
@@ -163,6 +164,17 @@ internal class TestSite : AutoCloseable {
               const user = sessionStorage.getItem('user');
               document.getElementById('who').textContent = user ? 'Salam, ' + user : 'Anonim';
             </script>
+            </body></html>
+            """
+
+        /** What a visitor checks by reading (page_checks): two main headings, a missing anchor, a broken image, one without alt. */
+        const val FACTS_PAGE =
+            """
+            <!doctype html><html lang="az"><head><title>Fakt səhifəsi</title><meta name="description" content="Pətək sınağı"></head>
+            <body><h1>Başlıq</h1><h1>İkinci başlıq</h1>
+            <a href="#var">Var</a> <a href="#yoxdur">Yoxdur</a> <a href="https://example.org/x">Kənar</a>
+            <section id="var">Bölmə</section>
+            <img src="/missing.png" alt="Qırıq"> <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
             </body></html>
             """
 

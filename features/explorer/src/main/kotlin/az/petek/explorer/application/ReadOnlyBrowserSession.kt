@@ -13,7 +13,9 @@ package az.petek.explorer.application
 
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
+import az.petek.browser.domain.Viewport
 import az.petek.core.time.HarnessTimestamp
 import az.petek.explorer.domain.SiteOrigin
 import java.net.URI
@@ -56,6 +58,13 @@ internal class ReadOnlyBrowserSession(
         width: Int,
         height: Int,
     ): Int? = delegate.horizontalOverflow(width, height)
+
+    override suspend fun resizeViewport(
+        width: Int,
+        height: Int,
+    ): Viewport? = delegate.resizeViewport(width, height)
+
+    override suspend fun pageFacts(): PageFacts? = delegate.pageFacts()
 
     override suspend fun click(ref: Int) = refuse("click")
 

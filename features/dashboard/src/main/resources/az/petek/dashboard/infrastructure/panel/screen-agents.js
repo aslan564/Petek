@@ -109,7 +109,7 @@
     c.aid.textContent = a.id;
     c.avatar.textContent = fmt.initials(a.name);
     c.avatar.style.setProperty('--h', fmt.hue(a.name));
-    c.role.textContent = L.role[a.role] || 'Rol məlum deyil';
+    c.role.textContent = P.roleLabel(a.role);
     c.role.className = 'role role-' + (a.role || 'none');
     const dept = [a.department || (a.role === 'admin' ? 'Rəhbərlik' : null), L.registration[a.registration]].filter(Boolean).join(' · ');
     c.dept.textContent = dept || '—';
@@ -191,6 +191,9 @@
     ui.emptyText.textContent = cards.size ? 'Filtrləri dəyişin və ya axtarışı təmizləyin.' : 'Run başlayanda hər tester burada öz kartı ilə görünəcək.';
   }
 
+  /** A company's roles first, in rank order, then the site's own roles by name. */
+  function roleOrder(role) { const i = ['admin', 'manager', 'employee'].indexOf(role); return i < 0 ? 3 : i; }
+
   function chip(label, key, cssVar, set) {
     const n = h('span', { class: 'n', text: '0' });
     const b = h('button', { class: 'chip', attrs: { type: 'button', 'aria-pressed': 'false' }, data: { key } });
@@ -217,11 +220,24 @@
       ui.stateChips[st].n.textContent = n;
       ui.stateChips[st].b.classList.toggle('zero', n === 0);
     });
-    const roleCounts = { admin: 0, manager: 0, employee: 0 };
-    for (const a of s.agents) if (a.role in roleCounts) roleCounts[a.role]++;
-    for (const r of Object.keys(roleCounts)) {
-      ui.roleChips[r].n.textContent = roleCounts[r];
-      ui.roleChips[r].b.classList.toggle('zero', roleCounts[r] === 0);
+    // The run's own roles: a company's admin, managers and employees, or whatever roles the site has.
+    const roleCounts = new Map();
+    for (const a of s.agents) roleCounts.set(a.role || '', (roleCounts.get(a.role || '') || 0) + 1);
+    const roles = [...roleCounts.keys()].sort((x, y) => roleOrder(x) - roleOrder(y) || x.localeCompare(y));
+    if (roles.join('\u0001') !== ui.roleKeys) {
+      ui.roleKeys = roles.join('\u0001');
+      ui.roleChips = {};
+      for (const r of [...filters.roles]) if (!roleCounts.has(r)) filters.roles.delete(r);
+      P.fill(ui.roleChipBox, roles.map((r) => {
+        const c = chip(P.roleLabel(r), r, null, filters.roles);
+        c.b.setAttribute('aria-pressed', String(filters.roles.has(r)));
+        ui.roleChips[r] = c;
+        return c.b;
+      }));
+    }
+    for (const r of roles) {
+      ui.roleChips[r].n.textContent = roleCounts.get(r);
+      ui.roleChips[r].b.classList.toggle('zero', roleCounts.get(r) === 0);
     }
     setPair(ui.stepsOk.box, ui.stepsOk.value, k.stepsPassed);
     setPair(ui.stepsBad.box, ui.stepsBad.value, k.stepsFailed);
@@ -337,7 +353,7 @@
     drawer.id.textContent = a.id;
     drawer.avatar.textContent = fmt.initials(a.name);
     drawer.avatar.style.setProperty('--h', fmt.hue(a.name));
-    drawer.role.textContent = L.role[a.role] || 'Rol məlum deyil';
+    drawer.role.textContent = P.roleLabel(a.role);
     drawer.role.className = 'role role-' + (a.role || 'none');
     drawer.state.textContent = L.agentState[a.state] || a.state;
     drawer.state.className = 'state-tag st-' + a.state;
@@ -449,8 +465,9 @@
     ui.stateChips = {};
     for (const st of L.agentStates) { const c = chip(L.agentState[st], st, L.stateVar[st], filters.states); ui.stateChips[st] = c; stateChips.append(c.b); }
     const roleChips = h('div', { class: 'chips', attrs: { role: 'group', 'aria-label': 'Rol filtri' } });
+    ui.roleChipBox = roleChips;
     ui.roleChips = {};
-    for (const r of ['admin', 'manager', 'employee']) { const c = chip(L.role[r], r, null, filters.roles); ui.roleChips[r] = c; roleChips.append(c.b); }
+    ui.roleKeys = null;
     ui.densityCards = h('button', { attrs: { type: 'button', title: 'Böyük kartlar', 'aria-label': 'Böyük kartlar' }, on: { click: () => setDensity('cards') } }, P.icon('grid', 'sm'));
     ui.densityCompact = h('button', { attrs: { type: 'button', title: 'Sıx siyahı', 'aria-label': 'Sıx siyahı' }, on: { click: () => setDensity('compact') } }, P.icon('list', 'sm'));
     ui.shown = h('span', 'shown');

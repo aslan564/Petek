@@ -88,7 +88,7 @@ class RunCommand : PetekSubcommand("run") {
             // blocked is reported as such, never tested against something else.
             container.reachability.require(campaign.settings.target)
             // A run signs up and writes: only on a site whose owner proved it is theirs (ADR-0012), or a local one. A
-            // visitor run only looks, a few visitors at a time, and needs no proof.
+            // visitor run only looks, with as many visitors as the owner chose, and needs no proof.
             val ownership = container.ownership.check(campaign.settings.target)
             if (ownership is OwnershipStatus.Unverified) {
                 val problems = VisitorRun.problems(campaign)
@@ -96,7 +96,7 @@ class RunCommand : PetekSubcommand("run") {
                 if (!json) {
                     echo(
                         "${ownership.host} has not proved its ownership, so '${campaign.settings.name}' runs as a visitor run: " +
-                            "${campaign.settings.testers} visitor(s) that only read, nothing is sent to the site.",
+                            "${campaign.settings.testers} visitor(s) that only read; nothing is sent to the site.",
                     )
                 }
             }
@@ -124,8 +124,8 @@ class RunCommand : PetekSubcommand("run") {
 
     /** What could have started without the proof, and why this campaign did not qualify. */
     private fun notAVisitorRun(problems: List<String>): String =
-        "Without the proof only a visitor run may start: at most ${VisitorRun.MAX_TESTERS} testers, all of them visitors " +
-            "(tenant: none, registration guest), `run` steps that only read (${VisitorRun.READ_ONLY_FUNCTIONS.sorted().joinToString()}) " +
+        "Without the proof only a visitor run may start: any number of testers, all of them visitors (tenant: none, " +
+            "registration guest), `run` steps that only read (${VisitorRun.READ_ONLY_FUNCTIONS.sorted().joinToString()}) " +
             "and no `do` step. This campaign is not one: ${problems.joinToString("; ")}."
 
     private fun scaled(

@@ -22,7 +22,11 @@ must be able to register, read the OTP, and fall back to provided credentials if
   permission and a confirmed test target). Code reads the page (`HtmlScanner`, `FormClassifier`, `Keywords`); the AI
   answers one structured question per page (`PageAnalyst`).
 - `SiteModel` with `Provenance` (observed/inferred), versioned per target, event-logged; `CompareExplorationsUseCase`
-  diffs versions. `TestPatterns` derive ideas; `GenerateScenarioUseCase` drafts a campaign the validator accepts.
+  diffs versions. `TestPatterns` derive ideas; `GenerateScenarioUseCase` drafts a campaign the validator accepts,
+  named once per site (`explorer-<host>`: every exploration's draft is the next version, so versions compare) and with
+  the owner's tester count. Its site-wide checks (`site_health`, `page_checks`) are done by every tester on every page,
+  each in its own browser, the links shared out (`share: links`); where people sign in, the pages a visitor sees are
+  checked before anyone signs in and each role's own pages after the scenario (owner's decision, 2026-09-27).
 - Logged-in sessions come from `TestCompanyRoleSessions` (app): a setup-only campaign creates a test company through
   the test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8).
 - Findings are recorded by code, never judged by the AI: broken links, HTTP errors, slow pages, accessibility gaps,
@@ -37,7 +41,9 @@ must be able to register, read the OTP, and fall back to provided credentials if
   `pageSettleTimeout`, 4 s by default) before it snapshots, so the analyst judges the page, not the empty shell. The
   analyst writes in the page's language and, without a clue, in Azerbaijani. Both from the first exploration of a real
   single-page application (2026-09-26).
-- Triage (`features/scenarios`) classifies surprises and proposes scenario v2 as a diff.
+- Triage (`features/scenarios`) classifies surprises and proposes scenario v2 as a diff. A failed check that code made
+  on what the browser saw (a `SITE_CHECK` finding) is decided by code as a defect of the site (`CodeTriage`), with no
+  model; only the rest needs the AI, and without one the panel says so and how to connect it.
 
 ## Architecture (Faza 10, ADR-0010)
 

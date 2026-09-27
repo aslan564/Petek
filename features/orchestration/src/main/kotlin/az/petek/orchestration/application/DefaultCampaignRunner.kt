@@ -440,7 +440,10 @@ class DefaultCampaignRunner(
         for (actor in result.actors) {
             val agentId = actor.identity.agentId
             val failureKey = actor.failureKey
-            if (failureKey != null) {
+            if (failureKey in FailureReason.SITE_DEFECT_KEYS) {
+                // A check found a defect of the site (a page checked before signing in): a finding, and the tester goes on.
+                board.message("$agentId found a defect of the site in setup step '${step.id}'; it stays in the run")
+            } else if (failureKey != null) {
                 markFailed(run, agentId, failureKey)
                 board.update(agentId, AgentState.FAILED, step.id, "failed setup: $failureKey")
                 board.message("$agentId failed setup step '${step.id}' ($failureKey) and is excluded from later steps")

@@ -53,14 +53,36 @@ data class ResolvedAccount(
 object TargetProfileConfig {
     /**
      * [base] for [target]: the matching profile's URL, test API, token, production hosts (added to the base's) and
-     * mail settings; a site without a profile only changes the target.
+     * mail settings. A site without a profile changes the target and takes nothing that belongs to the base's own site:
+     * no test API, token or oracle (a site's test API is its own), and the local Mailpit inbox instead of mail read
+     * through the base site's test API.
      */
     fun forTarget(
         base: PetekConfig,
         target: URI,
     ): PetekConfig {
-        val profile = base.profileFor(target) ?: return base.copy(target = target)
+        val profile = base.profileFor(target) ?: return withoutProfile(base, target)
         return apply(base, profile)
+    }
+
+    private fun withoutProfile(
+        base: PetekConfig,
+        target: URI,
+    ): PetekConfig {
+        if (origin(target) == origin(base.target)) return base.copy(target = target)
+        return base.copy(
+            target = target,
+            testApiUrl = null,
+            testToken = null,
+            oracle = false,
+            oraclePaths = emptyMap(),
+            mailSource = base.mailSource.takeUnless { it == MailSource.TEST_API } ?: MailSource.MAILPIT,
+        )
+    }
+
+    private fun origin(url: URI): String {
+        val canonical = WebUrls.canonical(url)
+        return "${canonical.scheme}://${canonical.host?.lowercase()}:${canonical.port}"
     }
 
     fun apply(

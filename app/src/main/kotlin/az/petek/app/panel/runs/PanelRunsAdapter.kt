@@ -22,6 +22,8 @@ import az.petek.app.panel.explorer.SetupRuns
 import az.petek.app.panel.scenarios.PanelScenariosAdapter
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
+import az.petek.campaign.domain.VisitorRun
+import az.petek.campaign.infrastructure.YamlCampaignSource
 import az.petek.core.error.PetekException
 import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.FindingId
@@ -52,6 +54,7 @@ import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
+import az.petek.llm.domain.LlmProviderKey
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.domain.RunOptions
@@ -60,10 +63,12 @@ import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.scenarios.application.TriageItem
+import az.petek.scenarios.domain.CodeTriage
 import az.petek.scenarios.domain.EvidenceRefType
 import az.petek.scenarios.domain.ProposalStatus
 import az.petek.scenarios.domain.ScenarioInvalidException
 import az.petek.scenarios.domain.ScenarioNotInCatalogException
+import az.petek.scenarios.domain.ScenarioSource
 import az.petek.scenarios.domain.ScenarioVersion
 import az.petek.scenarios.domain.TriageRunNotFinishedException
 import az.petek.scenarios.domain.TriageRunNotFoundException
@@ -98,8 +103,9 @@ private val logger = KotlinLogging.logger {}
  * - **Starting.** A run executes one APPROVED or FROZEN catalog version: its text is exported byte-exact into a
  *   temporary file under the evidence directory and loaded by the same loader as `petek run` (so the run's
  *   `campaign_hash` is the version's SHA-256 and triage finds the version again), then resized to the owner's tester
- *   count ([CampaignScaler.resize]) and validated. The "Hədəf sayt", when it names another address than
- *   `PETEK_TARGET`, runs it there with `PETEK_TARGET` semantics ([RunTargets]). The plan is published to the
+ *   count ([CampaignScaler.resize]) and validated. A version runs on its own site (`campaign.target`), or on the
+ *   "Hədəf sayt" when one is given, with `PETEK_TARGET` semantics ([RunTargets]); an explorer draft only on the site it
+ *   was written for, since its steps open that site's pages. The plan is published to the
  *   orchestrator screen before the first step ([PanelRunWatch]); the run itself goes on in [scope].
  * - **One at a time.** The owner's runs and the explorer's session setup ([runKeepingData]) share one slot; a second
  *   start is a [PanelConflictException]. [cancelRun] cancels the running one; its teardown and report still happen.
@@ -127,31 +133,33 @@ internal class PanelRunsAdapter(
         val problems = request.problems()
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val version = scenarios.runnable(request)
-        val target =
+        val asked =
             request.target
-                ?.takeIf {
-                    it.isNotBlank()
-                }?.let { PanelTargets.allowed(it, container.config.targetPolicy, PanelInstructions.TARGET) }
-        // A run goes to the configured site or to a site with a target profile (targets/<name>.yaml): only those have their
-        // own test token, test API and mail settings; any other site would get this site's token and sign-up flows.
-        if (target != null && !PanelTargets.sameSite(target, container.config.target) && container.config.profileFor(target) == null) {
+                ?.takeIf { it.isNotBlank() }
+                ?.let { PanelTargets.allowed(it, container.config.targetPolicy, PanelInstructions.TARGET) }
+        // A scenario runs on its own site (its `campaign.target`), never on whatever site the panel was opened for.
+        val own = ownTarget(version)
+        if (asked != null && own != null && version.source == ScenarioSource.EXPLORER && !PanelTargets.sameSite(asked, own)) {
             throw PanelRequestException(
                 listOf(
                     FieldProblem(
                         PanelInstructions.TARGET,
-                        "Run yalnız ${container.config.target} saytında və ya hədəf profili olan saytda işləyir. ${target.host} " +
-                            "üçün targets/<ad>.yaml profili yaradın (ünvan, test API, poçt); o vaxta qədər \"Kəşf et\" (yalnız oxuma) işləyir.",
+                        "${version.label} ssenarisini kəşfiyyatçı ${own.host} üçün, o saytın səhifələri ilə yazıb; \"Hədəf sayt\" isə " +
+                            "${asked.host}-dir. Hədəf saytı $own edin və ya ${asked.host} saytını kəşf edib onun ssenarisini yaradın. " +
+                            "Heç bir sayt test edilmədi.",
                     ),
                 ),
             )
         }
+        val target = asked ?: own?.let { PanelTargets.allowed(it.toString(), container.config.targetPolicy, PanelInstructions.TARGET) }
         val lease = targets.lease(target)
         val campaign =
             try {
-                load(version, lease, request.testers).also {
+                load(version, lease, request.testers).let {
                     PanelTargets.allowed(it.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
+                    requireOwnSettings(it)
                     PanelTargets.reachable(it.settings.target, lease.container.reachability, PanelInstructions.TARGET)
-                    PanelTargets.runAllowed(it, lease.container.ownership, PanelInstructions.TARGET)
+                    PanelTargets.runnable(it, lease.container.ownership, PanelInstructions.TARGET)
                 }
             } catch (e: Exception) {
                 lease.close()
@@ -202,9 +210,7 @@ internal class PanelRunsAdapter(
         val items = job.await()
         triaged += runId
         val failed = items.filter { it.verdict == null && it.failure != null }
-        if (items.isNotEmpty() && failed.size == items.size) {
-            throw PanelUnavailableException("Triaj alınmadı: ${failed.first().failure?.reason.orEmpty()}. Bir az sonra yenidən cəhd edin.")
-        }
+        if (items.isNotEmpty() && failed.size == items.size) throw PanelUnavailableException(undecided(failed))
         return view(runId, items)
     }
 
@@ -413,6 +419,45 @@ internal class PanelRunsAdapter(
         return runId
     }
 
+    /**
+     * A run that writes (sign-ups, forms, the test API) goes to the configured site or to a site with a target profile
+     * (targets/<name>.yaml): only those have their own test token, test API and mail settings. A visitor run only reads,
+     * like the explorer, so it may go to any site the owner gave.
+     */
+    private fun requireOwnSettings(campaign: Campaign) {
+        val target = campaign.settings.target
+        if (PanelTargets.sameSite(target, container.config.target) || container.config.profileFor(target) != null) return
+        if (VisitorRun.findProblems(campaign).isEmpty()) return
+        throw PanelRequestException(
+            listOf(
+                FieldProblem(
+                    PanelInstructions.TARGET,
+                    "Yazan run (qeydiyyat, formlar, test API) yalnız ${container.config.target} saytında və ya hədəf profili olan " +
+                        "saytda işləyir. ${target.host} üçün targets/<ad>.yaml profili yaradın (ünvan, test API, poçt); o vaxta " +
+                        "qədər orada yalnız oxuyan ziyarətçi run və \"Kəşf et\" işləyir.",
+                ),
+            ),
+        )
+    }
+
+    /** The site [version] names itself (`campaign.target`); null when it names none or cannot be read. */
+    private suspend fun ownTarget(version: ScenarioVersion): URI? =
+        withContext(Dispatchers.IO) {
+            val directory = container.config.evidenceDir.resolve(EXPORT_DIRECTORY)
+            Files.createDirectories(directory)
+            val folder = Files.createTempDirectory(directory, "target-")
+            val file = folder.resolve(version.fileName)
+            try {
+                scenarios.export(version, file)
+                YamlCampaignSource().load(file).settings.target
+            } catch (_: PetekException) {
+                null
+            } finally {
+                Files.deleteIfExists(file)
+                Files.deleteIfExists(folder)
+            }
+        }
+
     /** Exports [version] byte-exact, loads it like `petek run` and applies the tester count. */
     private suspend fun load(
         version: ScenarioVersion,
@@ -542,11 +587,39 @@ internal class PanelRunsAdapter(
             throw PanelConflictException("Run-ın ssenarisi artıq yoxlamadan keçmir: ${e.issues.firstOrNull()?.message.orEmpty()}")
         }
 
+    /** Why [failed] surprises have no verdict, and what to do, in Azerbaijani. */
+    private fun undecided(failed: List<TriageItem>): String {
+        val reason =
+            failed
+                .first()
+                .failure
+                ?.reason
+                .orEmpty()
+        val count = "${failed.size} sürpriz"
+        return when {
+            container.config.llmProvider == LlmProviderKey.NONE -> {
+                "$count AI olmadan təsnif oluna bilmir: bunlar agentin özünün bildirdiyi və ya kodun qərar verə bilmədiyi " +
+                    "problemlərdir, AI isə qoşulmayıb (PETEK_LLM_PROVIDER=none). .env faylında AI-ı seçin (məsələn " +
+                    "PETEK_LLM_PROVIDER=auto, kompüterdəki AI CLI-ni özü tapır) və \"Triaj et\"-i yenidən basın. Sayt " +
+                    "yoxlamalarının tapdığı xətaları kod AI-sız təsnif edir."
+            }
+
+            "unavailable" in reason.lowercase() -> {
+                "$count təsnif olunmadı: AI cavab vermir ($reason). AI-ın işlədiyini yoxlayıb \"Triaj et\"-i yenidən basın."
+            }
+
+            else -> {
+                "$count təsnif olunmadı: $reason. \"Triaj et\"-i yenidən basın."
+            }
+        }
+    }
+
     private suspend fun view(
         runId: RunId,
         items: List<TriageItem>,
     ): TriageView {
         val decided = items.filter { it.verdict != null }
+        val failed = items.filter { it.verdict == null && it.failure != null }
         val artifacts =
             decided
                 .flatMap { item ->
@@ -580,7 +653,12 @@ internal class PanelRunsAdapter(
                         surpriseKind = surprise.kind.name,
                         surprise = withoutContacts(surprise.text),
                         category = TriageCategory.valueOf(verdict.category.name),
-                        rationale = withoutContacts(verdict.rationale),
+                        rationale =
+                            if (verdict.model == CodeTriage.MODEL) {
+                                CODE_RATIONALE
+                            } else {
+                                withoutContacts(verdict.rationale)
+                            },
                         confidence = verdict.confidence,
                         proposedChange =
                             change?.let {
@@ -603,6 +681,7 @@ internal class PanelRunsAdapter(
                                 .filter { evidenceShown.containsKey(it) },
                     )
                 },
+            note = failed.takeIf { it.isNotEmpty() }?.let(::undecided),
         )
     }
 
@@ -611,6 +690,11 @@ internal class PanelRunsAdapter(
     private companion object {
         /** The newest runs the history shows; each summary reads its run's evidence, so the list stays bounded. */
         const val HISTORY_LIMIT = 100
+
+        /** A verdict code made ([CodeTriage]), as the owner reads it. */
+        const val CODE_RATIONALE =
+            "Kod qərar verdi, AI yox: brauzerin gördüyünü kod yoxladı və saytda xəta tapdı. Bu, saytın öz xətasıdır, " +
+                "bildirilməlidir; ssenari dəyişmir."
 
         /** The orchestrator files its own housekeeping (browser, network, teardown) under this step; no scenario step. */
         const val HARNESS_STEP = "harness"

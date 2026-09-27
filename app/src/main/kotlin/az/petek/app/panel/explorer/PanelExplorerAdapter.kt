@@ -24,6 +24,7 @@ import az.petek.dashboard.domain.PanelExplorer
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.PanelNotFoundException
 import az.petek.dashboard.domain.PanelRequestException
+import az.petek.dashboard.domain.RoleSplit
 import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.explorer.application.ExploreSiteUseCase
@@ -95,6 +96,9 @@ internal class PanelExplorerAdapter(
         val target: URI,
         val grounding: String?,
         val departments: List<String>,
+        /** The owner's tester count and team from the instruction form, when the exploration was started from it. */
+        val testers: Int? = null,
+        val team: RoleSplit? = null,
     )
 
     private val lock = Any()
@@ -191,7 +195,15 @@ internal class PanelExplorerAdapter(
         }
         val id = shown?.let { synchronized(lock) { it.tracker.explorationId } }
         if (shown != null && id != null && container.explorations.model(id) != null) {
-            return DraftSource(id, shown.target, synchronized(lock) { shown.tracker.grounding }, shown.instructions?.departments.orEmpty())
+            val form = shown.instructions
+            return DraftSource(
+                id,
+                shown.target,
+                synchronized(lock) { shown.tracker.grounding },
+                form?.departments.orEmpty(),
+                testers = form?.testers,
+                team = form?.roles,
+            )
         }
         val stored =
             container.explorations.list(limit = LOOKBACK).firstOrNull { it.modelVersion != null }
@@ -346,10 +358,16 @@ internal class PanelExplorerAdapter(
             stored ?: model?.let {
                 try {
                     container
-                        .scenarioGenerator(DraftSettings.of(run.instructions?.departments.orEmpty()))
+                        .scenarioGenerator(DraftSettings.of(run.instructions?.departments.orEmpty(), run.instructions?.roles))
                         .compose(
                             it,
-                            ScenarioRequest(id, grounding.ifBlank { null }, testApi = testApi(run.target), tenant = tenant(run.target)),
+                            ScenarioRequest(
+                                id,
+                                grounding.ifBlank { null },
+                                testApi = testApi(run.target),
+                                tenant = tenant(run.target),
+                                testers = run.instructions?.testers?.takeIf { count -> count in 1..ScenarioRequest.MAX_TESTERS },
+                            ),
                         ).yaml
                 } catch (e: Exception) {
                     logger.warn(e) { "No scenario draft could be composed from exploration $id" }

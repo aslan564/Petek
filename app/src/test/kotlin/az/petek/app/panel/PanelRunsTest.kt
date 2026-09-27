@@ -221,6 +221,68 @@ class PanelRunsTest {
                 .target shouldBe "http://127.0.0.1:9"
         }
 
+    /** A visitor run written for [target]: visitors that only read (a site the owner explored). */
+    private fun visitorCampaign(
+        target: String,
+        name: String = "visitors",
+    ): String =
+        """
+        campaign:
+          name: $name
+          target: $target
+          testers: 2
+          seed: 7
+          tenant: none
+          roles: {anonymous: 2}
+          registration: {guest: 2}
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        setup:
+          - id: gates
+            actor: anonymous[*]
+            run: register_and_login
+        steps:
+          - id: pages
+            actor: anonymous[*]
+            run: {function: site_health, args: {checks: mobile, share: pages}}
+        """.trimIndent() + "\n"
+
+    @Test
+    fun `a scenario runs on the site it was written for, not on the site the panel was opened for`() =
+        runBlocking<Unit> {
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    runs = FakeBrowserEngine(),
+                    scenarios = mapOf("visitors.yaml" to visitorCampaign("http://127.0.0.2:9")),
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario, testers = 5))
+            panel.ended(started.runId)
+
+            started.testers shouldBe 5
+            val run = panel.backend.runs().single()
+            run.target shouldBe "http://127.0.0.2:9"
+            run.testers shouldBe 5
+        }
+
+    @Test
+    fun `a scenario that writes is refused on another site without a target profile`() =
+        runBlocking<Unit> {
+            val runs = FakeBrowserEngine()
+            val writes = tinyCampaign().replace("campaign:\n", "campaign:\n  target: http://127.0.0.2:9\n")
+            val panel =
+                PanelHarness(dir, site = PanelWaits.site(), runs = runs, scenarios = mapOf("tiny.yaml" to writes)).also { open += it }
+            val scenario = panel.approved()
+
+            val refused = shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }
+
+            refused.problems.single().field shouldBe PanelInstructions.TARGET
+            refused.problems.single().message shouldContain "Yazan run"
+            runs.options.shouldBeEmpty()
+        }
+
     @Test
     fun `a site with a target profile may be run, with the profile's settings`() =
         runBlocking<Unit> {
@@ -455,7 +517,7 @@ class PanelRunsTest {
             refused.problems.single().message shouldContain "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır"
             refused.problems.single().message shouldContain "https://stage.example.com/.well-known/petek-verification.txt"
             refused.problems.single().message shouldContain "DNS-ə TXT qeydi əlavə edin: _petek-verification.stage.example.com"
-            refused.problems.single().message shouldContain "Bu kampaniya belə deyil: it has companies (tenant: company)"
+            refused.problems.single().message shouldContain "Bu kampaniya belə deyil: şirkətlidir (tenant: company)"
             runs.options.shouldBeEmpty()
             panel.backend.runs().shouldBeEmpty()
         }

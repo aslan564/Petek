@@ -15,6 +15,7 @@ import az.petek.agent.application.InMemorySharedRunState
 import az.petek.agent.application.runs.RunFunctionSettings
 import az.petek.agent.application.runs.RunFunctions
 import az.petek.agent.domain.ActionOutcome
+import az.petek.agent.domain.ActorShare
 import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.TargetProfile
 import az.petek.core.testing.FakeHarnessClock
@@ -69,7 +70,9 @@ class RunFunctionFixture(
         name: String,
         args: Map<String, String> = emptyMap(),
         timeout: Duration = 30.minutes,
-    ): ActionOutcome = registry[name]!!.execute(runtime, args, AgentTestData.step(scenarioStep = "setup-$name", timeout = timeout))
+        share: ActorShare = ActorShare.ALONE,
+    ): ActionOutcome =
+        registry[name]!!.execute(runtime, args, AgentTestData.step(scenarioStep = "setup-$name", timeout = timeout, share = share))
 
     /** RUN steps recorded so far, in order. */
     val steps: List<StepRecord> get() = evidence.stepList.filter { it.kind == StepKind.RUN }

@@ -101,21 +101,27 @@ internal class ScenarioComposer(
     private val composing = HashSet<String>()
     val idSources = LinkedHashMap<String, IdSource>()
 
+    /** Checks of the pages anyone may see, done in setup before anyone signs in (see [siteChecks]). */
+    private val beforeSignIn = mutableListOf<ScenarioStep>()
+
     val mainSteps: List<ScenarioStep> get() = steps.toList()
 
+    /**
+     * The main steps of [ideas]: first the steps of each action idea, in the ideas' order, then the site-wide checks of
+     * all site-wide ideas together ([siteChecks]). Call it before [setupSteps]: the checks done before signing in are
+     * setup steps.
+     */
     fun compose(ideas: List<TestIdea>): Pair<List<CoveredIdea>, List<SkippedIdea>> {
         val covered = mutableListOf<CoveredIdea>()
         val skipped = mutableListOf<SkippedIdea>()
-        ideas.forEach { idea ->
-            val action = model.action(idea.actionId)
-            val outcome =
-                if (idea.pattern.siteWide) {
-                    siteHealth(idea.pattern)
-                } else if (action == null) {
-                    Outcome.Skipped("the action is not in site model v${model.version}")
-                } else {
-                    ideaSteps(idea, action)
-                }
+        val (siteWide, actions) = ideas.partition { it.pattern.siteWide }
+        val outcomes =
+            actions.map { idea ->
+                val action = model.action(idea.actionId)
+                idea to
+                    if (action == null) Outcome.Skipped("the action is not in site model v${model.version}") else ideaSteps(idea, action)
+            } + siteChecks(siteWide)
+        outcomes.forEach { (idea, outcome) ->
             when (outcome) {
                 is Outcome.Covered -> covered += CoveredIdea(idea, outcome.stepIds)
                 is Outcome.Skipped -> skipped += SkippedIdea(idea, outcome.reason)
@@ -124,12 +130,14 @@ internal class ScenarioComposer(
         return covered to skipped
     }
 
-    fun setupSteps(): List<ScenarioStep> {
+    /** The setup: the checks done before signing in ([compose] makes them), then every tester passes its gate. */
+    fun setupSteps(): List<ScenarioStep> = beforeSignIn + gateSteps()
+
+    private fun gateSteps(): List<ScenarioStep> {
         val functions = settings.setup
         if (settings.tenant == Tenant.NONE) {
             // No company to create: every tester passes its own gate (sign-up, owner's account or visit).
-            val everybody = settings.team.roles.joinToString(" | ") { "${it.key}[*]" }
-            return listOf(step("gates", StepPhase.SETUP, everybody, StepAction.Run(functions.join)))
+            return listOf(step("gates", StepPhase.SETUP, everybody(), StepAction.Run(functions.join)))
         }
         return buildList {
             add(step("owner_signup", StepPhase.SETUP, "admin", StepAction.Run(functions.registerOwner)))
@@ -153,41 +161,106 @@ internal class ScenarioComposer(
             TestPattern.IDEMPOTENCY -> idempotency(action, page)
             TestPattern.BOUNDARY -> boundary(action)
             TestPattern.DIRECT_URL -> directUrl(action, page)
-            else -> siteHealth(idea.pattern)
+            else -> Outcome.Skipped("${idea.pattern.name.lowercase()} is a site-wide check")
         }
     }
 
     /**
-     * A site-wide blind check (Faza 13): one `site_health` step of the least privileged tester over the pages the
-     * explorer saw without an object id (at most [MAX_HEALTH_PAGES]; the home page when it saw none).
+     * The site-wide checks (Faza 13, 19) of [ideas], done by code: `site_health` for what a visitor meets while a page
+     * loads (console and failed requests, slow requests, the back button, the phone layout, an expired session, the
+     * site's own links) and `page_checks` for what is on it (in-page links, images, alt texts, titles and headings,
+     * links to other sites). Every tester of a group works at once on a job of its own (`share: work`): each page on a
+     * phone, a tablet and a desktop, dealt out among them, and dealt round again as a second look when there are more
+     * testers than jobs; the links of a page are asked about once.
+     *
+     * Where people sign in (a site with companies, or roles seen signed in), the pages a visitor may see are checked in
+     * setup, before the testers sign in, and then each role checks the pages only it saw after the scenario; the expired
+     * session is checked there. A site without sign-in has one group, checked by everyone in the main steps.
      */
-    private fun siteHealth(pattern: TestPattern): Outcome {
-        val check = HEALTH_CHECKS[pattern] ?: return Outcome.Skipped("${pattern.name.lowercase()} is not a site-wide check")
-        val role = healthRole() ?: return Outcome.Skipped("the campaign has no tester to run site-wide checks")
-        val pages =
-            model.pages
-                .map { it.urlPattern }
-                .filter { UrlPatterns.ID !in it && it.startsWith("/") && literal(it) }
-                .distinct()
-                .take(MAX_HEALTH_PAGES)
-                .ifEmpty { listOf("home") }
-        val id = Slugs.firstFree("site-$check") { it !in stepIds }
-        steps +=
-            step(
-                id = id,
-                phase = StepPhase.MAIN,
-                actor = single(role),
-                action = StepAction.Run(settings.setup.siteHealth, mapOf("checks" to check, "pages" to pages.joinToString(","))),
-            )
-        return Outcome.Covered(listOf(id))
+    private fun siteChecks(ideas: List<TestIdea>): List<Pair<TestIdea, Outcome>> {
+        if (ideas.isEmpty()) return emptyList()
+        val patterns = ideas.map { it.pattern }.toSet()
+        val health = patterns.mapNotNull { HEALTH_CHECKS[it] }.filter { it != SESSION }.sortedBy { CHECK_ORDER.indexOf(it) }
+        val content = patterns.mapNotNull { PAGE_CHECKS[it] }.sortedBy { CHECK_ORDER.indexOf(it) }
+        val signIn = settings.tenant == Tenant.COMPANY || settings.team.roles.any { it != ScenarioSettings.VISITOR }
+        val stepsOf = mutableMapOf<String, MutableList<String>>()
+
+        fun group(
+            prefix: String,
+            phase: StepPhase,
+            actor: String,
+            pages: List<String>,
+            healthChecks: List<String>,
+        ) {
+            if (healthChecks.isNotEmpty()) {
+                val id = Slugs.firstFree("$prefix-pages") { it !in stepIds }
+                val step = checkStep(id, phase, actor, settings.setup.siteHealth, healthChecks, pages)
+                if (phase == StepPhase.SETUP) beforeSignIn += step else steps += step
+                healthChecks.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
+            }
+            if (content.isNotEmpty()) {
+                val id = Slugs.firstFree("$prefix-content") { it !in stepIds }
+                val step = checkStep(id, phase, actor, settings.setup.pageChecks, content, pages)
+                if (phase == StepPhase.SETUP) beforeSignIn += step else steps += step
+                content.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
+            }
+        }
+
+        val public = pagesSeenBy { ScenarioSettings.VISITOR.key in it.reachableBy }
+        if (!signIn) {
+            group("site", StepPhase.MAIN, everybody(), public.ifEmpty { listOf("home") }, health)
+        } else {
+            group("public", StepPhase.SETUP, everybody(), public.ifEmpty { listOf("home") }, health)
+            val session = if (TestPattern.SESSION_EXPIRY in patterns) listOf(SESSION) else emptyList()
+            settings.team.roles.filter { it != ScenarioSettings.VISITOR }.forEach { role ->
+                val own = pagesSeenBy { role.key in it.reachableBy && ScenarioSettings.VISITOR.key !in it.reachableBy }
+                if (own.isEmpty() && session.isEmpty()) return@forEach
+                val checks = if (own.isEmpty()) session else health + session
+                group(role.key, StepPhase.MAIN, everyone(role), own.ifEmpty { listOf("home") }, checks)
+            }
+        }
+        return ideas.map { idea ->
+            val check = HEALTH_CHECKS[idea.pattern] ?: PAGE_CHECKS[idea.pattern]
+            val ids = check?.let { stepsOf[it] }.orEmpty()
+            idea to if (ids.isEmpty()) Outcome.Skipped("no page to check for ${idea.pattern.name.lowercase()}") else Outcome.Covered(ids)
+        }
     }
 
-    private fun healthRole(): Role? =
-        if (settings.tenant == Tenant.NONE) {
-            settings.team.roles.firstOrNull()
-        } else {
-            PREFERENCE.firstOrNull { settings.team.count(it) > 0 }
-        }
+    private fun checkStep(
+        id: String,
+        phase: StepPhase,
+        actor: String,
+        function: String,
+        checks: List<String>,
+        pages: List<String>,
+    ): ScenarioStep =
+        step(
+            id = id,
+            phase = phase,
+            actor = actor,
+            action =
+                StepAction.Run(
+                    function,
+                    mapOf(
+                        "checks" to checks.joinToString(","),
+                        "pages" to pages.joinToString(","),
+                        SHARE to SHARE_WORK,
+                        DEVICES to ALL_DEVICES,
+                    ),
+                ),
+        )
+
+    /** The site's own pages (no object id) seen by whom [seen] accepts, at most [MAX_SITE_PAGES]. */
+    private fun pagesSeenBy(seen: (PageModel) -> Boolean): List<String> =
+        model.pages
+            .filter(seen)
+            .map { it.urlPattern }
+            .filter { UrlPatterns.ID !in it && it.startsWith("/") && literal(it) }
+            .distinct()
+            .take(MAX_SITE_PAGES)
+
+    /** Every tester of the campaign. */
+    private fun everybody(): String = settings.team.roles.joinToString(" | ") { everyone(it) }
 
     /**
      * What [action] creates, opened by its address by a second tester who did not create it: the same role's second
@@ -621,7 +694,14 @@ internal class ScenarioComposer(
         val PREFERENCE = listOf(Role.EMPLOYEE, Role.MANAGER, Role.ADMIN)
         val WRITE_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
         const val ITEM_SUFFIX = "-item"
-        const val MAX_HEALTH_PAGES = 5
+
+        /** The most pages one group of site-wide checks visits. */
+        const val MAX_SITE_PAGES = 20
+        const val SESSION = "session"
+        const val SHARE = "share"
+        const val SHARE_WORK = "work"
+        const val DEVICES = "devices"
+        const val ALL_DEVICES = "phone,tablet,desktop"
 
         /** The `site_health` check of each site-wide pattern. */
         val HEALTH_CHECKS: Map<TestPattern, String> =
@@ -631,8 +711,21 @@ internal class ScenarioComposer(
                 TestPattern.SLOW_ENDPOINTS to "slow",
                 TestPattern.BACK_BUTTON to "back",
                 TestPattern.MOBILE_VIEWPORT to "mobile",
-                TestPattern.SESSION_EXPIRY to "session",
+                TestPattern.SESSION_EXPIRY to SESSION,
             )
+
+        /** The `page_checks` check of each site-wide pattern (Faza 19). */
+        val PAGE_CHECKS: Map<TestPattern, String> =
+            mapOf(
+                TestPattern.PAGE_ANCHORS to "anchors",
+                TestPattern.BROKEN_IMAGES to "images",
+                TestPattern.IMAGE_ALT to "alt",
+                TestPattern.PAGE_META to "meta",
+                TestPattern.OUTBOUND_LINKS to "outbound",
+            )
+
+        /** The order checks are written in, so a draft reads the same whatever the ideas' order. */
+        val CHECK_ORDER = listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound")
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
 

@@ -119,7 +119,27 @@ data class StepContext(
     /** Upper bound of LLM decisions for a `do` step (campaign budget). */
     val maxSteps: Int,
     val timeout: Duration,
+    /** Where this agent stands among the step's actors, for functions that share the step's work out (`share: pages`). */
+    val share: ActorShare = ActorShare.ALONE,
 )
+
+/**
+ * Actor [position] (from 0, in agent id order) of the [of] actors of a step. A run function asked to share its work
+ * takes only its own part, so N testers do N different parts at the same time instead of all doing the same.
+ */
+data class ActorShare(
+    val position: Int,
+    val of: Int,
+) {
+    init {
+        require(of >= 1) { "a step has at least one actor, was $of" }
+        require(position in 0 until of) { "position must be in 0 until $of, was $position" }
+    }
+
+    companion object {
+        val ALONE = ActorShare(0, 1)
+    }
+}
 
 enum class ActionStatus { SUCCEEDED, FAILED, BLOCKED, ERROR }
 
@@ -161,6 +181,15 @@ enum class FailureReason(
 
     /** `direct_url`: a page of someone else's object opened for a tester who must not see it. */
     ACCESS_NOT_REFUSED("access_not_refused"),
+    ;
+
+    companion object {
+        /**
+         * Keys of failures that are a defect of the site a check found, not a tester that could not go on: a setup
+         * step that fails with one of them (the pages checked before signing in) leaves its tester in the run.
+         */
+        val SITE_DEFECT_KEYS: Set<String> = setOf(UNHEALTHY_PAGE.key, ACCESS_NOT_REFUSED.key)
+    }
 }
 
 data class ActionOutcome(

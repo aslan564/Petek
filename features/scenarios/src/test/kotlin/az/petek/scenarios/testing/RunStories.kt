@@ -163,6 +163,36 @@ object RunStories {
             artifacts = emptyList(),
         )
 
+    /** a05's page check found defects of the site in `read_announce`: a broken link and a page too wide for a phone. */
+    fun siteCheckFailed(agent: String = "a05") =
+        RunEvidence(
+            steps =
+                listOf(
+                    step(
+                        "stp_${agent}_h1",
+                        agent,
+                        "read_announce",
+                        StepKind.RUN,
+                        "run site_health",
+                        StepStatus.FAILED,
+                        "unhealthy_page: 2 problem(s): / links to /gone, which answers 404; / is 12 px wider than a 375px screen",
+                    ),
+                ),
+            assertions = emptyList(),
+            findings =
+                listOf(
+                    finding(
+                        "fnd_${agent}_health",
+                        "stp_${agent}_h1",
+                        "read_announce",
+                        agent,
+                        FindingClass.SITE_CHECK,
+                        "The site failed a check that code made on what the browser saw (unhealthy_page).",
+                    ),
+                ),
+            artifacts = listOf(artifact("art_${agent}_h", "stp_${agent}_h1")),
+        )
+
     /** a04 cannot join: the e-mail code is rejected twice (`run` sub-steps, the function's and the orchestrator's conclusions). */
     fun failedJoin(agent: String = "a04") =
         RunEvidence(

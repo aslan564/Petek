@@ -87,6 +87,21 @@ class BlindCheckRunFunctionsTest {
         }
 
     @Test
+    fun `a page the site redirects to its slash address still passes the back button check`() =
+        runTest {
+            browser.pageLinks["/docs/"] = listOf("/", "/docs/")
+            browser.onAction = { action ->
+                // The site answers /docs with /docs/, the way a static host does for a folder.
+                if (action == "navigate /docs") browser.url = "/docs/"
+                if (action == "back" && browser.url == "/docs") browser.url = "/docs/"
+            }
+
+            val outcome = fixture.run("site_health", mapOf("checks" to "back", "pages" to "/docs"))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+        }
+
+    @Test
     fun `an unknown check is refused before anything is opened`() =
         runTest {
             val outcome = fixture.run("site_health", mapOf("checks" to "links,colour"))

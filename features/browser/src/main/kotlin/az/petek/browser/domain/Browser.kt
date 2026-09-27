@@ -190,6 +190,37 @@ data class PageHealth(
     }
 }
 
+/**
+ * The current page as a visitor sees it, for checks that only read (Faza 19, the showcase cards): its title, main
+ * headings, description and language, its images, its visible links with their absolute address, and the in-page
+ * anchors (`#id`) that name no element. Texts are redacted like everything else the session reads.
+ */
+data class PageFacts(
+    val title: String,
+    /** Visible `<h1>` texts. */
+    val headings: List<String>,
+    /** `<meta name="description">`; null when the page has none. */
+    val description: String?,
+    /** `<html lang>`; null when it is not set. */
+    val language: String?,
+    val images: List<ImageFact>,
+    val links: List<LinkFact>,
+    val missingAnchors: List<String>,
+)
+
+/** An image of the page: [alt] null when the attribute is missing; [loaded] false only for one that finished and failed. */
+data class ImageFact(
+    val src: String,
+    val alt: String?,
+    val loaded: Boolean,
+)
+
+/** A visible link: its text (or accessible name) and its absolute address. */
+data class LinkFact(
+    val text: String,
+    val url: String,
+)
+
 /** One slow request to the target: `GET /api/reports` answered in [millis] ms (browser-measured, request to end). */
 data class SlowResponse(
     val method: String,
@@ -338,6 +369,18 @@ interface BrowserSession {
         width: Int,
         height: Int,
     ): Int? = null
+
+    /**
+     * Shows the pages at [width] × [height] from now on (a phone, a tablet, a desktop) and returns the viewport it had
+     * before, so the caller can put it back; null when the session cannot change it.
+     */
+    suspend fun resizeViewport(
+        width: Int,
+        height: Int,
+    ): Viewport? = null
+
+    /** What a visitor can check on the current page without acting on it ([PageFacts]); null when the session cannot read it. */
+    suspend fun pageFacts(): PageFacts? = null
 
     suspend fun close()
 }

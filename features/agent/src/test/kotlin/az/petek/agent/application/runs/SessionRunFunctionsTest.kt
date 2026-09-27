@@ -56,6 +56,7 @@ class SessionRunFunctionsTest {
                 "logout",
                 "site_health",
                 "direct_url",
+                "page_checks",
             )
     }
 

@@ -15,6 +15,7 @@ import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.domain.ScenarioStep
+import az.petek.campaign.domain.Tenant
 import az.petek.core.error.PetekException
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.ActorResolver
@@ -27,6 +28,8 @@ import az.petek.orchestration.domain.ActorResolver
  * uses keeps at least one seat whenever there are enough seats, so steps written for it still have someone to run them,
  * and managers are always invited (the company-code form has no role field). Given names beyond N are dropped; testers
  * beyond the given names get catalog names from the identity generator.
+ *
+ * A campaign without companies (`tenant: none`) shares its own roles and gates out the same way instead.
  *
  * Steps whose actors can no longer match anyone would be skipped silently by the runner; [uncoveredSteps] finds them
  * so the command can warn before the run starts.
@@ -61,6 +64,7 @@ object CampaignScaler {
         val settings = campaign.settings
         if (testers < 1) throw ScalingException("the tester count must be at least 1, was $testers")
         if (testers == settings.testers) return campaign
+        if (settings.tenant == Tenant.NONE) return resizeWithoutCompanies(campaign, testers)
         val roles = settings.roles
         val admins = minOf(roles.admin, 1)
         val others = testers - admins
@@ -90,6 +94,41 @@ object CampaignScaler {
                     testers = testers,
                     roles = RoleQuota(admin = admins, manager = managers, employee = employees),
                     registration = RegistrationQuota(invite = invite, companyCode = others - invite),
+                    names = settings.names.take(testers),
+                ),
+        )
+    }
+
+    /**
+     * A site without companies: the campaign's own roles and its gates are shared out in their ratios, each keeping a
+     * seat while seats allow, so `2 visitors -> 30` makes 30 visitors. Testers who sign in with the owner's accounts
+     * (`login`) never become more than the campaign had, since each needs an account of its own; the other seats go to
+     * those who sign up (`self`) or visit (`guest`).
+     */
+    private fun resizeWithoutCompanies(
+        campaign: Campaign,
+        testers: Int,
+    ): Campaign {
+        val settings = campaign.settings
+        val used = settings.roles.counts.filterValues { it > 0 }
+        if (used.isEmpty()) throw ScalingException("the campaign names no role to give $testers testers")
+        val roles = RoleQuota.of(used.keys.zip(apportion(testers, used.values.toList())).toMap())
+        val gates = settings.registration
+        val login = minOf(apportion(testers, listOf(gates.login, gates.self, gates.guest))[0], gates.login)
+        val others = testers - login
+        if (others > 0 && gates.self + gates.guest == 0) {
+            throw ScalingException(
+                "every tester of the campaign signs in with one of the owner's ${gates.login} account(s), so $testers testers " +
+                    "need more accounts; or let testers sign up (registration: self) or visit (guest)",
+            )
+        }
+        val (self, guest) = apportion(others, listOf(gates.self, gates.guest))
+        return campaign.copy(
+            settings =
+                settings.copy(
+                    testers = testers,
+                    roles = roles,
+                    registration = RegistrationQuota(invite = 0, companyCode = 0, self = self, login = login, guest = guest),
                     names = settings.names.take(testers),
                 ),
         )

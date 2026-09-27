@@ -254,6 +254,7 @@ internal object PanelJson {
             buildJsonObject {
                 put("runId", it.runId.value)
                 put("scenarioId", it.scenarioId)
+                put("note", it.note)
                 putJsonArray("verdicts") {
                     it.verdicts.forEach { verdict ->
                         addJsonObject {
