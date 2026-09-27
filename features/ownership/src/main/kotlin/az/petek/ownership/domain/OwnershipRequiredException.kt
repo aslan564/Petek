@@ -19,7 +19,9 @@ import az.petek.core.error.PetekException
  */
 class OwnershipRequiredException(
     val status: OwnershipStatus.Unverified,
-) : PetekException(describe(status)) {
+    /** What else could have started without the proof, and why this did not qualify; added to the message. */
+    note: String? = null,
+) : PetekException(describe(status) + note?.let { "\n$it" }.orEmpty()) {
     private companion object {
         fun describe(status: OwnershipStatus.Unverified): String {
             val challenge = status.challenge

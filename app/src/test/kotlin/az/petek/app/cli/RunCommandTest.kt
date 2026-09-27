@@ -104,8 +104,28 @@ class RunCommandTest {
                 "Pətək writes to a site only after its owner proves ownership, so nothing was tested on stage.example.com"
             result.stderr shouldContain "https://stage.example.com/.well-known/petek-verification.txt"
             result.stderr shouldContain "_petek-verification.stage.example.com"
+            result.stderr shouldContain "This campaign is not one: it has companies (tenant: company)"
+            result.stderr shouldContain "step 'signup' is a `do` step"
             cli.browser.options.shouldBeEmpty()
             cli.evidence { it.evidence.latest() } shouldBe null
+        }
+
+    @Test
+    fun `a visitor run starts on a stage whose owner has not proved it, and says so`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com"),
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                )
+            cli.write("visit.yaml", VISITOR_CAMPAIGN)
+
+            val result = cli.run("run", "visit.yaml")
+
+            result.statusCode shouldBe 0
+            result.stdout shouldContain "stage.example.com has not proved its ownership, so 'visit' runs as a visitor run"
+            cli.evidence { it.evidence.latest() }.shouldNotBeNull().result shouldBe RunResult.PASSED
         }
 
     @Test
@@ -375,4 +395,27 @@ class RunCommandTest {
             result.statusCode shouldBe 1
             result.stdout shouldContain "assertions failed 1"
         }
+
+    private companion object {
+        /** Two visitors that only read: the gate `guest` and the read-only `site_health`. */
+        val VISITOR_CAMPAIGN =
+            """
+            campaign:
+              name: visit
+              testers: 2
+              seed: 7
+              tenant: none
+              roles: {visitor: 2}
+              registration: {guest: 2}
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            setup:
+              - id: gates
+                actor: visitor[*]
+                run: register_and_login
+            steps:
+              - id: health
+                actor: visitor[n=1]
+                run: {function: site_health, args: {checks: "console,mobile", pages: "/"}}
+            """.trimIndent()
+    }
 }

@@ -18,11 +18,14 @@ import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.ValidationIssue
+import az.petek.campaign.domain.VisitorRun
 import az.petek.core.ids.RunTags
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import az.petek.ownership.domain.OwnershipRequiredException
+import az.petek.ownership.domain.OwnershipStatus
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.default
@@ -84,8 +87,19 @@ class RunCommand : PetekSubcommand("run") {
             // The site that was given must answer before a single tester starts (rule 12): a site that is down or
             // blocked is reported as such, never tested against something else.
             container.reachability.require(campaign.settings.target)
-            // A run signs up and writes: only on a site whose owner proved it is theirs (ADR-0012), or a local one.
-            container.ownership.requireFullTest(campaign.settings.target)
+            // A run signs up and writes: only on a site whose owner proved it is theirs (ADR-0012), or a local one. A
+            // visitor run only looks, a few visitors at a time, and needs no proof.
+            val ownership = container.ownership.check(campaign.settings.target)
+            if (ownership is OwnershipStatus.Unverified) {
+                val problems = VisitorRun.problems(campaign)
+                if (problems.isNotEmpty()) throw OwnershipRequiredException(ownership, notAVisitorRun(problems))
+                if (!json) {
+                    echo(
+                        "${ownership.host} has not proved its ownership, so '${campaign.settings.name}' runs as a visitor run: " +
+                            "${campaign.settings.testers} visitor(s) that only read, nothing is sent to the site.",
+                    )
+                }
+            }
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(
@@ -107,6 +121,12 @@ class RunCommand : PetekSubcommand("run") {
             if (ci) ciOutputs(summaries)
             exitCodeOf(summaries)
         }
+
+    /** What could have started without the proof, and why this campaign did not qualify. */
+    private fun notAVisitorRun(problems: List<String>): String =
+        "Without the proof only a visitor run may start: at most ${VisitorRun.MAX_TESTERS} testers, all of them visitors " +
+            "(tenant: none, registration guest), `run` steps that only read (${VisitorRun.READ_ONLY_FUNCTIONS.sorted().joinToString()}) " +
+            "and no `do` step. This campaign is not one: ${problems.joinToString("; ")}."
 
     private fun scaled(
         container: AppContainer,

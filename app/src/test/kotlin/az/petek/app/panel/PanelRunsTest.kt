@@ -455,7 +455,50 @@ class PanelRunsTest {
             refused.problems.single().message shouldContain "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır"
             refused.problems.single().message shouldContain "https://stage.example.com/.well-known/petek-verification.txt"
             refused.problems.single().message shouldContain "DNS-ə TXT qeydi əlavə edin: _petek-verification.stage.example.com"
+            refused.problems.single().message shouldContain "Bu kampaniya belə deyil: it has companies (tenant: company)"
             runs.options.shouldBeEmpty()
             panel.backend.runs().shouldBeEmpty()
+        }
+
+    @Test
+    fun `a visitor run starts on a site whose ownership is not proved`() =
+        runBlocking<Unit> {
+            val runs = FakeBrowserEngine()
+            val visitors =
+                """
+                campaign:
+                  name: visit
+                  testers: 2
+                  seed: 7
+                  tenant: none
+                  roles: {visitor: 2}
+                  registration: {guest: 2}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                setup:
+                  - id: gates
+                    actor: visitor[*]
+                    run: register_and_login
+                steps:
+                  - id: health
+                    actor: visitor[n=1]
+                    run: {function: site_health, args: {checks: "console,mobile", pages: "/"}}
+                """.trimIndent() + "\n"
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(URI("https://stage.example.com")),
+                    runs = runs,
+                    scenarios = mapOf("visit.yaml" to visitors),
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                ).also { open += it }
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = panel.approved()))
+            panel.ended(started.runId)
+
+            started.testers shouldBe 2
+            panel.backend
+                .runs()
+                .single()
+                .target shouldBe "https://stage.example.com"
         }
 }

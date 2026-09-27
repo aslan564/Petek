@@ -944,6 +944,10 @@ o yalnız run-ın öz test datasını tokenlə qorunan test API-dən silir, onu 
   link-local ünvanlar; host-un bütün ünvanları belədirsə.
 - [x] Qapı: `petek run`, panel run-ı və MCP (exit 2 / hədəf sahəsi altında göstəriş); kəşfiyyat təsdiqsiz saytda yalnız
   anonim fazada işləyir və səbəbini deyir.
+- [x] Ziyarətçi run (sahibin qərarı, 2026-09-27): təsdiqsiz saytda yalnız oxuyan kampaniya da başlaya bilər — ən çox 3
+  tester, hamısı qonaq (`tenant: none`, `guest`), `do` addımı yox, yalnız `register_and_login` və `site_health`, test
+  API-yə və ya yazmağa ehtiyac duyan yoxlama yox (`VisitorRun`, campaign domain). CLI, panel və MCP bunu tətbiq edir,
+  başqa kampaniyanı rədd edəndə nəyin mane olduğunu deyir; kəşfiyyatçının girişsiz sayt üçün qaralaması elə belədir.
 - [x] `petek verify` (kod, iki yol, yoxlama; `--json`), `doctor`-da sahiblik sətri.
 - [x] Bundle runtime-a `jdk.naming.dns` (JNDI DNS provayderi jdeps-ə görünmür).
 - [x] İstifadə qaydası: README (EN/AZ), `SECURITY.md`, skill paketi — yalnız sahibi olduğunuz pre/stage sayt, yalnız test

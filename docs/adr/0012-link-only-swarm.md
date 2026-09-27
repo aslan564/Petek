@@ -1,6 +1,6 @@
 # ADR-0012: Link-only swarm — verified ownership, a gate learnt once, isolated cards
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-27: visitor runs on unproved sites)
 **Date:** 2026-09-26
 **Deciders:** Aslan (owner)
 
@@ -22,6 +22,13 @@ like independent users; thirty testers asking the AI how to sign up cost thirty 
   `petek-verification=<token>`, the token being an HMAC of the host under the identity secret. Loopback, `localhost`,
   private-network and link-local addresses are exempt. A verification is remembered and re-checked after 30 days.
   Without it Pətək only reads.
+- **Visitor runs** (the owner's decision of 2026-09-27). Reading is allowed without the proof, so a run that only
+  reads may start on an unproved site too: at most 3 testers, all visitors (`tenant: none`, gate `guest`), no `do` step
+  (an AI agent may click and type), `run` steps only of the read-only functions (`register_and_login`, which opens the
+  home page for a visitor, and `site_health`), and no check that writes or needs the test API (`oracle`,
+  `only_one_succeeds`, `http_status` other than GET). `VisitorRun` (campaign domain) decides; `petek run`, the panel and
+  MCP apply it and name what keeps any other campaign from being one. The explorer's draft for a site without sign-in
+  is such a campaign.
 - **The explorer** classifies the site (shop, news, showcase, sign-in system, other), maps the gate from outside
   (pass 0), then goes inside with an account of its own (pass 1): the instruction document's explorer account, else one
   it registers. It never shares that account with a tester and keeps exploring until the run ends; what it finds

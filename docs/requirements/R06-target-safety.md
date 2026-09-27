@@ -59,7 +59,8 @@ destroying a customer's data.
 - `oracle`: `HttpTargetOracleTest` (token handling, `is_test` refusal, no redirects).
 - `explorer`: trial touch refused without a confirmed test target.
 - ownership (ADR-0012): `features/ownership` domain tests (proof line, exemptions, ledger); `RunCommandTest` (public
-  stage unproved → exit 2 with the proof to publish, proved → runs, local → exempt); `PanelRunsTest` and
+  stage unproved → exit 2 with the proof to publish and why the campaign is not a visitor run, a visitor run → runs,
+  proved → runs, local → exempt); `VisitorRunTest`; `PanelRunsTest` (a visitor run starts on an unproved site); `PanelRunsTest` and
   `PanelExplorerTest` on a public stage host (run refused with file and DNS instructions; explorer reads anonymously,
   role and trial phases skipped); `PanelTargetsTest` (`owned`, `proofHowTo` for a host and an IP); `VerifyCommandTest`.
 

@@ -15,6 +15,8 @@ import az.petek.app.config.PetekConfig
 import az.petek.app.config.WebUrls
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.diagnostics.TargetReachability
+import az.petek.campaign.domain.Campaign
+import az.petek.campaign.domain.VisitorRun
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.dashboard.domain.FieldProblem
@@ -86,6 +88,33 @@ internal object PanelTargets {
                 ),
             )
         }
+    }
+
+    /**
+     * Refuses a run of [campaign] unless its site's owner proved it is theirs (ADR-0012) or the campaign is a visitor
+     * run ([VisitorRun]: a few visitors that only read): a [PanelRequestException] for [field], in Azerbaijani, with the
+     * proof to publish and why the campaign is not a visitor run. Nothing is written before.
+     */
+    suspend fun runAllowed(
+        campaign: Campaign,
+        ownership: SiteOwnership,
+        field: String,
+    ) {
+        val status = ownership.check(campaign.settings.target)
+        if (status !is OwnershipStatus.Unverified) return
+        val problems = VisitorRun.problems(campaign)
+        if (problems.isEmpty()) return
+        throw PanelRequestException(
+            listOf(
+                FieldProblem(
+                    field,
+                    "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır, ona görə ${status.host} üzərində heç nə test " +
+                        "edilmədi. Təsdiqsiz saytda yalnız ziyarətçi run başlaya bilər: ən çox ${VisitorRun.MAX_TESTERS} tester, " +
+                        "hamısı qonaq, yalnız oxuyan `run` addımları, `do` addımı yox. Bu kampaniya belə deyil: " +
+                        "${problems.joinToString("; ")}. ${proofHowTo(status)} Sonra yenidən başladın.",
+                ),
+            ),
+        )
     }
 
     /** Why an exploration of an unproved site only reads, and how to change that; shown under "Sessiyalar". */

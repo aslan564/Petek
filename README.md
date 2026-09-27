@@ -210,8 +210,9 @@ What your site needs, by depth of testing:
 only on a site whose ownership is proved: `petek verify` prints a code to publish either as the file
 `/.well-known/petek-verification.txt` or as the DNS TXT record `_petek-verification.<host>` (both containing
 `petek-verification=<code>`), then checks it. `localhost`, loopback and private-network addresses need no proof. An
-unproved site is only read, as an anonymous visitor would read it; `petek run` refuses it with exit code 2 and the
-instructions. Point Pətək at a pre-production or staging copy you own, use test accounts only, and never hand it a real
+unproved site is only read, as an anonymous visitor would read it: the explorer, and a **visitor run** of at most 3
+visiting testers whose steps only read (the explorer drafts one for a site without sign-in); `petek run` refuses any
+other campaign there with exit code 2, the instructions and what keeps it from being a visitor run. Point Pətək at a pre-production or staging copy you own, use test accounts only, and never hand it a real
 user's account (ADR-0012). The code is made for the host exactly (lower case): `www.example.com` and `example.com`
 are two hosts, each with its own proof; the file must be served from that origin without a redirect to another host.
 A proof is remembered for 30 days; `petek verify` checks it again. `petek verify` exits with 1 while the proof is
