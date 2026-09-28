@@ -1072,7 +1072,7 @@ dərəcədə aiddir (Faza 25).
 
 #### Mərhələ A — yalançı PASSED və təhlükəsizlik (lokal, təsdiq lazım deyil)
 
-- [ ] **24.1 Tək aktorlu yarış PASSED olmur.**
+- [x] **24.1 Tək aktorlu yarış PASSED olmur.**
   - *Problem:* `RaceVerdict.judge` "tam bir qalib" və "hər request oxunub" şərtlərinə baxır, neçə aktorun yarışdığına
     yox; validatorun "ən azı 2 tester" yoxlaması kvotaya görədir, runtime-a yox. `wave_size` yarışanları ayrı
     dalğalara böləndə (hər dalğada bir manager) və ya setup-da biri düşəndə yarış bir nəfərlə keçir və PASSED olur;
@@ -1084,6 +1084,10 @@ dərəcədə aiddir (Faza 25).
   - *Test:* `wave_size: 2`, 2 manager, 2 şöbə; setup-da düşən manager; start xəttindən əvvəl düşən aktor;
     `RaceVerdict` vahid testləri; ön baxış xəbərdarlığı.
   - *Sənəd:* ARCHITECTURE «Races», R03.
+  - *Vəziyyət:* `RaceVerdict` yarışanları (request sübutu olanları) sayır, 2-dən azdırsa FAILED: "a race needs at least 2
+    racing actors; only a02 raced"; heç hərəkət etməyən aktor `did not race` görünür. `Waves.of` runner-in və ön baxışın
+    ortaq dalğa qaydasıdır; `petek run` və panel (MCP də) dalğalara bölünən yarışı run-dan əvvəl deyir. Orkestrasiya
+    testləri yarışı real hökmlə yoxlayır.
 
 - [ ] **24.2 Qadağan addımda qəbul olunan yazı sorğusu xətadır.**
   - *Problem:* `expectsRefusal` addımında qərarı yalnız refusal assert-ləri verir. Agent qadağan əməliyyatı UI-dan və
@@ -1230,15 +1234,17 @@ dərəcədə aiddir (Faza 25).
 
 #### Qərar gözləyən suallar (Faza 24)
 
-- [ ] **24.9:** hədəf profilinə `allowed_hosts` və brauzer səviyyəsində production bloku (profil sxemi dəyişir).
+**Qərar (sahib, 2026-09-28):** "hamısını düzəlt" — aşağıdakı beş sualın hamısında tövsiyə qəbul edildi.
+
+- [x] **24.9:** hədəf profilinə `allowed_hosts` və brauzer səviyyəsində production bloku (profil sxemi dəyişir).
   Tövsiyə: bəli.
-- [ ] **24.10:** icra modeli dəyişir: receiver-lər emitter addımı zamanı öz sessiyalarında gözləyir; ADR-0006
+- [x] **24.10:** icra modeli dəyişir: receiver-lər emitter addımı zamanı öz sessiyalarında gözləyir; ADR-0006
   yenilənir. Tövsiyə: bəli.
-- [ ] **24.11:** tək nəfərlik rol bütün dalğalarda canlı qalsın (canlı brauzer sayı `wave_size + 1`, proxy hesabında
+- [x] **24.11:** tək nəfərlik rol bütün dalğalarda canlı qalsın (canlı brauzer sayı `wave_size + 1`, proxy hesabında
   ayrıca)? Tövsiyə: bəli.
-- [ ] **24.12:** yeni verdikt sübut bazasının sxemini, hesabatları, JUnit XML və SARIF çıxışını dəyişir. Tövsiyə:
+- [x] **24.12:** yeni verdikt sübut bazasının sxemini, hesabatları, JUnit XML və SARIF çıxışını dəyişir. Tövsiyə:
   bəli, 24.10-dan sonra.
-- [ ] **24.5 və 24.6 DSL-i pozur:** dərhal xəta, yoxsa bir buraxılış xəbərdarlıq, sonra xəta? Tövsiyə: dərhal xəta,
+- [x] **24.5 və 24.6 DSL-i pozur:** dərhal xəta, yoxsa bir buraxılış xəbərdarlıq, sonra xəta? Tövsiyə: dərhal xəta,
   çünki köhnə forma yalançı nəticə verir; validator mesajı düzgün formanı göstərir.
 
 Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; `wave_size: 2` ilə iki managerli yarış PASSED ola bilmir;

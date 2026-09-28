@@ -317,6 +317,43 @@ class RunCommandTest {
         }
 
     @Test
+    fun `a race that the waves leave with one racer is announced before the run`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write(
+                "waves.yaml",
+                """
+                campaign:
+                  name: waves
+                  testers: 5
+                  seed: 3
+                  wave_size: 2
+                  roles: {admin: 1, manager: 2, employee: 2}
+                  departments: [IT, HR]
+                  registration: {invite: 2, company_code: 2}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                setup:
+                  - id: signup
+                    actor: admin
+                    do: "Sign up"
+                steps:
+                  - id: race
+                    actor: manager[*]
+                    parallel: true
+                    do: "Approve the same ticket"
+                    assert:
+                      - only_one_succeeds: {request: "POST .*/approve"}
+                """,
+            )
+
+            val result = cli.run("run", "waves.yaml")
+
+            // a02 (manager IT) is in wave 1 with the admin, a03 (manager HR) in wave 2.
+            result.stderr shouldContain "Warning: with campaign.wave_size 2, race step 'race'"
+            result.stderr shouldContain "has a single racer in wave 1, 2, where it fails"
+        }
+
+    @Test
     fun `--testers above the campaign's testers runs a bigger version of it`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)

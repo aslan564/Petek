@@ -168,7 +168,7 @@ internal class PanelRunsAdapter(
         val (started, job) = begin(campaign, lease, RunOptions(), request.headful)
         // A closed browser tab cancels this request, never the run: it goes on and the board shows it.
         val runId = awaitStart(started, job)
-        warnAboutUncoveredSteps(campaign, lease.container)
+        warnAboutStepsThatCannotRun(campaign, lease.container)
         return RunStartView(runId, version.id.value, campaign.settings.testers)
     }
 
@@ -499,8 +499,11 @@ internal class PanelRunsAdapter(
         return resized
     }
 
-    /** Tells the board which steps nobody can run with this tester count (they will be skipped); never blocks. */
-    private fun warnAboutUncoveredSteps(
+    /**
+     * Tells the board which steps nobody can run with this tester count (they will be skipped) and which races the waves
+     * leave with a single racer (they fail there); never blocks.
+     */
+    private fun warnAboutStepsThatCannotRun(
         campaign: Campaign,
         container: AppContainer,
     ) {
@@ -518,8 +521,22 @@ internal class PanelRunsAdapter(
                         uncovered.joinToString { it.id },
                 )
             }
+            CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
+                val where =
+                    if (split.waves.size ==
+                        1
+                    ) {
+                        "${split.waves.single()} nömrəli dalğada"
+                    } else {
+                        "${split.waves.joinToString()} nömrəli dalğalarda"
+                    }
+                board.message(
+                    "Diqqət: dalğa ölçüsü ${campaign.settings.waveSize} olduğu üçün '${split.step.id}' yarışının $where yalnız bir " +
+                        "iştirakçı qalır və yarış orada keçmir; yarış üçün eyni dalğada ən azı 2 iştirakçı lazımdır.",
+                )
+            }
         } catch (e: Exception) {
-            logger.debug(e) { "uncovered steps could not be checked" }
+            logger.debug(e) { "steps that cannot run could not be checked" }
         }
     }
 

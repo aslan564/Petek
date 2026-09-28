@@ -11,6 +11,7 @@
 
 package az.petek.app.campaign
 
+import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.RoleQuota
@@ -19,6 +20,7 @@ import az.petek.campaign.domain.Tenant
 import az.petek.core.error.PetekException
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.ActorResolver
+import az.petek.orchestration.domain.Waves
 
 /**
  * `petek run --testers N` and the panel's tester count: resizes a campaign to N testers while keeping its shape, fewer
@@ -32,9 +34,16 @@ import az.petek.orchestration.domain.ActorResolver
  * A campaign without companies (`tenant: none`) shares its own roles and gates out the same way instead.
  *
  * Steps whose actors can no longer match anyone would be skipped silently by the runner; [uncoveredSteps] finds them
- * so the command can warn before the run starts.
+ * so the command can warn before the run starts, and [racesSplitByWaves] finds the races `wave_size` leaves with a
+ * single racer in a wave, where they fail.
  */
 object CampaignScaler {
+    /** A race step and the waves (numbered from 1) that hold only one of its racers. */
+    data class SplitRace(
+        val step: ScenarioStep,
+        val waves: List<Int>,
+    )
+
     /** `petek run --testers N`: [resize], with the new size in the campaign's name so reports tell the runs apart. */
     fun scale(
         campaign: Campaign,
@@ -140,6 +149,25 @@ object CampaignScaler {
         identities: List<Identity>,
         resolver: ActorResolver,
     ): List<ScenarioStep> = campaign.allSteps.filter { resolver.resolve(it.actors, identities).isEmpty() }
+
+    /**
+     * Race steps (`only_one_succeeds`) of [campaign] that its `wave_size` leaves with a single racer in some wave. The
+     * runner cuts the testers into waves in agent order ([Waves]), so the racers of one step can land in different
+     * waves, and a race with one racer never passes. Empty without waves; a wave the step has no racer in skips it.
+     */
+    fun racesSplitByWaves(
+        campaign: Campaign,
+        identities: List<Identity>,
+        resolver: ActorResolver,
+    ): List<SplitRace> {
+        val waves = Waves.of(identities, campaign.settings.waveSize)
+        return campaign.allSteps
+            .filter { step -> step.assertions.any { it is AssertionSpec.OnlyOneSucceeds } }
+            .map { step ->
+                val alone = waves.withIndex().filter { (_, wave) -> resolver.resolve(step.actors, wave).size == 1 }
+                SplitRace(step, alone.map { it.index + 1 })
+            }.filter { it.waves.isNotEmpty() }
+    }
 
     /**
      * Splits [total] seats in proportion to [weights] (largest remainder; ties go to the earlier category), then gives

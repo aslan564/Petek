@@ -242,6 +242,32 @@ class CampaignScalerTest {
     }
 
     @Test
+    fun `races that the waves leave with one racer are found with those waves`() {
+        val race =
+            "\n  - id: race\n    actor: [\"manager[IT]\", \"manager[HR]\"]\n    parallel: true\n    do: \"Approve the same ticket\"" +
+                "\n    assert:\n      - only_one_succeeds: {request: \"POST .*/approve\"}"
+        val campaign = portalLike(race)
+        val generator = DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
+        val identities =
+            generator
+                .generate(IdentitySpecs.of(campaign.settings, "test.portal.example"), RunTags.forPlan(campaign.sourceHash, 42))
+                .identities
+
+        fun split(waveSize: Int?) =
+            CampaignScaler
+                .racesSplitByWaves(
+                    campaign.copy(settings = campaign.settings.copy(waveSize = waveSize)),
+                    identities,
+                    DefaultActorResolver(),
+                ).map { it.step.id to it.waves }
+
+        // a01 is the admin, a02 the IT manager and a03 the HR manager: waves of two part them, waves of three do not.
+        split(2) shouldContainExactly listOf("race" to listOf(1, 2))
+        split(3).shouldBeEmpty()
+        split(null).shouldBeEmpty()
+    }
+
+    @Test
     fun `resizing up shares the new seats in the campaign's ratios and keeps a manager per department`() {
         val campaign = portalLike()
 

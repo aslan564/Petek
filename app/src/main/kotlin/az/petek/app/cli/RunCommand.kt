@@ -20,6 +20,7 @@ import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.domain.VisitorRun
 import az.petek.core.ids.RunTags
+import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
@@ -100,6 +101,7 @@ class RunCommand : PetekSubcommand("run") {
                     )
                 }
             }
+            warnAboutSplitRaces(container, campaign)
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(
@@ -138,9 +140,7 @@ class RunCommand : PetekSubcommand("run") {
         if (issues.isNotEmpty()) {
             throw CampaignValidationException(issues + ValidationIssue(null, "--testers $agents does not fit this campaign"))
         }
-        val spec = IdentitySpecs.of(scaled.settings, container.config.mailDomain, container.config.mailInbox)
-        val preview = container.identityGenerator.generate(spec, RunTags.forPlan(scaled.sourceHash, scaled.settings.seed))
-        CampaignScaler.uncoveredSteps(scaled, preview.identities, DefaultActorResolver()).forEach { step ->
+        CampaignScaler.uncoveredSteps(scaled, previewIdentities(container, scaled), DefaultActorResolver()).forEach { step ->
             echo(
                 "Warning: with --testers $agents no tester matches '${step.actors.raw}', so step '${step.id}' (line ${step.line}) " +
                     "will be skipped.",
@@ -148,6 +148,32 @@ class RunCommand : PetekSubcommand("run") {
             )
         }
         return scaled
+    }
+
+    /** The identities a run of [campaign] will plan, generated ahead for the warnings (nothing is stored). */
+    private fun previewIdentities(
+        container: AppContainer,
+        campaign: Campaign,
+    ): List<Identity> =
+        container.identityGenerator
+            .generate(
+                IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
+                RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
+            ).identities
+
+    /** A race step that `campaign.wave_size` leaves with one racer in a wave fails there: say so before the run starts. */
+    private fun warnAboutSplitRaces(
+        container: AppContainer,
+        campaign: Campaign,
+    ) {
+        val size = campaign.settings.waveSize ?: return
+        CampaignScaler.racesSplitByWaves(campaign, previewIdentities(container, campaign), DefaultActorResolver()).forEach { split ->
+            echo(
+                "Warning: with campaign.wave_size $size, race step '${split.step.id}' (line ${split.step.line}) has a single " +
+                    "racer in wave ${split.waves.joinToString()}, where it fails: a race needs at least 2 racers in the same wave.",
+                err = true,
+            )
+        }
     }
 
     private fun printSummary(

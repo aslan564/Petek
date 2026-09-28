@@ -55,6 +55,7 @@ import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import az.petek.orchestration.domain.Waves
 import az.petek.verification.application.VerifyStepUseCase
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -184,10 +185,7 @@ class DefaultCampaignRunner(
         val completed =
             withTimeoutOrNull(run.budget) {
                 planIdentities(run)
-                val waves =
-                    run.campaign.settings.waveSize
-                        ?.let { run.identities.chunked(it) }
-                        .orEmpty()
+                val waves = Waves.of(run.identities, run.campaign.settings.waveSize)
                 val live = waves.maxOfOrNull { it.size } ?: run.identities.size
                 if (settings.proxies.isNotEmpty() && settings.proxies.size < live) {
                     run.abort(
@@ -196,7 +194,7 @@ class DefaultCampaignRunner(
                     )
                     return@withTimeoutOrNull true
                 }
-                if (waves.size <= 1) {
+                if (waves.isEmpty()) {
                     startAgents(run, board, run.identities)
                     runSteps(run, board, tasks)
                     if (run.options.swapAccounts) swapAccounts(run, board, tasks)
