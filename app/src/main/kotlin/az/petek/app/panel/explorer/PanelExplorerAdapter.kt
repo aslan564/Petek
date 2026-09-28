@@ -38,6 +38,8 @@ import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.ExplorationRecord
 import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
+import az.petek.explorer.domain.GateMaps
+import az.petek.explorer.domain.SiteModel
 import az.petek.ownership.domain.OwnershipStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -235,14 +237,21 @@ internal class PanelExplorerAdapter(
     fun testApi(target: URI): Boolean = container.oracle.isAvailable && PanelTargets.sameSite(target, container.config.target)
 
     /**
-     * Whether drafts for [target] are for a site with companies: its profile's `tenant`, else companies when the test
-     * API can seed one (the contract's shape), else none (Faza 13).
+     * Whether drafts for [target] are for a site with companies (Faza 25.1): its profile's `tenant`, else companies only
+     * when the explorer saw the site's own way into one in [model] and the test API can seed it ([GateMaps.tenantFor]).
      */
-    fun tenant(target: URI): Tenant =
-        container.config
-            .profileFor(target)
-            ?.spec
-            ?.tenant ?: if (testApi(target)) Tenant.COMPANY else Tenant.NONE
+    fun tenant(
+        target: URI,
+        model: SiteModel,
+    ): Tenant =
+        GateMaps.tenantFor(
+            model,
+            container.config
+                .profileFor(target)
+                ?.spec
+                ?.tenant,
+            testApi(target),
+        )
 
     // --- the exploration ------------------------------------------------------------------------------------------
 
@@ -365,7 +374,7 @@ internal class PanelExplorerAdapter(
                                 id,
                                 grounding.ifBlank { null },
                                 testApi = testApi(run.target),
-                                tenant = tenant(run.target),
+                                tenant = tenant(run.target, it),
                                 testers = run.instructions?.testers?.takeIf { count -> count in 1..ScenarioRequest.MAX_TESTERS },
                             ),
                         ).yaml

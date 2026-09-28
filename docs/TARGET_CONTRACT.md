@@ -5,6 +5,12 @@ What a target site offers so Pətək can test it deterministically. The fake tar
 (`scenarios/contract-demo.yaml`). Every path and selector can be overridden per campaign under `target_profile:`
 (`paths`, `selectors`); the defaults below come from `TargetProfile.DEFAULT_PATHS` / `DEFAULT_SELECTORS`.
 
+The company model below (an owner who creates a company, managers and employees who join by invitation or company
+code, departments) is this contract's own model, not what Pətək assumes of a site (Faza 25.1): a campaign or draft uses
+it only when the target profile says `tenant: company`, or when the explorer saw the site's own way into a company, a
+form to join with an invitation or code and a signed-in role that hands them out, and the test API can seed the test
+company. A test API alone means oracle checks and teardown, nothing about the site's gate.
+
 The contract is the default, not a requirement: a site whose flows differ describes them under
 `target_profile.flows` (sign-up, join by invitation or company code, login, identity check; docs/ARCHITECTURE.md
 "Target flows"), with `local_storage`, `dismiss` for overlays and `api_prefix` for its regular API. The flows of §2

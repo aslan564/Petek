@@ -11,11 +11,15 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.ResolvedTarget
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelHarness.Companion.tinyCampaign
 import az.petek.app.testing.PanelWaits
 import az.petek.app.testing.PanelWaits.exploration
 import az.petek.app.testing.PanelWaits.explored
+import az.petek.campaign.domain.TargetSpec
+import az.petek.campaign.domain.Tenant
+import az.petek.core.security.Secret
 import az.petek.dashboard.domain.DiffLineKind
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelNotFoundException
@@ -33,6 +37,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -46,8 +51,20 @@ class PanelScenariosTest {
     @AfterEach
     fun close() = open.forEach { it.close() }
 
-    private fun harness(scenarios: Map<String, String> = emptyMap()): PanelHarness =
-        PanelHarness(dir, site = PanelWaits.site(), scenarios = scenarios).also { open += it }
+    private fun harness(
+        scenarios: Map<String, String> = emptyMap(),
+        targets: List<ResolvedTarget> = emptyList(),
+    ): PanelHarness = PanelHarness(dir, site = PanelWaits.site(), scenarios = scenarios, targets = targets).also { open += it }
+
+    /** The owner's word that the harness's site has companies: its target profile's `tenant` (Faza 25.1). */
+    private val companies =
+        listOf(
+            ResolvedTarget(
+                TargetSpec("demo", URI("http://127.0.0.1:9"), tenant = Tenant.COMPANY),
+                testToken = Secret("dev-token"),
+                accounts = emptyList(),
+            ),
+        )
 
     private fun restart(scenarios: Map<String, String> = emptyMap()): PanelHarness {
         open.removeAt(open.lastIndex).close()
@@ -143,7 +160,7 @@ class PanelScenariosTest {
     @Test
     fun `a draft is generated from the latest exploration as an explorer version, once per text`() =
         runBlocking<Unit> {
-            val panel = harness()
+            val panel = harness(targets = companies)
             shouldThrow<PanelConflictException> { panel.backend.generateScenario() }.message shouldStartWith "Əvvəlcə saytı kəşf edin"
             val explored = panel.explored(PanelHarness.instructions(panel.site.base.toString()).copy(departments = listOf("Satış", "IT")))
 

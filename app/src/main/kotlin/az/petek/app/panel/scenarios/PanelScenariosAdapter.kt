@@ -88,6 +88,9 @@ internal class PanelScenariosAdapter(
     private suspend fun generate(): ScenarioView {
         val source = explorer.draftSource()
         val settings = DraftSettings.of(source.departments, source.team)
+        val model =
+            container.explorations.model(source.explorationId)
+                ?: throw PanelConflictException("Bu kəşfiyyatın sayt modeli yoxdur; saytı yenidən kəşf edin.")
         val draft =
             try {
                 container
@@ -97,7 +100,7 @@ internal class PanelScenariosAdapter(
                             source.explorationId,
                             source.grounding?.ifBlank { null },
                             testApi = explorer.testApi(source.target),
-                            tenant = explorer.tenant(source.target),
+                            tenant = explorer.tenant(source.target, model),
                             testers = source.testers?.takeIf { it in 1..ScenarioRequest.MAX_TESTERS },
                         ),
                         explorer.observerFor(source.explorationId),

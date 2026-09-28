@@ -264,14 +264,15 @@ internal class TestCompanyRoleSessions(
     }
 
     /**
-     * Whether the site has companies: its profile's `tenant`, else companies when the test API is there to confirm the
-     * test company (the contract shape), else none (Faza 13).
+     * Whether the explorer's own account opens a company: only when the owner said the site has companies (its
+     * profile's `tenant`). Before exploring nothing shows the site's gate, and a test API alone says nothing about it
+     * (Faza 25.1): otherwise the explorer signs up as a plain user.
      */
     private fun tenantOf(request: RoleSessionRequest): Tenant =
         container.config
             .profileFor(request.target)
             ?.spec
-            ?.tenant ?: if (container.oracle.isAvailable) Tenant.COMPANY else Tenant.NONE
+            ?.tenant ?: Tenant.NONE
 
     /** A site without companies: the explorer alone signs up through the profile's `sign_up` flow, as role `explorer`. */
     private fun selfSignUp(profile: TargetProfile): Campaign {

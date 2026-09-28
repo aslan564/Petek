@@ -11,6 +11,8 @@
 
 package az.petek.explorer.domain
 
+import az.petek.campaign.domain.Tenant
+
 /**
  * What kind of site the explorer walked (docs/PLAN.md Faza 17, `LINK_ONLY_SWARM.md` §0 point 2): a shop, a news site,
  * a showcase and a sign-in system are tested differently, so the kind picks the bug cards (Faza 19).
@@ -157,6 +159,15 @@ data class GateMap(
     val profileSelectors: Map<String, String> get() = register?.selectors.orEmpty() + login?.selectors.orEmpty()
 }
 
+/**
+ * How the explorer saw one join a company on the site: the pages with a form taking an invitation or company code
+ * ([joinPages]) and the actions a signed-in role hands them out with ([issuedBy], action ids).
+ */
+data class CompanyWay(
+    val joinPages: List<String>,
+    val issuedBy: List<String>,
+)
+
 /** Builds the [GateMap] from a site model, by code. */
 object GateMaps {
     private val GATE_PATH =
@@ -165,6 +176,39 @@ object GateMaps {
     private val CAPTCHA = Regex("(?i)(captcha|recaptcha|hcaptcha|turnstile)")
     private val INVITE = Regex("(?i)(invite|invitation|dəvət|devet|company.?code|join.?code)")
     private val CODE_FIELD = Regex("(?i)^(code|otp|token|verification.?code|kod)$")
+
+    /**
+     * The site's own way into a company, as the explorer saw it (Faza 25.1): pages with a form to join by invitation or
+     * company code, and the operations a signed-in role hands those out with. Null unless both were seen: a join form
+     * alone does not say who gives the code, and an invitation feature alone does not say how one joins with it.
+     */
+    fun companyWay(model: SiteModel): CompanyWay? {
+        val join =
+            model.pages
+                .filter { page ->
+                    page.forms.any { form ->
+                        form.fields.any { INVITE.containsMatchIn("${it.name} ${it.label} ${it.testId.orEmpty()}") }
+                    }
+                }.map { it.urlPattern }
+        val issued =
+            model.actions.filter { action ->
+                action.allowedRoles.any { it != SiteModelAccumulator.ANONYMOUS } &&
+                    INVITE.containsMatchIn("${action.name} ${action.httpPath.orEmpty()} ${action.selector}")
+            }
+        return if (join.isEmpty() || issued.isEmpty()) null else CompanyWay(join.distinct(), issued.map { it.id })
+    }
+
+    /**
+     * Whether a draft is for a site with companies (Faza 25.1): the owner's word when given (the target profile's
+     * `tenant`); else companies only when the explorer saw the site's own [companyWay] and the test API can seed the
+     * test company such a draft's setup needs. A test API alone says nothing about the site's gate: it is for oracle
+     * checks and teardown.
+     */
+    fun tenantFor(
+        model: SiteModel,
+        owner: Tenant?,
+        testApi: Boolean,
+    ): Tenant = owner ?: if (testApi && companyWay(model) != null) Tenant.COMPANY else Tenant.NONE
 
     fun isGatePage(page: PageModel): Boolean =
         GATE_PATH.containsMatchIn(page.urlPattern) || page.forms.any { it.kind == ActionKind.LOGIN || it.kind == ActionKind.REGISTER }

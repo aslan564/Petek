@@ -110,6 +110,8 @@ class PanelEndToEndTest {
             explored.model.pages
                 .map { it.urlPattern }
                 .shouldNotBeEmpty()
+            // The demo site's own gate shows its companies: a code to join with and an admin who invites (Faza 25.1).
+            explored.draftYaml.shouldNotBeNull() shouldContain "register_owner"
             page.waitFor("() => document.body.innerText.includes('Bitdi')")
             page.shoot("e2e-2-kesfiyyat", full = true)
 

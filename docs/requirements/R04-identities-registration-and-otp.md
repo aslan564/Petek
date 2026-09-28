@@ -7,7 +7,10 @@
 Each run creates its testers itself: unique names, e-mails on the test domain, unguessable but reproducible
 passwords, phones, roles, departments. Testers register the way real users do — the owner signs up and creates the
 company, managers join by invitation, employees by invitation or with the company code — and complete e-mail and
-phone verification without a human. The owner decided: both registration modes, per tester.
+phone verification without a human. The owner decided: both registration modes, per tester. That is the company
+model of the contract; since Faza 25.1 no site is assumed to have it: the owner's `tenant: company`, or the explorer's
+sight of the site's own join form and of the role that hands out invitations or codes (with a test API to seed the
+test company), chooses it, and otherwise testers pass the site's gate as it is (sign-up, the owner's accounts, guest).
 
 ## Why
 

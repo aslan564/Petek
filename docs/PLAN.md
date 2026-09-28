@@ -1341,7 +1341,7 @@ olunmayanda yaranır. Şirkətsiz saytda qapı planı da kəşfiyyatdan gəlir (
 sahibin hesabları, qonaq). Bu fazanın işi qalan müqavilə fərziyyələrini çıxarmaqdır. Sıra: Faza 24-ün A
 mərhələsindən sonra.
 
-- [ ] **25.1 Qeydiyyat modeli test API-dən yox, qapıdan seçilir.**
+- [x] **25.1 Qeydiyyat modeli test API-dən yox, qapıdan seçilir.**
   - *Problem:* sahib profildə `tenant` verməyibsə, panel onu test API-nin varlığına görə seçir
     (`PanelExplorerAdapter.tenant`, `RoleSessions.tenantOf`): API varsa şirkət çərçivəsi, yəni dəvət və şirkət kodu,
     admin + manager + employee, şöbələr. Bu, müqavilə saytının modelidir; real saytın qapısı ilə əlaqəsi yoxdur.
@@ -1352,6 +1352,13 @@ mərhələsindən sonra.
   - *Test:* test API-si olan, amma şirkəti olmayan saytda draft sərbəst qeydiyyatla yazılır; dəvətli qapı görüləndə
     draftda dəvəti verən rol var; sahibin profilindəki qapı kəşfiyyatdan üstündür.
   - *Sənəd:* R04, R07, R11; TARGET_CONTRACT-da şirkət modeli müqavilənin öz modeli kimi göstərilir.
+  - *Vəziyyət:* `GateMaps.tenantFor`: sahibin `tenant`-ı; yoxdursa şirkət yalnız kəşfiyyatçı saytın öz şirkət yolunu
+    gördükdə (`GateMaps.companyWay`: dəvət və ya şirkət kodu alan qoşulma forması və daxil olmuş rolun onları verən
+    əməliyyatı) və test API test şirkətini toxuya bildikdə; test API tək başına heç vaxt şirkət draftı yaratmır.
+    Panel (draft, avtomatik önizləmə) bunu işlədir; kəşfiyyatçının öz hesabı (`self_register`) yalnız sahib
+    `tenant: company` deyəndə şirkət açır. Fake target-də kəşfiyyatçı `/join` formasını və adminin "Dəvət et"
+    əməliyyatını görür, draft yenə şirkət draftıdır (e2e bunu indi yoxlayır); kodu kimin verdiyini görmədiyi saytda
+    (kəşfiyyatçı özü soruşur) draft `tenant: none` olur.
 
 - [ ] **25.2 Draft çərçivəsində müqavilə sabitləri qalmır.**
   - *Problem:* `ScenarioSettings`-in default-ları müqavilədəndir: komanda 1 admin + 2 manager + 3 employee, şöbələr IT

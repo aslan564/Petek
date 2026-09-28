@@ -49,7 +49,13 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 - `SignInChain` (app): the methods of the site's target profile (`sign_in`, default `test_company` → `own_accounts` →
   `self_register` → `anonymous`) are tried in order until one yields logged-in sessions; every attempt and fallback
-  is a line of the exploration's activity.
+  is a line of the exploration's activity. `self_register` opens a company only when the profile says `tenant:
+  company`; otherwise the explorer signs up as a plain user (Faza 25.1).
+- Drafts choose their tenant by `GateMaps.tenantFor` (Faza 25.1): the profile's `tenant`, else companies only when
+  the explorer saw the site's own way into one (`GateMaps.companyWay`: a form taking an invitation or company code,
+  and an operation of a signed-in role handing them out) and the test API can seed the test company; a test API
+  alone never makes a company draft. When the explorer saw a code but not who gives it, it asks, and the draft takes
+  the gate as it is.
 - `OwnAccountRoleSessions`: the owner's accounts from the panel ("Hesablar", password to `.env` as
   `PETEK_ACC_<SITE>_<ROLE>`, the account with its `${VAR}` reference to `targets/<site>.yaml`; the database never
   sees it) or from the target profile. A given `storage_state` file is used as is; a session saved by an earlier

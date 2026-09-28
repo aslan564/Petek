@@ -28,7 +28,9 @@ context". The engine (browser, agent loop, assertions, realtime, explorer) was g
 - Blind patterns in `TestPatterns` that need no site knowledge: form validation (empty/long/invalid), double submit
   (idempotency), direct-URL permission checks across roles, races on one object, session expiry, back button, broken
   links, console/network errors, slow endpoints, mobile viewport. Each says which evidence tier it can deliver.
-- Explorer drafts without a company setup (login-only or anonymous); seed paths and keywords move to the profile.
+- Explorer drafts without a company setup (login-only or anonymous); seed paths and keywords move to the profile. A
+  draft is a company draft only on the owner's word or when the explorer saw the site's own company way (Faza 25.1),
+  never because a test API is there.
 - Defaults of any one site leave the core (`PetekConfig`, `.env.example`, panel placeholder); a site's settings live in
   its target profile (`docs/examples/target-profile.yaml`).
 
