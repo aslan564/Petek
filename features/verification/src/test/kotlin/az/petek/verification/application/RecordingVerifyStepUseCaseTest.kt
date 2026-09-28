@@ -456,11 +456,17 @@ class RecordingVerifyStepUseCaseTest {
     @Test
     fun `verifyGroup with a single winner passes`() =
         runTest {
+            val approve = RequestPattern("POST", ".*/approve")
+            val won = RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 303)))
+            val lost = RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 409)))
             val records =
                 useCase().verifyGroup(
                     listOf(OnlyOneSucceeds()),
                     assertionInput(session = null, agentId = null),
-                    listOf(ActorResult(AgentId("a02"), true, "approved"), ActorResult(AgentId("a03"), false, "409")),
+                    listOf(
+                        ActorResult(AgentId("a02"), won.succeeded, "approved", won),
+                        ActorResult(AgentId("a03"), lost.succeeded, "409", lost),
+                    ),
                 )
 
             records.single().verdict shouldBe Verdict.PASSED

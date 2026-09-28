@@ -46,6 +46,7 @@ import az.petek.identity.domain.IdentityPlan
 import az.petek.identity.domain.IdentityRegistryGenerator
 import az.petek.identity.domain.IdentitySpec
 import az.petek.oracle.domain.JsonFieldSelector
+import az.petek.oracle.testing.FakeTargetOracle
 import az.petek.orchestration.application.RestoringBrowserSession
 import az.petek.orchestration.application.RunFinalizer
 import az.petek.orchestration.domain.AgentStatus
@@ -58,6 +59,7 @@ import az.petek.orchestration.domain.TaskUpdate
 import az.petek.verification.application.VerifyStepUseCase
 import az.petek.verification.domain.ActorResult
 import az.petek.verification.domain.AssertionInput
+import az.petek.verification.domain.DefaultAssertionEvaluator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -165,7 +167,9 @@ class DottedFieldSelector : JsonFieldSelector {
 /**
  * Evaluates assertions like the real use case in miniature and records them: visible_text looks at the fake session's
  * visible texts and measures latency from t0; latency_max reads that latency; oracle renders its path (so template
- * errors surface) and asks [oracleVerdict]; everything else passes.
+ * errors surface) and asks [oracleVerdict]; everything else passes. A race (`only_one_succeeds`) gets the real verdict,
+ * which is pure code over the actors' results, so runner tests see the real race rules; its oracle condition is not
+ * asked.
  */
 class FakeVerify(
     private val recorder: EvidenceRecorder,
@@ -174,6 +178,7 @@ class FakeVerify(
 ) : VerifyStepUseCase {
     val actorCalls = CopyOnWriteArrayList<Pair<List<AssertionSpec>, AssertionInput>>()
     val groupCalls = CopyOnWriteArrayList<List<ActorResult>>()
+    private val races = DefaultAssertionEvaluator(FakeTargetOracle(isAvailable = false), renderer, DottedFieldSelector(), clock)
 
     @Volatile
     var oracleVerdict: (String, AssertionInput) -> Verdict = { _, _ -> Verdict.PASSED }
@@ -223,9 +228,9 @@ class FakeVerify(
         results: List<ActorResult>,
     ): List<AssertionRecord> {
         groupCalls += results
-        val winners = results.count { it.succeeded }
-        return specs.map { spec ->
-            record(input, spec, EvidenceSource.SENDER, "exactly one", if (winners == 1) Verdict.PASSED else Verdict.FAILED, null)
+        return specs.filterIsInstance<AssertionSpec.OnlyOneSucceeds>().map { spec ->
+            val judged = races.evaluateOnlyOneSucceeds(spec, results, input)
+            record(input, spec, EvidenceSource.SENDER, judged.expected, judged.verdict, null, judged.note)
                 .also { recorder.assertion(it) }
         }
     }

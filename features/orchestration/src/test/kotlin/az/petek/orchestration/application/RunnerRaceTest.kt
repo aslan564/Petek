@@ -30,6 +30,7 @@ import az.petek.orchestration.testing.VirtualClock
 import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
 import az.petek.orchestration.testing.managers
+import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -162,6 +163,39 @@ class RunnerRaceTest {
                 .none { it.lostRace } shouldBe true
             summary.outcome shouldBe RunOutcome.FAILED
             summary.assertionsFailed shouldBe 1
+        }
+
+    @Test
+    fun `a race left with one manager after the other failed setup is no race and fails`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                when {
+                    call.scenarioStep == "join" && call.agentId == AgentId("a03") -> {
+                        ActionOutcome(ActionStatus.FAILED, "no e-mail", failureReason = FailureReason.MAIL_TIMEOUT)
+                    }
+
+                    call.scenarioStep == "race" -> {
+                        f.browser.session(call.agentId.value).mutated("POST", TICKET, 303)
+                        DONE
+                    }
+
+                    else -> {
+                        DONE
+                    }
+                }
+            }
+
+            val summary = f.runner().run(race().copy(setup = listOf(setupStep("join", managers()))))
+
+            f.verify.groupCalls
+                .single()
+                .map { it.agentId.value } shouldContainExactly listOf("a02")
+            val group = f.evidence.assertionList.single { it.type == "only_one_succeeds" }
+            group.verdict shouldBe Verdict.FAILED
+            group.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
+            f.actionOf("a02").status shouldBe StepStatus.PASSED
+            summary.outcome shouldBe RunOutcome.FAILED
         }
 
     @Test

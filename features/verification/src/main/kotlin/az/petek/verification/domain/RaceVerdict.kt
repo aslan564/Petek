@@ -26,14 +26,21 @@ import kotlinx.serialization.json.putJsonObject
  * The pure part of `only_one_succeeds`: the verdict from the actors' code-derived results ([ActorResult.succeeded],
  * see [RaceEvidence]) and, when the spec has one, the outcome of its oracle condition ([OracleCheck]).
  *
- * - PASSED when exactly one actor succeeded, the requests of every actor could be read (otherwise a second winner
- *   could go unseen) and the oracle condition (if any) did not fail; an oracle that could not be asked (no test API)
- *   is SKIPPED and leaves the verdict to the requests, with a note.
+ * - PASSED when at least [MIN_RACERS] actors raced, exactly one actor succeeded, the requests of every actor could be
+ *   read (otherwise a second winner could go unseen) and the oracle condition (if any) did not fail; an oracle that
+ *   could not be asked (no test API) is SKIPPED and leaves the verdict to the requests, with a note.
+ * - An actor raced when it reached the start line and acted, so its requests were read or found unreadable
+ *   ([ActorResult.race] is set). One whose action never ran (awaited event missing, template error) did not race, and
+ *   neither did the actors a step never got (a wave without them, a tester that failed earlier): a single racer that
+ *   wins proves nothing about the race, so such a step never passes.
  * - `observed` lists the decisive request per actor in agent order, e.g.
  *   `a02 POST /tickets/t2/approve -> 303; a03 POST /tickets/t2/approve -> 409`, then the oracle's answer.
  * - The raw evidence is JSON with every actor's requests, its agent summary (text only) and whether it lost the race.
  */
 internal object RaceVerdict {
+    /** Fewer racers than this is no race at all, whoever of them won. */
+    const val MIN_RACERS = 2
+
     /** What the target's test API said about the race's final state. */
     class OracleCheck(
         val verdict: Verdict,
@@ -52,18 +59,34 @@ internal object RaceVerdict {
         val winners = ordered.filter { it.succeeded }
         val winnerIds = winners.joinToString { it.agentId.value }
         val unknown = ordered.filter { it.race?.unavailable != null }
+        val racers = ordered.filter { it.race != null }
         val raceNote =
             when {
-                ordered.isEmpty() -> "no actor results to compare"
+                ordered.isEmpty() -> {
+                    "no actor results to compare"
+                }
 
-                winners.isEmpty() -> "no actor succeeded; expected exactly one winner"
+                racers.size < MIN_RACERS -> {
+                    val raced = racers.joinToString { it.agentId.value }.ifEmpty { null }
+                    "a race needs at least $MIN_RACERS racing actors; " + (raced?.let { "only $it raced" } ?: "none raced")
+                }
 
-                winners.size > 1 -> "more than one actor succeeded ($winnerIds); expected exactly one"
+                winners.isEmpty() -> {
+                    "no actor succeeded; expected exactly one winner"
+                }
+
+                winners.size > 1 -> {
+                    "more than one actor succeeded ($winnerIds); expected exactly one"
+                }
 
                 // A second winner could hide among actors whose requests are unknown.
-                unknown.isNotEmpty() -> "the requests of ${unknown.joinToString { it.agentId.value }} could not be read"
+                unknown.isNotEmpty() -> {
+                    "the requests of ${unknown.joinToString { it.agentId.value }} could not be read"
+                }
 
-                else -> null
+                else -> {
+                    null
+                }
             }
         val oracleFailed = oracle?.verdict == Verdict.FAILED
         return AssertionResult(
@@ -82,7 +105,8 @@ internal object RaceVerdict {
     private fun expected(
         spec: AssertionSpec.OnlyOneSucceeds,
         actors: Int,
-    ): String = "exactly one of $actors actors succeeds" + (spec.request?.let { " by `${it.describe()}`" } ?: "")
+    ): String =
+        "exactly one of $actors actor${if (actors == 1) "" else "s"} succeeds" + (spec.request?.let { " by `${it.describe()}`" } ?: "")
 
     private fun observed(results: List<ActorResult>): String =
         if (results.isEmpty()) {
@@ -93,7 +117,7 @@ internal object RaceVerdict {
 
     private fun outcome(result: ActorResult): String =
         result.race?.describe()
-            ?: if (result.succeeded) "succeeded" else "did not succeed"
+            ?: if (result.succeeded) "succeeded" else "did not race"
 
     private fun oracleObserved(check: OracleCheck): String =
         when {

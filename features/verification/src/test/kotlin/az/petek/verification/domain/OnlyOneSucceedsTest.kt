@@ -49,10 +49,14 @@ class OnlyOneSucceedsTest {
 
     private val evaluator = evaluator()
 
+    /** An actor that raced: the target accepted its approval (303) or refused it as already decided (409). */
     private fun actor(
         index: Int,
         succeeded: Boolean,
-    ) = ActorResult(AgentId.of(index), succeeded, if (succeeded) "approved" else "409 already decided")
+    ) = racer(index, request(if (succeeded) 303 else 409), summary = if (succeeded) "approved" else "409 already decided")
+
+    /** An actor whose action never ran (its awaited event never came, its step could not be rendered). */
+    private fun absent(index: Int) = ActorResult(AgentId.of(index), false, "not_received")
 
     private fun request(
         status: Int,
@@ -83,7 +87,7 @@ class OnlyOneSucceedsTest {
         result.source shouldBe EvidenceSource.SENDER
         result.spec shouldBe AssertionSpec.OnlyOneSucceeds()
         result.expected shouldBe "exactly one of 2 actors succeeds"
-        result.observed shouldBe "a02 did not succeed; a03 succeeded"
+        result.observed shouldBe "a02 POST /tickets/t2/approve -> 409; a03 POST /tickets/t2/approve -> 303"
         result.note.shouldBeNull()
         result.latency.shouldBeNull()
         result.oracleEvidence.shouldBeNull()
@@ -102,8 +106,47 @@ class OnlyOneSucceedsTest {
         val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(10, true), actor(2, true), actor(3, false)))
 
         result.verdict shouldBe Verdict.FAILED
-        result.observed shouldBe "a02 succeeded; a03 did not succeed; a10 succeeded"
+        result.observed shouldBe
+            "a02 POST /tickets/t2/approve -> 303; a03 POST /tickets/t2/approve -> 409; a10 POST /tickets/t2/approve -> 303"
         result.note shouldBe "more than one actor succeeded (a02, a10); expected exactly one"
+    }
+
+    // --- who raced ------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a single racer that wins is no race and fails`() {
+        // E.g. a wave that holds only one of the two managers, or the other one failed its setup.
+        val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, true)))
+
+        result.verdict shouldBe Verdict.FAILED
+        result.expected shouldBe "exactly one of 1 actor succeeds"
+        result.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
+    }
+
+    @Test
+    fun `an actor whose action never ran did not race, so the one who did cannot pass alone`() {
+        val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, true), absent(3)))
+
+        result.verdict shouldBe Verdict.FAILED
+        result.observed shouldBe "a02 POST /tickets/t2/approve -> 303; a03 did not race"
+        result.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
+    }
+
+    @Test
+    fun `actors that all stopped before the start line fail the race`() {
+        val result = evaluator.evaluateOnlyOneSucceeds(listOf(absent(2), absent(3)))
+
+        result.verdict shouldBe Verdict.FAILED
+        result.note shouldBe "a race needs at least 2 racing actors; none raced"
+    }
+
+    @Test
+    fun `an actor that raced without a matching request still counts as a racer`() {
+        // It acted and its requests were read: the target simply saw nothing from it, as when it found the ticket decided.
+        val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, true), racer(3)))
+
+        result.verdict shouldBe Verdict.PASSED
+        result.observed shouldBe "a02 POST /tickets/t2/approve -> 303; a03 no matching request"
     }
 
     @Test

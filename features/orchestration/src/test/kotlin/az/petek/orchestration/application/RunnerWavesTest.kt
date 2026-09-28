@@ -14,7 +14,10 @@ package az.petek.orchestration.application
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.browser.domain.BrowserProxy
+import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.RequestPattern
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.Verdict
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.testing.RunnerFixture
@@ -22,6 +25,7 @@ import az.petek.orchestration.testing.VirtualClock
 import az.petek.orchestration.testing.admin
 import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
+import az.petek.orchestration.testing.managers
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -78,6 +82,38 @@ class RunnerWavesTest {
             read.filter { it.agentId?.value in setOf("a04", "a05") }.map { it.status }.toSet() shouldBe setOf(StepStatus.FAILED)
             summary.outcome shouldBe RunOutcome.FAILED
             f.buses.size shouldBe 2
+        }
+
+    @Test
+    fun `a race whose testers fall into different waves is no race and never passes with one racer`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            f.agents.script = { call, _ ->
+                if (call.scenarioStep == "race") f.browser.session(call.agentId.value).mutated("POST", "/tickets/t1/approve", 303)
+                ActionOutcome(ActionStatus.SUCCEEDED, "approved")
+            }
+            val race = AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))
+            val base =
+                campaign(
+                    managers = 2,
+                    employees = 2,
+                    steps = listOf(step("race", managers(), parallel = true, assertions = listOf(race))),
+                )
+            // a01 (admin) and a02 (manager IT) are wave 1, a03 (manager HR) and a04 wave 2: each wave holds one manager.
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            val summary = f.runner().run(waved)
+
+            f.verify.groupCalls.map { results -> results.map { it.agentId.value } } shouldContainExactly
+                listOf(listOf("a02"), listOf("a03"))
+            f.evidence.assertionList
+                .filter { it.type == "only_one_succeeds" }
+                .map { it.verdict to it.note } shouldContainExactly
+                listOf(
+                    Verdict.FAILED to "a race needs at least 2 racing actors; only a02 raced",
+                    Verdict.FAILED to "a race needs at least 2 racing actors; only a03 raced",
+                )
+            summary.outcome shouldBe RunOutcome.FAILED
         }
 
     @Test

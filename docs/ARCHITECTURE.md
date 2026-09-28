@@ -137,10 +137,13 @@ is decided by code from each actor's own requests (AGENTS.md rule 2), never by w
    actor's own request (403, 400, 404, 5xx) is never a lost race: when its agent claimed success anyway, the action is
    FAILED with `request_failed: <request>; agent: <summary>` (an INVESTIGATE finding), otherwise the agent's own
    failure stands. A race interrupted by the budget or an abort still records the racers that already acted.
-4. **Verdict.** `verification` passes when exactly one actor won and the requests of every actor could be read; the
-   observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve -> 303; a03 POST
-   /tickets/t2/approve -> 409`). With `oracle: {path, field, equals}` and a test API, the target's final state must
-   match too, and its answer is kept as an ORACLE artifact.
+4. **Verdict.** `verification` passes when at least two actors raced (reached the start line and acted), exactly one
+   actor won and the requests of every actor could be read. One racer is no race: a race step whose other actors are
+   in another wave, failed earlier or stopped before the start line fails with `a race needs at least 2 racing actors;
+   only a02 raced`, whoever won. The observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve
+   -> 303; a03 POST /tickets/t2/approve -> 409`; an actor that never acted shows `did not race`). With `oracle: {path,
+   field, equals}` and a test API, the target's final state must match too, and its answer is kept as an ORACLE
+   artifact.
 
 ## Live task plan
 
