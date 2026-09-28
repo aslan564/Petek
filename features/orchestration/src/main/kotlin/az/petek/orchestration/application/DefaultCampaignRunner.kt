@@ -261,9 +261,11 @@ class DefaultCampaignRunner(
 
     /**
      * The account swap ([RunOptions.swapAccounts], Faza 18): the testers that finished the main steps without failing
-     * pass their accounts on in a ring (tester *i* takes the account of tester *i + 1*). Each old browser is closed first,
-     * so an account is never in two browsers; each account then opens in a new browser with its saved storage state
-     * and a new agent, and the main steps run once more as `<step>@swap`. A swap needs at least two finished testers.
+     * pass their accounts on in a ring (tester *i* takes the account of tester *i + 1*); a tester that failed a main
+     * step sits out, saying why. Each old browser is closed first, so an account is never in two browsers; each account
+     * then opens in a new browser with its saved storage state and a new agent, starts on the site's home page (not on
+     * a blank page), and the main steps run once more as `<step>@swap` with the swapped testers only. A swap needs at
+     * least two finished testers.
      */
     private suspend fun swapAccounts(
         run: RunState,
@@ -271,12 +273,16 @@ class DefaultCampaignRunner(
         tasks: TaskBoard,
     ) {
         if (run.aborted) return
-        val finished = run.activeIdentities().filter { run.status(it.agentId) != IdentityStatus.FAILED }
+        val active = run.activeIdentities().filter { run.status(it.agentId) != IdentityStatus.FAILED }
+        val finished = active.filterNot { run.tally.hasFailures(it.agentId) }
         if (finished.size < 2) {
             evidence.system(run, null, "swap_accounts", StepStatus.SKIPPED, "fewer than two testers finished; no account to swap")
             return
         }
         val factory = run.factory ?: return
+        (active - finished.toSet()).forEach {
+            evidence.system(run, it.agentId, "swap_accounts", StepStatus.SKIPPED, "${it.agentId} failed a main step and sits out the swap")
+        }
         finished.forEach { identity ->
             run.sessions.remove(identity.agentId)?.let { session ->
                 safely(run, "closing the session of ${identity.agentId}") { session.close() }
@@ -294,10 +300,38 @@ class DefaultCampaignRunner(
                 "tester ${tester.agentId} continues with the account of ${account.agentId} (${account.role.key}) in a new browser",
             )
             openAgent(run, factory, account, colleagues, restoreSession = true)
+            openSite(run, account.agentId)
         }
         board.message("accounts swapped among ${finished.size} testers; the main steps run again")
         val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
-        runSteps(run, board, tasks, again)
+        run.wave = finished.map { it.agentId }.toSet()
+        try {
+            runSteps(run, board, tasks, again)
+        } finally {
+            run.wave = null
+        }
+    }
+
+    /**
+     * A swapped account starts on the site's home page with its saved session, as its owner would, so its first step
+     * sees the site rather than a blank page. Where it landed is recorded (a sign-in page there means the saved session
+     * no longer holds); a site that cannot be opened at all takes the tester out of the swap.
+     */
+    private suspend fun openSite(
+        run: RunState,
+        agentId: AgentId,
+    ) {
+        val session = run.sessions[agentId] ?: return
+        try {
+            session.navigate("/")
+            evidence.system(run, agentId, "swap_open", StepStatus.PASSED, "the saved session opened ${session.currentUrl()}")
+        } catch (e: Exception) {
+            rethrowIfCancelled(e)
+            val reason = FailureReason.BROWSER_ERROR.key
+            val detail = "$reason: the site did not open with the saved session: ${e::class.simpleName}: ${e.message}"
+            evidence.system(run, agentId, "swap_open", StepStatus.ERROR, detail, tally = Tally.FAIL)
+            markFailed(run, agentId, reason)
+        }
     }
 
     private suspend fun startAgents(

@@ -136,6 +136,7 @@ internal class StepExecutor(
 
     suspend fun execute(step: ScenarioStep): StepResult {
         board.stepStarted(step.id)
+        run.stepStarted(step.id)
         // What `{last_id}` means for an actor that neither waits for nor emits an event in this step: the newest object
         // before the step began, taken once, so concurrent actors never see each other's ids through it.
         val lastIdBeforeStep = run.bus.latestAny()?.objectId
@@ -272,7 +273,10 @@ internal class StepExecutor(
         board.update(actor.agentId, AgentState.WAITING, actor.step.id, "wait_for ${spec.event}")
         tasks.update(actor.step.id, actor.agentId, TaskState.WAITING_EVENT, "wait_for ${spec.event}")
         val started = clock.now()
-        val event = run.bus.await(spec.event, afterSequence = 0, timeout = spec.timeout) ?: return WaitResult.TimedOut(started)
+        // Only the latest execution of the emitting step counts: never the first pass's event in the account swap.
+        val event =
+            run.bus.await(spec.event, afterSequence = run.eventCursor(spec.event), timeout = spec.timeout)
+                ?: return WaitResult.TimedOut(started)
         val stepId =
             evidence.step(
                 run,
@@ -310,7 +314,10 @@ internal class StepExecutor(
             )
         evidence.screenshot(run, waitStepId, actor.agentId, actor.session)
         // An event that exists by now arrived after this receiver's deadline: record it as missed for that event.
-        run.bus.latest(spec.event)?.let { recordReceipt(actor, it, received = false, t1 = null, latencyMs = null) }
+        run.bus
+            .latest(spec.event)
+            ?.takeIf { it.sequence > run.eventCursor(spec.event) }
+            ?.let { recordReceipt(actor, it, received = false, t1 = null, latencyMs = null) }
         val reason = "not evaluated: ${spec.event} not received"
         skipAction(actor, reason)
         evidence.skippedAssertions(run, actor.stepId, actor.step.id, actor.agentId, actorSpecs(actor.step), reason)
@@ -983,6 +990,7 @@ internal class StepExecutor(
             run.eventNames.forEach { name ->
                 run.bus
                     .latest(name)
+                    ?.takeIf { it.sequence > run.eventCursor(name) }
                     ?.objectId
                     ?.let { put(name, it) }
             }

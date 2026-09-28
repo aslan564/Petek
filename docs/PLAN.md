@@ -1118,7 +1118,7 @@ dərəcədə aiddir (Faza 25).
     catch-all domen); `DefaultAgentLoop` `type` mətnini yer tutucular həll olunmazdan əvvəl yoxlayır, imtina modelə
     etibarsız qərar kimi qayıdır. Beynəlxalq formatlı (`+`) nömrələr yoxlanır; yerli formatlı nömrə tanınmır.
 
-- [ ] **24.4 Swap: sessiya sayta açılır, gözləmə öz hadisəsini gözləyir.**
+- [x] **24.4 Swap: sessiya sayta açılır, gözləmə öz hadisəsini gözləyir.**
   - *Problem 1:* swap hesabı təzə brauzerdə açır, sessiya isə `about:blank`-da qalır. İlk addımı `wait_for` olan
     receiver-in `visible_text`-i boş səhifədə yoxlanır və FAILED olur; sonra agentin öz `do`-su bildirişi oxuyur,
     oracle keçir və judge bunu `DELIVERY_UI` yazır, yəni sayta yalançı çatdırılma xətası.
@@ -1134,6 +1134,10 @@ dərəcədə aiddir (Faza 25).
     receiver hədəf səhifəsindədir və yalançı `DELIVERY_UI` yoxdur; setup hadisəsini gözləyən main addım swap-da da
     işləyir; main-də uğursuz tester halqada deyil.
   - *Sənəd:* R05, ARCHITECTURE «Run lifecycle».
+  - *Vəziyyət:* `RunState.eventCursor`: hadisəni emit edən addımın son icrasının başlanğıcındakı bus sequence-i
+    (`wait_for`, buraxılmış hadisə qəbzi və `{event.<ad>.id}` bunu işlədir; yeni bus kursorları sıfırlayır). Swap-da
+    hər sessiya `/`-ya açılır (`swap_open` sübutu, harada açıldığı ilə); main addımda uğursuz olan tester `swap_accounts`
+    SKIPPED ilə kənarda qalır və swap keçidində iştirak etmir. `RunnerSwapTest`.
 
 #### Mərhələ B — yalançı FAILED və səhv obyektə baxan sübut (bəziləri DSL-i pozur)
 

@@ -42,6 +42,11 @@ internal class RunState(
     /** Where events are published and awaited; each wave gets its own, so live events stay within it (Faza 21). */
     @Volatile
     var bus: EventBus = bus
+        set(value) {
+            field = value
+            // A new bus counts its sequences from the start: where the old one stood says nothing about it.
+            stepStarts.clear()
+        }
 
     /** The testers of the wave now running; null when everyone runs at once. */
     @Volatile
@@ -50,6 +55,29 @@ internal class RunState(
 
     /** Every event name some step emits; `{event.<name>.id}` templates are resolved from these. */
     val eventNames: List<String> = campaign.allSteps.mapNotNull { it.emits?.event }.distinct()
+
+    /** The step that emits each event (the validator allows exactly one per event). */
+    private val emitters: Map<String, String> =
+        campaign.allSteps.mapNotNull { step -> step.emits?.let { it.event to step.id } }.toMap()
+
+    /**
+     * Where the bus stood when the latest execution of each step began, by step id without the swap suffix. Every
+     * event that execution emits comes later, so an event is taken only from the latest execution of its step: the
+     * account swap runs the main steps again on the same bus, and a waiter there must never take the first pass's
+     * event (Faza 24.4).
+     */
+    private val stepStarts = ConcurrentHashMap<String, Long>()
+
+    /** Remembers where the bus stands as [stepId] begins; see [eventCursor]. */
+    fun stepStarted(stepId: String) {
+        stepStarts[stepId.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX)] = bus.latestAny()?.sequence ?: 0L
+    }
+
+    /**
+     * The sequence an [event] must come after to belong to the latest execution of the step that emits it; 0 when that
+     * step has not run on this bus.
+     */
+    fun eventCursor(event: String): Long = emitters[event]?.let { stepStarts[it] } ?: 0L
 
     @Volatile
     var identities: List<Identity> = emptyList()
@@ -134,6 +162,10 @@ internal class StepTally {
     val stepsFailed: Int get() = failed.get()
     val assertionsFailed: Int get() = assertionFailures.get()
     val failedAgents: Int get() = agentsWithFailures.size
+
+    /** Whether [agentId] failed a step or one of its assertions so far. */
+    fun hasFailures(agentId: AgentId): Boolean = agentId in agentsWithFailures
+
     val anyFailure: Boolean get() = stepsFailed > 0 || assertionsFailed > 0
 
     fun step(

@@ -17,7 +17,10 @@ looking at the server alone or by one browser.
 
 - **Event bus.** A step with `emits: <event>` publishes the event on the in-process `EventBus` with t0 from the harness
   clock the moment the action completed; `wait_for: <event>` in the receivers' steps blocks until it arrives (with a
-  timeout), then each receiver's assertion (`visible_text` …) measures t1 when the text is visible in its own DOM.
+  timeout), then each receiver's assertion (`visible_text` …) measures t1 when the text is visible in its own DOM. A
+  waiter takes only an event of the latest execution of the step that emits it (the bus sequence at that step's start
+  is its cursor), so the account swap, which runs the main steps again on the same bus, never hands a receiver the
+  first pass's event; a setup event keeps serving, since setup runs once (Faza 24.4).
 - **Latency.** `latency_max` asserts per receiver; the report shows avg/p95/max and the missing receivers.
 - **Transport detection.** `features/browser` watches network traffic of each session and records the transport
   (WebSocket, SSE, polling) as an observation shown in the report — information, not a dependency.
