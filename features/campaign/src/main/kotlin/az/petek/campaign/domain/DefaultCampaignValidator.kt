@@ -31,8 +31,8 @@ import kotlin.time.Duration
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
- *   actors that can match two or more testers; its `request` names a mutating method (or `*`) and a regex that
- *   compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder;
+ *   actors that can match two or more testers; its `request` is required and names a mutating method (or `*`) and a
+ *   regex that compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder;
  * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
  *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
@@ -524,6 +524,10 @@ class DefaultCampaignValidator(
 
                     is AssertionSpec.OnlyOneSucceeds -> {
                         listOfNotNull(
+                            (
+                                "needs the request that decides the race, e.g. {request: \"POST .*/approve\"}: without it any " +
+                                    "mutating request counts, and an unrelated one (a notification marked read) makes a second winner"
+                            ).takeIf { assertion.request == null },
                             "needs parallel: true so the actors start at the same instant".takeUnless { step.parallel },
                             "needs a do or run whose outcomes are compared".takeIf { step.action == StepAction.None },
                             maxMatches(step.actors).takeIf { it < 2 }?.let {

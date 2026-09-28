@@ -244,7 +244,7 @@ steps:
 | `http_status` | `path`, `method` (default `GET`), `equals` | agentin sessiyası ilə birbaşa HTTP çağırışı |
 | `count` | `selector`, `equals` | elementlərin sayı |
 | `latency_max` | `ms` | `wait_for` sonrası ölçülən gecikmə həddi |
-| `only_one_succeeds` | `true` və ya `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}` | paralel aktorlardan yalnız birinin sorğusunu hədəf qəbul edib: brauzerin gördüyü uyğun sorğulardan biri `< 400`, heç biri 403/409/422 deyil (agentin `done(success)` sözü nəzərə alınmır); `oracle` verilibsə, test API-nin son vəziyyəti də yoxlanır. Yarışı uduzan aktor (409/422 və ya obyekt artıq qərarlaşdırılıb) gözlənilən nəticədir: addımı `lost_race` ilə keçir |
+| `only_one_succeeds` | `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}` (`request` məcburidir, Faza 24.5) | paralel aktorlardan yalnız birinin sorğusunu hədəf qəbul edib: brauzerin gördüyü uyğun sorğulardan biri `< 400`, heç biri 403/409/422 deyil (agentin `done(success)` sözü nəzərə alınmır); `oracle` verilibsə, test API-nin son vəziyyəti də yoxlanır. Yarışı uduzan aktor (409/422 və ya obyekt artıq qərarlaşdırılıb) gözlənilən nəticədir: addımı `lost_race` ilə keçir |
 
 `{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = həmin aktorun son `emits` payload-undakı obyekt id-si.
 
@@ -1141,7 +1141,7 @@ dərəcədə aiddir (Faza 25).
 
 #### Mərhələ B — yalançı FAILED və səhv obyektə baxan sübut (bəziləri DSL-i pozur)
 
-- [ ] **24.5 Yarışın `request`-i məcburidir.**
+- [x] **24.5 Yarışın `request`-i məcburidir.**
   - *Problem:* `only_one_succeeds: true` hər mutating request-i sayır (`RequestPattern.ANY_MUTATION`). Approve
     göndərməyən racer-in səhifəsi "oxundu" kimi əlaqəsiz bir 200 alırsa, o da qalib sayılır və yarış yalançı "iki
     qalib" ilə FAILED olur.
@@ -1150,6 +1150,9 @@ dərəcədə aiddir (Faza 25).
     `CampaignYamlWriter` belə halda `true` yazır).
   - *Test:* validator; `RaceEvidence`-də refusal-sız əlaqəsiz 200; kəşfiyyatçının draftı.
   - *Sənəd:* bu planın «Ssenari formatı», ARCHITECTURE «Races».
+  - *Vəziyyət:* validator `request`-siz yarışı nümunə ilə rədd edir; parser `true`-nu hələ oxuyur ki, xəta sətri ilə
+    deyilsin. Kəşfiyyatçı sorğusunu görmədiyi əməliyyat üçün yarış yazmır və səbəbini qeyd edir. Repodakı nümunələr
+    artıq pattern-li idi; test snippet-ləri köçürüldü.
 
 - [ ] **24.6 `{last_id}` yalnız addımın öz hadisəsidir.**
   - *Problem:* `emitted ?: waited ?: lastIdBeforeStep` zənciri hadisənin id-si oxunmayanda başqa adlı hadisənin

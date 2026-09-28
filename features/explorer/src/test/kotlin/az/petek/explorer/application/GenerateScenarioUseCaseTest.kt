@@ -41,6 +41,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -276,6 +277,20 @@ class GenerateScenarioUseCaseTest {
         skipped.getValue("login-submit" to TestPattern.BOUNDARY) shouldContain "setup run functions"
         composed.covered.flatMap { it.stepIds }.toSet() shouldBe
             (composed.campaign.steps.map { it.id } + listOf("public-pages", "public-content")).toSet()
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a race whose request the explorer never saw is not written, since code could not decide the winner`() {
+        val portal = Models.portal()
+        val unseen =
+            portal.copy(actions = portal.actions.map { if (it.id == "ticket-approve") it.copy(httpMethod = null, httpPath = null) else it })
+
+        val composed = useCase().compose(unseen, request(maxIdeas = 50))
+
+        composed.campaign.steps.map { it.id } shouldNotContain "ticket-approve-race"
+        composed.skipped.single { it.idea.actionId == "ticket-approve" && it.idea.pattern == TestPattern.RACE }.reason shouldContain
+            "was not seen, so code could not decide who won a race"
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 

@@ -400,6 +400,9 @@ internal class ScenarioComposer(
             }
                 ?: return Outcome.Skipped("a race needs two testers of a role that was offered '$name' (seen: $seen)")
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
+        val request =
+            raceRequest(action)
+                ?: return Outcome.Skipped("the request '$name' sends was not seen, so code could not decide who won a race")
         val id = stepId(action, "race")
         steps +=
             step(
@@ -408,7 +411,7 @@ internal class ScenarioComposer(
                 actor = actors.parseList(listOf("${role.key}[n=1]", "${role.key}[n=2]")),
                 action = StepAction.Do("$open səhifəsini aç və '${site(action.name)}' et"),
                 parallel = true,
-                assertions = listOf(AssertionSpec.OnlyOneSucceeds(raceRequest(action))),
+                assertions = listOf(AssertionSpec.OnlyOneSucceeds(request)),
             )
         return Outcome.Covered(prerequisites + id)
     }

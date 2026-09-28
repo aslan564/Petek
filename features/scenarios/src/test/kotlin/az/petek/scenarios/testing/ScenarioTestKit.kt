@@ -91,7 +91,7 @@ object ScenarioTestKit {
         |    parallel: true
         |    do: "Eyni ticketi approve et"
         |    assert:
-        |      - only_one_succeeds: true
+        |      - only_one_succeeds: {request: "POST .*/approve"}
         |
         |  - id: forbidden
         |    actor: employee[dept=IT, n=2]

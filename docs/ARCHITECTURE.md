@@ -126,7 +126,8 @@ is decided by code from each actor's own requests (AGENTS.md rule 2), never by w
    (assertion probes) and requests to other origins are not included.
 2. **Orchestration.** Right before the action the runner reads the actor's requests once (so answers to earlier
    requests are timestamped first) and takes the start time; after the action it reads the requests since then.
-   `only_one_succeeds: {request: "<METHOD> <path regex>"}` narrows them (default: every mutating request). An actor
+   `only_one_succeeds: {request: "<METHOD> <path regex>"}` names the request that decides; it is required, since with
+   every mutating request an unrelated accepted one (a notification marked read) would make a second winner. An actor
    won when one matching request was accepted (status < 400) and none was refused (403, 409, 422); a refusal of the
    same request it had already won (a double submit) does not count. Only a winner emits the step's event.
 3. **Lost race.** An actor that was refused as already decided (409/422), or that gave its answer (success claimed,

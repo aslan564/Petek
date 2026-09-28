@@ -27,6 +27,9 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+/** The request an approval race is decided by. */
+private val APPROVE = RequestPattern("POST", ".+/approve")
+
 class DefaultCampaignValidatorTest {
     private val validator = DefaultCampaignValidator()
 
@@ -493,6 +496,15 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `only_one_succeeds needs the request that decides the race`() {
+            val bare = issue(race(AssertionSpec.OnlyOneSucceeds()), "needs the request that decides the race")
+
+            bare.message shouldContain "step 'check', only_one_succeeds"
+            bare.message shouldContain "e.g. {request: \"POST .*/approve\"}"
+            issues(race(AssertionSpec.OnlyOneSucceeds(APPROVE))).shouldBeEmpty()
+        }
+
+        @Test
         fun `only_one_succeeds needs parallel actors`() {
             val issue = issue(asserting(AssertionSpec.OnlyOneSucceeds(), actor = "manager[IT] | manager[HR]"), "needs parallel: true")
             issue.message shouldContain "step 'check', only_one_succeeds"
@@ -500,7 +512,7 @@ class DefaultCampaignValidatorTest {
 
         @Test
         fun `only_one_succeeds needs actors that can match two testers`() {
-            fun racing(actor: String) = asserting(AssertionSpec.OnlyOneSucceeds(), actor = actor, parallel = true)
+            fun racing(actor: String) = asserting(AssertionSpec.OnlyOneSucceeds(APPROVE), actor = actor, parallel = true)
 
             issues(racing("manager[IT] | manager[HR]")).shouldBeEmpty()
             issues(racing("employee[n=1] | employee[n=2]")).shouldBeEmpty()
@@ -523,7 +535,7 @@ class DefaultCampaignValidatorTest {
             issue(waiting, "needs a do or run").message shouldContain "step 'check', only_one_succeeds"
             val running =
                 asserting(
-                    AssertionSpec.OnlyOneSucceeds(),
+                    AssertionSpec.OnlyOneSucceeds(APPROVE),
                     actor = "manager[IT] | manager[HR]",
                     parallel = true,
                     action = StepAction.Run("login"),
@@ -553,7 +565,7 @@ class DefaultCampaignValidatorTest {
 
         @Test
         fun `only_one_succeeds checks its oracle path and templates`() {
-            val oracle = { path: String -> AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition(path, "status", "approved")) }
+            val oracle = { path: String -> AssertionSpec.OnlyOneSucceeds(APPROVE, OracleCondition(path, "status", "approved")) }
 
             issues(race(oracle("/test/tickets/{last_id}"))).shouldBeEmpty()
             issue(race(oracle("https://evil.example/steal")), "oracle path must be a path on the target")
@@ -578,7 +590,7 @@ class DefaultCampaignValidatorTest {
                 race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "assignee", "{self.name}"))),
                 "{self.name} has no actor to refer to",
             )
-            issues(race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "status", "approved"))))
+            issues(race(AssertionSpec.OnlyOneSucceeds(APPROVE, OracleCondition("/test/tickets/{last_id}", "status", "approved"))))
                 .shouldBeEmpty()
         }
 
