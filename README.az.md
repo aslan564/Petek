@@ -243,7 +243,8 @@ məcburidir.
 | `PETEK_TARGET` | — | Test olunan sistem; hər kampaniyanın `campaign.target`-ini əvəz edir |
 | `PETEK_TARGETS_DIR` | `targets` | Hədəf profilləri, hər sayta bir `targets/<ad>.yaml` (URL, `api_url`, production hostlar, poçt, `${VAR}` token və hesab referansları, giriş sırası, kampaniya profili); `PETEK_TARGET` profilin adı ola bilər, panel profili olan istənilən saytda run edir (bax `docs/examples/target-profile.yaml`) |
 | `PETEK_PRODUCTION_HOSTS` | — (yoxdur) | Hədəf kimi rədd edilən hostlar, əgər … |
-| `PETEK_ALLOW_PRODUCTION` | `false` | … bu `true` deyilsə (qayda 8) |
+| `PETEK_ALLOW_PRODUCTION` | `false` | … bu `true` deyilsə (qayda 8); testerin səhifəsi başqa production hostunu heç vaxt açmır və ora yazmır |
+| `PETEK_ALLOWED_HOSTS` | — (yoxdur) | Hədəfin öz hostundan başqa testerlərin aça biləcəyi hostlar (giriş xidməti, e-poçt linkinin hostu); başqa hosta aparan səhifə geri qaytarılır. Hədəf profili öz `allowed_hosts`-unu əlavə edir |
 | `PETEK_TEST_TOKEN` | — | Hədəfin `/test/...` API-si üçün `X-Test-Token`; boş = oracle yoxlamaları və teardown yoxdur |
 | `PETEK_TEST_API_URL` | hədəf | `/test/...` API hədəfin origin-ində deyilsə onun baza ünvanı |
 | `PETEK_MAIL_INBOX` | — | Sizin qutunuz (`test@sirket.example`): hər tester `test+<run>-<agent>@sirket.example` ilə qeydiyyatdan keçir; `PETEK_MAIL_DOMAIN`-i əvəz edir; `+`-u qəbul etməyən sayt hesabatda deyilir |

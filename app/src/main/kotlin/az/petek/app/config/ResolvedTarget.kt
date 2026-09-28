@@ -101,6 +101,7 @@ object TargetProfileConfig {
             target = WebUrls.canonical(spec.url),
             testApiUrl = spec.apiUrl?.let(WebUrls::canonical),
             productionHosts = base.productionHosts + spec.productionHosts,
+            allowedHosts = base.allowedHosts + spec.allowedHosts,
             testToken = token,
             mailSource = mailSource,
             mailDomain = inbox?.substringAfter('@') ?: spec.mail.domain ?: base.mailDomain,

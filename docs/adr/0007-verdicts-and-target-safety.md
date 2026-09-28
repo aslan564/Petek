@@ -30,6 +30,11 @@ production data (rule 8). The owner also wants to test real sites that are produ
   2. The target's test API requires `X-Test-Token` and exists only in staging test mode.
   3. Test companies are flagged `is_test`: the oracle refuses to delete anything that is not, and the target refuses too.
   4. Teardown runs in `finally`, and `petek teardown --run <id>` covers crashed runs.
+  5. *(2026-09-28, Faza 24.9)* The origin belongs to the campaign, not to the tab: a tester may be only on the
+     target's host and the hosts the owner allowed (`allowed_hosts`, `PETEK_ALLOWED_HOSTS`). A page that a click or a
+     redirect takes elsewhere is brought back before the model sees it (`off_site` when it keeps leaving), and every
+     browser context refuses to open a production host or write to one (answered `204` / aborted by the session
+     itself), whatever a page links to; the target itself is exempt only when `PETEK_ALLOW_PRODUCTION` allowed it.
 
 ## Options Considered
 

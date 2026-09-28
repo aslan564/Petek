@@ -39,6 +39,11 @@ data class TargetSpec(
     val oraclePaths: Map<String, String> = emptyMap(),
     /** `tenant: company | none`; null lets Pətək decide (companies when the site's test API can seed one). */
     val tenant: Tenant? = null,
+    /**
+     * `allowed_hosts`: hosts besides [url]'s own that testers may open, such as a sign-in service or the host of an
+     * e-mail link (Faza 24.9). Every other host is off the site; [productionHosts] are never opened at all.
+     */
+    val allowedHosts: Set<String> = emptySet(),
 ) {
     init {
         require(NAME.matches(name)) { "a target name is lower-case letters, digits and '-', was '$name'" }

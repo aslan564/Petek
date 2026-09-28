@@ -245,7 +245,8 @@ question writes and whose `evidence/`, `scenarios/` and `targets/` then live nex
 | `PETEK_TARGET` | — | The system under test; replaces `campaign.target` of every campaign |
 | `PETEK_TARGETS_DIR` | `targets` | Target profiles, one `targets/<name>.yaml` per site (URL, `api_url`, production hosts, mail, `${VAR}` token and account references, sign-in order, campaign profile); `PETEK_TARGET` may name one, and the panel runs any site that has one (see `docs/examples/target-profile.yaml`) |
 | `PETEK_PRODUCTION_HOSTS` | — (none) | Hosts refused as a target unless … |
-| `PETEK_ALLOW_PRODUCTION` | `false` | … this is `true` (rule 8) |
+| `PETEK_ALLOW_PRODUCTION` | `false` | … this is `true` (rule 8); no tester page ever opens another production host or writes to it |
+| `PETEK_ALLOWED_HOSTS` | — (none) | Hosts besides the target's own that testers may open (a sign-in service, the host of an e-mail link); a page that leads to any other host is brought back. A target profile adds its own `allowed_hosts` |
 | `PETEK_TEST_TOKEN` | — | `X-Test-Token` for the target's `/test/...` API; empty disables oracle checks and teardown |
 | `PETEK_TEST_API_URL` | the target | Base address of the `/test/...` API when it is not on the target's origin |
 | `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, needs the token), `imap` (your own inbox) or `manual` (you type each code into the panel's "Kodu daxil et" box; for the explorer's 1–3 sessions) |

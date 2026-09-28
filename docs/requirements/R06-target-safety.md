@@ -18,6 +18,12 @@ destroying a customer's data.
 - **Target policy (rule 8).** `TargetPolicy` (`core/domain`) refuses hosts in `PETEK_PRODUCTION_HOSTS` unless
   `PETEK_ALLOW_PRODUCTION=true`; `PETEK_TARGET` replaces `campaign.target` so a scenario file cannot redirect a run;
   the CLI (`TargetGuard`), `doctor` and the panel (`PanelTargets`) apply the same policy to every URL.
+- **Testers stay on the site (Faza 24.9).** The policy holds during a run too, not only when the target is chosen:
+  a tester may be only on the target's host and the hosts the owner allowed (`allowed_hosts` of the target profile,
+  `PETEK_ALLOWED_HOSTS`: a sign-in service, the host of an e-mail link). An absolute URL elsewhere is refused before
+  the browser moves, a page a click or redirect took elsewhere is brought back before the model sees it (`off_site`
+  when it keeps leaving), and each browser context refuses to open a production host or write to one
+  (`SessionOptions.blockedHosts`), the target itself excepted when it was allowed.
 - **Test API guard.** `HttpTargetOracle` sends `X-Test-Token` only to the configured test API base and never follows
   redirects; company lookups and teardown refuse companies without `is_test=true`; the explorer's trial touch requires
   the owner's `allowWrites` and a `TestTargetCheck` that confirms test data through the API.

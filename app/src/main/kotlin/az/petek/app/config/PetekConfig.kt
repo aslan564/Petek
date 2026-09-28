@@ -31,7 +31,10 @@ import java.nio.file.Path
  * so a config can be logged or printed safely.
  *
  * @property target the system under test (`PETEK_TARGET`); it replaces `campaign.target` of every campaign.
- * @property productionHosts hosts refused as a target unless [allowProduction] (AGENTS.md rule 8).
+ * @property productionHosts hosts refused as a target unless [allowProduction] (AGENTS.md rule 8); no tester page ever
+ *   opens one or writes to one, the target itself excepted when it was allowed.
+ * @property allowedHosts hosts besides the target's own testers may open (`PETEK_ALLOWED_HOSTS`, a profile's
+ *   `allowed_hosts`): a sign-in service, the host of an e-mail link. Every other host is off the site (Faza 24.9).
  * @property testToken `X-Test-Token` for the target's `/test/...` API; null disables oracle assertions.
  * @property testApiUrl where the `/test/...` API lives when it is not on the target's own origin (`PETEK_TEST_API_URL`,
  *   e.g. a separate `api.` host); null means the target itself, see [testApiBase].
@@ -59,6 +62,7 @@ data class PetekConfig(
     val target: URI,
     val productionHosts: Set<String> = DEFAULT_PRODUCTION_HOSTS,
     val allowProduction: Boolean = false,
+    val allowedHosts: Set<String> = emptySet(),
     val testToken: Secret? = null,
     val testApiUrl: URI? = null,
     val mailSource: MailSource = MailSource.MAILPIT,
@@ -153,6 +157,7 @@ data class PetekConfig(
 
     override fun toString(): String =
         "PetekConfig(target=${masked(target)}, productionHosts=$productionHosts, allowProduction=$allowProduction, " +
+            "allowedHosts=$allowedHosts, " +
             "testToken=${setOrUnset(testToken)}, testApiUrl=${testApiUrl?.let(::masked)}, mailSource=${mailSource.key}, " +
             "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, mailInbox=${mailInbox ?: "unset"}, imap=${imap ?: "unset"}, " +
             "identitySecret=***, llmProvider=$llmProvider ($llmProviderReason), llmModel=$llmModelLabel, llmBin=$effectiveLlmBin, " +

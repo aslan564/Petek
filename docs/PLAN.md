@@ -1190,7 +1190,7 @@ dərəcədə aiddir (Faza 25).
 
 #### Mərhələ C — arxitektura qərarları (sahibin təsdiqi ilə)
 
-- [ ] **24.9 İcazəli origin kampaniyanındır, tab-ın yox (qayda 8).**
+- [x] **24.9 İcazəli origin kampaniyanındır, tab-ın yox (qayda 8).**
   - *Problem:* `staysOnSite` mütləq URL-i cari səhifənin hostu ilə müqayisə edir. `click` agenti başqa hosta apara
     bilər, sonra `navigate` orada sərbəstdir. `PETEK_PRODUCTION_HOSTS` yalnız hədəf seçiləndə yoxlanır, brauzerdə
     runtime bloku yoxdur: staging-dəki "canlı sayta keç" linki agenti production-a aparıb orada yazdıra bilər.
@@ -1199,6 +1199,12 @@ dərəcədə aiddir (Faza 25).
     qayıdır və agentə `off_site` deyir. (3) Sessiyanın öz thread-ində Playwright `route` production hostlarına sənəd
     naviqasiyasını həmişə kəsir; `PETEK_ALLOW_PRODUCTION` yalnız hədəfin özünə aiddir.
   - *Sənəd:* R06, R12, ADR-0007, hədəf profili sxemi, ARCHITECTURE.
+  - *Vəziyyət:* `allowed_hosts` (hədəf profili) və `PETEK_ALLOWED_HOSTS`; `AgentRuntime.siteHosts` = hədəfin hostu +
+    icazəlilər. `navigate` yalnız bunlara (və `/yol`-a; `/\host` forması yol sayılmır); klik/yönləndirmə kənara
+    aparanda səhifə model görməzdən əvvəl geri qaytarılır, 3 dəfədən çox və ya qayıdan kimi yenə çıxırsa `off_site`
+    (profilə əlavə etmək məsləhəti ilə). `SessionOptions.blockedHosts`: kontekst production hostunu açmır (`204`, tab
+    olduğu yerdə qalır) və ora yazmır (sorğu kəsilir); real Chromium testi ilə. Yol üstündə: profildəki `tenant:`
+    oxunurdu, amma `TargetSpec`-ə ötürülmürdü — düzəldildi.
 
 - [ ] **24.10 Gecikmə yazı anından ölçülür, receiver-lər əvvəlcədən baxır.**
   - *Problem:* `t0` emitter-in bütün `do`-su bitəndən sonrakı publish anıdır, submit-dən sonrakı LLM dövrəsi də

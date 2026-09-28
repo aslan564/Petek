@@ -111,6 +111,11 @@ data class AgentRuntime(
     val storageStatePath: Path,
     /** The test team's address space: what the agent may type besides its own and its colleagues' addresses. */
     val testMail: TestMail = TestMail.NONE,
+    /**
+     * The hosts this agent may be on (Faza 24.9): the target's own and the ones the owner allowed (a sign-in service,
+     * the host of an e-mail link). A path always resolves against the target; empty allows paths only.
+     */
+    val siteHosts: Set<String> = emptySet(),
 )
 
 /** The scenario step an agent is working on. */
@@ -189,6 +194,13 @@ enum class FailureReason(
      * the site accepted it (status < 400). Decided by code from the browser's requests, whatever the agent said.
      */
     FORBIDDEN_ACCEPTED("forbidden_accepted"),
+
+    /**
+     * The page kept leaving the site under test for a host that is neither the target's nor one the owner allowed: it
+     * was brought back and left again (Faza 24.9). When that host is the site's own sign-in or mail, it belongs in
+     * `allowed_hosts` of the target profile.
+     */
+    OFF_SITE("off_site"),
     ;
 
     companion object {

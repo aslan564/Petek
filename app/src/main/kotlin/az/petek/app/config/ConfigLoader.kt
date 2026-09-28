@@ -72,7 +72,8 @@ class ConfigLoader(
             val named = namedProfile?.first
             val target = if (named != null) WebUrls.canonical(named.spec.url) else url(Keys.TARGET, default = null)
             if (target == null && text(Keys.TARGET) == null) problems += "${Keys.TARGET} is required (the URL of the system under test)"
-            val productionHosts = hosts(Keys.PRODUCTION_HOSTS)
+            val productionHosts = hosts(Keys.PRODUCTION_HOSTS, PetekConfig.DEFAULT_PRODUCTION_HOSTS)
+            val allowedHosts = hosts(Keys.ALLOWED_HOSTS, emptySet())
             val allowProduction = flag(Keys.ALLOW_PRODUCTION, default = false)
             val testToken = token(Keys.TEST_TOKEN)
             val testApiUrl = url(Keys.TEST_API_URL, default = null)
@@ -146,6 +147,7 @@ class ConfigLoader(
                     target = checkNotNull(target),
                     productionHosts = productionHosts,
                     allowProduction = allowProduction,
+                    allowedHosts = allowedHosts,
                     testToken = testToken,
                     testApiUrl = testApiUrl,
                     mailSource = checkNotNull(mailSource),
@@ -213,8 +215,11 @@ class ConfigLoader(
             return WebUrls.canonical(url)
         }
 
-        private fun hosts(key: String): Set<String> {
-            val raw = text(key) ?: return PetekConfig.DEFAULT_PRODUCTION_HOSTS
+        private fun hosts(
+            key: String,
+            default: Set<String>,
+        ): Set<String> {
+            val raw = text(key) ?: return default
             val hosts =
                 raw
                     .split(',')
@@ -478,6 +483,7 @@ class ConfigLoader(
     object Keys {
         const val TARGET = "PETEK_TARGET"
         const val PRODUCTION_HOSTS = "PETEK_PRODUCTION_HOSTS"
+        const val ALLOWED_HOSTS = "PETEK_ALLOWED_HOSTS"
         const val ALLOW_PRODUCTION = "PETEK_ALLOW_PRODUCTION"
         const val TEST_TOKEN = "PETEK_TEST_TOKEN"
         const val TEST_API_URL = "PETEK_TEST_API_URL"

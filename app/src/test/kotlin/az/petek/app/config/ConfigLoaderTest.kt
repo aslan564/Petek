@@ -94,6 +94,7 @@ class ConfigLoaderTest {
                 target,
                 "PETEK_PRODUCTION_HOSTS" to " Portal.example , app.portal.example ,",
                 "PETEK_ALLOW_PRODUCTION" to "yes",
+                "PETEK_ALLOWED_HOSTS" to " SSO.portal.example ,",
                 "PETEK_TEST_TOKEN" to "tok-123",
                 "PETEK_TEST_API_URL" to "https://api.staging.portal.example/",
                 "PETEK_MAIL_SOURCE" to "Test-API",
@@ -119,6 +120,7 @@ class ConfigLoaderTest {
 
         config.productionHosts shouldBe setOf("portal.example", "app.portal.example")
         config.allowProduction shouldBe true
+        config.allowedHosts shouldBe setOf("sso.portal.example")
         config.testToken shouldBe Secret("tok-123")
         config.testApiUrl shouldBe URI("https://api.staging.portal.example/")
         config.testApiBase shouldBe URI("https://api.staging.portal.example/")
@@ -341,6 +343,7 @@ class ConfigLoaderTest {
               url: https://Stage.Shop.example
               api_url: https://api.stage.shop.example
               production_hosts: [shop.example]
+              allowed_hosts: [login.shop.example]
               mail: {source: test-api, domain: qa.shop.example}
               test_api: {token: '${'$'}{SHOP_TOKEN}'}
             """.trimIndent(),
@@ -358,6 +361,7 @@ class ConfigLoaderTest {
         config.mailSource shouldBe MailSource.TEST_API
         config.mailDomain shouldBe "qa.shop.example"
         config.productionHosts shouldBe setOf("shop.example")
+        config.allowedHosts shouldBe setOf("login.shop.example")
         config.targets.map { it.spec.name } shouldBe listOf("blog", "shop")
         config.profileFor(URI("https://blog.example/path"))?.testToken shouldBe null
         TargetProfileConfig.forTarget(config, URI("https://blog.example")).target shouldBe URI("https://blog.example")

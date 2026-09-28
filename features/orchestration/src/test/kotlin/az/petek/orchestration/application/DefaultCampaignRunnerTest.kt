@@ -54,6 +54,32 @@ class DefaultCampaignRunnerTest {
 
     private fun TestScope.fixture() = RunnerFixture(VirtualClock(testScheduler))
 
+    @Test
+    fun `testers stay on the site and its allowed hosts and never open a production host`() =
+        runTest {
+            val f = fixture()
+            val seen = java.util.concurrent.CopyOnWriteArrayList<Set<String>>()
+            f.agents.script = { _, runtime ->
+                seen += runtime.siteHosts
+                ActionOutcome(ActionStatus.SUCCEEDED, "ok")
+            }
+            val settings =
+                RunnerSettings(
+                    mailDomain = "test.example.test",
+                    storageRoot = Path.of("build", "storage"),
+                    allowedHosts = { setOf("SSO.example.test") },
+                    // The target itself is production here, which the owner allowed: only the other one is blocked.
+                    productionHosts = { setOf("example.test", "staging.example.test") },
+                )
+
+            f.runner(settings = settings).run(campaign(managers = 0, employees = 1, steps = listOf(step("look", employees()))))
+
+            f.browser.opened
+                .map { it.blockedHosts }
+                .toSet() shouldBe setOf(setOf("example.test"))
+            seen.toSet() shouldBe setOf(setOf("staging.example.test", "sso.example.test"))
+        }
+
     /** The shape of docs/examples/company-portal.yaml on a 7-tester registry: a01 admin, a02-a03 managers, a04-a07 employees. */
     private fun portalCampaign() =
         campaign(

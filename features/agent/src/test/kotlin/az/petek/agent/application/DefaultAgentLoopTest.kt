@@ -392,7 +392,7 @@ class DefaultAgentLoopTest {
         }
 
     @Test
-    fun `on a blank page only paths can be opened`() =
+    fun `on a blank page the site's own pages open by path or by address`() =
         runTest {
             browser.url = "about:blank"
             val llm =
@@ -404,8 +404,68 @@ class DefaultAgentLoopTest {
 
             execute(llm)
 
-            browser.actions shouldContainExactly listOf("navigate /login")
-            llm.userTurn(1) shouldContain "INVALID: Only pages of the site under test can be opened. Use a path such as /tickets."
+            browser.actions shouldContainExactly listOf("navigate https://staging.portal.test/login", "navigate /login")
+        }
+
+    @Test
+    fun `a protocol-relative address is another host, not a path, and is refused`() =
+        runTest {
+            val llm =
+                scripted(
+                    decision("navigate", """"url": "//portal.example/register""""),
+                    decision("click", """"ref": 3"""),
+                    decision("navigate", """"url": "/\\portal.example/register""""),
+                    decision("done", """"summary": "ok""""),
+                )
+
+            execute(llm)
+
+            browser.actions shouldContainExactly listOf("click 3")
+            llm.userTurn(1) shouldContain "'url' must be a path starting with '/' (e.g. /tickets) or an absolute http(s) URL"
+            llm.userTurn(3) shouldContain "INVALID: Only pages of the site under test can be opened."
+        }
+
+    @Test
+    fun `a page a click took to another host is brought back before the model sees it`() =
+        runTest {
+            browser.onAction = { action -> if (action == "click 3") browser.url = "https://portal.example/landing" }
+            val llm = scripted(decision("click", """"ref": 3"""), decision("done", """"summary": "ok""""))
+
+            execute(llm).status shouldBe ActionStatus.SUCCEEDED
+
+            browser.actions shouldContainExactly listOf("click 3", "navigate https://staging.portal.test/login")
+            llm.requests shouldHaveSize 2
+            llm.userTurn(1) shouldContain
+                "The page left the site under test for portal.example; it was brought back to https://staging.portal.test/login."
+        }
+
+    @Test
+    fun `a page that keeps leaving the site ends the task with off_site, never shown to the model`() =
+        runTest {
+            browser.snapshotProvider = { PageSnapshot("https://sso.portal.example/login", "Sign in", emptyList(), "Sign in") }
+            val llm = scripted(decision("done", """"summary": "ok""""))
+
+            val outcome = execute(llm)
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.failureReason shouldBe FailureReason.OFF_SITE
+            outcome.summary shouldContain "If sso.portal.example is the site's own sign-in or mail, add it to allowed_hosts"
+            llm.requests shouldHaveSize 0
+        }
+
+    @Test
+    fun `a host the owner allowed can be opened and is not left`() =
+        runTest {
+            val allowed = AgentTestData.runtime(browser, identity, siteHosts = setOf("staging.portal.test", "sso.portal.example"))
+            val llm =
+                scripted(
+                    decision("navigate", """"url": "https://sso.portal.example/login""""),
+                    decision("done", """"summary": "ok""""),
+                )
+
+            execute(llm, target = allowed).status shouldBe ActionStatus.SUCCEEDED
+
+            browser.actions shouldContainExactly listOf("navigate https://sso.portal.example/login")
         }
 
     @Test

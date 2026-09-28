@@ -423,6 +423,22 @@ class AppContainer(
                     correlationHeader = config.correlationHeader,
                     accounts = { site -> ownAccountsFor(site) },
                     proxies = config.proxies,
+                    allowedHosts = { site ->
+                        config.allowedHosts +
+                            config
+                                .profileFor(site)
+                                ?.spec
+                                ?.allowedHosts
+                                .orEmpty()
+                    },
+                    productionHosts = { site ->
+                        config.productionHosts +
+                            config
+                                .profileFor(site)
+                                ?.spec
+                                ?.productionHosts
+                                .orEmpty()
+                    },
                 ),
             sharedStateFactory = ::InMemorySharedRunState,
             watchdog = watchdog,

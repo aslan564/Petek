@@ -39,6 +39,16 @@ data class RunnerSettings(
      * are fewer proxies than live testers the run does not start and says so. Empty: every tester shares the machine's IP.
      */
     val proxies: List<BrowserProxy> = emptyList(),
+    /**
+     * Hosts besides a target's own that its testers may open (its profile's `allowed_hosts`, `PETEK_ALLOWED_HOSTS`): a
+     * sign-in service, the host of an e-mail link (Faza 24.9). Every other host is off the site.
+     */
+    val allowedHosts: (URI) -> Set<String> = { emptySet() },
+    /**
+     * A target's production hosts (`PETEK_PRODUCTION_HOSTS`, its profile's `production_hosts`): no tester page opens one
+     * or writes to one, the target itself excepted when the owner allowed it (AGENTS.md rule 8).
+     */
+    val productionHosts: (URI) -> Set<String> = { emptySet() },
 ) {
     init {
         require(mailDomain.isNotBlank()) { "mailDomain must not be blank" }

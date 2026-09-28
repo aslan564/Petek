@@ -368,13 +368,17 @@ class DefaultCampaignRunner(
     ) {
         val agentId = identity.agentId
         try {
+            val target = run.campaign.settings.target
+            val targetHost = target.host?.lowercase()
             val options =
                 SessionOptions(
                     label = agentId.value,
-                    baseUrl = run.campaign.settings.target,
+                    baseUrl = target,
                     localStorage = run.campaign.target.localStorage,
                     correlationHeader = settings.correlationHeader,
                     proxy = proxy,
+                    // No tester page opens a production host or writes to one; the target itself only when it was allowed.
+                    blockedHosts = settings.productionHosts(target).map { it.trim().lowercase() }.toSet() - setOfNotNull(targetHost),
                 )
             val stored = storageStatePath(run.runId, agentId)
             val signedIn = options.copy(storageState = stored.takeIf(Files::isRegularFile))
@@ -407,6 +411,7 @@ class DefaultCampaignRunner(
                     runStartedAt = run.startedAt.wall,
                     storageStatePath = stored,
                     testMail = TestMail.of(settings.mailDomain, settings.mailbox),
+                    siteHosts = setOfNotNull(targetHost) + settings.allowedHosts(target).map { it.trim().lowercase() },
                 )
             run.agents[agentId] = agents.create(runtime)
         } catch (e: Exception) {

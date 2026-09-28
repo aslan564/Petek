@@ -90,6 +90,38 @@ class PlaywrightBrowserSessionTest {
     }
 
     @Test
+    fun `a production host is never opened nor written to, whatever a page does`() =
+        runBlocking<Unit> {
+            // The same local site under the name localhost plays a production host next to the staging on 127.0.0.1.
+            val production = "http://localhost:${site.baseUrl.port}"
+            val control = sessions.open(SessionOptions("control", site.baseUrl, defaultTimeout = 5.seconds))
+            val guarded =
+                sessions.open(SessionOptions("tester", site.baseUrl, defaultTimeout = 5.seconds, blockedHosts = setOf("LOCALHOST")))
+            try {
+                // Without the guard the address opens and the write arrives: the guard below is what stops them.
+                val homes = site.homeRequests.get()
+                control.navigate("$production/")
+                site.homeRequests.get() shouldBe homes + 1
+                control.navigate("/write-elsewhere?to=$production/api/write")
+                control.waitForText("sent", 5.seconds).found shouldBe true
+                site.writes.get() shouldBe 1
+
+                // The tab stays where it was (a blank page here): the production page is never asked for.
+                runCatching { guarded.navigate("$production/") }
+                site.homeRequests.get() shouldBe homes + 1
+                guarded.currentUrl() shouldNotContain "localhost"
+                guarded.navigate("/write-elsewhere?to=$production/api/write")
+                guarded.waitForText("blocked", 5.seconds).found shouldBe true
+                site.writes.get() shouldBe 1
+                guarded.navigate("/")
+                site.homeRequests.get() shouldBe homes + 2
+            } finally {
+                control.close()
+                guarded.close()
+            }
+        }
+
+    @Test
     fun `snapshot numbers the visible interactive elements in DOM order with their accessible names`() =
         withSession { session ->
             session.navigate("/form")

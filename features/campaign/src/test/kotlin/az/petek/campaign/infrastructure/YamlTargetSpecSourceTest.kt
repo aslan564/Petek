@@ -17,6 +17,7 @@ import az.petek.campaign.domain.SignInMethod
 import az.petek.campaign.domain.TargetMail
 import az.petek.campaign.domain.TargetSpec
 import az.petek.campaign.domain.TargetSpecException
+import az.petek.campaign.domain.Tenant
 import az.petek.campaign.testing.repoFile
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -52,6 +53,7 @@ class YamlTargetSpecSourceTest {
                       url: https://staging.portal.example
                       api_url: https://api.staging.portal.example
                       production_hosts: [Portal.example, www.portal.example]
+                      allowed_hosts: [SSO.portal.example]
                       mail: {source: test-api, domain: Test.Portal.example}
                       test_api: {token: '${'$'}{PETEK_TEST_TOKEN_PORTAL}'}
                       sign_in: [own_accounts, anonymous]
@@ -59,6 +61,7 @@ class YamlTargetSpecSourceTest {
                         - {role: admin, email: owner@example.com, password: '${'$'}{PETEK_ACC_ADMIN}'}
                         - {role: hr, storage_state: sessions/hr.json}
                       profile: docs/examples/company-portal.yaml
+                      tenant: none
                     """,
                 ),
             )
@@ -78,6 +81,8 @@ class YamlTargetSpecSourceTest {
                         OwnAccount("hr", storageState = "sessions/hr.json"),
                     ),
                 profile = "docs/examples/company-portal.yaml",
+                tenant = Tenant.NONE,
+                allowedHosts = setOf("sso.portal.example"),
             )
     }
 

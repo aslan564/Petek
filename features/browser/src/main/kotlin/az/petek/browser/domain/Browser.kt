@@ -102,6 +102,11 @@ data class SessionOptions(
      * preflighted, which a site's CORS must allow.
      */
     val correlationHeader: Boolean = false,
+    /**
+     * Hosts no page of this session may open (top-level page or frame) or write to (`POST`, `PUT`, `PATCH`, `DELETE`):
+     * the owner's production hosts (AGENTS.md rule 8). Other requests there, such as an image a page loads, pass.
+     */
+    val blockedHosts: Set<String> = emptySet(),
 )
 
 /** Result of waiting for something to appear. [observedAt] is the harness time it was seen (t1). */

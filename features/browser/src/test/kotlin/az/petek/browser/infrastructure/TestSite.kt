@@ -47,6 +47,9 @@ internal class TestSite : AutoCloseable {
     /** How often the site's home page was asked for. */
     val homeRequests = AtomicInteger()
 
+    /** How many writes reached `/api/write` (a page elsewhere posts there with `/write-elsewhere?to=`). */
+    val writes = AtomicInteger()
+
     private val server =
         embeddedServer(CIO, host = "127.0.0.1", port = 0) {
             install(SSE)
@@ -126,6 +129,11 @@ internal class TestSite : AutoCloseable {
                     )
                 }
                 put("/api/tickets/{id}") { call.respondText("updated") }
+                post("/api/write") {
+                    writes.incrementAndGet()
+                    call.respondText("written")
+                }
+                get("/write-elsewhere") { call.respondText(WRITE_ELSEWHERE_PAGE, ContentType.Text.Html) }
                 delete("/api/tickets/{id}") { call.respondText("gone", status = HttpStatusCode.Forbidden) }
             }
         }.start(wait = false)
@@ -140,6 +148,15 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        /** Posts to the address in `?to=` as the page loads and says whether the request went out. */
+        const val WRITE_ELSEWHERE_PAGE =
+            "<!doctype html><html><head><title>Yazı</title></head><body><p id='state'>...</p><script>" +
+                "const to = new URLSearchParams(location.search).get('to');" +
+                "fetch(to, {method: 'POST', mode: 'no-cors', body: 'x'})" +
+                ".then(() => { document.getElementById('state').textContent = 'sent'; })" +
+                ".catch(() => { document.getElementById('state').textContent = 'blocked'; });" +
+                "</script></body></html>"
+
         const val HOME_PAGE = "<!doctype html><html><head><title>Ana səhifə</title></head><body><p>Ana səhifə</p></body></html>"
 
         /** A single-page application's login: the user is kept in sessionStorage only. */

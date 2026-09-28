@@ -317,6 +317,11 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
   or tokens: it types `{self.password}` and the harness substitutes it.
 - **Target policy.** Hosts listed in `PETEK_PRODUCTION_HOSTS` are refused unless `PETEK_ALLOW_PRODUCTION=true`; the
   refusal names both variables. Oracle deletes require `is_test=true`.
+- **Testers stay on the site.** A tester may be only on the target's host and the hosts the owner allowed
+  (`allowed_hosts` of the target profile, `PETEK_ALLOWED_HOSTS`): `navigate` elsewhere is an invalid decision, a page
+  that a click or redirect took away is brought back before the model sees it (`off_site` when it keeps leaving), and
+  every browser context answers a navigation to a production host with `204` (the tab stays) and aborts a write there
+  (`SessionOptions.blockedHosts`). A typed e-mail address or phone number must be the test team's (`ContactPolicy`).
 - **Dialogs.** A dialog's message is masked for secrets the session typed before it reaches the evidence or the LLM.
 - **AI command-line tools.** A tool is started via `ProcessBuilder` with an argument list (no shell) in an empty
   temporary directory; its arguments are the owner's (`PETEK_LLM_ARGS`), the code holds no vendor-specific flag.
