@@ -17,6 +17,7 @@ import az.petek.agent.domain.AgentAction
 import az.petek.agent.domain.AgentDecision
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariableKeys
+import az.petek.agent.domain.ContactPolicy
 import az.petek.agent.domain.DecisionParse
 import az.petek.agent.domain.DecisionProtocol
 import az.petek.agent.domain.FailureReason
@@ -63,8 +64,9 @@ private val logger = KotlinLogging.logger {}
  * `report_problem`, or a guard stops it. Guards, all decided by code (AGENTS.md rules 2 and 3):
  * - [StepContext.maxSteps] LLM decisions -> `step_limit`; the whole execution runs within [StepContext.timeout] -> `timeout`;
  * - the same action chosen repeatedly (per [LoopDetector]) -> `loop_detected`, the repeat is not executed;
- * - a ref that is not on the page, a placeholder that does not resolve or an absolute URL on another host is an
- *   invalid decision (fed back, nothing executed);
+ * - a ref that is not on the page, a placeholder that does not resolve, an absolute URL on another host or a typed
+ *   e-mail address or phone number that is not the test team's ([ContactPolicy]) is an invalid decision (fed back,
+ *   nothing executed);
  * - [MAX_INVALID_DECISIONS] invalid decisions in a row -> `invalid_decision`;
  * - [MAX_FAILED_ACTIONS] failed browser/mail actions in a row -> `browser_error`;
  * - no verification e-mail for `get_email_code` -> `mail_timeout`; a test inbox that stayed unreachable for the
@@ -126,6 +128,7 @@ class DefaultAgentLoop(
         private val step: StepContext,
     ) {
         private val detector = loopDetectorFactory()
+        private val contacts = ContactPolicy(runtime.identity, runtime.roster, runtime.testMail)
         private val history = mutableListOf<ActionHistoryEntry>()
         private val system: String by lazy { runtime.redact(prompts.system(runtime)) }
         private val label = "${runtime.identity.agentId}/${step.scenarioStep}"
@@ -281,6 +284,7 @@ class DefaultAgentLoop(
                 return Preparation.Rejected("Element [$ref] is not on the current page. Use a ref from the Elements list.")
             }
             if (action !is AgentAction.Type) return Preparation.Ready(null)
+            contacts.refusal(action.text)?.let { return Preparation.Rejected(it) }
             return when (val resolution = resolver.resolve(action.text, runtime)) {
                 is PlaceholderResolver.Resolution.Resolved -> Preparation.Ready(resolution.text)
                 is PlaceholderResolver.Resolution.Unresolved -> Preparation.Rejected(resolution.message)

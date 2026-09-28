@@ -17,6 +17,7 @@ import az.petek.agent.domain.AgentVariables
 import az.petek.agent.domain.Colleague
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.SharedRunState
+import az.petek.agent.domain.TestMail
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.browser.domain.BrowserProxy
@@ -371,6 +372,7 @@ class DefaultCampaignRunner(
                     shared = run.shared,
                     runStartedAt = run.startedAt.wall,
                     storageStatePath = stored,
+                    testMail = TestMail.of(settings.mailDomain, settings.mailbox),
                 )
             run.agents[agentId] = agents.create(runtime)
         } catch (e: Exception) {

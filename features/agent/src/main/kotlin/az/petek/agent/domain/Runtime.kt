@@ -109,6 +109,8 @@ data class AgentRuntime(
     val runStartedAt: Instant,
     /** Where this agent's storage state is saved after login. */
     val storageStatePath: Path,
+    /** The test team's address space: what the agent may type besides its own and its colleagues' addresses. */
+    val testMail: TestMail = TestMail.NONE,
 )
 
 /** The scenario step an agent is working on. */

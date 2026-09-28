@@ -1104,7 +1104,7 @@ dərəcədə aiddir (Faza 25).
     screenshot-u). Detal: `forbidden_accepted: POST /api/tickets/t1/approve -> 200 was accepted, although this step
     expects the site to refuse it; agent: ...`.
 
-- [ ] **24.3 Agent yalnız test komandasının ünvanlarını yazır.**
+- [x] **24.3 Agent yalnız test komandasının ünvanlarını yazır.**
   - *Problem:* `DefaultAgentLoop.prepare` `type` mətnində yalnız yer tutucuları həll edir. Model "həmkarını dəvət et"
     kimi tapşırıqda uydurma real e-poçt və ya telefon yaza bilər, hədəf sayt da real üçüncü şəxsə məktub və ya SMS
     göndərər.
@@ -1114,6 +1114,9 @@ dərəcədə aiddir (Faza 25).
     Qayda agent domain-ində saf funksiyadır; `run` axınları sahibin profilindən gəldiyi üçün toxunulmur.
   - *Test:* `ScriptedLlmClient` ilə xarici ünvan → rədd və izah; öz, həmkar, artı ünvan → keçir; telefon halları.
   - *Sənəd:* R12 (yeni təhdid sətri: AI üçüncü şəxslə əlaqə saxlayır).
+  - *Vəziyyət:* `ContactPolicy` (agent domain) və `TestMail` (sahibin qutusu varsa yalnız onun `+` ünvanları, yoxdursa
+    catch-all domen); `DefaultAgentLoop` `type` mətnini yer tutucular həll olunmazdan əvvəl yoxlayır, imtina modelə
+    etibarsız qərar kimi qayıdır. Beynəlxalq formatlı (`+`) nömrələr yoxlanır; yerli formatlı nömrə tanınmır.
 
 - [ ] **24.4 Swap: sessiya sayta açılır, gözləmə öz hadisəsini gözləyir.**
   - *Problem 1:* swap hesabı təzə brauzerdə açır, sessiya isə `about:blank`-da qalır. İlk addımı `wait_for` olan

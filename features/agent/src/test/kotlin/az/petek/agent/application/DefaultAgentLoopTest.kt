@@ -376,6 +376,22 @@ class DefaultAgentLoopTest {
         }
 
     @Test
+    fun `an address outside the test team is never typed`() =
+        runTest {
+            val llm =
+                scripted(
+                    decision("type", """"ref": 1, "text": "ceo@company.example""""),
+                    decision("type", """"ref": 1, "text": "{self.email}""""),
+                    decision("done", """"summary": "ok""""),
+                )
+
+            execute(llm).status shouldBe ActionStatus.SUCCEEDED
+
+            browser.actions.none { "company.example" in it } shouldBe true
+            llm.userTurn(1) shouldContain "INVALID: Only e-mail addresses and phone numbers of the test team can be typed"
+        }
+
+    @Test
     fun `on a blank page only paths can be opened`() =
         runTest {
             browser.url = "about:blank"
