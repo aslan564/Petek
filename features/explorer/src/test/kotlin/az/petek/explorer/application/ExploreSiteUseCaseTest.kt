@@ -27,6 +27,7 @@ import az.petek.explorer.domain.ExplorationStatus
 import az.petek.explorer.domain.FindingKind
 import az.petek.explorer.domain.Provenance
 import az.petek.explorer.domain.Severity
+import az.petek.explorer.domain.TestApiProbe
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.explorer.domain.TrialOutcome
@@ -80,7 +81,8 @@ class ExploreSiteUseCaseTest {
         llm: LlmClient = this.llm,
         check: TestTargetCheck = TestTargetCheck.REFUSE_ALL,
         settings: ExplorerSettings = ExplorerSettings(),
-    ) = ExploreSiteUseCase(site.factory(), llm, artifacts, repository, site.clock, ids, policy, check, settings)
+        testApi: TestApiProbe = TestApiProbe.NONE,
+    ) = ExploreSiteUseCase(site.factory(), llm, artifacts, repository, site.clock, ids, policy, check, settings, testApi)
 
     private fun request(
         phases: Set<ExplorationPhase> = setOf(ExplorationPhase.ANONYMOUS),
@@ -362,7 +364,7 @@ class ExploreSiteUseCaseTest {
             loggedInSite()
             val sessions = mapOf("employee" to site.session("employee"), "admin" to site.session("admin"))
 
-            val result = useCase().execute(request(phases = setOf(ExplorationPhase.ROLE_BASED)), sessions, observer)
+            val result = useCase().execute(request(phases = setOf(ExplorationPhase.ROLE_BASED)), sessions, observer = observer)
 
             val model = result.model
             val announce = model.action("announcement-submit").shouldNotBeNull()
@@ -644,7 +646,7 @@ class ExploreSiteUseCaseTest {
                 useCase(check = confirmed).execute(
                     request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
                     mapOf("admin" to admin, "employee" to employee),
-                    observer,
+                    observer = observer,
                 )
 
             val clicks = admin.actions.filter { it.startsWith("clickSelector ") }
@@ -680,6 +682,47 @@ class ExploreSiteUseCaseTest {
         }
 
     @Test
+    fun `the trial touch asks the test API about what it created, as the role that created it`() =
+        runTest {
+            loggedInSite()
+            site.creates["[data-testid=\"announcement-submit\"]"] = "/announcements/a1" to true
+            site.creates["[data-testid=\"ticket-submit\"]"] = "/tickets/t9" to false
+            val asked = mutableListOf<Triple<String, String, String>>()
+            // The test API serves announcements only; tickets it does not know (Faza 25.2).
+            val probe =
+                TestApiProbe { resource, by, marker ->
+                    asked += Triple(resource, by, marker)
+                    resource == "announcements"
+                }
+            val confirmed = TestTargetCheck { TestTargetVerdict.Confirmed("company c1 is_test=true") }
+
+            val result =
+                useCase(check = confirmed, testApi = probe).execute(
+                    request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
+                    mapOf("admin" to site.session("admin"), "employee" to site.session("employee")),
+                    accounts = mapOf("admin" to "owner@test.portal.example"),
+                )
+
+            asked.map { it.first to it.second } shouldContainExactlyInAnyOrder
+                listOf("announcements" to "owner@test.portal.example", "tickets" to "owner@test.portal.example")
+            asked.forEach { it.third shouldStartWith "Pətək sınaq" }
+            result.model
+                .action("announcement-submit")!!
+                .trial!!
+                .testApi shouldBe true
+            result.model
+                .action("ticket-submit")!!
+                .trial!!
+                .testApi shouldBe false
+            // Not accepted: nothing was created, so nothing is asked.
+            result.model
+                .action("company-department-submit")!!
+                .trial!!
+                .testApi
+                .shouldBeNull()
+        }
+
+    @Test
     fun `what the trial touch created is deleted again through the site's delete action, only while it shows the marker`() =
         runTest {
             loggedInSite()
@@ -698,7 +741,7 @@ class ExploreSiteUseCaseTest {
                 useCase(check = confirmed).execute(
                     request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
                     mapOf("admin" to admin, "employee" to site.session("employee")),
-                    observer,
+                    observer = observer,
                 )
 
             // The object page was never walked, so its one delete button is found on the page itself and clicked by ref.
@@ -811,7 +854,7 @@ class ExploreSiteUseCaseTest {
                 useCase(check = confirmed).execute(
                     request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
                     mapOf("admin" to admin),
-                    redirectWhenTouching,
+                    observer = redirectWhenTouching,
                 )
 
             admin.actions.none { "company-department" in it && (it.startsWith("fill") || it.startsWith("click")) } shouldBe true

@@ -1360,13 +1360,20 @@ mərhələsindən sonra.
     əməliyyatını görür, draft yenə şirkət draftıdır (e2e bunu indi yoxlayır); kodu kimin verdiyini görmədiyi saytda
     (kəşfiyyatçı özü soruşur) draft `tenant: none` olur.
 
-- [ ] **25.2 Draft çərçivəsində müqavilə sabitləri qalmır.**
+- [x] **25.2 Draft çərçivəsində müqavilə sabitləri qalmır.**
   - *Problem:* `ScenarioSettings`-in default-ları müqavilədəndir: komanda 1 admin + 2 manager + 3 employee, şöbələr IT
     və HR, oracle yoxlaması yalnız `announcements` və `tickets` üçün.
   - *Yol:* komanda sahibin tester sayından və kəşfiyyatçının gördüyü rollardan qurulur; şöbə yalnız kəşfiyyatçı şöbə
     görəndə yazılır; oracle resursları sabit siyahıdan yox, test API-nin həqiqətən verdiklərindən götürülür.
   - *Test:* müqavilədən fərqli resursları olan test API-də oracle yoxlamaları həmin resurslara yazılır.
   - *Sənəd:* R07, R11.
+  - *Vəziyyət:* şirkət draftının komandası sahibin formundan, yoxdursa kəşfiyyatçının gördüyü rollardan (manager
+    görülübsə 2, employee görülübsə 3; canlı görənlər də sayılır); şöbələr sahibin formundan, yoxdursa kəşfiyyatçının
+    gördüyü şöbə seçimlərindən (`Departments.seen`), heç biri yoxdursa draftın öz test şirkətinin bir şöbəsi (`Test`).
+    Oracle resursları sabit siyahıdan çıxdı: sınaq toxunuşu yaratdığı obyekti yaradanın e-poçtu ilə test API-dən
+    soruşur (`TestApiProbe`, paneldə `OracleResourceProbe`: `GET /test/<resurs>/latest?by=`, cavab marker-i daşımalıdır)
+    və draft oracle yoxlamasını yalnız belə sübut olunan resurslara yazır. Resurs adı sınaqla draft arasında ortaqdır
+    (`Resources`). Fake target-də draft yenə `announcements` oracle-ını yazır (e2e yoxlayır).
 
 - [ ] **25.3 "Test et" əsas yoldur.** Faza 23-ün açıq bəndi (kəşf et → ssenari → run) bu fazanın məqsədidir: sahib
   heç bir ssenari faylı yazmadan başlayır; CLI və MCP də eyni axını verir, nümunə kampaniya faylı əsas yol kimi

@@ -9,7 +9,9 @@ The company model below (an owner who creates a company, managers and employees 
 code, departments) is this contract's own model, not what Pətək assumes of a site (Faza 25.1): a campaign or draft uses
 it only when the target profile says `tenant: company`, or when the explorer saw the site's own way into a company, a
 form to join with an invitation or code and a signed-in role that hands them out, and the test API can seed the test
-company. A test API alone means oracle checks and teardown, nothing about the site's gate.
+company. A test API alone means oracle checks and teardown, nothing about the site's gate. Nor is any resource assumed
+of it (Faza 25.2): a draft checks `/test/<resource>/...` only for a resource whose `latest?by=` answered the explorer's
+trial touch with the object it had just created; the announcements and tickets below are this contract's resources.
 
 The contract is the default, not a requirement: a site whose flows differ describes them under
 `target_profile.flows` (sign-up, join by invitation or company code, login, identity check; docs/ARCHITECTURE.md

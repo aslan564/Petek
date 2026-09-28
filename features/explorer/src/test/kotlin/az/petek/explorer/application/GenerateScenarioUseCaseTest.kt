@@ -309,6 +309,133 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `a company draft takes the departments and roles the explorer saw, not the contract's`() {
+        val portal = Models.portal()
+        // The site's own departments, in its ticket form; no manager was ever seen signed in.
+        val sales =
+            portal.copy(
+                pages =
+                    portal.pages.map { page ->
+                        page.copy(
+                            forms =
+                                page.forms.map { form ->
+                                    form.copy(
+                                        fields =
+                                            form.fields.map { field ->
+                                                if (field.name ==
+                                                    "department"
+                                                ) {
+                                                    field.copy(options = listOf("Seçin", "Satış", "Anbar"))
+                                                } else {
+                                                    field
+                                                }
+                                            },
+                                    )
+                                },
+                        )
+                    },
+                roles = portal.roles.filter { it.name != "manager" },
+                actions =
+                    portal.actions.map { action ->
+                        action.copy(
+                            allowedRoles = action.allowedRoles - "manager",
+                            forbiddenRoles = action.forbiddenRoles - "manager",
+                            trial = action.trial?.let { it.copy(seenLiveBy = it.seenLiveBy - "manager") },
+                        )
+                    },
+            )
+
+        val campaign = useCase().compose(sales, request(testApi = true)).campaign
+
+        campaign.settings.departments shouldBe listOf("Satış", "Anbar")
+        campaign.settings.roles.manager shouldBe 0
+        campaign.settings.roles.employee shouldBe ScenarioSettings.FAN_OUT
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a company draft whose explorer saw no department gets one of its own, and the owner's win`() {
+        val portal = Models.portal()
+        val noDepartments =
+            portal.copy(
+                pages =
+                    portal.pages.map { page ->
+                        page.copy(
+                            forms =
+                                page.forms.map { form ->
+                                    form.copy(
+                                        fields =
+                                            form.fields.filter {
+                                                it.name !=
+                                                    "department"
+                                            },
+                                    )
+                                },
+                        )
+                    },
+            )
+
+        useCase()
+            .compose(noDepartments, request(testApi = true))
+            .campaign.settings.departments shouldBe
+            listOf(ScenarioSettings.OWN_DEPARTMENT)
+        GenerateScenarioUseCase(
+            validator,
+            DefaultTemplateRenderer(),
+            runFunctions,
+            repository,
+            clock,
+            SequentialIdGenerator(),
+            ScenarioSettings(departments = listOf("Maliyyə")),
+        ).compose(noDepartments, request(testApi = true)).campaign.settings.departments shouldBe listOf("Maliyyə")
+    }
+
+    @Test
+    fun `oracle checks follow what the test API served in the trial, whatever the resource is called`() {
+        // A site whose test API serves notes, not the contract's announcements or tickets (Faza 25.2).
+        val notes =
+            Models.model(
+                listOf(
+                    Models.page("/login", Models.form(ActionKind.LOGIN, "login-submit", "/login", Models.field("email", "email"))),
+                    Models.page("/notes", Models.form(ActionKind.CREATE, "note-submit", "/notes", Models.field("text", required = true))),
+                    Models.page(
+                        "/drafts",
+                        Models.form(ActionKind.CREATE, "draft-submit", "/drafts", Models.field("text", required = true)),
+                    ),
+                ),
+                listOf(
+                    Models.action(
+                        "note-submit",
+                        ActionKind.CREATE,
+                        "/notes",
+                        httpPath = "/notes",
+                        trial = Models.trial(emptySet(), testApi = true),
+                    ),
+                    Models.action(
+                        "draft-submit",
+                        ActionKind.CREATE,
+                        "/drafts",
+                        httpPath = "/drafts",
+                        trial = Models.trial(emptySet(), testApi = false),
+                    ),
+                ),
+            )
+
+        val campaign = useCase().compose(notes, request(maxIdeas = 50, testApi = true)).campaign
+
+        campaign.target.idSources shouldBe mapOf("notes_created" to IdSource.OracleField("/test/notes/latest?by={self.email}", "id"))
+        campaign
+            .step("note-submit-happy")
+            .assertions
+            .filterIsInstance<AssertionSpec.Oracle>()
+            .single()
+            .path shouldBe
+            "/test/notes/{last_id}"
+        // The test API did not answer with the draft the trial made: no oracle check is written for it.
+        campaign.step("draft-submit-happy").assertions.none { it is AssertionSpec.Oracle } shouldBe true
+    }
+
+    @Test
     fun `the written YAML is read back by the campaign loader as the same campaign`() {
         listOf(request(), request(maxIdeas = 50), request(maxIdeas = 50, testApi = true)).forEach { scenario ->
             val composed = useCase().compose(Models.portal(), scenario)
@@ -463,7 +590,7 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
-    fun `with a test API only the resources it serves get oracle ids and checks, others are named by their form`() {
+    fun `with a test API only the resources the trial saw it serve get oracle ids and checks, others are named by their form`() {
         val portal = Models.portal()
         val model =
             portal.copy(

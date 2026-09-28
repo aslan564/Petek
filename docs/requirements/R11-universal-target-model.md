@@ -30,7 +30,11 @@ context". The engine (browser, agent loop, assertions, realtime, explorer) was g
   links, console/network errors, slow endpoints, mobile viewport. Each says which evidence tier it can deliver.
 - Explorer drafts without a company setup (login-only or anonymous); seed paths and keywords move to the profile. A
   draft is a company draft only on the owner's word or when the explorer saw the site's own company way (Faza 25.1),
-  never because a test API is there.
+  never because a test API is there. Its frame keeps no contract values (Faza 25.2): the team comes from the owner's
+  form or the roles the explorer saw (two managers only when a manager was seen), the departments from the owner's form
+  or the department options the explorer saw (else one of the draft's own test company, `Test`), and oracle checks are
+  written only for resources the trial touch saw the test API answer with (`TestApiProbe`: `GET /test/<resource>/
+  latest?by=<the creator's e-mail>` carrying the trial's marker), not for a fixed `announcements`/`tickets` list.
 - Defaults of any one site leave the core (`PetekConfig`, `.env.example`, panel placeholder); a site's settings live in
   its target profile (`docs/examples/target-profile.yaml`).
 

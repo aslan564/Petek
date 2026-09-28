@@ -150,6 +150,8 @@ internal data class TrialDto(
     val urlPatternAfter: String?,
     val seenLiveBy: List<String>,
     val evidence: List<String>,
+    /** Whether the test API answered with the object (Faza 25.2); absent in models stored before. */
+    val testApi: Boolean? = null,
 )
 
 @Serializable
@@ -511,10 +513,20 @@ internal object ExplorationJsonMapper {
             evidence.artifacts(),
         )
 
-    private fun TrialTouch.toDto() = TrialDto(role, outcome.name, marker, messages, urlPatternAfter, seenLiveBy.toList(), evidence.ids())
+    private fun TrialTouch.toDto() =
+        TrialDto(role, outcome.name, marker, messages, urlPatternAfter, seenLiveBy.toList(), evidence.ids(), testApi)
 
     private fun TrialDto.toDomain() =
-        TrialTouch(role, enumValueOf<TrialOutcome>(outcome), marker, messages, urlPatternAfter, seenLiveBy.toSet(), evidence.artifacts())
+        TrialTouch(
+            role,
+            enumValueOf<TrialOutcome>(outcome),
+            marker,
+            messages,
+            urlPatternAfter,
+            seenLiveBy.toSet(),
+            evidence.artifacts(),
+            testApi,
+        )
 
     private fun ActionModel.toDto() =
         ActionDto(

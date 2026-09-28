@@ -64,6 +64,8 @@ internal class RoleSessions(
     val sessions: Map<String, BrowserSession>,
     val testCheck: TestTargetCheck,
     val note: String?,
+    /** The e-mail each role's session is signed in with, when known: the test API is asked about what it creates. */
+    val accounts: Map<String, String> = emptyMap(),
     private val release: suspend () -> Unit = {},
 ) {
     /** Closes the sessions and removes whatever was created for them. Call it once, also after a failure. */
@@ -231,6 +233,7 @@ internal class TestCompanyRoleSessions(
             sessions = opened,
             testCheck = OracleTestTargetCheck(container.oracle, container.config.target, owner),
             note = null,
+            accounts = active.entries.filter { it.key.key in opened }.associate { (role, identity) -> role.key to identity.email },
         ) {
             withContext(NonCancellable) {
                 closeAll(opened.values)

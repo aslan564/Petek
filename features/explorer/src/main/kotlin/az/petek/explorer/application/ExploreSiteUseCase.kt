@@ -31,6 +31,7 @@ import az.petek.explorer.domain.ExplorationResult
 import az.petek.explorer.domain.ExplorationStatus
 import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.SiteModelAccumulator
+import az.petek.explorer.domain.TestApiProbe
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.llm.domain.LlmClient
@@ -78,10 +79,16 @@ class ExploreSiteUseCase(
     private val targetPolicy: TargetPolicy,
     private val testTargetCheck: TestTargetCheck = TestTargetCheck.REFUSE_ALL,
     private val settings: ExplorerSettings = ExplorerSettings(),
+    private val testApi: TestApiProbe = TestApiProbe.NONE,
 ) {
+    /**
+     * Explores [request]'s site; [accounts] are the e-mail addresses the logged-in [roleSessions] are signed in with (by
+     * role), for asking the test API about what the trial touch creates ([TestApiProbe]).
+     */
     suspend fun execute(
         request: ExplorationRequest,
         roleSessions: Map<String, BrowserSession> = emptyMap(),
+        accounts: Map<String, String> = emptyMap(),
         observer: ExplorationObserver = ExplorationObserver.NONE,
     ): ExplorationResult {
         val verdict = targetPolicy.verify(request.target)
@@ -108,7 +115,7 @@ class ExploreSiteUseCase(
         emitter.emit {
             ExplorationEvent.Started(it, request.target, request.phases.sorted(), request.grounding, request.budget, request.allowWrites)
         }
-        val phases = Phases(context, roleSessions)
+        val phases = Phases(context, roleSessions, accounts)
         var status = ExplorationStatus.COMPLETED
         var failure: Exception? = null
         try {
@@ -185,6 +192,7 @@ class ExploreSiteUseCase(
     private inner class Phases(
         private val context: ExplorationContext,
         private val roleSessions: Map<String, BrowserSession>,
+        private val accounts: Map<String, String>,
     ) {
         private var anonymousSession: BrowserSession? = null
 
@@ -242,7 +250,7 @@ class ExploreSiteUseCase(
                 }
             }
             started(ExplorationPhase.TRIAL_TOUCH, roleSessions.keys.sorted())
-            TrialToucher(context, roleSessions, watchers, clock).run()
+            TrialToucher(context, roleSessions, watchers, clock, testApi, accounts).run()
         }
 
         private suspend fun started(

@@ -40,6 +40,7 @@ import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
 import az.petek.explorer.domain.GateMaps
 import az.petek.explorer.domain.SiteModel
+import az.petek.explorer.domain.TestApiProbe
 import az.petek.ownership.domain.OwnershipStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -285,6 +286,7 @@ internal class PanelExplorerAdapter(
                     targetPolicy = container.config.targetPolicy,
                     testTargetCheck = sessions.testCheck,
                     settings = settings,
+                    testApi = if (testApi(run.target)) OracleResourceProbe(container.oracle) else TestApiProbe.NONE,
                 )
             val grounding = synchronized(lock) { run.tracker.grounding }
             val result =
@@ -297,6 +299,7 @@ internal class PanelExplorerAdapter(
                         request?.allowWrites == true && writable,
                     ),
                     sessions.sessions,
+                    sessions.accounts,
                 ) { event -> onEvent(run, event) }
             conclude(run, result.record.id)
         } catch (e: CancellationException) {

@@ -155,7 +155,8 @@ enum class TrialOutcome {
 
 /**
  * The result of submitting a CREATE form once with harmless data (phase TRIAL_TOUCH). [marker] is the unique text the
- * explorer typed; [seenLiveBy] are the other roles whose open page showed it without reloading.
+ * explorer typed; [seenLiveBy] are the other roles whose open page showed it without reloading; [testApi] whether the
+ * site's test API answered with the created object (null: not asked, or it could not say; Faza 25.2).
  */
 data class TrialTouch(
     val role: String,
@@ -165,6 +166,7 @@ data class TrialTouch(
     val urlPatternAfter: String?,
     val seenLiveBy: Set<String>,
     val evidence: List<ArtifactId>,
+    val testApi: Boolean? = null,
 )
 
 /** A viewpoint the site was explored from: `anonymous` or a logged-in role given by the caller. */

@@ -29,6 +29,7 @@ import az.petek.explorer.domain.ActionModel
 import az.petek.explorer.domain.CoveredIdea
 import az.petek.explorer.domain.Keywords
 import az.petek.explorer.domain.PageModel
+import az.petek.explorer.domain.Resources
 import az.petek.explorer.domain.Selectors
 import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.SkippedIdea
@@ -272,10 +273,10 @@ internal class ScenarioComposer(
         page: PageModel,
     ): Outcome {
         val role = actorRole(action) ?: return noRole(action)
-        val resource = createdResource(action, page)
+        val resource = Resources.created(action, page)
         val objectPattern =
             model.pages.map { it.urlPattern }.firstOrNull { pattern ->
-                pattern.split('/').count { it == UrlPatterns.ID } == 1 && objectOf(pattern) == resource
+                pattern.split('/').count { it == UrlPatterns.ID } == 1 && Resources.objectOf(pattern) == resource
             } ?: action.trial?.urlPatternAfter?.takeIf { pattern -> pattern.split('/').count { it == UrlPatterns.ID } == 1 }
                 ?: return Outcome.Skipped("no page of one ${site(resource)} object was seen, so there is no address to type")
         val other =
@@ -474,12 +475,12 @@ internal class ScenarioComposer(
         if (!composing.add(action.id)) return null
         try {
             val (open, prerequisites) = objectPage(page) ?: return null
-            val resource = createdResource(action, page)
+            val resource = Resources.created(action, page)
             val event = Slugs.firstFree(Slugs.identifier(resource, "item") + "_created", "_") { it !in idSources && it !in usedEvents() }
             val marker = "Pətək yoxlaması ${Slugs.of(action.id)}"
             val assertions = mutableListOf<AssertionSpec>(AssertionSpec.VisibleText(marker, settings.visibleWithin))
             val idSource =
-                if (testApi && resource in settings.oracleResources) {
+                if (testApi && servedByTestApi(action, resource)) {
                     idSources[event] = IdSource.OracleField("/test/$resource/latest?by={self.email}", "id")
                     assertions += AssertionSpec.Oracle("/test/$resource/{last_id}", field = null, equals = null, contains = marker)
                     null
@@ -513,6 +514,15 @@ internal class ScenarioComposer(
     }
 
     /**
+     * Whether the site's test API serves [resource] (Faza 25.2): the trial touch of [action] saw it answer with the object
+     * it created, or the frame names the resource ([ScenarioSettings.oracleResources]); never a list assumed of a site.
+     */
+    private fun servedByTestApi(
+        action: ActionModel,
+        resource: String,
+    ): Boolean = action.trial?.testApi == true || resource in settings.oracleResources
+
+    /**
      * Where a step about [page] opens it: the page itself, or, when the page shows one object (`/tickets/{id}`), that
      * object created earlier in the draft, e.g. `/tickets/{event.tickets_created.id}`, after the steps creating it.
      * Null when the page needs an object that no observed action creates, or more than one object (only one can be
@@ -521,7 +531,7 @@ internal class ScenarioComposer(
     private fun objectPage(page: PageModel): Pair<String, List<String>>? =
         when (page.urlPattern.split('/').count { it == UrlPatterns.ID }) {
             0 -> page.urlPattern to emptyList()
-            1 -> creatorFor(objectOf(page.urlPattern))?.let { withObject(page.urlPattern, it.event) to it.steps }
+            1 -> creatorFor(Resources.objectOf(page.urlPattern))?.let { withObject(page.urlPattern, it.event) to it.steps }
             else -> null
         }
 
@@ -531,17 +541,11 @@ internal class ScenarioComposer(
             if (candidate.kind != ActionKind.CREATE) continue
             val role = actorRole(candidate) ?: continue
             val page = model.page(candidate.pageId) ?: continue
-            if (createdResource(candidate, page) != resource) continue
+            if (Resources.created(candidate, page) != resource) continue
             creator(candidate, page, role)?.let { return it }
         }
         return null
     }
-
-    /** What [action] creates: named by its form's action path when it has one, else by its page. */
-    private fun createdResource(
-        action: ActionModel,
-        page: PageModel,
-    ): String = collectionOf(action.httpPath ?: page.urlPattern)
 
     /** `http_status` for a role that must be refused: the action's form path, with the created object when it needs one. */
     private fun httpCheck(
@@ -553,7 +557,7 @@ internal class ScenarioComposer(
         val resolved =
             when (path.split('/').count { it == UrlPatterns.ID }) {
                 0 -> path
-                1 -> creatorFor(objectOf(path))?.let { withObject(path, it.event) } ?: return null
+                1 -> creatorFor(Resources.objectOf(path))?.let { withObject(path, it.event) } ?: return null
                 else -> return null
             }
         return AssertionSpec.HttpStatus(resolved, method, settings.forbiddenStatus)
@@ -583,23 +587,6 @@ internal class ScenarioComposer(
     }
 
     private fun escapeRegex(text: String): String = text.map { if (it in REGEX_META) "\\$it" else "$it" }.joinToString("")
-
-    /** The collection a pattern lists or posts to: its last segment that is neither an id nor a verb. */
-    private fun collectionOf(pattern: String): String =
-        pattern
-            .split('/')
-            .lastOrNull { it.isNotEmpty() && it != UrlPatterns.ID && Keywords.fold(it) !in VERB_SEGMENTS }
-            .let(::resourceName)
-
-    /** The object a pattern with ids shows or acts on: the segment right before its last id (`/tickets/{id}/approve`). */
-    private fun objectOf(pattern: String): String {
-        val segments = pattern.split('/').filter { it.isNotEmpty() }
-        val lastId = segments.lastIndexOf(UrlPatterns.ID)
-        if (lastId < 0) return collectionOf(pattern)
-        return resourceName(segments.take(lastId).lastOrNull { it != UrlPatterns.ID })
-    }
-
-    private fun resourceName(segment: String?): String = segment?.let { Slugs.of(it) }?.ifEmpty { null } ?: "items"
 
     /** Campaign templates read braces as placeholders: a selector with braces would make the whole draft invalid. */
     private fun literal(selector: String): Boolean = '{' !in selector && '}' !in selector
@@ -733,8 +720,5 @@ internal class ScenarioComposer(
         val CHECK_ORDER = listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound")
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
-
-        /** Path segments that name what is done, not what it is done to (`/tickets/new`, `/tickets/{id}/edit`). */
-        val VERB_SEGMENTS = setOf("new", "create", "add", "edit", "update", "yeni", "yarat", "elave", "redakte")
     }
 }

@@ -38,13 +38,15 @@ data class SetupFunctions(
  * The fixed frame of a generated campaign: a small team that can express every covered idea (two managers for races,
  * several employees for real-time fan-out), its departments, and the limits of the assertions it writes.
  *
- * @property oracleResources the resources whose objects the target's test API serves (`GET /test/<resource>/latest?by=`
- *   and `GET /test/<resource>/{id}`, docs/TARGET_CONTRACT.md). Only these get oracle id sources and oracle checks;
- *   an oracle path the target does not serve would make every generated check fail.
+ * @property oracleResources resources the caller knows the target's test API serves (`GET /test/<resource>/latest?by=`
+ *   and `GET /test/<resource>/{id}`, docs/TARGET_CONTRACT.md), besides those the trial touch proved (Faza 25.2). Only
+ *   these get oracle id sources and oracle checks: an oracle path the target does not serve would make every generated
+ *   check fail. Empty by default: no site is assumed to serve any.
  */
 data class ScenarioSettings(
-    val team: RoleQuota = RoleQuota(admin = 1, manager = 2, employee = 3),
-    val departments: List<String> = listOf("IT", "HR"),
+    val team: RoleQuota = RoleQuota(admin = 1, manager = PER_ROLE, employee = FAN_OUT),
+    /** The owner's departments; empty: those the explorer saw ([az.petek.explorer.domain.Departments]), else one of the draft's own. */
+    val departments: List<String> = emptyList(),
     val seed: Long = 42,
     val budget: Budget = Budget(maxStepsPerAgent = 40, maxMinutes = 20),
     val setup: SetupFunctions = SetupFunctions(),
@@ -52,20 +54,39 @@ data class ScenarioSettings(
     val waitTimeout: Duration = 30.seconds,
     val maxLatency: Duration = 5_000.milliseconds,
     val forbiddenStatus: Int = 403,
-    val oracleResources: Set<String> = setOf("announcements", "tickets"),
+    val oracleResources: Set<String> = emptySet(),
     /** Whether the drafts are for a site with companies (the frame above) or without ([forSiteWithoutCompanies]). */
     val tenant: Tenant = Tenant.COMPANY,
     /** Without companies: the gate of each role's testers (`self`, `login`, `guest`); a role not listed signs up. */
     val gates: Map<Role, RegistrationMode> = emptyMap(),
+    /** The owner gave [team]; otherwise a company draft builds it from the roles the explorer saw ([withSeenRoles]). */
+    val teamGiven: Boolean = false,
 ) {
     init {
         if (tenant == Tenant.COMPANY) {
             require(team.admin == 1) { "a generated campaign has exactly one admin, who owns the company" }
             require(team.manager >= 0 && team.employee >= 0) { "role counts must not be negative" }
-            require(departments.isNotEmpty()) { "a generated campaign needs at least one department" }
         } else {
             require(team.total > 0) { "a generated campaign needs at least one tester" }
         }
+    }
+
+    /**
+     * On a site with companies, the team made of the roles the explorer saw signed in (Faza 25.2) unless the owner gave
+     * one: the admin who owns the company, two managers when a manager was seen (so a race has its pair), a few
+     * employees when an employee was seen (for real-time fan-out); a role nobody saw gets no testers.
+     */
+    fun withSeenRoles(seenRoles: Collection<String>): ScenarioSettings {
+        if (teamGiven || tenant != Tenant.COMPANY) return this
+        val seen = seenRoles.mapNotNull(Role::fromKey).toSet()
+        return copy(
+            team =
+                RoleQuota(
+                    admin = 1,
+                    manager = if (Role.MANAGER in seen) PER_ROLE else 0,
+                    employee = if (Role.EMPLOYEE in seen) FAN_OUT else 0,
+                ),
+        )
     }
 
     /** The gate of [role]'s testers on a site without companies. */
@@ -141,6 +162,15 @@ data class ScenarioSettings(
 
     companion object {
         const val PER_ROLE = 2
+
+        /** Employees of a company draft by default: enough for a message to reach several at once. */
+        const val FAN_OUT = 3
+
+        /**
+         * The one department of a company draft when neither the owner named any nor the explorer saw one: the draft's
+         * own test company gets it through `seed_company`; nothing is assumed of the site.
+         */
+        const val OWN_DEPARTMENT = "Test"
 
         /** The role of a site's visitors: what the explorer saw without an account (`anonymous`). */
         val VISITOR: Role = checkNotNull(Role.fromKey("anonymous"))

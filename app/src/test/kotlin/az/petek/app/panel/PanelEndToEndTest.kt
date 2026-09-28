@@ -111,7 +111,10 @@ class PanelEndToEndTest {
                 .map { it.urlPattern }
                 .shouldNotBeEmpty()
             // The demo site's own gate shows its companies: a code to join with and an admin who invites (Faza 25.1).
-            explored.draftYaml.shouldNotBeNull() shouldContain "register_owner"
+            val draft = explored.draftYaml.shouldNotBeNull()
+            draft shouldContain "register_owner"
+            // Oracle checks only where the trial touch saw the test API answer with what it created (Faza 25.2).
+            draft shouldContain "/test/announcements/latest?by={self.email}"
             page.waitFor("() => document.body.innerText.includes('Bitdi')")
             page.shoot("e2e-2-kesfiyyat", full = true)
 

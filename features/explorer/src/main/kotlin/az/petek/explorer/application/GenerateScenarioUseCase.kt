@@ -28,6 +28,7 @@ import az.petek.core.ids.IdGenerator
 import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
 import az.petek.explorer.domain.CoveredIdea
+import az.petek.explorer.domain.Departments
 import az.petek.explorer.domain.ExplorationEvent
 import az.petek.explorer.domain.ExplorationObserver
 import az.petek.explorer.domain.ExplorationRepository
@@ -147,7 +148,12 @@ class GenerateScenarioUseCase(
                 testers = request.testers,
             )
         } else {
-            request.testers?.let(settings::withTesters) ?: settings
+            // A company draft (Faza 25.2): the owner's team and departments, else the roles and departments the explorer saw.
+            val seen = model.roles.map { it.name } + model.actions.flatMap { it.allowedRoles + it.trial?.seenLiveBy.orEmpty() }
+            val team = settings.withSeenRoles(seen)
+            val departments = team.departments.ifEmpty { Departments.seen(model).ifEmpty { listOf(ScenarioSettings.OWN_DEPARTMENT) } }
+            val framed = team.copy(departments = departments)
+            request.testers?.let(framed::withTesters) ?: framed
         }
 
     /**
