@@ -32,10 +32,11 @@ import java.net.URI
 
 /**
  * `petek panel` (also what `petek` does without a command): serves the web panel on 127.0.0.1 and opens it in the
- * browser; everything is chosen in the page. Without a configuration (no `--env-file`, no `.env`) there is no site
- * to test, so the browser first shows one question, which site (rule 12: the owner is asked, never a stand-in site);
- * the answer is written to `.env` and the panel opens for it. Runs until the process is stopped (IntelliJ's stop
- * button, Ctrl+C).
+ * browser; everything is chosen in the page. The configuration is found as [CliSession] says. Without any there is no
+ * site to test, so the browser first shows one question, which site (rule 12: the owner is asked, never a stand-in
+ * site); the answer is written to the `.env` of the owner's own workspace ([CliRuntime.workspace]), so from then on a
+ * bare `petek` in any directory opens the panel for it. Runs until the process is stopped (IntelliJ's stop button,
+ * Ctrl+C).
  */
 class PanelCommand : PetekSubcommand(NAME) {
     private val port by option("--port", help = "panel port (default 7070; the next free one when taken)")
@@ -58,8 +59,8 @@ class PanelCommand : PetekSubcommand(NAME) {
 
     /**
      * No configuration names a site to test (rule 12): the browser asks the owner which one, and nothing else starts
-     * until the answer comes ([PanelSetup]). The answer is written to `.env`, the panel starts for it in this process
-     * and the setup page moves on to it.
+     * until the answer comes ([PanelSetup]). The answer is written to the workspace's `.env`, the panel starts for it
+     * in this process and the setup page moves on to it.
      */
     private suspend fun askForTheSite(runtime: CliRuntime): Int {
         val opened = CompletableDeferred<WebPanel>()
@@ -67,7 +68,7 @@ class PanelCommand : PetekSubcommand(NAME) {
         try {
             val setup =
                 PanelSetup(
-                    envFile = runtime.workingDirectory.resolve(CliSession.DEFAULT_ENV_FILE),
+                    envFile = session.setupEnvFile,
                     templates = InitTemplates.bundled(),
                     reachability = runtime.siteReachability ?: HttpTargetReachability(checkNotNull(probe)),
                     open = { startPanel(runtime).also(opened::complete).url },
@@ -106,9 +107,10 @@ class PanelCommand : PetekSubcommand(NAME) {
             WebPanel.start(
                 config = config,
                 containers = runtime.panelContainers,
-                workingDirectory = runtime.workingDirectory,
+                workingDirectory = session.configurationDirectory,
                 capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
                 port = port,
+                configurationFile = session.configurationFile,
             )
         echo("Pətək paneli: ${panel.url}  (hədəf: ${config.targetLabel})")
         return panel

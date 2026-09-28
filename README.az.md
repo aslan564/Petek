@@ -103,6 +103,13 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 ## Sürətli başlanğıc
 
+**Bir əmr.** Bir dəfə quraşdırın (aşağıdakı buraxılış paketi və ya `npx petek`), sonra istənilən yerdən arqumentsiz
+`petek` yazın. İlk dəfə brauzer hansı saytın test ediləcəyini soruşur və cavabı sizin şəxsi iş qovluğunuzda
+(`~/.petek/workspace/.env`) saxlayır, sonra istənilən qovluqda sadəcə `petek` paneli həmin sayt üçün açır. Panel
+**Quraşdırma** ekranı ilə açılır: sayt cavab verirmi, sahiblik (kopyalanan təsdiq sətri və "Yoxla" düyməsi), AI (bir
+kliklə sınaq) və tester sayı; sonra "Kəşf et". Layihənin öz `.env`-i (və ya `--env-file`, ya da CI-ın verdiyi kimi
+mühitdəki `PETEK_TARGET`) həmişə əvvəlki kimi birinci gəlir.
+
 **Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.example.com` (`.env`,
 `.petek/`, skill paketi və AI-nızın MCP qeydi), `npx petek verify` (staging saytın sizin olduğunu təsdiqləyir), sonra
 `npx petek dev`: tətbiqin health ünvanını (`.petek/petek.yaml`-da `health_url`) gözləyir və paneli yanında açır. AI
@@ -222,8 +229,11 @@ və səbəbi kodunuzda düzəlt.
 
 ## Konfiqurasiya
 
-Hər şey `.env`-dən (və ya `--env-file`) və mühitdən gəlir; real mühit dəyişənləri üstün gəlir. Sirlər `Secret` ilə
-gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
+Hər şey `.env`-dən (və ya `--env-file`) və mühitdən gəlir; real mühit dəyişənləri üstün gəlir. Fayl bu ardıcıllıqla
+axtarılır: `--env-file`; cari qovluqdakı `.env`; `PETEK_TARGET` verilibsə yalnız mühit (CI); yoxdursa sizin şəxsi iş
+qovluğunuz `$PETEK_HOME/workspace/.env` (`PETEK_HOME` default `~/.petek`). Onu panelin ilk sualı yazır; `evidence/`,
+`scenarios/` və `targets/` də onun yanında olur. Sirlər `Secret` ilə gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET`
+məcburidir.
 
 | Açar | Default | Məna |
 |---|---|---|
@@ -304,6 +314,8 @@ ilə birinci dərəcəli rejim edir).
 ## Veb panel
 
 Arqumentsiz `petek` (və ya `petek panel`) yalnız loopback-ə bağlanan Ktor serveri qaldırır və brauzeri açır. Ekranlar:
+**Quraşdırma** (bir dəfə tamamlanana qədər ilk ekran: sayt cavab verirmi, kopyalama və "Yoxla" düyməli sahiblik
+sübutu, bir kliklə AI sınağı, bu kompüterin tutum tövsiyəsi ilə tester sayı),
 **Təlimat** (hədəf, sadə dildə təlimat, komanda, büdcə, "Kəşf et"), **Kəşfiyyat** (kəşfiyyatçı canlı: fazalar, sayt
 modeli, tapıntılar, cavablanacaq suallar), **Ssenarilər** (versiyalar, YAML, diff, təsdiq/dondurma, triaj),
 **Orkestrator** (addım zolaqları × agentlər matrisi, zaman xətti), **Agentlər** (screenshot-lu canlı lövhə),

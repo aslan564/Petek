@@ -208,7 +208,42 @@ class PanelEndToEndTest {
             panel.url.toString() shouldContain "127.0.0.1"
         }
 
-    private fun open(): Page {
+    @Test
+    fun `a fresh browser opens on the setup screen, which checks the site in the page and sets the instructions' tester count`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm(failingSteps = emptySet())
+            val file = dir.resolve("demo.env").also { Files.writeString(it, environment(target.baseUrl, target.mailpitUrl)) }
+            val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the demo configuration names its secret") }).load(file)
+            panel =
+                WebPanel.start(
+                    config = config,
+                    containers = { cfg, overrides -> AppContainer(cfg, overrides.copy(llm = llm.client)) },
+                    workingDirectory = dir,
+                    capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
+                    port = 0,
+                    configurationFile = file,
+                )
+            val page = open(hash = "", ready = "() => location.hash === '#/qurasdirma'")
+
+            // The site answers and, being local, needs no proof; the AI answers the health check.
+            page.waitFor("() => document.body.innerText.includes('Sayt cavab verir')")
+            page.waitFor("() => document.body.innerText.includes('Təsdiq lazım deyil')")
+            page.locator("section.screen[aria-label='Quraşdırma'] .tester-row input.num").fill("7")
+            page.button("Sına").click()
+            page.waitFor("() => document.body.innerText.includes('AI cavab verdi')")
+            page.shoot("e2e-0-qurasdirma")
+
+            // Done: the instructions take over, with the tester count chosen here.
+            page.button("Hazırdır: saytı kəşf et").click()
+            page.waitForURL("**#/telimat")
+            page.locator("section.screen[aria-label='Təlimat'] .tester-row input.num").inputValue() shouldBe "7"
+            errors.shouldBeEmpty()
+        }
+
+    private fun open(
+        hash: String = "#/telimat",
+        ready: String = "() => document.querySelector('input[type=url]') !== null",
+    ): Page {
         playwright = Playwright.create()
         val browser = playwright.chromium().launch()
         context =
@@ -226,8 +261,8 @@ class PanelEndToEndTest {
         }
         page.onPageError { errors += it }
         page.setDefaultTimeout(WAIT_MILLIS)
-        page.navigate(panel.url.toString() + "#/telimat")
-        page.waitFor("() => document.querySelector('input[type=url]') !== null")
+        page.navigate(panel.url.toString() + hash)
+        page.waitFor(ready)
         return page
     }
 

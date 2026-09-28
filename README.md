@@ -104,6 +104,13 @@ A run (`petek run scenarios/<campaign>.yaml`):
 
 ## Quick start
 
+**One command.** Install once (a release bundle or `npx petek`, below), then run `petek` with no arguments from
+anywhere. The first time, the browser asks which site to test and keeps the answer in your own workspace
+(`~/.petek/workspace/.env`), so later a bare `petek` in any directory opens the panel for it. The panel opens on
+**Quraşdırma** (setup): the site answers, its ownership (with the proof line to copy and a "check" button), the AI
+(a one-click test) and how many testers; then "explore". A project's own `.env` (or `--env-file`, or `PETEK_TARGET`
+in the environment, as CI sets it) always comes first, exactly as before.
+
 **In five minutes, next to your app.** With Node.js: `npx petek init --target https://staging.example.com` (writes
 `.env`, `.petek/`, the skill pack and your AI's MCP entry), `npx petek verify` (proves the staging site is yours), then
 `npx petek dev`: it waits for your app's health URL (`health_url` in `.petek/petek.yaml`) and opens the panel next to
@@ -224,7 +231,10 @@ fix the cause in your code.
 
 ## Configuration
 
-Everything comes from `.env` (or `--env-file`) and the environment; real environment variables win. Secrets travel as
+Everything comes from `.env` (or `--env-file`) and the environment; real environment variables win. The file is found
+in this order: `--env-file`; `.env` in the current directory; the environment alone when it sets `PETEK_TARGET` (CI);
+else your own workspace, `$PETEK_HOME/workspace/.env` (`PETEK_HOME` defaults to `~/.petek`), which the panel's first
+question writes and whose `evidence/`, `scenarios/` and `targets/` then live next to it. Secrets travel as
 `Secret` and never reach logs or the AI. `PETEK_TARGET` is the only required key.
 
 | Key | Default | Meaning |
@@ -306,6 +316,8 @@ what its proof rests on (evidence tier: oracle-confirmed, screen/network, or a m
 ## The web panel
 
 `petek` with no arguments (or `petek panel`) starts a loopback-only Ktor server and opens the browser. Screens:
+**Quraşdırma** (setup, the first screen until it is done once: the site answering, its ownership proof with a copy and a
+check button, the AI with a one-click test, the tester count with this machine's capacity advice),
 **Təlimat** (target, plain-language instructions, team, budget, "explore"), **Kəşfiyyat** (the explorer live: phases,
 site model, findings, questions to answer), **Ssenarilər** (versions, YAML, diff, approve/freeze, triage),
 **Orkestrator** (step lanes × agents task matrix, timeline), **Agentlər** (live board with screenshots),

@@ -315,7 +315,8 @@ class Doctor(
                     if (config.browserIgnoreTlsErrors) "; TLS certificate errors are ignored (PETEK_BROWSER_IGNORE_TLS_ERRORS)" else "",
             )
 
-        private val PING =
+        /** The tiny structured request the AI must answer with `{"ok": true}`; the panel's setup screen sends it too. */
+        internal val PING =
             LlmRequest(
                 system = "You are a health check. Answer only with the JSON object you are asked for.",
                 messages = listOf(LlmMessage(LlmRole.USER, "Answer with {\"ok\": true}.")),

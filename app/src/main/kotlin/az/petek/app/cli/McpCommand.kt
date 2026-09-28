@@ -59,7 +59,7 @@ class McpCommand : PetekSubcommand(NAME) {
             .start(
                 config = config,
                 containers = runtime.panelContainers,
-                workingDirectory = runtime.workingDirectory,
+                workingDirectory = session.configurationDirectory,
                 capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
             ).use { core ->
                 val settings =

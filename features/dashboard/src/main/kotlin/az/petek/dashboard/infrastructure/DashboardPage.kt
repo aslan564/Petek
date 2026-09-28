@@ -73,6 +73,7 @@ internal class DashboardPage(
         val SCRIPTS =
             listOf(
                 "core.js",
+                "screen-setup.js",
                 "screen-instructions.js",
                 "screen-explorer.js",
                 "screen-scenarios.js",

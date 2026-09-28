@@ -206,6 +206,11 @@ internal class PanelLlm(
                 triage()
             }
 
+            // The health check of `petek doctor` and the setup screen.
+            request.label == "doctor" -> {
+                buildJsonObject { put("ok", true) }
+            }
+
             else -> {
                 agentGate?.await()
                 CliHarness.done(success = request.label.substringAfter('/') !in failingSteps)

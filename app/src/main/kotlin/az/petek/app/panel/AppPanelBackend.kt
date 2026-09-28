@@ -40,6 +40,7 @@ import az.petek.dashboard.domain.ManualCodeView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelCapacity
 import az.petek.dashboard.domain.PanelExplorer
+import az.petek.dashboard.domain.PanelReadiness
 import az.petek.dashboard.domain.PanelRuns
 import az.petek.dashboard.domain.PanelScenarios
 import az.petek.evidence.domain.ArtifactRecord
@@ -79,11 +80,13 @@ internal class AppPanelBackend(
     /** The desk of `PETEK_MAIL_SOURCE=manual`; null for every other mail source (nothing to answer then). */
     private val manualCodes: ManualCodeDesk? = null,
     private val ownerAccounts: OwnerAccounts? = null,
+    private val readiness: PanelReadiness = object : PanelReadiness {},
 ) : PanelBackend,
     PanelCapacity by capacity,
     PanelExplorer by explorer,
     PanelScenarios by scenarios,
     PanelRuns by runs,
+    PanelReadiness by readiness,
     AutoCloseable {
     override suspend fun explorationArtifact(artifactId: ArtifactId): ArtifactRecord? =
         explorer.explorationArtifact(artifactId) ?: runs.evidenceArtifact(artifactId)
@@ -111,7 +114,8 @@ internal class AppPanelBackend(
          * Builds the panel's backend over [container] (the panel's own object graph, decorated for the live board):
          * [workingDirectory] holds `scenarios/`, [board] receives harness messages, [watch] must be the watch whose
          * decorators wrap [container]'s repositories, and [derive] builds the container of a run against another site
-         * (see [RunTargets]). [roleSessions] replaces the explorer's test-company sessions (tests).
+         * (see [RunTargets]). [roleSessions] replaces the explorer's test-company sessions (tests). [configurationFile]
+         * is the file the configuration came from (default: `.env` of [workingDirectory]), shown on the setup screen.
          */
         fun create(
             container: AppContainer,
@@ -121,6 +125,7 @@ internal class AppPanelBackend(
             board: MonitorView,
             derive: (PetekConfig) -> AppContainer,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
+            configurationFile: Path? = null,
         ): AppPanelBackend {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val answers =
@@ -145,7 +150,8 @@ internal class AppPanelBackend(
             val scenarios = PanelScenariosAdapter(container, explorer, workingDirectory.resolve(SCENARIO_DIRECTORY), scope)
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
             val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
-            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts)
+            val readiness = PanelReadinessAdapter(container, configurationFile ?: workingDirectory.resolve(ENV_FILE))
+            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts, readiness)
         }
 
         /** The explorer's way in, in the order of the site's target profile (ADR-0010). */
