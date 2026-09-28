@@ -1052,6 +1052,246 @@ layihənin `.env`-i, `--env-file` və CI-ın mühit dəyişənləri əvvəlki ki
 - [ ] Paneldə saytlar siyahısı: bir neçə sayt, hər biri öz ayarları ilə, panel yenidən başlamadan.
 - [ ] Quraşdırma kanalları: `brew` (macOS), `scoop` (Windows); npm paketinin dərci (`NPM_TOKEN`).
 
+### Faza 24 — Orkestratorun kompozisiya auditi (2026-09-28)
+
+Audit (`DefaultCampaignRunner` → `StepExecutor` → agent → verification → judge) göstərdi ki, qaydaların hər biri tək
+götürəndə doğrudur; deşiklər onların birləşdiyi yerdədir: dalğa × rol sırası, swap × hadisə şini, dalğa × yarış,
+emit xətası × `{last_id}`. Bu faza həmin birləşmələri bağlayır. Sıra zərərə görədir: əvvəl yalançı PASSED və
+təhlükəsizlik, sonra yalançı FAILED və səhv obyektə baxan sübut, sonra ölçünün dəqiqliyi. Nümunələr (elan, manager,
+IT/HR) müqavilə saytındandır; düzəlişlər isə mühərrik səviyyəsindədir və kəşfiyyatçının yazdığı ssenarilərə də eyni
+dərəcədə aiddir (Faza 25).
+
+- Hər bənd ayrıca commit-dir; onu sındıran birləşmənin regression testi və toxunduğu tələb/ADR sənədi eyni commit-ə
+  daxildir. Hər commit-də `./gradlew spotlessApply build`, hər mərhələnin sonunda `./gradlew e2eTest` keçir.
+- DSL-i pozan bənd repodakı nümunələri (`scenarios/contract-demo.yaml`, `docs/examples/company-portal.yaml`) və
+  kəşfiyyatçının draft yazanını eyni commit-də köçürür.
+- Mərhələ C arxitektura qərarlarıdır: sahib aşağıdakı suallara cavab verməyincə başlanmır.
+
+İcra sırası: 24.1 → 24.2 → 24.3 → 24.4 → 24.9 (təsdiq gələn kimi) → 24.5 → 24.6 → 24.7 → 24.8 → 24.10 → 24.11 →
+24.12 → 24.13. Kompozisiya matrisi (24.14) hər bəndlə böyüyür, 24.15 yol üstündə edilir.
+
+#### Mərhələ A — yalançı PASSED və təhlükəsizlik (lokal, təsdiq lazım deyil)
+
+- [ ] **24.1 Tək aktorlu yarış PASSED olmur.**
+  - *Problem:* `RaceVerdict.judge` "tam bir qalib" və "hər request oxunub" şərtlərinə baxır, neçə aktorun yarışdığına
+    yox; validatorun "ən azı 2 tester" yoxlaması kvotaya görədir, runtime-a yox. `wave_size` yarışanları ayrı
+    dalğalara böləndə (hər dalğada bir manager) və ya setup-da biri düşəndə yarış bir nəfərlə keçir və PASSED olur;
+    dalğa yolunda run da PASSED olur.
+  - *Yol:* qrup verdikti request sübutu olan, yəni start xəttinə çatıb hərəkət etmiş aktorları sayır; 2-dən azdırsa
+    FAILED, qeydi "yarış üçün ən azı 2 canlı aktor lazımdır, N yarışdı". SKIPPED yox: judge SKIPPED-i neytral sayır və
+    run yenə PASSED olardı. Run-dan əvvəlki ön baxış (CLI, panel, MCP) dalğalara bölünən yarışı əvvəlcədən deyir;
+    mexanizm `--testers` xəbərdarlığınınkıdır (kimlik generatorunun ön baxışı + `chunked(wave_size)`).
+  - *Test:* `wave_size: 2`, 2 manager, 2 şöbə; setup-da düşən manager; start xəttindən əvvəl düşən aktor;
+    `RaceVerdict` vahid testləri; ön baxış xəbərdarlığı.
+  - *Sənəd:* ARCHITECTURE «Races», R03.
+
+- [ ] **24.2 Qadağan addımda qəbul olunan yazı sorğusu xətadır.**
+  - *Problem:* `expectsRefusal` addımında qərarı yalnız refusal assert-ləri verir. Agent qadağan əməliyyatı UI-dan və
+    ya başqa yolla edib, sayt da qəbul edibsə, buna baxılmır; `not_visible` və harness-in sonrakı `http_status`
+    sorğusu (vəziyyət artıq dəyişib) bunu həmişə tutmur. Nəticədə saytın icazə xətası PASSED kimi keçir.
+  - *Yol:* addımın 401/403 gözləyən `http_status` assert-i qadağan əməliyyatın metodunu və yolunu artıq verir. Action
+    zamanı aktorun öz sessiyasının göndərdiyi uyğun mutating request `< 400` cavab alıbsa (`BrowserSession.mutations`,
+    yarışdakı kimi), addım FAILED `forbidden_accepted` olur: `SITE_CHECK`, `UI_NETWORK` sübutu. Agentin "etdim" sözü
+    yalnız qeyddir. `http_status`-suz (yalnız `not_visible`) addım dəyişmir.
+  - *Test:* fake sessiyada qadağan yola 200 → FAILED; 403 → keçir; əlaqəsiz yola 200 → təsirsiz.
+  - *Sənəd:* ARCHITECTURE, `ExpectedOutcomes`/`FailureKeys` KDoc, R03.
+
+- [ ] **24.3 Agent yalnız test komandasının ünvanlarını yazır.**
+  - *Problem:* `DefaultAgentLoop.prepare` `type` mətnində yalnız yer tutucuları həll edir. Model "həmkarını dəvət et"
+    kimi tapşırıqda uydurma real e-poçt və ya telefon yaza bilər, hədəf sayt da real üçüncü şəxsə məktub və ya SMS
+    göndərər.
+  - *Yol:* `type` mətnindəki e-poçt və telefon formalı hər dəyər icazəli dəstdə olmalıdır: testerin özü, həmkar
+    siyahısı (`Colleague`), test poçt domeni və sahibin qutusunun artı ünvanları, reyestrin saxta telefonları. Əks
+    halda `prepare` action-ı rədd edir və modelə icazəli variantları deyir (başqa hosta `navigate` imtinası kimi).
+    Qayda agent domain-ində saf funksiyadır; `run` axınları sahibin profilindən gəldiyi üçün toxunulmur.
+  - *Test:* `ScriptedLlmClient` ilə xarici ünvan → rədd və izah; öz, həmkar, artı ünvan → keçir; telefon halları.
+  - *Sənəd:* R12 (yeni təhdid sətri: AI üçüncü şəxslə əlaqə saxlayır).
+
+- [ ] **24.4 Swap: sessiya sayta açılır, gözləmə öz hadisəsini gözləyir.**
+  - *Problem 1:* swap hesabı təzə brauzerdə açır, sessiya isə `about:blank`-da qalır. İlk addımı `wait_for` olan
+    receiver-in `visible_text`-i boş səhifədə yoxlanır və FAILED olur; sonra agentin öz `do`-su bildirişi oxuyur,
+    oracle keçir və judge bunu `DELIVERY_UI` yazır, yəni sayta yalançı çatdırılma xətası.
+  - *Problem 2:* swap main addımları eyni `EventBus`-da təkrarlayır, `wait_for` isə `afterSequence = 0` ilə gözləyir.
+    Swap-da emitter nəşr etməsə, waiter 1-ci keçidin hadisəsini dərhal alır və `{last_id}` köhnə obyektə baxır.
+  - *Yol:* (1) `swapAccounts` hər təzə sessiyanı main addımlardan əvvəl hədəfin ana səhifəsinə aparır və sübut yazır;
+    bərpa olunan sessiyanın hələ daxil olduğu da burada görünür. (2) `RunState` hər addım icrasının başlanğıcındakı bus
+    sequence-ini saxlayır (bus-a məxsusdur, dalğa yeni bus alanda sıfırlanır); `wait_for` hadisəni emit edən addımın bu
+    icrasının başlanğıcından sonrakı hadisəni gözləyir. Setup addımları swap-da təkrarlanmadığı üçün setup
+    hadisələrinin kursoru dəyişmir. (3) Kod Faza 18-in qərarına uyğunlaşır: main addımda uğursuz olan tester halqaya
+    düşmür (indi düşür, çünki testeri yalnız setup uğursuzluğu çıxarır).
+  - *Test:* swap + `emits`/`wait_for`: swap-da emitter uğursuzdur → waiter köhnə hadisəni almır (`not_received`);
+    receiver hədəf səhifəsindədir və yalançı `DELIVERY_UI` yoxdur; setup hadisəsini gözləyən main addım swap-da da
+    işləyir; main-də uğursuz tester halqada deyil.
+  - *Sənəd:* R05, ARCHITECTURE «Run lifecycle».
+
+#### Mərhələ B — yalançı FAILED və səhv obyektə baxan sübut (bəziləri DSL-i pozur)
+
+- [ ] **24.5 Yarışın `request`-i məcburidir.**
+  - *Problem:* `only_one_succeeds: true` hər mutating request-i sayır (`RequestPattern.ANY_MUTATION`). Approve
+    göndərməyən racer-in səhifəsi "oxundu" kimi əlaqəsiz bir 200 alırsa, o da qalib sayılır və yarış yalançı "iki
+    qalib" ilə FAILED olur.
+  - *Yol:* validator `request`-siz `only_one_succeeds`-i rədd edir və nümunə pattern göstərir; `true` forması
+    sənədlərdən çıxır. Kəşfiyyatçının `ScenarioComposer`-i pattern çıxara bilməyəndə yarış addımı yazmır (indi
+    `CampaignYamlWriter` belə halda `true` yazır).
+  - *Test:* validator; `RaceEvidence`-də refusal-sız əlaqəsiz 200; kəşfiyyatçının draftı.
+  - *Sənəd:* bu planın «Ssenari formatı», ARCHITECTURE «Races».
+
+- [ ] **24.6 `{last_id}` yalnız addımın öz hadisəsidir.**
+  - *Problem:* `emitted ?: waited ?: lastIdBeforeStep` zənciri hadisənin id-si oxunmayanda başqa adlı hadisənin
+    obyektinə sürüşür. `wait_for`/`emits`-siz addımda `{last_id}` "ən son nə olubsa"dır: demo-dakı `forbidden` addımı
+    təsadüfən düz işləyir, arada başqa `emits` əlavə olunsa səssizcə başqa obyektə baxar. Qalib olmayan yarışda qrup
+    assert-i əvvəlki hadisənin obyektini götürür.
+  - *Yol:* addımın hadisəsi varsa `{last_id}` yalnız onun id-sidir; id yoxdursa template xətası (`id_unavailable`),
+    fallback yoxdur. Hadisəsiz addımda validator `{last_id}`-i rədd edir və `{event.<ad>.id}` təklif edir. Qrup
+    assert-i yalnız qalibin emit etdiyi id-ni görür. İstehlak olunan (`wait_for` və ya `{event.…}` ilə oxunan)
+    hadisəni bir neçə testerə uyğun gələn, yarış olmayan addım emit edirsə, validator xəta verir: hansı obyektin
+    yoxlanacağı bitirmə sırasından asılı olardı.
+  - *Test:* id oxunmayan emit + aradakı başqa hadisə → template xətası, səhv obyekt yox; validator halları; qalibsiz
+    yarışda qrup assert-i.
+  - *Sənəd:* bu planın «Ssenari formatı», ARCHITECTURE, `Placeholder` KDoc; nümunələrdə `forbidden` →
+    `{event.ticket_created.id}`.
+
+- [ ] **24.7 Emitteri olmayan dalğada gözləmə SKIPPED-dir.**
+  - *Problem:* kimliklər admin → manager → employee sırasındadır, dalğalar bu siyahını `chunked(wave_size)` ilə kəsir;
+    sonrakı dalğalarda adətən emitter olmur, receiver-lər `not_received` alır və run FAILED olur. Judge WAIT-i
+    finding-dən çıxardığı üçün səbəb heç yerdə görünmür. `RunnerWavesTest` bu davranışı hazırda təsdiqləyir.
+  - *Yol:* hadisəni emit edən addım bu dalğada heç bir aktora uyğun gəlməyibsə, onu gözləyən addım FAILED yox,
+    "emitter bu dalğada yoxdur" səbəbi ilə SKIPPED yazılır; hesabat əhatəni göstərir (məs. "30 receiver-dən 9-u
+    yoxlandı, 21-i emittersiz dalğada"). Heç bir dalğada yoxlanmayan addım run-ı PASSED etmir (`not_covered`). Ön
+    baxış xəbərdarlıq edir. Setup hadisəsini gözləyən main addım üçün də eyni qayda keçərlidir; setup hadisələrini
+    dalğalar arasında daşımaq 24.11-in işidir.
+  - *Test:* `RunnerWavesTest` yeni semantikaya keçir; heç bir dalğada yoxlanmayan addım.
+  - *Sənəd:* ARCHITECTURE (dalğalar), R05, Faza 21 qeydi.
+
+- [ ] **24.8 Loop detector səhifənin vəziyyətinə baxır.**
+  - *Problem:* ref-lər hər snapshot-da 1-dən nömrələnir, `ConsecutiveLoopDetector` isə yalnız ardıcıl eyni action-ı
+    sayır. Üç fərqli səhifədə eyni yerdəki "Next" (`click [7]`) 3-cü dəfə icra olunmur (`loop_detected`), eyni
+    səhifədə A-B-A-B dövrəsi isə tutulmur.
+  - *Yol:* detector (action, səhifə fingerprint-i: URL + snapshot mətninin hash-i) cütünü son K qərarlıq pəncərədə
+    sayır; eyni vəziyyətdə eyni action 3 dəfə → loop; səhifə dəyişibsə təkrar sayılmır. `LoopDetector.register`
+    fingerprint alır.
+  - *Test:* səhifələmə (eyni ref, fərqli səhifə) → loop yox; eyni səhifədə A-B-A-B → loop; `wait_text` təkrarı.
+  - *Sənəd:* R02 (qoruyucular).
+
+#### Mərhələ C — arxitektura qərarları (sahibin təsdiqi ilə)
+
+- [ ] **24.9 İcazəli origin kampaniyanındır, tab-ın yox (qayda 8).**
+  - *Problem:* `staysOnSite` mütləq URL-i cari səhifənin hostu ilə müqayisə edir. `click` agenti başqa hosta apara
+    bilər, sonra `navigate` orada sərbəstdir. `PETEK_PRODUCTION_HOSTS` yalnız hədəf seçiləndə yoxlanır, brauzerdə
+    runtime bloku yoxdur: staging-dəki "canlı sayta keç" linki agenti production-a aparıb orada yazdıra bilər.
+  - *Yol:* (1) icazəli hostlar = `PETEK_TARGET` hostu + hədəf profilindəki `allowed_hosts` (SSO, e-poçt linkləri);
+    `staysOnSite` bununla müqayisə edir. (2) Action-dan sonra səhifə icazəsiz hostdadırsa harness əvvəlki ünvana
+    qayıdır və agentə `off_site` deyir. (3) Sessiyanın öz thread-ində Playwright `route` production hostlarına sənəd
+    naviqasiyasını həmişə kəsir; `PETEK_ALLOW_PRODUCTION` yalnız hədəfin özünə aiddir.
+  - *Sənəd:* R06, R12, ADR-0007, hədəf profili sxemi, ARCHITECTURE.
+
+- [ ] **24.10 Gecikmə yazı anından ölçülür, receiver-lər əvvəlcədən baxır.**
+  - *Problem:* `t0` emitter-in bütün `do`-su bitəndən sonrakı publish anıdır, submit-dən sonrakı LLM dövrəsi də
+    içindədir; receiver-lər isə emitter addımı bitəndən sonra baxmağa başlayır. Çatdırılma yavaşdırsa ölçü real
+    gecikmədən LLM quyruğu qədər az çıxır və `latency_max` yalançı PASSED verir. Eyni mətn eyni şirkətdə ikinci dəfə
+    nəşr olunanda (dalğa, swap) receiver köhnə mətni görüb keçir. ADR-0006 yalnız id lookup gecikməsini qəbul edib.
+  - *Yol:* (1) `t0` = emitter-in uyğun mutating request-inin harness vaxtı (`ObservedMutation.at`; `emits`-ə məcburi
+    olmayan `request` pattern-i və ya id mənbəyinin cavabı); publish anı ayrıca saxlanır. (2) Arming: `wait_for` +
+    `visible_text` addımının receiver-ləri emitter addımı başlayanda öz sessiyalarında mətni gözləməyə başlayır (o an
+    boşdurlar); əvvəlcə mətnin olmadığı yoxlanır, varsa yoxlama etibarsızdır. (3) İkisi birlikdə gedir: yalnız `t0`
+    dəyişsə, arming olmadan ölçü əks tərəfə şişər. `{last_id}` olan mətn əvvəlcədən bilinmir, orada köhnə üsul qalır
+    və nəticə "yuxarı həd" kimi işarələnir (mutation `t0`-ı ilə bu, həqiqətən yuxarı həddir).
+  - *Sənəd:* ADR-0006 (yeni seçim), R05, bu planın «Əsas dizayn qərarları» 3-cü bəndi.
+
+- [ ] **24.11 Hər dalğa addımlarının ehtiyac duyduğu rolları daşıyır.** Rollar dalğalara növbə ilə paylanır (indi
+  kimliklər rol sırası ilə kəsilir); tək nəfərlik rol (məs. şirkətin sahibi) bütün dalğalarda canlı qalır, onun setup
+  addımları yalnız ilk dalğada işləyir; bir yarışın iştirakçıları eyni dalğaya düşür; setup hadisələri dalğalar
+  arasında daşınır. 24.1 və 24.7 bunsuz da düzgündür; bu bənd həmin halları nadir edir.
+
+- [ ] **24.12 "Sübut yoxdur" verdikti.** `Verdict`-ə yeni dəyər (`INCONCLUSIVE`): oxunmayan race request-i kimi hallar
+  saytın FAILED-i yox, "alət boşluğu" rəfinə düşür. Hesabat "heç kim uyğun request göndərmədi" (`no_attempt`) ilə
+  "hamı rədd edildi" fərqini göstərir.
+
+#### Mərhələ D — hesabat və keyfiyyət
+
+- [ ] **24.13 Flaky-nin səbəbi.** `StabilityAnalyzer` dəyişkənliyi sayt, agent (LLM) və mühit üzrə ayırır; yalnız
+  agent xətaları ilə dəyişən addım "saytda flaky" sayılmır.
+- [ ] **24.14 Kompozisiya matrisi.** Orkestrasiya testlərində {dalğa, swap, setup uğursuzluğu, emitter uğursuzluğu,
+  yarış} × {`emits`/`wait_for`, `{last_id}`, `only_one_succeeds`, qadağan addım} cədvəli; hər bənd öz xanasını
+  doldurur, faza sonunda boş xana qalmır.
+- [ ] **24.15 Xırdalar.** Yarış iştirakçıları `pacing.max_parallel_actors`-dan çoxdursa validator xəbərdarlığı.
+
+#### Auditdə baxılıb, dəyişiklik lazım deyil
+
+- Swap-dan sonra `{self.*}` əvvəlki testerə baxmalıdır: kimlik və saxlanmış sessiya birlikdə keçir, bu düzgündür.
+- "Boş resolve = FAILED" ümumi qaydası: dalğada boş resolve normaldır; əsl deşik 24.1-dir.
+- "A keçdi, C yoxdur → DELIVERY": A (SENDER) yalnız yarışda olur, receiver qrupunda yoxdur.
+- Paylaşılan dəyər konflikti səssizdir: sübutda yazılır.
+- Tutum aşanda `--ci` dayansın və `TOOL_GAP` sinfi olsun: tutum tövsiyədir (sahibin qərarı); `AGENT_FAILURE` artıq
+  "alət boşluğu" rəfinə düşür.
+- Watchdog sayğacları sızır: agent id-lər run-lar arasında təkrarlanır, xəritə tester sayı ilə məhduddur.
+- Qrup `only_one_succeeds` bir aktora yapışır: `agentId = null` ilə ayrıca qrupdur.
+- Dalğa nəticəsi flaky görünür: dalğa bölgüsü deterministikdir, nəticə hər təkrarda eynidir.
+
+#### Qərar gözləyən suallar (Faza 24)
+
+- [ ] **24.9:** hədəf profilinə `allowed_hosts` və brauzer səviyyəsində production bloku (profil sxemi dəyişir).
+  Tövsiyə: bəli.
+- [ ] **24.10:** icra modeli dəyişir: receiver-lər emitter addımı zamanı öz sessiyalarında gözləyir; ADR-0006
+  yenilənir. Tövsiyə: bəli.
+- [ ] **24.11:** tək nəfərlik rol bütün dalğalarda canlı qalsın (canlı brauzer sayı `wave_size + 1`, proxy hesabında
+  ayrıca)? Tövsiyə: bəli.
+- [ ] **24.12:** yeni verdikt sübut bazasının sxemini, hesabatları, JUnit XML və SARIF çıxışını dəyişir. Tövsiyə:
+  bəli, 24.10-dan sonra.
+- [ ] **24.5 və 24.6 DSL-i pozur:** dərhal xəta, yoxsa bir buraxılış xəbərdarlıq, sonra xəta? Tövsiyə: dərhal xəta,
+  çünki köhnə forma yalançı nəticə verir; validator mesajı düzgün formanı göstərir.
+
+Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; `wave_size: 2` ilə iki managerli yarış PASSED ola bilmir;
+qadağan əməliyyatı qəbul edən sayt FAILED alır; swap + `wait_for` yalançı `DELIVERY_UI` vermir; xarici ünvan rədd
+olunur; gecikdirilmiş çatdırılmada `latency_max` yalançı keçmir; `./gradlew build` və `./gradlew e2eTest` keçir.
+
+### Faza 25 — Ssenari kəşfiyyatdan doğulur (sahibin qərarı, 2026-09-28)
+
+Sahibin qərarı: hər sistem fərqlidir, ona görə sayt əvvəlcədən yazılmış statik ssenari ilə başlamır. Testlər yalnız
+kəşfiyyatçının saytda tapdıqları əsasında planlanır və hər tester öz payına düşən ssenari ilə işləyir; saytda olmayan
+şeyi (məs. elanı) heç bir tester gözləmir. Qeydiyyat və giriş də belədir: sahib təlimat verməyibsə, bütün testerlərin
+planını kəşfiyyatçının qapıda tapdıqları qurur. Alət heç bir model və ya AI üçün yazılmayıb, istənilən AI onu işlədir
+(R09, R10). Statik kampaniya faylı yalnız iki halda qalır: Pətəkin öz e2e testləri (fake target, qayda 12) və sahibin
+özünün yazdığı ssenari, çünki o, sahibin təlimatıdır.
+
+Artıq belədir: kəşfiyyatçının draftı yalnız gördüyü əməliyyatlardan yazılır (`ScenarioComposer`, `TestPatterns`);
+real-time testi yalnız sınaq toxunuşu nəticənin canlı gəldiyini görəndə, icazə testi yalnız əməliyyat bir rola təklif
+olunmayanda yaranır. Şirkətsiz saytda qapı planı da kəşfiyyatdan gəlir (`GateMaps` → `sign_up`/`login` axınları,
+sahibin hesabları, qonaq). Bu fazanın işi qalan müqavilə fərziyyələrini çıxarmaqdır. Sıra: Faza 24-ün A
+mərhələsindən sonra.
+
+- [ ] **25.1 Qeydiyyat modeli test API-dən yox, qapıdan seçilir.**
+  - *Problem:* sahib profildə `tenant` verməyibsə, panel onu test API-nin varlığına görə seçir
+    (`PanelExplorerAdapter.tenant`, `RoleSessions.tenantOf`): API varsa şirkət çərçivəsi, yəni dəvət və şirkət kodu,
+    admin + manager + employee, şöbələr. Bu, müqavilə saytının modelidir; real saytın qapısı ilə əlaqəsi yoxdur.
+  - *Yol:* qərar ardıcıllığı: (1) sahibin təlimatı (hədəf profili: `tenant`, qapılar, hesablar); (2) yoxdursa
+    kəşfiyyatçının qapı xəritəsi: sərbəst qeydiyyat, sahibin hesabları ilə giriş, dəvət, kodla qoşulma və ya qonaq,
+    hər rol üçün öz yolu. Dəvət və kod yalnız kəşfiyyatçı onları və onları verən əməliyyatı görəndə seçilir. Test
+    API-nin olması yalnız oracle və teardown deməkdir.
+  - *Test:* test API-si olan, amma şirkəti olmayan saytda draft sərbəst qeydiyyatla yazılır; dəvətli qapı görüləndə
+    draftda dəvəti verən rol var; sahibin profilindəki qapı kəşfiyyatdan üstündür.
+  - *Sənəd:* R04, R07, R11; TARGET_CONTRACT-da şirkət modeli müqavilənin öz modeli kimi göstərilir.
+
+- [ ] **25.2 Draft çərçivəsində müqavilə sabitləri qalmır.**
+  - *Problem:* `ScenarioSettings`-in default-ları müqavilədəndir: komanda 1 admin + 2 manager + 3 employee, şöbələr IT
+    və HR, oracle yoxlaması yalnız `announcements` və `tickets` üçün.
+  - *Yol:* komanda sahibin tester sayından və kəşfiyyatçının gördüyü rollardan qurulur; şöbə yalnız kəşfiyyatçı şöbə
+    görəndə yazılır; oracle resursları sabit siyahıdan yox, test API-nin həqiqətən verdiklərindən götürülür.
+  - *Test:* müqavilədən fərqli resursları olan test API-də oracle yoxlamaları həmin resurslara yazılır.
+  - *Sənəd:* R07, R11.
+
+- [ ] **25.3 "Test et" əsas yoldur.** Faza 23-ün açıq bəndi (kəşf et → ssenari → run) bu fazanın məqsədidir: sahib
+  heç bir ssenari faylı yazmadan başlayır; CLI və MCP də eyni axını verir, nümunə kampaniya faylı əsas yol kimi
+  təqdim olunmur.
+
+- [ ] **25.4 Uğur meyarları universal olur.** "MVP-nin uğur meyarları" (elan 29 receiver-ə, ticket axını, test
+  şirkəti) müqavilə saytının e2e meyarlarıdır və belə adlandırılır. Universal meyar: tanımadığı saytda draft yalnız
+  mövcud əməliyyatları yoxlayır; heç bir addım saytda olmayan şeyi gözləmir; hər tester öz qapısından keçir və ya
+  səbəbi hesabatdadır.
+
+Hazır sayılır: test API-si olan, amma şirkət modeli olmayan saytda kəşfiyyatdan run-a qədər heç bir dəvət, şirkət kodu
+və ya müqavilə resursu fərz edilmir; draftdakı hər addım kəşfiyyatçının gördüyü bir əməliyyata və ya qapıya bağlıdır.
+
 ## Sübut bazası və hesabat
 
 Hər keçdi/keçmədi hökmü ən azı bir screenshot və ya oracle cavabına bağlıdır; sübutsuz nəticə hesabata düşmür.
@@ -1105,9 +1345,14 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
 **Qərar gözləyən suallar** (hamısı cavablandı, 2026-09-25)
 
 - [x] Qeydiyyat dəvətlə, yoxsa sərbəst şirkət kodu ilə? — **Hər ikisi, tester başına.** `campaign.registration` bölgüsü hər kimliyə öz rejimini verir; rəhbərlər həmişə dəvətlə qoşulur (şirkət kodu ilə qeydiyyat işçi yaradır), qalan dəvətlər işçilərə düşür.
+  **Dəyişdi 2026-09-28 (sahibin qərarı):** qeydiyyat rejimi əvvəlcədən fərz edilmir. Sahib giriş və ya qeydiyyat üçün
+  təlimat verməyibsə, bütün testerlərin qeydiyyat/giriş planını kəşfiyyatçının qapıda tapdıqları qurur; dəvət və
+  şirkət kodu yalnız müqavilə saytının (fake target) modelidir (Faza 25).
 - [x] Hədəf saytda real-time mexanizmi hansıdır? — **Avtomatik aşkarlanır.** Pətək ondan asılı deyil: gecikmə DOM-da ölçülür, nəqliyyat (WebSocket, SSE, polling) şəbəkə trafikindən tapılıb hesabatda göstərilir.
 - [x] Elanın "oxundu" statusu backend-də var, yoxsa yalnız bildiriş göndərilir? (receipts oracle-ı buna bağlıdır) — **Var** (təsdiqləndi); `receipts` oracle assert-i default kampaniyadadır.
 - [x] Hansı LLM provayderi və model agentlər üçün? — **Sahibdə hansı AI varsa** (2026-09-26: heç bir vendor default deyil; R09, ADR-0008).
+  2026-09-28 (sahibin qərarı, təkrar): alət heç bir konkret model və ya AI üçün yazılmayıb; istənilən AI onu metod
+  paketi kimi işlədir (MCP, `--json`, skill paketi; R10).
 
 **Real saytlar üçün açıq sual**
 
