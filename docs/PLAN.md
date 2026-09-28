@@ -1278,9 +1278,12 @@ dərəcədə aiddir (Faza 25).
     ağırıdır (sayt > mühit > agent); öz action-ı agent/mühit səbəbindən pozulan aktorun uğursuz yoxlaması mənasızdır.
     `StabilityRow` sayt/agent/mühit saylarını daşıyır; `flaky` yalnız saytın bəzən uğursuz etdiyi addımdır, qalan
     dəyişkənlik `unsteady` ("qeyri-sabit: agent, mühit, yoxlanmadı (saytın xətası deyil)"), hesabatda və paneldə.
-- [ ] **24.14 Kompozisiya matrisi.** Orkestrasiya testlərində {dalğa, swap, setup uğursuzluğu, emitter uğursuzluğu,
+- [x] **24.14 Kompozisiya matrisi.** Orkestrasiya testlərində {dalğa, swap, setup uğursuzluğu, emitter uğursuzluğu,
   yarış} × {`emits`/`wait_for`, `{last_id}`, `only_one_succeeds`, qadağan addım} cədvəli; hər bənd öz xanasını
   doldurur, faza sonunda boş xana qalmır.
+  - *Vəziyyət:* `CompositionMatrixTest`: 20 xananın 8-i əvvəlki bəndlərin testlərindədir (KDoc hansı test olduğunu
+    deyir), qalan 12-si bu sinifdədir (hər şərt üçün bir iç sinif, hər xüsusiyyət üçün bir test). Boş xana qalmadı.
+    Yol üstündə: oxunmayan racer sorğusu testinin adı və hökmü 24.12-yə uyğunlaşdı (`INCONCLUSIVE`).
 - [x] **24.15 Xırdalar.** Yarış iştirakçıları `pacing.max_parallel_actors`-dan çoxdursa validator xəbərdarlığı.
   - *Vəziyyət:* `CampaignValidator.warnings` (bloklamayan, xətalardan ayrı): `parallel` addım (hər yarış) limiti
     saymır, aktorları eyni anda başlayır; limitdən çox aktoru ola bilən belə addım üçün sətir nömrəsi ilə xəbərdarlıq.

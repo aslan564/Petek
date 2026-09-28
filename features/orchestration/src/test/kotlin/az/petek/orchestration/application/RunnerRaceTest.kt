@@ -461,7 +461,7 @@ class RunnerRaceTest {
         }
 
     @Test
-    fun `an actor whose requests cannot be read neither wins nor loses, and the race fails`() =
+    fun `an actor whose requests cannot be read neither wins nor loses, and the race stays undecided`() =
         runTest {
             val f = fixture()
             f.racing(requests = mapOf("a02" to listOf(TICKET to 303)))
@@ -479,6 +479,10 @@ class RunnerRaceTest {
                 .race!!
                 .unavailable!! shouldContain "BrowserActionException"
             f.actionOf("a03").detail!! shouldContain "request: requests unavailable"
+            // A second winner could hide in a03's unread requests: no proof either way (Faza 24.12).
+            f.evidence.assertionList
+                .single { it.type == "only_one_succeeds" }
+                .verdict shouldBe Verdict.INCONCLUSIVE
         }
 
     @Test

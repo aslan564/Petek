@@ -180,6 +180,7 @@ class FakeVerify(
 ) : VerifyStepUseCase {
     val actorCalls = CopyOnWriteArrayList<Pair<List<AssertionSpec>, AssertionInput>>()
     val groupCalls = CopyOnWriteArrayList<List<ActorResult>>()
+    val groupInputs = CopyOnWriteArrayList<AssertionInput>()
     private val races = DefaultAssertionEvaluator(FakeTargetOracle(isAvailable = false), renderer, DottedFieldSelector(), clock)
 
     @Volatile
@@ -255,6 +256,7 @@ class FakeVerify(
         results: List<ActorResult>,
     ): List<AssertionRecord> {
         groupCalls += results
+        groupInputs += input
         return specs.filterIsInstance<AssertionSpec.OnlyOneSucceeds>().map { spec ->
             val judged = races.evaluateOnlyOneSucceeds(spec, results, input)
             record(input, spec, EvidenceSource.SENDER, judged.expected, judged.verdict, null, judged.note)
