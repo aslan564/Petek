@@ -21,7 +21,11 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
 - **Ids.** `core/domain` generates UUIDv7-based ids with prefixes (`run_`, `scn_`, …); agent ids are `a01…` without an
   upper bound (rule 4). `workspace_id` joins them in Faza 8 (ADR-0011).
 - **Judge.** `features/reporting` `ThreeSourceJudge` folds A/B/C into `FindingRecord`s classified `BACKEND`,
-  `DELIVERY_UI`, `SITE_CHECK`, `INVESTIGATE`, `FLAKY` or `AGENT_FAILURE`. A step that failed with a key becomes a
+  `DELIVERY_UI`, `SITE_CHECK`, `INVESTIGATE`, `FLAKY`, `AGENT_FAILURE` or `INCONCLUSIVE`. A check whose evidence
+  cannot decide it (`Verdict.INCONCLUSIVE`, Faza 24.12: a race nobody attempted or with one racer, unreadable racer
+  requests, `stale_text`, a latency known only as a range around its limit) is no evidence for A, B or C; a step whose
+  only non-passing checks are such gets one `INCONCLUSIVE` finding on the "tool gap" shelf, never one about the site,
+  and the run is not PASSED (the summaries count them as "inconclusive", JUnit as a property, SARIF as a note). A step that failed with a key becomes a
   finding of its own: a site defect a deterministic check saw (`unhealthy_page` from `site_health`,
   `access_not_refused` from `direct_url`, `forbidden_accepted` when the site accepted the request a forbidden-action
   step's `http_status` expects it to refuse, sent by the tester's own page during the action) is `SITE_CHECK` with

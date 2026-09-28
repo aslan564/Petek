@@ -39,7 +39,8 @@ looking at the server alone or by one browser.
   text naming the event's own object (`{last_id}`) cannot be watched for before the object exists; it is checked after
   the event, and a text visible at the first look gives only an upper bound.
 - **Latency.** `latency_max` asserts per receiver on the range the delay lies in: PASSED when even its longest is
-  within the limit, FAILED when even its shortest exceeds it, and FAILED with "cannot be confirmed" in between. The
+  within the limit, FAILED when even its shortest exceeds it, and INCONCLUSIVE in between (Faza 24.12); a
+  `stale_text` is INCONCLUSIVE too, never a delivery defect of the site. The
   report shows avg/p95/max and the missing receivers.
 - **Transport detection.** `features/browser` watches network traffic of each session and records the transport
   (WebSocket, SSE, polling) as an observation shown in the report — information, not a dependency.

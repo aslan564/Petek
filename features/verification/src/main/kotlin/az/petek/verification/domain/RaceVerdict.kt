@@ -29,6 +29,11 @@ import kotlinx.serialization.json.putJsonObject
  * - PASSED when at least [MIN_RACERS] actors raced, exactly one actor succeeded, the requests of every actor could be
  *   read (otherwise a second winner could go unseen) and the oracle condition (if any) did not fail; an oracle that
  *   could not be asked (no test API) is SKIPPED and leaves the verdict to the requests, with a note.
+ * - FAILED when the site decided wrongly: more than one winner, every attempt refused (nobody could decide the
+ *   object), or the oracle condition failed.
+ * - INCONCLUSIVE (Faza 24.12) when the evidence cannot decide: fewer than [MIN_RACERS] racers, no racer sent the
+ *   request at all (`no_attempt`, a gap of the agents, not a refusal by the site), or requests that could not be read
+ *   where a winner could hide.
  * - An actor raced when it reached the start line and acted, so its requests were read or found unreadable
  *   ([ActorResult.race] is set). One whose action never ran (awaited event missing, template error) did not race, and
  *   neither did the actors a step never got (a wave without them, a tester that failed earlier): a single racer that
@@ -40,6 +45,9 @@ import kotlinx.serialization.json.putJsonObject
 internal object RaceVerdict {
     /** Fewer racers than this is no race at all, whoever of them won. */
     const val MIN_RACERS = 2
+
+    /** Leads the note of a race in which no racer sent the request that decides it (Faza 24.12). */
+    const val NO_ATTEMPT = "no_attempt"
 
     /** What the target's test API said about the race's final state. */
     class OracleCheck(
@@ -60,38 +68,48 @@ internal object RaceVerdict {
         val winnerIds = winners.joinToString { it.agentId.value }
         val unknown = ordered.filter { it.race?.unavailable != null }
         val racers = ordered.filter { it.race != null }
-        val raceNote =
+        val attempted = racers.filter { it.race?.decisive != null }
+        val (raceVerdict, raceNote) =
             when {
                 ordered.isEmpty() -> {
-                    "no actor results to compare"
+                    Verdict.INCONCLUSIVE to "no actor results to compare"
                 }
 
                 racers.size < MIN_RACERS -> {
                     val raced = racers.joinToString { it.agentId.value }.ifEmpty { null }
-                    "a race needs at least $MIN_RACERS racing actors; " + (raced?.let { "only $it raced" } ?: "none raced")
-                }
-
-                winners.isEmpty() -> {
-                    "no actor succeeded; expected exactly one winner"
+                    Verdict.INCONCLUSIVE to
+                        "a race needs at least $MIN_RACERS racing actors; " + (raced?.let { "only $it raced" } ?: "none raced")
                 }
 
                 winners.size > 1 -> {
-                    "more than one actor succeeded ($winnerIds); expected exactly one"
+                    Verdict.FAILED to "more than one actor succeeded ($winnerIds); expected exactly one"
                 }
 
-                // A second winner could hide among actors whose requests are unknown.
+                // A winner, or a second one, could hide among actors whose requests are unknown.
                 unknown.isNotEmpty() -> {
-                    "the requests of ${unknown.joinToString { it.agentId.value }} could not be read"
+                    Verdict.INCONCLUSIVE to "the requests of ${unknown.joinToString { it.agentId.value }} could not be read"
+                }
+
+                winners.isEmpty() && attempted.isEmpty() -> {
+                    Verdict.INCONCLUSIVE to "$NO_ATTEMPT: no racer sent ${requestOf(spec)}, so nothing was decided"
+                }
+
+                winners.isEmpty() -> {
+                    Verdict.FAILED to "no actor succeeded: every attempt was refused; expected exactly one winner"
                 }
 
                 else -> {
-                    null
+                    Verdict.PASSED to null
                 }
             }
-        val oracleFailed = oracle?.verdict == Verdict.FAILED
+        val verdict =
+            when {
+                raceVerdict == Verdict.FAILED || oracle?.verdict == Verdict.FAILED -> Verdict.FAILED
+                else -> raceVerdict
+            }
         return AssertionResult(
             spec = spec,
-            verdict = if (raceNote == null && !oracleFailed) Verdict.PASSED else Verdict.FAILED,
+            verdict = verdict,
             source = EvidenceSource.SENDER,
             expected = expected(spec, ordered.size) + (oracle?.let { " and ${it.expected}" } ?: ""),
             observed = AssertionText.clip(observed(ordered) + (oracle?.let { "; oracle: ${oracleObserved(it)}" } ?: "")),
@@ -101,6 +119,9 @@ internal object RaceVerdict {
             oracleEvidence = oracle?.body?.takeIf { it.isNotBlank() },
         )
     }
+
+    private fun requestOf(spec: AssertionSpec.OnlyOneSucceeds): String =
+        spec.request?.let { "a request matching `${it.describe()}`" } ?: "a mutating request"
 
     private fun expected(
         spec: AssertionSpec.OnlyOneSucceeds,

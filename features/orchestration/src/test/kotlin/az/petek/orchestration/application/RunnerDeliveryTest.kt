@@ -152,7 +152,7 @@ class RunnerDeliveryTest {
                 "written by POST /api/drafts -> 200 or a later one of 2 accepted requests (emits.request names the write)"
             unnamed.checks("visible_text").map { it.note }.toSet() shouldBe
                 setOf("latency is an upper bound: t0 is the first of several writes, POST /api/drafts -> 200")
-            unnamed.checks("latency_max").map { it.verdict }.toSet() shouldBe setOf(Verdict.FAILED)
+            unnamed.checks("latency_max").map { it.verdict }.toSet() shouldBe setOf(Verdict.INCONCLUSIVE)
             unnamed.checks("latency_max").first().note!! shouldContain "but it is only an upper bound"
         }
 
@@ -165,10 +165,14 @@ class RunnerDeliveryTest {
 
             val summary = f.runner().run(announcing())
 
-            f.checks("visible_text").map { it.verdict }.toSet() shouldBe setOf(Verdict.FAILED)
+            // Nothing proves a delivery: undecided, not a delivery defect of the site, and the run is not PASSED.
+            f.checks("visible_text").map { it.verdict }.toSet() shouldBe setOf(Verdict.INCONCLUSIVE)
             f.checks("visible_text").forEach { it.note!! shouldStartWith "stale_text: the receiver's page showed \"$text\" already" }
-            f.checks("latency_max").map { it.note }.toSet() shouldBe setOf("no latency measured: the preceding visible_text failed")
+            f.checks("latency_max").map { it.verdict to it.note }.toSet() shouldBe
+                setOf(Verdict.INCONCLUSIVE to "no latency measured: the preceding visible_text proves no delivery")
             f.evidence.receiptList.map { it.received } shouldContainExactly listOf(false, false)
+            summary.assertionsFailed shouldBe 0
+            summary.assertionsInconclusive shouldBe 4
             summary.outcome shouldBe RunOutcome.FAILED
         }
 
@@ -192,7 +196,7 @@ class RunnerDeliveryTest {
 
             val visible = f.checks("visible_text").groupBy({ it.scenarioStep }, { it.verdict })
             visible["read"] shouldBe listOf(Verdict.PASSED, Verdict.PASSED)
-            visible["read@swap"] shouldBe listOf(Verdict.FAILED, Verdict.FAILED)
+            visible["read@swap"] shouldBe listOf(Verdict.INCONCLUSIVE, Verdict.INCONCLUSIVE)
             f.checks("visible_text").filter { it.scenarioStep == "read@swap" }.forEach { it.note!! shouldStartWith "stale_text" }
         }
 

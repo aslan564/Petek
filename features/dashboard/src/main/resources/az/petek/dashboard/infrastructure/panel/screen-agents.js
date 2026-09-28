@@ -244,6 +244,7 @@
     setPair(ui.asOk.box, ui.asOk.value, k.assertionsPassed);
     setPair(ui.asBad.box, ui.asBad.value, k.assertionsFailed);
     ui.asSkip.textContent = fmt.int(k.assertionsSkipped);
+    ui.asUnknown.textContent = fmt.int(k.assertionsInconclusive || 0);
     ui.events.textContent = fmt.int(k.events);
     setPair(ui.rcOk.box, ui.rcOk.value, k.receiptsReceived);
     setPair(ui.rcBad.box, ui.rcBad.value, k.receiptsMissing);
@@ -445,6 +446,7 @@
     ui.stepsOk = pairItem('ok', '✓'); ui.stepsBad = pairItem('bad', '✗');
     ui.asOk = pairItem('ok', '✓'); ui.asBad = pairItem('bad', '✗');
     ui.asSkip = h('b', { text: '0' });
+    ui.asUnknown = h('b', { text: '0' });
     ui.events = h('span', { class: 'tile-big', text: '0' });
     ui.rcOk = pairItem('ok', '✓'); ui.rcBad = pairItem('bad', '✗');
     ui.rcBar = h('i', { style: { width: '0', '--c': 'var(--green)' } });
@@ -453,7 +455,7 @@
     const tiles = h('section', { class: 'tiles', attrs: { 'aria-label': 'Sayğaclar' } },
       h('div', 'tile tile-agents', h('div', 'tile-head', h('span', { class: 'tile-label', text: 'Agentlər' }), ui.agentsTotal), ui.stateBar, ui.legend),
       tile('Addımlar', h('div', 'pair', ui.stepsOk.box, ui.stepsBad.box), h('div', { class: 'tile-foot', text: 'keçdi / uğursuz' })),
-      tile('Təsdiqlər', h('div', 'pair', ui.asOk.box, ui.asBad.box, h('span', null, '⤼ ', ui.asSkip)), h('div', { class: 'tile-foot', text: 'keçdi / uğursuz / buraxıldı' })),
+      tile('Təsdiqlər', h('div', 'pair', ui.asOk.box, ui.asBad.box, h('span', null, '⤼ ', ui.asSkip), h('span', null, ' ? ', ui.asUnknown)), h('div', { class: 'tile-foot', text: 'keçdi / uğursuz / buraxıldı / sübutsuz' })),
       tile('Hadisələr', ui.events, h('div', { class: 'tile-foot', text: 'yayımlanan hadisə' })),
       tile('Qəbzlər', h('div', 'pair', ui.rcOk.box, ui.rcBad.box), h('div', 'progress thin', ui.rcBar)),
       ui.findTile);

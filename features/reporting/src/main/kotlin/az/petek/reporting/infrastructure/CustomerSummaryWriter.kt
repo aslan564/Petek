@@ -144,6 +144,7 @@ class CustomerSummaryWriter(
                 FindingClass.INVESTIGATE -> "$step addımında mənbələr uyğun gəlmir; səbəbi aydınlaşdırılmalıdır."
                 FindingClass.FLAKY -> "$step addımı təkrar run-larda gah keçir, gah keçmir."
                 FindingClass.AGENT_FAILURE -> "$step addımında tester işini bitirə bilmədi."
+                FindingClass.INCONCLUSIVE -> "$step addımında yoxlama qərara gələ bilmədi: sübut yetərli deyildi."
             }
         }
 
@@ -189,6 +190,7 @@ class CustomerSummaryWriter(
                 FindingClass.INVESTIGATE -> "In step $step the sources disagree; the cause needs a closer look."
                 FindingClass.FLAKY -> "Step $step passes in some runs and fails in others."
                 FindingClass.AGENT_FAILURE -> "In step $step a tester could not finish its task."
+                FindingClass.INCONCLUSIVE -> "In step $step a check could not reach a verdict: its evidence was not enough."
             }
         }
 

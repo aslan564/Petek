@@ -647,6 +647,7 @@ class DefaultCampaignRunner(
                 failedAgents = run.tally.failedAgents,
                 reportDirectory = report?.toString(),
                 durationMs = run.startedAt.elapsedUntil(endedAt).inWholeMilliseconds,
+                assertionsInconclusive = run.tally.assertionsInconclusive,
             )
         board.finished(summary)
         return summary

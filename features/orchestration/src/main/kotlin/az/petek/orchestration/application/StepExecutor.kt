@@ -1047,6 +1047,7 @@ internal class StepExecutor(
         return try {
             val records = services.verify.verifyActor(specs, input)
             records.filter { it.verdict == Verdict.FAILED }.forEach { run.tally.assertionFailed(actor.agentId) }
+            repeat(records.count { it.verdict == Verdict.INCONCLUSIVE }) { run.tally.assertionInconclusive() }
             Verification(records, error = false)
         } catch (e: Exception) {
             rethrowIfCancelled(e)
@@ -1095,6 +1096,8 @@ internal class StepExecutor(
             }
         val failures = records.count { it.verdict == Verdict.FAILED }
         repeat(failures) { run.tally.assertionFailed(null) }
+        val undecided = records.count { it.verdict == Verdict.INCONCLUSIVE }
+        repeat(undecided) { run.tally.assertionInconclusive() }
         val failed = failures > 0
         evidence.step(
             run,
@@ -1103,7 +1106,14 @@ internal class StepExecutor(
             StepKind.SYSTEM,
             "verify_group ${specs.joinToString(",") { it.type }}",
             started,
-            if (failed) StepStatus.FAILED else StepStatus.PASSED,
+            when {
+                failed -> StepStatus.FAILED
+
+                // Neither proven nor refuted: the group check could not decide (Faza 24.12).
+                undecided > 0 -> StepStatus.SKIPPED
+
+                else -> StepStatus.PASSED
+            },
             records.joinToString("; ") { "${it.type}: ${it.verdict} (${it.observed ?: "-"})" },
             correlationId,
             Tally.NONE,
@@ -1169,9 +1179,11 @@ internal class StepExecutor(
             }
         val blocked = outcome.status == ActionStatus.BLOCKED && !isRefusal(outcome) && lost == null
         val state = if (blocked) AgentState.BLOCKED else AgentState.IDLE
+        val undecided = failureKey == null && acted.checks.any { it.inconclusive }
         val result =
             when {
                 failureKey != null -> failureKey
+                undecided -> INCONCLUSIVE
                 lost != null -> LOST_RACE
                 isExpectedRefusal(actor.step, outcome) -> FailureReason.PERMISSION_DENIED.key
                 else -> "ok"
@@ -1180,8 +1192,12 @@ internal class StepExecutor(
         val task =
             when {
                 failureKey != null && blocked -> TaskState.BLOCKED
-                failureKey != null -> TaskState.FAILED
+
+                // Not proven: the board shows it as not passed, its detail says why (the run is not PASSED either).
+                failureKey != null || undecided -> TaskState.FAILED
+
                 lost != null -> TaskState.LOST_RACE
+
                 else -> TaskState.PASSED
             }
         val detail =
@@ -1397,6 +1413,9 @@ internal class StepExecutor(
         val error: Boolean,
     ) {
         val failed: Boolean get() = error || records.any { it.verdict == Verdict.FAILED }
+
+        /** A check ran but could not decide (Faza 24.12): not a failure, but the actor's step is not proven either. */
+        val inconclusive: Boolean get() = records.any { it.verdict == Verdict.INCONCLUSIVE }
     }
 
     companion object {
@@ -1412,6 +1431,9 @@ internal class StepExecutor(
 
         /** Detail key of an action that lost a race: an expected outcome, not a failure (see reporting's FailureKeys). */
         const val LOST_RACE = "lost_race"
+
+        /** Result of an actor whose checks ran but could not decide (Faza 24.12): neither passed nor failed. */
+        const val INCONCLUSIVE = "inconclusive"
 
         /**
          * Failure key of a race action whose agent claimed success while the target turned down the actor's own

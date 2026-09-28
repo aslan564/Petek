@@ -423,10 +423,12 @@ class RecordingVerifyStepUseCaseTest {
     @Test
     fun `verifyGroup judges only_one_succeeds once and keeps every actor outcome as evidence`() =
         runTest {
+            val approve = RequestPattern("POST", ".*/approve")
+            val won = { RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 303))) }
             val results =
                 listOf(
-                    ActorResult(AgentId("a02"), succeeded = true, summary = "approved"),
-                    ActorResult(AgentId("a03"), succeeded = true, summary = "approved"),
+                    ActorResult(AgentId("a02"), succeeded = true, summary = "approved", race = won()),
+                    ActorResult(AgentId("a03"), succeeded = true, summary = "approved", race = won()),
                 )
 
             val records =
@@ -440,7 +442,7 @@ class RecordingVerifyStepUseCaseTest {
             record.type shouldBe "only_one_succeeds"
             record.source shouldBe EvidenceSource.SENDER
             record.verdict shouldBe Verdict.FAILED
-            record.observed shouldBe "a02 succeeded; a03 succeeded"
+            record.observed shouldBe "a02 POST /tickets/42/approve -> 303; a03 POST /tickets/42/approve -> 303"
             record.agentId.shouldBeNull()
             record.scenarioStep shouldBe "race_approve"
             val stored = artifact(record.artifactIds.single())

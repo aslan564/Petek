@@ -94,12 +94,35 @@ class OnlyOneSucceedsTest {
     }
 
     @Test
-    fun `no winner fails`() {
+    fun `no winner because every attempt was refused fails`() {
         val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, false), actor(3, false)))
 
         result.verdict shouldBe Verdict.FAILED
-        result.note shouldBe "no actor succeeded; expected exactly one winner"
+        result.note shouldBe "no actor succeeded: every attempt was refused; expected exactly one winner"
     }
+
+    @Test
+    fun `a race nobody attempted proves nothing about the site`() =
+        runTest {
+            // Both racers acted and their requests were read, but none of them sent the approval (Faza 24.12).
+            val result = evaluator.evaluateOnlyOneSucceeds(AssertionSpec.OnlyOneSucceeds(APPROVE), listOf(racer(2), racer(3)), input)
+
+            result.verdict shouldBe Verdict.INCONCLUSIVE
+            result.note shouldBe "no_attempt: no racer sent a request matching `POST .*/approve`, so nothing was decided"
+            result.observed shouldBe "a02 no matching request; a03 no matching request"
+        }
+
+    @Test
+    fun `two winners fail even when a third racer's requests could not be read`() =
+        runTest {
+            val unknown = RaceEvidence.unavailable("BrowserActionException: browser session 'a04' is closed")
+            val results = listOf(actor(2, true), actor(3, true), ActorResult(AgentId.of(4), false, "done", unknown))
+
+            val result = evaluator.evaluateOnlyOneSucceeds(AssertionSpec.OnlyOneSucceeds(APPROVE), results, input)
+
+            result.verdict shouldBe Verdict.FAILED
+            result.note shouldBe "more than one actor succeeded (a02, a03); expected exactly one"
+        }
 
     @Test
     fun `two winners fail and name who succeeded in agent order`() {
@@ -114,11 +137,11 @@ class OnlyOneSucceedsTest {
     // --- who raced ------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `a single racer that wins is no race and fails`() {
-        // E.g. a wave that holds only one of the two managers, or the other one failed its setup.
+    fun `a single racer that wins is no race and never passes`() {
+        // E.g. a race larger than a wave, or the other manager failed its setup: no evidence of a race (Faza 24.12).
         val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, true)))
 
-        result.verdict shouldBe Verdict.FAILED
+        result.verdict shouldBe Verdict.INCONCLUSIVE
         result.expected shouldBe "exactly one of 1 actor succeeds"
         result.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
     }
@@ -127,16 +150,16 @@ class OnlyOneSucceedsTest {
     fun `an actor whose action never ran did not race, so the one who did cannot pass alone`() {
         val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, true), absent(3)))
 
-        result.verdict shouldBe Verdict.FAILED
+        result.verdict shouldBe Verdict.INCONCLUSIVE
         result.observed shouldBe "a02 POST /tickets/t2/approve -> 303; a03 did not race"
         result.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
     }
 
     @Test
-    fun `actors that all stopped before the start line fail the race`() {
+    fun `actors that all stopped before the start line leave the race undecided`() {
         val result = evaluator.evaluateOnlyOneSucceeds(listOf(absent(2), absent(3)))
 
-        result.verdict shouldBe Verdict.FAILED
+        result.verdict shouldBe Verdict.INCONCLUSIVE
         result.note shouldBe "a race needs at least 2 racing actors; none raced"
     }
 
@@ -150,10 +173,10 @@ class OnlyOneSucceedsTest {
     }
 
     @Test
-    fun `no actor results fail instead of passing vacuously`() {
+    fun `no actor results never pass vacuously`() {
         val result = evaluator.evaluateOnlyOneSucceeds(emptyList())
 
-        result.verdict shouldBe Verdict.FAILED
+        result.verdict shouldBe Verdict.INCONCLUSIVE
         result.observed shouldBe "no actors"
         result.note shouldBe "no actor results to compare"
     }
@@ -195,7 +218,7 @@ class OnlyOneSucceedsTest {
 
             val result = evaluator.evaluateOnlyOneSucceeds(AssertionSpec.OnlyOneSucceeds(APPROVE), results, input)
 
-            result.verdict shouldBe Verdict.FAILED
+            result.verdict shouldBe Verdict.INCONCLUSIVE
             result.note shouldBe "the requests of a03 could not be read"
             result.observed shouldBe
                 "a02 POST /tickets/t2/approve -> 303; a03 requests unavailable: BrowserActionException: browser session 'a03' is closed"

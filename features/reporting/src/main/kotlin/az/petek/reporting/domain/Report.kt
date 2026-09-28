@@ -127,6 +127,8 @@ data class ReportSummary(
     val cacheReadTokens: Long = 0,
     /** Oracle checks on a target without a test API: "N/A (no oracle)", a supported mode, not a skip. */
     val assertionsNotApplicable: Int = 0,
+    /** Checks whose evidence could not decide them (Faza 24.12): neither passed nor a defect of the site. */
+    val assertionsInconclusive: Int = 0,
 )
 
 data class ReportModel(

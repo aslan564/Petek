@@ -60,6 +60,7 @@ class LoggingMonitorView(
         logger.info {
             "run ${summary.runId} finished: ${summary.outcome} (steps passed ${summary.stepsPassed}, " +
                 "failed ${summary.stepsFailed}; assertions failed ${summary.assertionsFailed}; " +
+                (if (summary.assertionsInconclusive > 0) "inconclusive ${summary.assertionsInconclusive}; " else "") +
                 "failed agents ${summary.failedAgents}; ${summary.durationMs} ms; report ${summary.reportDirectory ?: "-"})"
         }
     }

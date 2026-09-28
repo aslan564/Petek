@@ -241,4 +241,6 @@ data class RunSummary(
     val failedAgents: Int,
     val reportDirectory: String?,
     val durationMs: Long,
+    /** Checks whose evidence could not decide them (Faza 24.12); a run with any is not PASSED. */
+    val assertionsInconclusive: Int = 0,
 )

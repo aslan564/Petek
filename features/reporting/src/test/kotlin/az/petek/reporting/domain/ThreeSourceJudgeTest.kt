@@ -30,6 +30,7 @@ import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.evidence.domain.Verdict.FAILED
+import az.petek.evidence.domain.Verdict.INCONCLUSIVE
 import az.petek.evidence.domain.Verdict.PASSED
 import az.petek.evidence.domain.Verdict.SKIPPED
 import az.petek.reporting.ReportTestData.assertion
@@ -283,6 +284,45 @@ class ThreeSourceJudgeTest {
             finding.findingClass shouldBe FindingClass.INVESTIGATE
             finding.c.shouldBeNull()
             finding.artifactIds shouldContainExactly listOf(ArtifactId("art_1"))
+        }
+
+        @Test
+        fun `a stale text beside a confirming oracle is no delivery defect but an inconclusive finding`() {
+            // Before Faza 24.12 the FAILED stale text and the passing oracle made this a DELIVERY_UI finding about the site.
+            val stale = "stale_text: the receiver's page showed \"Elan\" already when the emitting step began"
+            val assertions =
+                listOf(
+                    assertion(
+                        "read_announce",
+                        "a02",
+                        RECEIVER,
+                        INCONCLUSIVE,
+                        observed = "visible before the change was written",
+                        note = stale,
+                        artifacts = listOf("art_1"),
+                    ),
+                    assertion("read_announce", "a02", ORACLE, PASSED, artifacts = listOf("art_2")),
+                )
+
+            val finding = judge.findings(run, assertions).single()
+
+            finding.findingClass shouldBe FindingClass.INCONCLUSIVE
+            Shelf.of(finding) shouldBe Shelf.TOOL_GAP
+            finding.note shouldContain "not a defect of the site"
+            finding.note shouldContain stale
+            finding.b!! shouldContain "visible before the change was written"
+            finding.artifactIds shouldContainExactly listOf(ArtifactId("art_1"))
+        }
+
+        @Test
+        fun `an inconclusive check beside a failing one leaves the classification to the failing one`() {
+            val assertions =
+                listOf(
+                    assertion("read_announce", "a02", RECEIVER, INCONCLUSIVE, note = "stale_text: ..."),
+                    assertion("read_announce", "a02", ORACLE, FAILED),
+                )
+
+            judge.findings(run, assertions).single().findingClass shouldBe FindingClass.BACKEND
         }
 
         @Test

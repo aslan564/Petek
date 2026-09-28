@@ -1240,7 +1240,7 @@ dərəcədə aiddir (Faza 25).
     50 ms-dən bir, kölgə DOM daxil); mətnin göründüyü anı səhifə özü qeyd edir. İzləmə başlayanda mətn artıq varsa
     `stale_text` (swap-ın ikinci nəşri də belə tutulur). `{last_id}` mətni əvvəlcədən bilinmir: hadisədən sonra
     yoxlanır, ilk baxışda görünürsə yuxarı həddir. `latency_max` gecikmənin aralığına baxır: ən uzunu da limitdədirsə
-    PASSED, ən qısası da keçirsə FAILED, arada "təsdiq oluna bilmir" (hələlik FAILED; 24.12-də `INCONCLUSIVE`).
+    PASSED, ən qısası da keçirsə FAILED, arada "təsdiq oluna bilmir" (24.12-dən `INCONCLUSIVE`, `stale_text` də).
     Kəşfiyyatçı yaratma addımına formun sorğusunu `emits.request` kimi yazır. Real Chromium testi, `WatchedDeliveryTest`,
     `RunnerDeliveryTest` (gecikən çatdırılma daha `latency_max`-dan yalançı keçmir).
 
@@ -1256,9 +1256,17 @@ dərəcədə aiddir (Faza 25).
     dalğanın şininə daşınır (`EventBus.carry`). Proxy-lər: sakinlər ilk proxy-ləri saxlayır, dalğanın testerləri
     növbətiləri alır; canlı say `wave_size` + sakinlərdir.
 
-- [ ] **24.12 "Sübut yoxdur" verdikti.** `Verdict`-ə yeni dəyər (`INCONCLUSIVE`): oxunmayan race request-i kimi hallar
+- [x] **24.12 "Sübut yoxdur" verdikti.** `Verdict`-ə yeni dəyər (`INCONCLUSIVE`): oxunmayan race request-i kimi hallar
   saytın FAILED-i yox, "alət boşluğu" rəfinə düşür. Hesabat "heç kim uyğun request göndərmədi" (`no_attempt`) ilə
   "hamı rədd edildi" fərqini göstərir.
+  - *Vəziyyət:* `Verdict.INCONCLUSIVE` və `FindingClass.INCONCLUSIVE` (rəf: "Pətək bacarmadı"). Yarış: oxunmayan
+    request (ikinci qalib sübut olunmayıbsa), heç kimin göndərmədiyi request (`no_attempt: no racer sent ...`) və tək
+    yarışan (24.1-in halı, əvvəl FAILED idi) `INCONCLUSIVE`-dir; hamının rədd edilməsi ("every attempt was refused")
+    və iki qalib FAILED qalır. 24.10-un halları: `stale_text` və limiti aralığın içində qalan `latency_max`
+    `INCONCLUSIVE`-dir. Judge onları A/B/C-dən çıxarır, yalnız belə yoxlaması olan qrup üçün bir `INCONCLUSIVE`
+    tapıntı yazır (sayta aid tapıntı yox). Run PASSED olmur (heç nə sübut olunmayıb): `RunSummary.assertionsInconclusive`,
+    CLI/konsol/log xülasəsi, hesabatların sayğacı, JUnit-də `inconclusive` xüsusiyyəti, SARIF-də `note`, canlı paneldə
+    "sübutsuz" sayğacı; tapşırıq lövhəsi belə aktoru `inconclusive: ...` ilə keçməmiş göstərir.
 
 #### Mərhələ D — hesabat və keyfiyyət
 

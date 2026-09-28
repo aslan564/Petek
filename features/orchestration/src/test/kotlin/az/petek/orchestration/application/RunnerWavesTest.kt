@@ -217,7 +217,7 @@ class RunnerWavesTest {
                 .map { it.verdict to it.note } shouldContainExactly
                 listOf(
                     Verdict.PASSED to null,
-                    Verdict.FAILED to "a race needs at least 2 racing actors; only a04 raced",
+                    Verdict.INCONCLUSIVE to "a race needs at least 2 racing actors; only a04 raced",
                 )
             summary.outcome shouldBe RunOutcome.FAILED
         }

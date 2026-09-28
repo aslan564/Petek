@@ -19,6 +19,12 @@ production data (rule 8). The owner also wants to test real sites that are produ
   - Otherwise: "investigate".
   - An expected `permission_denied` refusal is a pass, and so is a lost race (`lost_race`): `only_one_succeeds`
     decides who won from each actor's own requests and the target's answers, never from the agent's report.
+  - A check whose evidence cannot decide it is `INCONCLUSIVE` (amended 2026-09-28, Faza 24.12): a race with fewer
+    than two racers, one nobody attempted (`no_attempt`) or with requests that could not be read, a text the
+    receiver's page showed before the change was written (`stale_text`), a latency known only as a range around its
+    limit. It is no evidence for A, B or C and no finding about the site: its finding goes to the "tool gap" shelf
+    with what the check lacked. Nor does it prove anything, so a run with one is not PASSED. Before, such checks were
+    FAILED (and blamed on the site whenever the oracle passed) or, for a lone racer, would have passed.
   - Which step is a permission test is decided by code too: a main step whose assertions check the refusal itself
     (`not_visible` of the control, `http_status` 401/403). In such a step an agent that reported a problem or gave up
     (`report_problem` of any kind, `done` with success=false) is recorded as the `permission_denied` refusal, its own

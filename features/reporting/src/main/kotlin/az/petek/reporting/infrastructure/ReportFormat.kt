@@ -51,7 +51,11 @@ internal object ReportFormat {
             FindingClass.INVESTIGATE -> "Araşdırılmalı"
             FindingClass.FLAKY -> "Qeyri-sabit (flaky)"
             FindingClass.AGENT_FAILURE -> "Agent xətası"
+            FindingClass.INCONCLUSIVE -> "Sübut yetərli deyil"
         }
+
+    /** How the reports name checks whose evidence could not decide them (Faza 24.12). */
+    const val INCONCLUSIVE = "sübutu yetərli olmayan"
 
     /** The strength of a finding's proof as the owner reads it (Faza 10). */
     fun evidenceTier(value: EvidenceTier): String =

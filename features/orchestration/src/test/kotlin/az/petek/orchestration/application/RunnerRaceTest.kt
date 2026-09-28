@@ -166,7 +166,7 @@ class RunnerRaceTest {
         }
 
     @Test
-    fun `a race left with one manager after the other failed setup is no race and fails`() =
+    fun `a race left with one manager after the other failed setup is no race and never passes`() =
         runTest {
             val f = fixture()
             f.agents.script = { call, _ ->
@@ -192,14 +192,16 @@ class RunnerRaceTest {
                 .single()
                 .map { it.agentId.value } shouldContainExactly listOf("a02")
             val group = f.evidence.assertionList.single { it.type == "only_one_succeeds" }
-            group.verdict shouldBe Verdict.FAILED
+            // No evidence of a race: undecided rather than a defect of the site, and the run is not PASSED (Faza 24.12).
+            group.verdict shouldBe Verdict.INCONCLUSIVE
             group.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
             f.actionOf("a02").status shouldBe StepStatus.PASSED
+            summary.assertionsInconclusive shouldBe 1
             summary.outcome shouldBe RunOutcome.FAILED
         }
 
     @Test
-    fun `agents that claim success without an accepted request make nobody the winner`() =
+    fun `agents that claim success without sending the request make nobody the winner, and decide nothing`() =
         runTest {
             val f = fixture()
             f.racing(requests = emptyMap())
@@ -211,7 +213,10 @@ class RunnerRaceTest {
                 .map { it.succeeded } shouldBe listOf(false, false)
             f.evidence.assertionList
                 .single { it.type == "only_one_succeeds" }
-                .verdict shouldBe Verdict.FAILED
+                .let {
+                    it.verdict shouldBe Verdict.INCONCLUSIVE
+                    it.note!! shouldStartWith "no_attempt: no racer sent a request matching"
+                }
             f.actionOf("a02").detail shouldBe "ok; request: no matching request"
             summary.outcome shouldBe RunOutcome.FAILED
         }

@@ -140,6 +140,7 @@ class BuildReportUseCase(
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             assertionsSkipped = assertions.count { it.verdict == Verdict.SKIPPED },
             assertionsNotApplicable = assertions.count { it.verdict == Verdict.NOT_APPLICABLE },
+            assertionsInconclusive = assertions.count { it.verdict == Verdict.INCONCLUSIVE },
             agents = agents.distinct().size,
             durationMs = durationMs(run, steps),
             inputTokens = usage.sumOf { it.inputTokens },

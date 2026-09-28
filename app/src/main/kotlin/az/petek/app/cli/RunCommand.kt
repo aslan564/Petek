@@ -195,7 +195,8 @@ class RunCommand : PetekSubcommand("run") {
     ) {
         echo(
             "Run ${summary.runId}: ${summary.outcome} in ${seconds(summary.durationMs)} " +
-                "(steps passed ${summary.stepsPassed}, failed ${summary.stepsFailed}; assertions failed ${summary.assertionsFailed}; " +
+                "(steps passed ${summary.stepsPassed}, failed ${summary.stepsFailed}; assertions failed ${summary.assertionsFailed}" +
+                (if (summary.assertionsInconclusive > 0) ", inconclusive ${summary.assertionsInconclusive}" else "") + "; " +
                 "failed agents ${summary.failedAgents})",
         )
         val report = summary.reportDirectory
@@ -241,6 +242,7 @@ class RunCommand : PetekSubcommand("run") {
                         put("stepsPassed", summary.stepsPassed)
                         put("stepsFailed", summary.stepsFailed)
                         put("assertionsFailed", summary.assertionsFailed)
+                        put("assertionsInconclusive", summary.assertionsInconclusive)
                         put("failedAgents", summary.failedAgents)
                         val directory = summary.reportDirectory?.let { Path.of(it).toAbsolutePath() }
                         put("report", directory?.resolve(HTML_REPORT)?.toString())

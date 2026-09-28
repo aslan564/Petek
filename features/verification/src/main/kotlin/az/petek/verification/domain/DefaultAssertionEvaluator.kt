@@ -44,14 +44,14 @@ import kotlin.time.Duration.Companion.milliseconds
  *   without sending a request.
  * - `visible_text` measured against t0 ([AssertionInput.eventTime]: the write when the emitter's page showed it) uses
  *   the receiver's watch when there is one for the same text ([AssertionInput.watch], Faza 24.10): a text it saw appear
- *   is timed then, one the page showed before the change was written proves nothing and fails as `stale_text`.
+ *   is timed then, one the page showed before the change was written proves nothing: INCONCLUSIVE, `stale_text`.
  *   Otherwise it waits only for what is left of `t0 + within`; without a watch it checks the page first, and a text
  *   visible at once gives only an upper bound. When less than [MIN_WAIT] is left it checks once without waiting (a
  *   zero browser timeout would mean "wait forever"). A text seen, but only after `t0 + within` for certain, fails.
  * - `latency_max` compares the range the delay lies in, not only the measured value: it passes when even the longest
  *   possible delay is within the limit and fails when even the shortest exceeds it; when only a bound is known (the
- *   text was there at the first look, the write was not seen) and the limit lies inside the range, it fails with a
- *   note saying the limit cannot be confirmed.
+ *   text was there at the first look, the write was not seen) and the limit lies inside the range, it is INCONCLUSIVE,
+ *   with a note saying so (Faza 24.12).
  * - Sources follow the three-source model: screen checks are RECEIVER, oracle and the target's own HTTP answers
  *   are ORACLE, `latency_max` is HARNESS and `only_one_succeeds` is SENDER.
  * - `only_one_succeeds` trusts only [ActorResult.succeeded] (derived by the caller from each actor's own requests,
@@ -302,7 +302,7 @@ class DefaultAssertionEvaluator(
     ): AssertionResult =
         AssertionResult(
             spec = spec,
-            verdict = Verdict.FAILED,
+            verdict = Verdict.INCONCLUSIVE,
             source = EvidenceSource.RECEIVER,
             expected = AssertionText.describe(rendered),
             observed = "visible before the change was written",
@@ -372,8 +372,8 @@ class DefaultAssertionEvaluator(
 
     /**
      * `latency_max` over the latency of the preceding `visible_text`: PASSED when even the longest the delivery can
-     * have taken is within [AssertionSpec.LatencyMax.max], FAILED when even the shortest exceeds it, and FAILED with a
-     * note saying so when the measurement cannot tell (only a bound of the delay is known).
+     * have taken is within [AssertionSpec.LatencyMax.max], FAILED when even the shortest exceeds it, and INCONCLUSIVE
+     * when the measurement cannot tell (only a bound of the delay is known) or the text proved no delivery.
      */
     private fun latencyMax(
         spec: AssertionSpec.LatencyMax,
@@ -381,6 +381,10 @@ class DefaultAssertionEvaluator(
     ): AssertionResult {
         val range = measured?.range
         if (range == null) {
+            if (measured?.result?.verdict == Verdict.INCONCLUSIVE) {
+                val note = "no latency measured: the preceding visible_text proves no delivery"
+                return result(spec, Verdict.INCONCLUSIVE, observed = null, note = note)
+            }
             val reason =
                 when {
                     measured == null -> "no preceding visible_text"
@@ -402,11 +406,11 @@ class DefaultAssertionEvaluator(
                 }
 
                 range.measured > spec.max -> {
-                    Verdict.FAILED to "$latency exceeds $max, but it is only an upper bound (${range.upperBoundBecause ?: UNBOUNDED})"
+                    Verdict.INCONCLUSIVE to "$latency exceeds $max, but it is only an upper bound (${range.upperBoundBecause ?: UNBOUNDED})"
                 }
 
                 else -> {
-                    Verdict.FAILED to "$latency is within $max, but the delay may be up to ${AssertionText.ms(range.high)} " +
+                    Verdict.INCONCLUSIVE to "$latency is within $max, but the delay may be up to ${AssertionText.ms(range.high)} " +
                         "(${range.lowerBoundBecause ?: UNBOUNDED}), so the limit cannot be confirmed"
                 }
             }

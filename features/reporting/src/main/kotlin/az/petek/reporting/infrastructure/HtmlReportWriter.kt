@@ -135,7 +135,8 @@ class HtmlReportWriter : ReportWriter {
                     "${s.assertionsPassed} / ${s.assertionsFailed} / ${s.assertionsSkipped}",
                     null,
                     "keçdi / keçmədi / ötürüldü" +
-                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else ""),
+                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else "") +
+                        (if (s.assertionsInconclusive > 0) " · ${s.assertionsInconclusive} ${ReportFormat.INCONCLUSIVE}" else ""),
                 )
                 tile("Tapıntılar", model.findings.size.toString(), if (model.findings.isNotEmpty()) "bad" else "ok")
                 tile("Agentlər", s.agents.toString())
@@ -401,7 +402,7 @@ class HtmlReportWriter : ReportWriter {
         when (value) {
             FindingClass.BACKEND, FindingClass.DELIVERY_UI, FindingClass.SITE_CHECK -> "bad"
             FindingClass.INVESTIGATE, FindingClass.FLAKY -> "warn"
-            FindingClass.AGENT_FAILURE -> "info"
+            FindingClass.AGENT_FAILURE, FindingClass.INCONCLUSIVE -> "info"
         }
 
     private companion object {

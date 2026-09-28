@@ -121,12 +121,13 @@ class WatchedDeliveryTest {
                     ),
                 )
 
-            results[0].verdict shouldBe Verdict.FAILED
+            results[0].verdict shouldBe Verdict.INCONCLUSIVE
             results[0].observed shouldBe "visible before the change was written"
             results[0].latency.shouldBeNull()
             results[0].note!! shouldStartWith "stale_text: the receiver's page showed \"$announcement\" already"
             results[0].note!! shouldContain write
-            results[1].note shouldBe "no latency measured: the preceding visible_text failed"
+            results[1].verdict shouldBe Verdict.INCONCLUSIVE
+            results[1].note shouldBe "no latency measured: the preceding visible_text proves no delivery"
             session.immediateChecks.shouldBeEmpty()
         }
 
@@ -193,7 +194,7 @@ class WatchedDeliveryTest {
 
             results[0].latency shouldBe 3.seconds
             results[1].verdict shouldBe Verdict.PASSED
-            results[2].verdict shouldBe Verdict.FAILED
+            results[2].verdict shouldBe Verdict.INCONCLUSIVE
             results[2].note shouldBe
                 "3000 ms exceeds 2000 ms, but it is only an upper bound (the text was visible already when first checked)"
             session.waits.shouldBeEmpty()
@@ -224,7 +225,7 @@ class WatchedDeliveryTest {
             results[0].note shouldBe
                 "the delay may be up to 3200 ms (t0 is the publish (no write seen), and the change was written after the action began)"
             results[1].verdict shouldBe Verdict.PASSED
-            results[2].verdict shouldBe Verdict.FAILED
+            results[2].verdict shouldBe Verdict.INCONCLUSIVE
             results[2].note shouldBe
                 "200 ms is within 1000 ms, but the delay may be up to 3200 ms (t0 is the publish (no write seen)), " +
                 "so the limit cannot be confirmed"
@@ -250,7 +251,7 @@ class WatchedDeliveryTest {
             results[0].latency shouldBe 1500.milliseconds
             results[0].note shouldBe "latency is an upper bound: t0 is the first of several writes"
             results[1].verdict shouldBe Verdict.PASSED
-            results[2].verdict shouldBe Verdict.FAILED
+            results[2].verdict shouldBe Verdict.INCONCLUSIVE
             results[2].note shouldBe "1500 ms exceeds 1000 ms, but it is only an upper bound (t0 is the first of several writes)"
         }
 

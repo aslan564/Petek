@@ -203,10 +203,11 @@ internal class RunState(
 
     fun activeIdentities(): List<Identity> = waveIdentities().filterNot { isFailed(it.agentId) }
 
+    /** ABORTED, else FAILED when anything failed or a check could not be decided (nothing proves it), else PASSED. */
     fun outcome(): RunOutcome =
         when {
             aborted -> RunOutcome.ABORTED
-            tally.anyFailure -> RunOutcome.FAILED
+            tally.anyFailure || tally.assertionsInconclusive > 0 -> RunOutcome.FAILED
             else -> RunOutcome.PASSED
         }
 }
@@ -219,11 +220,15 @@ internal class StepTally {
     private val passed = AtomicInteger()
     private val failed = AtomicInteger()
     private val assertionFailures = AtomicInteger()
+    private val undecided = AtomicInteger()
     private val agentsWithFailures: MutableSet<AgentId> = ConcurrentHashMap.newKeySet()
 
     val stepsPassed: Int get() = passed.get()
     val stepsFailed: Int get() = failed.get()
     val assertionsFailed: Int get() = assertionFailures.get()
+
+    /** Checks whose evidence could not decide them (Faza 24.12): no failure of the agent, but no proof either. */
+    val assertionsInconclusive: Int get() = undecided.get()
     val failedAgents: Int get() = agentsWithFailures.size
 
     /** Whether [agentId] failed a step or one of its assertions so far. */
@@ -245,5 +250,9 @@ internal class StepTally {
     fun assertionFailed(agentId: AgentId?) {
         assertionFailures.incrementAndGet()
         agentId?.let(agentsWithFailures::add)
+    }
+
+    fun assertionInconclusive() {
+        undecided.incrementAndGet()
     }
 }

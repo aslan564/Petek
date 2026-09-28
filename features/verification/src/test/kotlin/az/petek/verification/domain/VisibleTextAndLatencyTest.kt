@@ -343,7 +343,7 @@ class VisibleTextAndLatencyTest {
                     assertionInput(session, t0),
                 )
 
-            results[1].verdict shouldBe Verdict.FAILED
+            results[1].verdict shouldBe Verdict.INCONCLUSIVE
             results[1].note!! shouldContain "only an upper bound"
         }
 

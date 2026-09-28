@@ -135,8 +135,13 @@ enum class EvidenceSource { SENDER, RECEIVER, ORACLE, HARNESS }
 /**
  * [NOT_APPLICABLE] is an oracle check on a target without a test API: not a skipped test but a supported mode
  * ("N/A (no oracle)", Faza 10); the other sources still judge the step.
+ *
+ * [INCONCLUSIVE] is a check that ran but whose evidence cannot decide it (Faza 24.12): a race nobody attempted, one with
+ * a single racer or with requests that could not be read, a text the receiver's page showed before the change was
+ * written, a latency known only as a range around its limit. It says nothing against the site, so it is no site
+ * finding (the "tool gap" shelf); nor does it prove anything, so a run with one is not PASSED.
  */
-enum class Verdict { PASSED, FAILED, SKIPPED, NOT_APPLICABLE }
+enum class Verdict { PASSED, FAILED, SKIPPED, NOT_APPLICABLE, INCONCLUSIVE }
 
 data class AssertionRecord(
     val stepId: StepId,
@@ -156,9 +161,10 @@ data class AssertionRecord(
 /**
  * What a finding is about. [SITE_CHECK]: a deterministic check of the site itself (blind `site_health`, `direct_url`)
  * saw it go wrong — a page wider than a phone, a script error, a broken link, a page open to a role that must not
- * see it; the check's own words say what.
+ * see it; the check's own words say what. [INCONCLUSIVE]: the checks of a step had no evidence to decide with
+ * ([Verdict.INCONCLUSIVE]); their notes say what was missing.
  */
-enum class FindingClass { BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE }
+enum class FindingClass { BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE, INCONCLUSIVE }
 
 /**
  * How strong a finding's proof is (Faza 10), shown next to every finding: the target's own test API confirmed it

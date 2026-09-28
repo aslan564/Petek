@@ -13,6 +13,7 @@ package az.petek.reporting.infrastructure
 
 import az.petek.evidence.domain.FindingClass
 import az.petek.reporting.ReportTestData
+import az.petek.reporting.domain.Shelf
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -64,6 +65,45 @@ class CiReportWritersTest {
             .jsonPrimitive.content shouldBe
             "../a01/0001-screenshot.png"
         SarifReportWriter().render(SampleReport.model()) shouldNotContain "javascript:"
+    }
+
+    @Test
+    fun `checks that could not decide are a JUnit property, a SARIF note and a tool gap in every summary`() {
+        val base = SampleReport.model()
+        val undecided =
+            ReportTestData.finding(
+                "fnd_3",
+                "race",
+                null,
+                FindingClass.INCONCLUSIVE,
+                a = "exactly one of 2 actors succeeds -> a02 no matching request; a03 no matching request",
+                b = null,
+                c = null,
+                note = "The check ran but its evidence could not decide it.",
+            )
+        val model =
+            base.copy(summary = base.summary.copy(assertionsInconclusive = 2), findings = base.findings + undecided)
+
+        JUnitReportWriter().render(model) shouldContain "<property name=\"inconclusive\" value=\"2\"/>"
+        val results =
+            Json
+                .parseToJsonElement(
+                    SarifReportWriter().render(model),
+                ).jsonObject["runs"]!!
+                .jsonArray
+                .single()
+                .jsonObject["results"] as JsonArray
+        results
+            .last()
+            .jsonObject["ruleId"]!!
+            .jsonPrimitive.content shouldBe "INCONCLUSIVE"
+        results
+            .last()
+            .jsonObject["level"]!!
+            .jsonPrimitive.content shouldBe "note"
+        MarkdownReportWriter().render(model) shouldContain "2 sübutu yetərli olmayan"
+        HtmlReportWriter().render(model) shouldContain "Sübut yetərli deyil"
+        Shelf.of(undecided) shouldBe Shelf.TOOL_GAP
     }
 
     @Test

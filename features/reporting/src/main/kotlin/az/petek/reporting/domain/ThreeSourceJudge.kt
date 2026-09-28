@@ -26,7 +26,9 @@ import az.petek.evidence.domain.Verdict
 /**
  * The [Judge] of docs/PLAN.md design decision 4: correctness is decided by three sources agreeing, never by an
  * opinion. Per (scenario step, actor) the assertions are folded into A (sender), B (receiver screen; harness checks
- * such as `latency_max` count here) and C (oracle); SKIPPED assertions carry no evidence and count as absent.
+ * such as `latency_max` count here) and C (oracle); SKIPPED, NOT_APPLICABLE and INCONCLUSIVE assertions carry no
+ * evidence and count as absent. A group whose only non-passing checks are INCONCLUSIVE yields one INCONCLUSIVE finding
+ * (the "tool gap" shelf) with what each check lacked (Faza 24.12).
  *
  * Rule order matters and is the contract: a failing oracle with a sender that did its part blames the backend,
  * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human.
@@ -98,11 +100,13 @@ class ThreeSourceJudge(
         key: GroupKey,
         group: List<AssertionRecord>,
     ): FindingRecord? {
-        val evidence = group.filter { it.verdict != Verdict.SKIPPED && it.verdict != Verdict.NOT_APPLICABLE }
+        val evidence = group.filter { it.verdict !in NO_EVIDENCE }
         val a = observe(SOURCE_A, evidence.filter { it.source == EvidenceSource.SENDER })
         val b = observe(SOURCE_B, evidence.filter { it.source == EvidenceSource.RECEIVER || it.source == EvidenceSource.HARNESS })
         val c = observe(SOURCE_C, evidence.filter { it.source == EvidenceSource.ORACLE })
-        val verdict = classify(a, b, c) as? JudgeVerdict.Finding ?: return null
+        val verdict =
+            classify(a, b, c) as? JudgeVerdict.Finding
+                ?: return inconclusive(run, key, group.filter { it.verdict == Verdict.INCONCLUSIVE })
         val failed = evidence.filter { it.verdict == Verdict.FAILED }
         return FindingRecord(
             findingId = ids.findingId(),
@@ -117,6 +121,32 @@ class ThreeSourceJudge(
             note = noteWithDetails(verdict.note, failed.mapNotNull { it.note }),
             artifactIds = evidence.flatMap { it.artifactIds }.distinct(),
             evidenceTier = if (c != null) EvidenceTier.ORACLE_CONFIRMED else EvidenceTier.UI_NETWORK,
+        )
+    }
+
+    /**
+     * Checks that ran but could not decide ([Verdict.INCONCLUSIVE], Faza 24.12) and nothing that failed: one finding on
+     * the "tool gap" shelf with what each check lacked, never a finding about the site.
+     */
+    private fun inconclusive(
+        run: RunRecord,
+        key: GroupKey,
+        records: List<AssertionRecord>,
+    ): FindingRecord? {
+        if (records.isEmpty()) return null
+        return FindingRecord(
+            findingId = ids.findingId(),
+            runId = run.runId,
+            stepId = records.first().stepId,
+            scenarioStep = key.scenarioStep,
+            agentId = key.agentId,
+            findingClass = FindingClass.INCONCLUSIVE,
+            a = observe(SOURCE_A, records.filter { it.source == EvidenceSource.SENDER })?.value,
+            b = observe(SOURCE_B, records.filter { it.source == EvidenceSource.RECEIVER || it.source == EvidenceSource.HARNESS })?.value,
+            c = observe(SOURCE_C, records.filter { it.source == EvidenceSource.ORACLE })?.value,
+            note = noteWithDetails(NOTE_INCONCLUSIVE, records.mapNotNull { it.note }),
+            artifactIds = records.flatMap { it.artifactIds }.distinct(),
+            evidenceTier = EvidenceTier.UI_NETWORK,
         )
     }
 
@@ -254,6 +284,12 @@ class ThreeSourceJudge(
         const val NOTE_SENDER_ONLY = "The sender's check (A) failed and there is no receiver or oracle evidence to attribute it."
         const val NOTE_NO_ORACLE = "The receiver (B) disagrees and there is no oracle evidence (C) to attribute it."
         const val NOTE_DISAGREE = "The sources disagree in a way the three-source rule cannot attribute."
+        const val NOTE_INCONCLUSIVE =
+            "The check ran but its evidence could not decide it: a gap of the test or its scenario, not a defect of the site."
+
+        /** Verdicts that carry no evidence for the three sources: not run, not applicable, or not decidable. */
+        val NO_EVIDENCE = setOf(Verdict.SKIPPED, Verdict.NOT_APPLICABLE, Verdict.INCONCLUSIVE)
+
         const val NOTE_REQUEST_FAILED =
             "The target turned down the actor's own request (B shows it) although its agent reported success (request_failed)."
     }

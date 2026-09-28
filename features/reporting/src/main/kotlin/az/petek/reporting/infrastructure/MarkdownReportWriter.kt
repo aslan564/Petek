@@ -72,7 +72,8 @@ class MarkdownReportWriter : ReportWriter {
                 listOf(
                     "Assertlər",
                     "${s.assertionsPassed} keçdi · ${s.assertionsFailed} keçmədi · ${s.assertionsSkipped} ötürüldü" +
-                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else ""),
+                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else "") +
+                        (if (s.assertionsInconclusive > 0) " · ${s.assertionsInconclusive} ${ReportFormat.INCONCLUSIVE}" else ""),
                 ),
                 listOf("Tapıntılar", model.findings.size.toString()),
                 listOf("Agentlər", s.agents.toString()),
