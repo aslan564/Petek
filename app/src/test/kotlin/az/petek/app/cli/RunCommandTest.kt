@@ -328,9 +328,9 @@ class RunCommandTest {
                   testers: 5
                   seed: 3
                   wave_size: 2
-                  roles: {admin: 1, manager: 2, employee: 2}
+                  roles: {admin: 1, manager: 3, employee: 1}
                   departments: [IT, HR]
-                  registration: {invite: 2, company_code: 2}
+                  registration: {invite: 3, company_code: 1}
                   budget: {max_steps_per_agent: 5, max_minutes: 2}
                 setup:
                   - id: signup
@@ -348,9 +348,9 @@ class RunCommandTest {
 
             val result = cli.run("run", "waves.yaml")
 
-            // a02 (manager IT) is in wave 1 with the admin, a03 (manager HR) in wave 2.
+            // Three racing managers, waves of two: a02 and a03 race in wave 1, a04 is alone in wave 2.
             result.stderr shouldContain "Warning: with campaign.wave_size 2, race step 'race'"
-            result.stderr shouldContain "has a single racer in wave 1, 2, where it fails"
+            result.stderr shouldContain "has a single racer in wave 2, where it fails"
         }
 
     @Test

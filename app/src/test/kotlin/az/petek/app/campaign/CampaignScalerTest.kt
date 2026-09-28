@@ -244,8 +244,11 @@ class CampaignScalerTest {
     @Test
     fun `receivers the waves put without the tester who emits their event are found`() {
         val posting =
-            "\n  - id: post\n    actor: admin\n    do: \"Post\"\n    emits: posted" +
-                "\n  - id: see\n    actor: employee[*]\n    wait_for: posted"
+            "\n  - id: post\n    actor: manager[IT]\n    do: \"Post\"\n    emits: posted" +
+                "\n  - id: see\n    actor: employee[*]\n    wait_for: posted" +
+                "\n  - id: answer\n    actor: manager[HR]\n    wait_for: posted" +
+                "\n  - id: note\n    actor: admin\n    do: \"Note\"\n    emits: noted" +
+                "\n  - id: read_note\n    actor: employee[*]\n    wait_for: noted"
         val campaign = portalLike(posting)
         val generator = DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
         val identities =
@@ -261,17 +264,20 @@ class CampaignScalerTest {
                     DefaultActorResolver(),
                 ).map { Triple(it.step.id, it.waves, it.covered) }
 
-        // a01 is the admin, a02..a06 the managers, a07..a30 employees. Waves of ten: wave 1 holds the admin and a07..a10.
-        gaps(10) shouldContainExactly listOf(Triple("see", listOf(2, 3), true))
-        // Waves of six: wave 1 is the admin with the managers only, so no employee ever reads the post.
-        gaps(6) shouldContainExactly listOf(Triple("see", listOf(2, 3, 4, 5), false))
+        // a01 is the admin, in every wave: its note reaches every wave. a02 (IT) and a03 (HR) are the first managers,
+        // dealt into waves 1 and 2, the employees into all: only wave 1 has the IT manager's post, and the HR manager
+        // never shares a wave with it.
+        gaps(10) shouldContainExactly listOf(Triple("see", listOf(2, 3), true), Triple("answer", listOf(2), false))
+        gaps(6) shouldContainExactly listOf(Triple("see", listOf(2, 3, 4, 5), true), Triple("answer", listOf(2), false))
         gaps(null).shouldBeEmpty()
     }
 
     @Test
     fun `races that the waves leave with one racer are found with those waves`() {
         val race =
-            "\n  - id: race\n    actor: [\"manager[IT]\", \"manager[HR]\"]\n    parallel: true\n    do: \"Approve the same ticket\"" +
+            "\n  - id: pair\n    actor: [\"manager[IT]\", \"manager[HR]\"]\n    parallel: true\n    do: \"Approve the same ticket\"" +
+                "\n    assert:\n      - only_one_succeeds: {request: \"POST .*/approve\"}" +
+                "\n  - id: all\n    actor: manager[*]\n    parallel: true\n    do: \"Approve the same ticket\"" +
                 "\n    assert:\n      - only_one_succeeds: {request: \"POST .*/approve\"}"
         val campaign = portalLike(race)
         val generator = DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
@@ -288,8 +294,9 @@ class CampaignScalerTest {
                     DefaultActorResolver(),
                 ).map { it.step.id to it.waves }
 
-        // a01 is the admin, a02 the IT manager and a03 the HR manager: waves of two part them, waves of three do not.
-        split(2) shouldContainExactly listOf("race" to listOf(1, 2))
+        // The racers of a step share a wave: the IT and HR managers always race together. All five managers do not
+        // fit into waves of two: a02..a05 race in pairs, a06 is left alone in wave 3; waves of three hold 3 and 2.
+        split(2) shouldContainExactly listOf("all" to listOf(3))
         split(3).shouldBeEmpty()
         split(null).shouldBeEmpty()
     }

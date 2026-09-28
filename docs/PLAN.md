@@ -1086,7 +1086,7 @@ dərəcədə aiddir (Faza 25).
     `RaceVerdict` vahid testləri; ön baxış xəbərdarlığı.
   - *Sənəd:* ARCHITECTURE «Races», R03.
   - *Vəziyyət:* `RaceVerdict` yarışanları (request sübutu olanları) sayır, 2-dən azdırsa FAILED: "a race needs at least 2
-    racing actors; only a02 raced"; heç hərəkət etməyən aktor `did not race` görünür. `Waves.of` runner-in və ön baxışın
+    racing actors; only a02 raced"; heç hərəkət etməyən aktor `did not race` görünür. `Waves` (24.11-dən `Waves.plan`) runner-in və ön baxışın
     ortaq dalğa qaydasıdır; `petek run` və panel (MCP də) dalğalara bölünən yarışı run-dan əvvəl deyir. Orkestrasiya
     testləri yarışı real hökmlə yoxlayır.
 
@@ -1244,10 +1244,17 @@ dərəcədə aiddir (Faza 25).
     Kəşfiyyatçı yaratma addımına formun sorğusunu `emits.request` kimi yazır. Real Chromium testi, `WatchedDeliveryTest`,
     `RunnerDeliveryTest` (gecikən çatdırılma daha `latency_max`-dan yalançı keçmir).
 
-- [ ] **24.11 Hər dalğa addımlarının ehtiyac duyduğu rolları daşıyır.** Rollar dalğalara növbə ilə paylanır (indi
+- [x] **24.11 Hər dalğa addımlarının ehtiyac duyduğu rolları daşıyır.** Rollar dalğalara növbə ilə paylanır (indi
   kimliklər rol sırası ilə kəsilir); tək nəfərlik rol (məs. şirkətin sahibi) bütün dalğalarda canlı qalır, onun setup
   addımları yalnız ilk dalğada işləyir; bir yarışın iştirakçıları eyni dalğaya düşür; setup hadisələri dalğalar
   arasında daşınır. 24.1 və 24.7 bunsuz da düzgündür; bu bənd həmin halları nadir edir.
+  - *Vəziyyət:* `Waves.plan` → `WavePlan` (sakinlər + dalğalar), runner və ön baxış eyni qaydanı işlədir. Rolunda tək
+    olan tester sakindir: brauzeri ilk dalğada açılır və run sonuna qədər qalır, setup-ı yalnız 1-ci dalğada işləyir,
+    hər dalğanın main addımlarında iştirak edir (admin hər dalğada elan verir, hər dalğanın oxucusu öz elanını alır).
+    Yarış addımının iştirakçıları bir qrupdur və eyni dalğaya düşür; dalğadan böyük yarış dalğa ölçülü hissələrə
+    bölünür və ön baxış bunu deyir. Qalanlar rol üzrə növbə ilə paylanır. Setup hadisələri eyni id ilə növbəti
+    dalğanın şininə daşınır (`EventBus.carry`). Proxy-lər: sakinlər ilk proxy-ləri saxlayır, dalğanın testerləri
+    növbətiləri alır; canlı say `wave_size` + sakinlərdir.
 
 - [ ] **24.12 "Sübut yoxdur" verdikti.** `Verdict`-ə yeni dəyər (`INCONCLUSIVE`): oxunmayan race request-i kimi hallar
   saytın FAILED-i yox, "alət boşluğu" rəfinə düşür. Hesabat "heç kim uyğun request göndərmədi" (`no_attempt`) ilə

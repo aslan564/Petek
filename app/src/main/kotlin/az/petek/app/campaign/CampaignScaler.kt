@@ -16,6 +16,7 @@ import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.RegistrationQuota
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.domain.ScenarioStep
+import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.Tenant
 import az.petek.core.error.PetekException
 import az.petek.identity.domain.Identity
@@ -164,41 +165,45 @@ object CampaignScaler {
 
     /**
      * Race steps (`only_one_succeeds`) of [campaign] that its `wave_size` leaves with a single racer in some wave. The
-     * runner cuts the testers into waves in agent order ([Waves]), so the racers of one step can land in different
-     * waves, and a race with one racer never passes. Empty without waves; a wave the step has no racer in skips it.
+     * runner keeps the racers of a step in one wave ([Waves]), so this happens only to a race with more racers than a
+     * wave holds, and a race with one racer never passes. Empty without waves; a wave the step has no racer in skips it.
      */
     fun racesSplitByWaves(
         campaign: Campaign,
         identities: List<Identity>,
         resolver: ActorResolver,
     ): List<SplitRace> {
-        val waves = Waves.of(identities, campaign.settings.waveSize)
+        val plan = Waves.plan(campaign, identities, resolver) ?: return emptyList()
         return campaign.allSteps
             .filter { step -> step.assertions.any { it is AssertionSpec.OnlyOneSucceeds } }
             .map { step ->
-                val alone = waves.withIndex().filter { (_, wave) -> resolver.resolve(step.actors, wave).size == 1 }
-                SplitRace(step, alone.map { it.index + 1 })
+                val alone = plan.waves.indices.filter { resolver.resolve(step.actors, plan.live(it)).size == 1 }
+                SplitRace(step, alone.map { it + 1 })
             }.filter { it.waves.isNotEmpty() }
     }
 
     /**
      * `wait_for` steps whose receivers some wave of `wave_size` holds without a tester of the step that emits their
      * event (Faza 24.7): the runner skips those receivers, and a step no wave holds with its emitter is never checked
-     * (`not_covered`). Empty without waves.
+     * (`not_covered`). The residents of every wave ([az.petek.orchestration.domain.WavePlan.residents]) emit in each,
+     * and a setup step's event serves the waves after its own too (Faza 24.11). Empty without waves.
      */
     fun waitsWithoutEmitter(
         campaign: Campaign,
         identities: List<Identity>,
         resolver: ActorResolver,
     ): List<WaitWithoutEmitter> {
-        val waves = Waves.of(identities, campaign.settings.waveSize)
-        if (waves.isEmpty()) return emptyList()
+        val plan = Waves.plan(campaign, identities, resolver) ?: return emptyList()
         val emitters = campaign.allSteps.mapNotNull { step -> step.emits?.let { it.event to step } }.toMap()
         return campaign.allSteps.mapNotNull { step ->
             val emitter = step.waitFor?.let { emitters[it.event] } ?: return@mapNotNull null
-            val withReceivers = waves.withIndex().filter { (_, wave) -> resolver.resolve(step.actors, wave).isNotEmpty() }
-            val alone = withReceivers.filter { (_, wave) -> resolver.resolve(emitter.actors, wave).isEmpty() }
-            if (alone.isEmpty()) null else WaitWithoutEmitter(step, emitter, alone.map { it.index + 1 }, alone.size < withReceivers.size)
+            val emits = plan.waves.indices.map { resolver.resolve(emitter.actors, plan.live(it)).isNotEmpty() }
+            val withReceivers = plan.waves.indices.filter { resolver.resolve(step.actors, plan.live(it)).isNotEmpty() }
+            val alone =
+                withReceivers.filterNot { wave ->
+                    emits[wave] || (emitter.phase == StepPhase.SETUP && emits.take(wave).any { it })
+                }
+            if (alone.isEmpty()) null else WaitWithoutEmitter(step, emitter, alone.map { it + 1 }, alone.size < withReceivers.size)
         }
     }
 

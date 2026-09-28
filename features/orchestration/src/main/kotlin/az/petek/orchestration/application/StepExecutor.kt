@@ -816,6 +816,7 @@ internal class StepExecutor(
         val resolution = services.objectIds.read(source, actor.session, performed.outcome, templates)
         val write = writeOf(actor, spec.request ?: raceSpec(actor.step)?.request, performed.startedAt, watched = watchStart != null)
         val event = run.bus.publish(spec.event, resolution.objectId, actor.agentId, EventOrigin(performed.startedAt, write.write))
+        if (actor.step.phase == StepPhase.SETUP) run.setupEvents += event
         tasks.eventPublished(event)
         services.recorder.event(
             EventRecord(

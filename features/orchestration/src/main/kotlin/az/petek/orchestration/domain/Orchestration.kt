@@ -73,6 +73,12 @@ interface EventBus {
         origin: EventOrigin? = null,
     ): PublishedEvent
 
+    /**
+     * Makes [event], published on an earlier bus of the same run, available on this one as it was (same id, object and
+     * times) with this bus's next sequence: a setup event goes on serving the waves after its own (Faza 24.11).
+     */
+    suspend fun carry(event: PublishedEvent): PublishedEvent
+
     /** Latest event named [name] with sequence > [afterSequence], waiting up to [timeout]; null on timeout. */
     suspend fun await(
         name: String,

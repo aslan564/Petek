@@ -62,6 +62,12 @@ class InProcessEventBus(
             event
         }
 
+    override suspend fun carry(event: PublishedEvent): PublishedEvent =
+        publishLock.withLock {
+            val current = state.value
+            event.copy(sequence = current.lastSequence + 1).also { state.value = current.with(it) }
+        }
+
     override suspend fun await(
         name: String,
         afterSequence: Long,

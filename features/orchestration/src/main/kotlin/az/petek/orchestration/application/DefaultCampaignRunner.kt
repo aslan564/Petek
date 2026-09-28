@@ -56,6 +56,7 @@ import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import az.petek.orchestration.domain.WavePlan
 import az.petek.orchestration.domain.Waves
 import az.petek.verification.application.VerifyStepUseCase
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -186,8 +187,8 @@ class DefaultCampaignRunner(
         val completed =
             withTimeoutOrNull(run.budget) {
                 planIdentities(run)
-                val waves = Waves.of(run.identities, run.campaign.settings.waveSize)
-                val live = waves.maxOfOrNull { it.size } ?: run.identities.size
+                val waves = Waves.plan(run.campaign, run.identities, actors)
+                val live = waves?.maxLive ?: run.identities.size
                 if (settings.proxies.isNotEmpty() && settings.proxies.size < live) {
                     run.abort(
                         "each tester should come from its own IP, but $live testers are live at once and only " +
@@ -195,7 +196,7 @@ class DefaultCampaignRunner(
                     )
                     return@withTimeoutOrNull true
                 }
-                if (waves.isEmpty()) {
+                if (waves == null) {
                     startAgents(run, board, run.identities)
                     runSteps(run, board, tasks)
                     if (run.options.swapAccounts) swapAccounts(run, board, tasks)
@@ -250,29 +251,48 @@ class DefaultCampaignRunner(
     // --- 2. browser and agents ------------------------------------------------------------------------------------
 
     /**
-     * `campaign.wave_size` (Faza 21): each wave opens the browsers of its testers, runs every step with them only and
-     * closes them, with its own event bus, so a live event never crosses waves. What the run shares (the company code,
-     * invitation links) stays shared. The board announces every tester once, at the first wave.
+     * `campaign.wave_size` (Faza 21, 24.11): each wave opens the browsers of its testers, runs every step with them and
+     * closes them, with its own event bus, so a live event never crosses waves. The residents ([WavePlan.residents], a
+     * role nobody else has, such as the company's owner) are live in every wave: their browsers open with the first wave
+     * and stay, their setup steps run in the first wave only, and every wave's main steps have them, so an
+     * announcement is made and read in every wave. The events of setup steps are carried to every later wave's bus.
+     * What the run shares (the company code, invitation links) stays shared. The board announces every tester once, at
+     * the first wave. Proxies: the residents keep the first ones, each wave's testers take the next.
      */
     private suspend fun runWaves(
         run: RunState,
         board: AgentBoard,
         tasks: TaskBoard,
-        waves: List<List<Identity>>,
+        plan: WavePlan,
     ) {
         board.start(run.runId, run.identities)
-        for ((index, wave) in waves.withIndex()) {
+        val residents = plan.residents
+        for ((index, wave) in plan.waves.withIndex()) {
             if (run.aborted) break
-            run.wave = wave.map { it.agentId }.toSet()
-            if (index > 0) run.bus = busFactory()
-            val members = "${wave.first().agentId}..${wave.last().agentId}"
-            evidence.system(run, null, "wave", StepStatus.PASSED, "wave ${index + 1} of ${waves.size}: ${wave.size} testers ($members)")
-            board.message("wave ${index + 1} of ${waves.size}: $members")
-            startAgents(run, board, wave, announce = false)
-            runSteps(run, board, tasks)
-            if (index < waves.lastIndex) {
-                recordNetworkObservations(run)
-                closeSessions(run)
+            val live = plan.live(index).map { it.agentId }.toSet()
+            if (index > 0) {
+                run.bus = busFactory()
+                run.setupEvents.forEach { run.bus.carry(it) }
+            }
+            val detail = waveDetail(index, plan)
+            evidence.system(run, null, "wave", StepStatus.PASSED, detail)
+            board.message(detail)
+            if (index == 0) {
+                startAgents(run, board, residents + wave, announce = false)
+                run.wave = live
+                runSteps(run, board, tasks)
+            } else {
+                startAgents(run, board, wave, announce = false, firstProxy = residents.size)
+                // The residents set up in the first wave; this wave's testers set up on their own, then everyone acts.
+                run.wave = wave.map { it.agentId }.toSet()
+                runSteps(run, board, tasks, run.campaign.setup.filter { step -> actors.resolve(step.actors, wave).isNotEmpty() })
+                run.wave = live
+                runSteps(run, board, tasks, run.campaign.steps)
+            }
+            if (index < plan.waves.lastIndex) {
+                val leaving = wave.map { it.agentId }.toSet()
+                recordNetworkObservations(run, leaving)
+                closeSessions(run, leaving)
                 wave.forEach {
                     run.sessions.remove(it.agentId)
                     run.agents.remove(it.agentId)
@@ -281,6 +301,21 @@ class DefaultCampaignRunner(
             }
         }
     }
+
+    /** `wave 2 of 3: 4 testers (a03, a07, a11, a15); in every wave: a01 (admin), set up in wave 1`. */
+    private fun waveDetail(
+        index: Int,
+        plan: WavePlan,
+    ): String =
+        buildString {
+            val wave = plan.waves[index]
+            append("wave ${index + 1} of ${plan.waves.size}: ${wave.size} testers (${wave.joinToString(", ") { it.agentId.value }})")
+            if (plan.residents.isNotEmpty()) {
+                append("; in every wave: ")
+                append(plan.residents.joinToString(", ") { "${it.agentId} (${it.role.key})" })
+                if (index > 0) append(", set up in wave 1")
+            }
+        }
 
     /**
      * The account swap ([RunOptions.swapAccounts], Faza 18): the testers that finished the main steps without failing
@@ -357,11 +392,13 @@ class DefaultCampaignRunner(
         }
     }
 
+    /** Opens the browsers and agents of [identities]; the n-th of them goes out through proxy [firstProxy] + n, if any. */
     private suspend fun startAgents(
         run: RunState,
         board: AgentBoard,
         identities: List<Identity>,
         announce: Boolean = true,
+        firstProxy: Int = 0,
     ) {
         // Set first: a browser that fails half-way through starting is still stopped at the end.
         run.browserStarted = true
@@ -371,7 +408,7 @@ class DefaultCampaignRunner(
         coroutineScope {
             identities
                 .mapIndexed { index, identity ->
-                    val proxy = settings.proxies.getOrNull(index)
+                    val proxy = settings.proxies.getOrNull(firstProxy + index)
                     async(diagnostics.of(run.runId, identity.agentId)) { openAgent(run, factory, identity, colleagues, proxy) }
                 }.awaitAll()
         }
@@ -629,9 +666,12 @@ class DefaultCampaignRunner(
         board.message(detail)
     }
 
-    /** One record per agent; reporting reads the comma-separated transports from `detail`. */
-    private suspend fun recordNetworkObservations(run: RunState) {
-        run.sessions.entries.sortedBy { it.key }.forEach { (agentId, session) ->
+    /** One record per agent (of [only], when given); reporting reads the comma-separated transports from `detail`. */
+    private suspend fun recordNetworkObservations(
+        run: RunState,
+        only: Set<AgentId>? = null,
+    ) {
+        run.sessions.entries.filter { only == null || it.key in only }.sortedBy { it.key }.forEach { (agentId, session) ->
             safely(run, "network observation of $agentId") {
                 val observation = session.networkObservation()
                 val transports =
@@ -656,9 +696,13 @@ class DefaultCampaignRunner(
         }
     }
 
-    private suspend fun closeSessions(run: RunState) {
+    /** Closes the browser sessions of the run (of [only], when given). */
+    private suspend fun closeSessions(
+        run: RunState,
+        only: Set<AgentId>? = null,
+    ) {
         coroutineScope {
-            run.sessions.forEach { (agentId, session) ->
+            run.sessions.filterKeys { only == null || it in only }.forEach { (agentId, session) ->
                 async { safely(run, "closing the session of $agentId") { session.close() } }
             }
         }

@@ -21,8 +21,10 @@ looking at the server alone or by one browser.
   waiter takes only an event of the latest execution of the step that emits it (the bus sequence at that step's start
   is its cursor), so the account swap, which runs the main steps again on the same bus, never hands a receiver the
   first pass's event; a setup event keeps serving, since setup runs once (Faza 24.4). With `campaign.wave_size` a
-  receiver whose wave has no tester of the emitting step is skipped (`emitter_absent`) rather than failed after its
-  timeout; the run reports per step how many receivers could wait, and one no receiver could wait for anywhere is
+  tester whose role nobody else has is live in every wave, so an announcement of the company's owner is made and read
+  in every wave, and the events of setup steps are carried to every later wave's bus (Faza 24.11); a receiver whose
+  wave still has no tester of the emitting step is skipped (`emitter_absent`) rather than failed after its timeout;
+  the run reports per step how many receivers could wait, and one no receiver could wait for anywhere is
   `not_covered`, a failure (Faza 24.7).
 - **Latency from the write (Faza 24.10).** t0 is when the change reached the target, not when the emitter's agent
   finished talking about it: the answer to the emitter's own request, as its page saw it (`emits: {event, request:

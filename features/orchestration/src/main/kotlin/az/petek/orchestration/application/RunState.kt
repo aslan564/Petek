@@ -23,9 +23,11 @@ import az.petek.core.time.HarnessTimestamp
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityStatus
 import az.petek.orchestration.domain.EventBus
+import az.petek.orchestration.domain.PublishedEvent
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration
@@ -55,6 +57,9 @@ internal class RunState(
     @Volatile
     var wave: Set<AgentId>? = null
     val budget: Duration = campaign.settings.budget.maxMinutes.minutes
+
+    /** The events setup steps published, in order: every wave's bus starts with them (Faza 24.11). */
+    val setupEvents: MutableList<PublishedEvent> = CopyOnWriteArrayList()
 
     /** Every event name some step emits; `{event.<name>.id}` templates are resolved from these. */
     val eventNames: List<String> = campaign.allSteps.mapNotNull { it.emits?.event }.distinct()
