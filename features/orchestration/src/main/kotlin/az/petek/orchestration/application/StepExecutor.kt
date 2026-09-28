@@ -22,6 +22,7 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.Pacing
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
@@ -114,6 +115,10 @@ internal data class StepResult(
  * claimed success anyway, the action is FAILED with `request_failed: ...`. Because all that needs every actor's
  * evidence, the action records of a race step are written once all its actors are done (with their own start and end
  * times); when the step is interrupted first (budget, abort), the racers that already acted are recorded unjudged.
+ *
+ * Forbidden actions: in a main step that expects a refusal, the requests the actor's own page sent during the action
+ * are read like a racer's; one the site accepted on the method and path of an `http_status` assertion that expects
+ * 401/403 fails the action with `forbidden_accepted`, a defect of the site ([refusalBreached]).
  *
  * Every task transition (waiting, running, final state) and every event published or received is reported to the
  * [TaskBoard].
@@ -232,7 +237,8 @@ internal class StepExecutor(
                 } catch (e: TemplateException) {
                     return ActorRun.Settled(templateFailed(actor, e))
                 }
-            val raceStart = race?.let { startRace(actor) }
+            val forbidden = forbiddenRequests(step, templates)
+            val watchStart = if (race != null || forbidden.isNotEmpty()) startWatching(actor) else null
             if (barrier != null) {
                 barrier.arrive()
                 arrived = true
@@ -240,9 +246,9 @@ internal class StepExecutor(
             }
             val performed =
                 pacer.paced(identity.agentId, { board.update(identity.agentId, AgentState.WAITING, step.id, it) }) {
-                    perform(actor, action, templates)
+                    perform(actor, action, templates, forbidden, watchStart)
                 }
-            val requests = if (race != null && raceStart != null) requestsOf(actor, race, raceStart) else null
+            val requests = if (race != null && watchStart != null) requestsOf(actor, race, watchStart) else null
             if (requests == null) recordAction(actor, performed, actionRecord(step, performed.outcome, race = null, lost = null))
             failureScreenshot(actor, performed.outcome)
             val succeeded = requests?.succeeded ?: performed.outcome.succeeded
@@ -413,18 +419,25 @@ internal class StepExecutor(
         )
     }
 
-    /** Runs the action; its record is written by [recordAction] (in a race step once every racer is done). */
+    /**
+     * Runs the action; its record is written by [recordAction] (in a race step once every racer is done). In a
+     * forbidden-action step the requests the page sent since [watchStart] are checked against [forbidden] before the
+     * agent's own words are judged ([refusalBreached], then [judgeRefusal]).
+     */
     private suspend fun perform(
         actor: ActorContext,
         action: StepAction,
         templates: TemplateContext,
+        forbidden: List<ForbiddenRequest> = emptyList(),
+        watchStart: HarnessTimestamp? = null,
     ): Performed {
         val description = describe(action)
         board.update(actor.agentId, AgentState.WORKING, actor.step.id, description)
         tasks.update(actor.step.id, actor.agentId, TaskState.RUNNING, description)
         val started = clock.now()
         val outcome = if (action is StepAction.None) NOTHING_TO_DO else execute(actor, action, templates)
-        return Performed(action, description, started, clock.now(), judgeRefusal(actor.step, rateLimited(actor, outcome, started)))
+        val checked = refusalBreached(actor, rateLimited(actor, outcome, started), forbidden, watchStart)
+        return Performed(action, description, started, clock.now(), judgeRefusal(actor.step, checked))
     }
 
     /**
@@ -543,13 +556,74 @@ internal class StepExecutor(
 
     private fun remainingBudget(): Duration = (run.budget - run.startedAt.elapsedUntil(clock.now())).coerceAtLeast(Duration.ZERO)
 
+    // --- forbidden actions ----------------------------------------------------------------------------------------
+
+    /**
+     * The requests a forbidden-action step (main steps only) expects the site to refuse: the mutating method and path of
+     * each `http_status` assertion that expects 401 or 403, rendered for this actor. One whose path cannot be rendered is
+     * left to its assertion, which reports the template error.
+     */
+    private fun forbiddenRequests(
+        step: ScenarioStep,
+        templates: TemplateContext,
+    ): List<ForbiddenRequest> {
+        if (step.phase != StepPhase.MAIN || !step.expectsRefusal) return emptyList()
+        return step.assertions
+            .filterIsInstance<AssertionSpec.HttpStatus>()
+            .filter { it.expectsRefusal && it.method.uppercase() in RequestPattern.MUTATING_METHODS }
+            .mapNotNull { spec ->
+                try {
+                    ForbiddenRequest(spec.method.uppercase(), services.renderer.render(spec.path, templates).substringBefore('?'))
+                } catch (_: TemplateException) {
+                    null
+                }
+            }
+    }
+
+    /**
+     * In a forbidden-action step the refusal is checked by code from the actor's own requests too, not only by the
+     * assertions that probe afterwards: when its page sent one of the [forbidden] requests during the action and the
+     * site accepted it (status < 400), the site let a tester do what it must refuse. The action is then FAILED with
+     * `forbidden_accepted` (a defect of the site, whatever the agent said), with a screenshot of the page.
+     */
+    private suspend fun refusalBreached(
+        actor: ActorContext,
+        outcome: ActionOutcome,
+        forbidden: List<ForbiddenRequest>,
+        since: HarnessTimestamp?,
+    ): ActionOutcome {
+        if (forbidden.isEmpty() || since == null) return outcome
+        val accepted =
+            try {
+                actor.session.mutations(since).firstOrNull { sent ->
+                    sent.status < RaceEvidence.ACCEPTED_BELOW && forbidden.any { it.matches(sent.method, sent.path) }
+                }
+            } catch (e: Exception) {
+                rethrowIfCancelled(e)
+                logger.debug { "${actor.agentId}: requests could not be read after a forbidden action (${e.message})" }
+                null
+            } ?: return outcome
+        evidence.screenshot(run, actor.stepId, actor.agentId, actor.session)
+        val agent =
+            outcome.summary
+                .takeIf { it.isNotBlank() }
+                ?.let { "; agent: $it" }
+                .orEmpty()
+        return ActionOutcome(
+            status = ActionStatus.FAILED,
+            summary = "${accepted.describe()} was accepted, although this step expects the site to refuse it$agent",
+            failureReason = FailureReason.FORBIDDEN_ACCEPTED,
+        )
+    }
+
     // --- races ----------------------------------------------------------------------------------------------------
 
     /**
      * Reads the actor's requests once so the session catches up on answers to requests sent before this step, then
-     * takes the start time its race evidence is read from. A session that cannot be read now fails later, in [requestsOf].
+     * takes the start time the requests of its action are read from (a race, a forbidden action). A session that cannot
+     * be read now fails later, when those requests are read.
      */
-    private suspend fun startRace(actor: ActorContext): HarnessTimestamp {
+    private suspend fun startWatching(actor: ActorContext): HarnessTimestamp {
         try {
             actor.session.mutations(clock.now())
         } catch (e: Exception) {
@@ -1020,6 +1094,17 @@ internal class StepExecutor(
         val endedAt: HarnessTimestamp,
         val outcome: ActionOutcome,
     )
+
+    /** A request a forbidden-action step expects the site to refuse: [method] and [path] (no query) as its assertion names them. */
+    private class ForbiddenRequest(
+        val method: String,
+        val path: String,
+    ) {
+        fun matches(
+            sentMethod: String,
+            sentPath: String,
+        ): Boolean = sentMethod.equals(method, ignoreCase = true) && sentPath.trimEnd('/') == path.trimEnd('/')
+    }
 
     private class ActionRecord(
         val status: StepStatus,

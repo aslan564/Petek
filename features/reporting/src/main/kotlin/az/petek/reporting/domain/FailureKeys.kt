@@ -88,6 +88,7 @@ object FailureKeys {
             RATE_LIMITED,
             "unhealthy_page",
             "access_not_refused",
+            "forbidden_accepted",
         )
 
     /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */

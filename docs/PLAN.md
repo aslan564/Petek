@@ -1089,7 +1089,7 @@ dərəcədə aiddir (Faza 25).
     ortaq dalğa qaydasıdır; `petek run` və panel (MCP də) dalğalara bölünən yarışı run-dan əvvəl deyir. Orkestrasiya
     testləri yarışı real hökmlə yoxlayır.
 
-- [ ] **24.2 Qadağan addımda qəbul olunan yazı sorğusu xətadır.**
+- [x] **24.2 Qadağan addımda qəbul olunan yazı sorğusu xətadır.**
   - *Problem:* `expectsRefusal` addımında qərarı yalnız refusal assert-ləri verir. Agent qadağan əməliyyatı UI-dan və
     ya başqa yolla edib, sayt da qəbul edibsə, buna baxılmır; `not_visible` və harness-in sonrakı `http_status`
     sorğusu (vəziyyət artıq dəyişib) bunu həmişə tutmur. Nəticədə saytın icazə xətası PASSED kimi keçir.
@@ -1099,6 +1099,10 @@ dərəcədə aiddir (Faza 25).
     yalnız qeyddir. `http_status`-suz (yalnız `not_visible`) addım dəyişmir.
   - *Test:* fake sessiyada qadağan yola 200 → FAILED; 403 → keçir; əlaqəsiz yola 200 → təsirsiz.
   - *Sənəd:* ARCHITECTURE, `ExpectedOutcomes`/`FailureKeys` KDoc, R03.
+  - *Vəziyyət:* `StepExecutor.refusalBreached` action-dan sonra aktorun sorğularını oxuyur (agentin sözü mühakimə
+    olunmazdan əvvəl); qəbul olunan qadağan sorğu `forbidden_accepted` (`SITE_CHECK`, `UI_NETWORK` sübut, səhifənin
+    screenshot-u). Detal: `forbidden_accepted: POST /api/tickets/t1/approve -> 200 was accepted, although this step
+    expects the site to refuse it; agent: ...`.
 
 - [ ] **24.3 Agent yalnız test komandasının ünvanlarını yazır.**
   - *Problem:* `DefaultAgentLoop.prepare` `type` mətnində yalnız yer tutucuları həll edir. Model "həmkarını dəvət et"

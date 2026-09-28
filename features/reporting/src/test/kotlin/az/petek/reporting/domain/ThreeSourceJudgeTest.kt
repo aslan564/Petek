@@ -455,6 +455,21 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a forbidden action the site accepted is a finding about the site that code saw, even in a do step`() {
+            val detail =
+                "forbidden_accepted: POST /api/tickets/t1/approve -> 200 was accepted, although this step expects the site to " +
+                    "refuse it; agent: Approved the ticket"
+            val steps = listOf(step("forbidden", "a06", StepStatus.FAILED, detail = detail))
+
+            val finding = judge.findings(run, emptyList(), steps).single()
+
+            finding.findingClass shouldBe FindingClass.SITE_CHECK
+            Shelf.of(finding) shouldBe Shelf.SITE_BUG
+            finding.note shouldContain "(forbidden_accepted)"
+            finding.evidenceTier shouldBe EvidenceTier.UI_NETWORK
+        }
+
+        @Test
         fun `a racer whose own request the target turned down is investigated, not blamed on the agent`() {
             val detail = "request_failed: POST /tickets/t2/approve -> 500; agent: Ticket approved"
             val steps = listOf(step("race", "a03", StepStatus.FAILED, detail = detail, action = "do: Eyni ticketi approve et"))

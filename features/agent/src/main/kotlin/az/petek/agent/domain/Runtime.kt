@@ -181,6 +181,12 @@ enum class FailureReason(
 
     /** `direct_url`: a page of someone else's object opened for a tester who must not see it. */
     ACCESS_NOT_REFUSED("access_not_refused"),
+
+    /**
+     * A forbidden-action step: the tester's own page sent the very request the step expects the site to refuse, and
+     * the site accepted it (status < 400). Decided by code from the browser's requests, whatever the agent said.
+     */
+    FORBIDDEN_ACCEPTED("forbidden_accepted"),
     ;
 
     companion object {
@@ -188,7 +194,7 @@ enum class FailureReason(
          * Keys of failures that are a defect of the site a check found, not a tester that could not go on: a setup
          * step that fails with one of them (the pages checked before signing in) leaves its tester in the run.
          */
-        val SITE_DEFECT_KEYS: Set<String> = setOf(UNHEALTHY_PAGE.key, ACCESS_NOT_REFUSED.key)
+        val SITE_DEFECT_KEYS: Set<String> = setOf(UNHEALTHY_PAGE.key, ACCESS_NOT_REFUSED.key, FORBIDDEN_ACCEPTED.key)
     }
 }
 

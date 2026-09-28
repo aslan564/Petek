@@ -23,15 +23,19 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
 - **Judge.** `features/reporting` `ThreeSourceJudge` folds A/B/C into `FindingRecord`s classified `BACKEND`,
   `DELIVERY_UI`, `SITE_CHECK`, `INVESTIGATE`, `FLAKY` or `AGENT_FAILURE`. A step that failed with a key becomes a
   finding of its own: a site defect a deterministic check saw (`unhealthy_page` from `site_health`,
-  `access_not_refused` from `direct_url`) is `SITE_CHECK`, a finding about the site told in the check's own words,
-  never a tool gap; a finding without evidence of its own links its step's last screenshot, which `site_health`
+  `access_not_refused` from `direct_url`, `forbidden_accepted` when the site accepted the request a forbidden-action
+  step's `http_status` expects it to refuse, sent by the tester's own page during the action) is `SITE_CHECK` with
+  UI/network evidence, a finding about the site told in the check's own words, never a tool gap; a finding without
+  evidence of its own links its step's last screenshot, which `site_health`
   takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
   many saw it (2026-09-27).
 - **Expected outcomes.** `ExpectedOutcomes` is the one place that decides which failing-looking records the test
   expected: a lost race (`lost_race`) and an expected refusal (`permission_denied`), each together with the agent's
   own records of that action (same correlation id). Which step is a permission test is decided by code in the
   orchestrator from the step's assertions (`not_visible`, `http_status` 401/403, ADR-0007), never from the wording
-  of the agent's report; the report shows such rows as "icazə verilmədi" and counts them as passed.
+  of the agent's report; the report shows such rows as "icazə verilmədi" and counts them as passed. The requests the
+  tester's page sent during such an action are read too: one the site accepted on the method and path of such an
+  `http_status` is `forbidden_accepted`, whatever the agent said (Faza 24.2).
 - **Report.** `BuildReportUseCase` → `ReportModel` → `HtmlReportWriter` / `MarkdownReportWriter`: summary, steps with
   screenshots, assertions, latency stats (avg/p95/max per receiver), findings with A/B/C, failed agents, stability,
   usage (tokens, cost per agent). Reports live next to the evidence (`<runDir>/report/`).
