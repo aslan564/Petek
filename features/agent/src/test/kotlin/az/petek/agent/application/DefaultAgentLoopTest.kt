@@ -15,9 +15,9 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariableKeys
-import az.petek.agent.domain.ConsecutiveLoopDetector
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.JsonDecisionProtocol
+import az.petek.agent.domain.RepeatedStateLoopDetector
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.FakeVerification
 import az.petek.browser.domain.BrowserActionException
@@ -137,7 +137,7 @@ class DefaultAgentLoopTest {
     ) = DefaultAgentLoop(
         llm = llm,
         protocol = protocol,
-        loopDetectorFactory = { ConsecutiveLoopDetector() },
+        loopDetectorFactory = { RepeatedStateLoopDetector() },
         recorder = evidence,
         artifacts = artifacts,
         verification = mail,
@@ -493,6 +493,19 @@ class DefaultAgentLoopTest {
             browser.actions shouldContainExactly listOf("click 3", "click 3")
             evidence.stepList.last().status shouldBe StepStatus.FAILED
             artifactsOf(ArtifactType.A11Y).last().stepId shouldBe evidence.stepList.last().stepId
+        }
+
+    @Test
+    fun `clicking the same place on pages that change is progress, not a loop`() =
+        runTest {
+            var page = 1
+            browser.onAction = { action -> if (action == "click 3") browser.url = "https://staging.portal.test/tickets?page=${++page}" }
+            val next = decision("click", """"ref": 3""")
+
+            val outcome = execute(scripted(next, next, next, next, decision("done", """"summary": "ok"""")))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            browser.actions shouldContainExactly List(4) { "click 3" }
         }
 
     @Test

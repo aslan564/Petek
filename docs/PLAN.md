@@ -1189,7 +1189,7 @@ dərəcədə aiddir (Faza 25).
     yarışın qrup hökmü verilmir. Run sonunda `coverage` qeydi ("N of M receivers could wait"); heç kim gözləyə bilməyibsə
     `not_covered` (FAILED). `petek run` və panel əvvəlcədən deyir (`CampaignScaler.waitsWithoutEmitter`).
 
-- [ ] **24.8 Loop detector səhifənin vəziyyətinə baxır.**
+- [x] **24.8 Loop detector səhifənin vəziyyətinə baxır.**
   - *Problem:* ref-lər hər snapshot-da 1-dən nömrələnir, `ConsecutiveLoopDetector` isə yalnız ardıcıl eyni action-ı
     sayır. Üç fərqli səhifədə eyni yerdəki "Next" (`click [7]`) 3-cü dəfə icra olunmur (`loop_detected`), eyni
     səhifədə A-B-A-B dövrəsi isə tutulmur.
@@ -1198,6 +1198,9 @@ dərəcədə aiddir (Faza 25).
     fingerprint alır.
   - *Test:* səhifələmə (eyni ref, fərqli səhifə) → loop yox; eyni səhifədə A-B-A-B → loop; `wait_text` təkrarı.
   - *Sənəd:* R02 (qoruyucular).
+  - *Vəziyyət:* `RepeatedStateLoopDetector` (açar: action + səhifənin fingerprint-i = ünvan və modelin gördüyü
+    render) `ConsecutiveLoopDetector`-u əvəz etdi; eyni səhifədə eyni action son 6 qərarda 3 dəfə → loop, dəyişən
+    səhifələrdə eyni klik → irəliləyiş.
 
 #### Mərhələ C — arxitektura qərarları (sahibin təsdiqi ilə)
 

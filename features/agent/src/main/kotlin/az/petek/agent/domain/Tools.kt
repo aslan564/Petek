@@ -138,10 +138,13 @@ interface DecisionProtocol {
     fun parse(output: JsonObject): DecisionParse
 }
 
-/** Detects the agent going in circles: the same action [threshold] times in a row. */
+/** Detects the agent going in circles: the same action on the same page again and again (see [RepeatedStateLoopDetector]). */
 interface LoopDetector {
-    /** Returns true when [action] completes a loop. */
-    fun register(action: AgentAction): Boolean
+    /** Returns true when [action], chosen on [page] (a fingerprint of what the model saw), completes a loop. */
+    fun register(
+        action: AgentAction,
+        page: String,
+    ): Boolean
 
     fun reset()
 }

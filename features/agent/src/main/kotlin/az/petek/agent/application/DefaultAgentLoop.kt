@@ -63,7 +63,8 @@ private val logger = KotlinLogging.logger {}
  * The `do` loop: snapshot -> LLM decision -> whitelist action -> evidence, until the model calls `done` /
  * `report_problem`, or a guard stops it. Guards, all decided by code (AGENTS.md rules 2 and 3):
  * - [StepContext.maxSteps] LLM decisions -> `step_limit`; the whole execution runs within [StepContext.timeout] -> `timeout`;
- * - the same action chosen repeatedly (per [LoopDetector]) -> `loop_detected`, the repeat is not executed;
+ * - the same action chosen repeatedly on a page that does not change (per [LoopDetector]) -> `loop_detected`, the
+ *   repeat is not executed;
  * - a ref that is not on the page, a placeholder that does not resolve, an absolute URL on another host or a typed
  *   e-mail address or phone number that is not the test team's ([ContactPolicy]) is an invalid decision (fed back,
  *   nothing executed);
@@ -314,7 +315,7 @@ class DefaultAgentLoop(
                         }
 
                         is Preparation.Ready -> {
-                            if (detector.register(action)) {
+                            if (detector.register(action, snapshot.fingerprint())) {
                                 loopDetected(described, reason)
                             } else {
                                 perform(action, preparation.typedText, described, reason)
@@ -577,7 +578,7 @@ class DefaultAgentLoop(
                 "Stopped: the same action was chosen again without progress; it was not executed.",
                 reason,
                 validDecision = true,
-                outcome = failed(FailureReason.LOOP_DETECTED, "Loop detected: '$described' was chosen repeatedly in a row."),
+                outcome = failed(FailureReason.LOOP_DETECTED, "Loop detected: '$described' was chosen repeatedly on the same page."),
             )
 
         private fun invalid(
@@ -709,6 +710,9 @@ class DefaultAgentLoop(
     }
 
     private fun JsonObject.reason(): String? = (this["reason"] as? JsonPrimitive)?.contentOrNull
+
+    /** What the model saw, as a key for the loop detector: the address without its fragment and the rendered page. */
+    private fun PageSnapshot.fingerprint(): String = url.substringBefore('#') + "|" + render().hashCode()
 
     /**
      * A path always resolves against the session's base URL (a `//host` or `/\host` form is another host, not a path);

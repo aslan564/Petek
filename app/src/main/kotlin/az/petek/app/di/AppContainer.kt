@@ -19,8 +19,8 @@ import az.petek.agent.application.PromptBuilder
 import az.petek.agent.application.RunFunctionRegistry
 import az.petek.agent.application.TesterAgentFactory
 import az.petek.agent.application.runs.RunFunctions
-import az.petek.agent.domain.ConsecutiveLoopDetector
 import az.petek.agent.domain.JsonDecisionProtocol
+import az.petek.agent.domain.RepeatedStateLoopDetector
 import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.diagnostics.CliVersion
@@ -318,7 +318,7 @@ class AppContainer(
             DefaultAgentLoop(
                 llm = llm,
                 protocol = protocol,
-                loopDetectorFactory = { ConsecutiveLoopDetector() },
+                loopDetectorFactory = { RepeatedStateLoopDetector() },
                 recorder = agentRecorder,
                 artifacts = artifacts,
                 verification = verification,
