@@ -43,7 +43,13 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
 - **Report.** `BuildReportUseCase` → `ReportModel` → `HtmlReportWriter` / `MarkdownReportWriter`: summary, steps with
   screenshots, assertions, latency stats (avg/p95/max per receiver), findings with A/B/C, failed agents, stability,
   usage (tokens, cost per agent). Reports live next to the evidence (`<runDir>/report/`).
-- **Stability.** `run --repeat N` groups runs; the stability analysis reports pass rate and flaky steps.
+- **Stability.** `run --repeat N` groups runs; the stability analysis reports pass rate and flaky steps. Each run
+  that did not pass a step is put on whom it failed on (Faza 24.13, `FailureKeys.causeOf`): the site (a failed check,
+  a defect code saw, no e-mail sent, a racer's request turned down), the surroundings (inbox, shared IP, AI provider,
+  browser, a wave that could not check it) or the tester's agent (a loop, the step limit, a time-out, and what follows
+  from it); an actor whose own action broke leaves its failed checks moot. Only a step the site fails at times is
+  `flaky`; one that varies because of agents, surroundings or runs that did not check it is "qeyri-sabit ... (saytın
+  xətası deyil)" (`unsteady`), in the report and the panel.
 
 ## Modules and key types
 

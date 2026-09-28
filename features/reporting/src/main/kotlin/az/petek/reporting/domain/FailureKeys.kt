@@ -92,6 +92,33 @@ object FailureKeys {
             "off_site",
         )
 
+    /**
+     * Keys that say the site itself went wrong, as code saw it: a deterministic check's defect, no e-mail sent, the
+     * target turning down a racer's own request.
+     */
+    private val SITE_KEYS: Set<String> =
+        setOf("unhealthy_page", "access_not_refused", "forbidden_accepted", MAIL_TIMEOUT, REQUEST_FAILED)
+
+    /**
+     * Keys of the run's surroundings rather than of the site or the tester's agent: the test inbox, a shared IP, the AI
+     * provider, the browser, a wave that could not check a step.
+     */
+    private val ENVIRONMENT_KEYS: Set<String> =
+        setOf(MAIL_UNAVAILABLE, RATE_LIMITED, "llm_unavailable", "browser_error", "not_covered")
+
+    /**
+     * Who a failure with [key] is on (Faza 24.13): [FailureCause.SITE] for the site's own defects, [FailureCause.ENVIRONMENT]
+     * for the run's surroundings, [FailureCause.AGENT] for everything else, the tester's agent getting lost (a loop, the
+     * step limit, a time-out, a problem it reported) and what follows from it (an event never published, an id that
+     * could not be read).
+     */
+    fun causeOf(key: String?): FailureCause =
+        when (key) {
+            in SITE_KEYS -> FailureCause.SITE
+            in ENVIRONMENT_KEYS -> FailureCause.ENVIRONMENT
+            else -> FailureCause.AGENT
+        }
+
     /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
     private val ENVIRONMENT_PROBLEMS: Map<String, String> =
         mapOf(
@@ -156,3 +183,6 @@ object FailureKeys {
         return find(step.detail) ?: BLOCKED.takeIf { step.status == StepStatus.BLOCKED }
     }
 }
+
+/** Who a failure is on (Faza 24.13): the site, the tester's agent (its model), or the run's surroundings. */
+enum class FailureCause { SITE, AGENT, ENVIRONMENT }

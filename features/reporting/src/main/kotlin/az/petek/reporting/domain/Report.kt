@@ -95,13 +95,35 @@ data class LatencyStats(
     val perReceiverMs: Map<String, Long?>,
 )
 
+/**
+ * How one scenario step behaved across the runs of a `--repeat` group, with who each run that did not pass it was on
+ * (Faza 24.13). A run can also leave a step undecided (skipped, not reached, only inconclusive checks), so the causes
+ * need not add up to the runs that did not pass.
+ */
 data class StabilityRow(
     val scenarioStep: String,
     val runs: Int,
     val passed: Int,
+    /** Runs in which the site failed the step: a check it failed, a defect code saw. */
+    val siteFailures: Int = runs - passed,
+    /** Runs in which the step failed because a tester's agent got lost (and only that). */
+    val agentFailures: Int = 0,
+    /** Runs in which the step failed because of the run's surroundings (inbox, shared IP, AI provider, browser). */
+    val environmentFailures: Int = 0,
 ) {
     val passRate: Double get() = if (runs == 0) 0.0 else passed.toDouble() / runs
-    val flaky: Boolean get() = passed in 1 until runs
+
+    /** Passed in some runs and the site failed it in others: the site itself is flaky here. */
+    val flaky: Boolean get() = passed > 0 && siteFailures > 0
+
+    /**
+     * Passed in some runs and not in others, but never because of the site: the testers' agents, the surroundings or a
+     * run that did not check it (skipped, not reached, inconclusive).
+     */
+    val unsteady: Boolean get() = passed in 1 until runs && siteFailures == 0
+
+    /** Runs that neither passed nor failed the step: it was skipped, not reached, or its checks could not decide. */
+    val undecided: Int get() = (runs - passed - siteFailures - agentFailures - environmentFailures).coerceAtLeast(0)
 }
 
 data class FailedAgentRow(

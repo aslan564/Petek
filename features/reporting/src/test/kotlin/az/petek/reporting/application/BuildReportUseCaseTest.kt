@@ -391,8 +391,9 @@ class BuildReportUseCaseTest {
             stability shouldContainExactly
                 listOf(
                     StabilityRow("announce", 3, 3),
-                    StabilityRow("read_announce", 3, 2),
-                    StabilityRow("join", 3, 1),
+                    // A failed action without a key the site owns is on the tester; a missing step was not checked.
+                    StabilityRow("read_announce", 3, 2, siteFailures = 0, agentFailures = 1),
+                    StabilityRow("join", 3, 1, siteFailures = 0),
                 )
         }
 

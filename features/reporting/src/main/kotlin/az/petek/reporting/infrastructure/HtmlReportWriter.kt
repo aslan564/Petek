@@ -283,6 +283,8 @@ class HtmlReportWriter : ReportWriter {
                             val tone =
                                 if (row.flaky) {
                                     "warn"
+                                } else if (row.unsteady) {
+                                    "info"
                                 } else if (row.runs > 0 && row.passed == row.runs) {
                                     "ok"
                                 } else {

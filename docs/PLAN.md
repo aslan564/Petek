@@ -1270,8 +1270,14 @@ dərəcədə aiddir (Faza 25).
 
 #### Mərhələ D — hesabat və keyfiyyət
 
-- [ ] **24.13 Flaky-nin səbəbi.** `StabilityAnalyzer` dəyişkənliyi sayt, agent (LLM) və mühit üzrə ayırır; yalnız
+- [x] **24.13 Flaky-nin səbəbi.** `StabilityAnalyzer` dəyişkənliyi sayt, agent (LLM) və mühit üzrə ayırır; yalnız
   agent xətaları ilə dəyişən addım "saytda flaky" sayılmır.
+  - *Vəziyyət:* `FailureKeys.causeOf`: sayt (`unhealthy_page`, `access_not_refused`, `forbidden_accepted`,
+    `mail_timeout`, `request_failed` və uğursuz yoxlama), mühit (`mail_unavailable`, `rate_limited`, `llm_unavailable`,
+    `browser_error`, `not_covered`), qalan hər şey agent. Hər run-da hər aktorun səbəbi ayrıca, addımın səbəbi ən
+    ağırıdır (sayt > mühit > agent); öz action-ı agent/mühit səbəbindən pozulan aktorun uğursuz yoxlaması mənasızdır.
+    `StabilityRow` sayt/agent/mühit saylarını daşıyır; `flaky` yalnız saytın bəzən uğursuz etdiyi addımdır, qalan
+    dəyişkənlik `unsteady` ("qeyri-sabit: agent, mühit, yoxlanmadı (saytın xətası deyil)"), hesabatda və paneldə.
 - [ ] **24.14 Kompozisiya matrisi.** Orkestrasiya testlərində {dalğa, swap, setup uğursuzluğu, emitter uğursuzluğu,
   yarış} × {`emits`/`wait_for`, `{last_id}`, `only_one_succeeds`, qadağan addım} cədvəli; hər bənd öz xanasını
   doldurur, faza sonunda boş xana qalmır.

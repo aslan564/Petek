@@ -400,6 +400,10 @@ internal object PanelJson {
                             put("runs", step.runs)
                             put("passed", step.passed)
                             put("flaky", step.flaky)
+                            put("unsteady", step.unsteady)
+                            put("siteFailures", step.siteFailures)
+                            put("agentFailures", step.agentFailures)
+                            put("environmentFailures", step.environmentFailures)
                         }
                     }
                 }

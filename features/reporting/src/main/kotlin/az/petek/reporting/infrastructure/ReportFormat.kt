@@ -108,9 +108,18 @@ internal object ReportFormat {
     fun stability(row: StabilityRow): String =
         when {
             row.flaky -> "flaky"
+            row.unsteady -> "qeyri-sabit: ${testerCauses(row)} (saytın xətası deyil)"
             row.runs > 0 && row.passed == row.runs -> "sabit"
             else -> "həmişə keçmir"
         }
+
+    /** Why a step did not pass when the site had no part in it (Faza 24.13): `agent`, `mühit`, `yoxlanmadı`. */
+    private fun testerCauses(row: StabilityRow): String =
+        listOfNotNull(
+            "agent".takeIf { row.agentFailures > 0 },
+            "mühit".takeIf { row.environmentFailures > 0 },
+            "yoxlanmadı".takeIf { row.undecided > 0 },
+        ).joinToString(", ")
 
     fun agent(
         id: String?,

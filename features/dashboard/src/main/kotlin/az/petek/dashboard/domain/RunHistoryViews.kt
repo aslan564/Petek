@@ -55,9 +55,16 @@ data class StepStabilityView(
     val scenarioStep: String,
     val runs: Int,
     val passed: Int,
+    /** Runs the site failed the step in; the others did not pass for the testers' agents or surroundings (Faza 24.13). */
+    val siteFailures: Int = runs - passed,
+    val agentFailures: Int = 0,
+    val environmentFailures: Int = 0,
 ) {
-    /** Passed in some runs and failed in others. */
-    val flaky: Boolean get() = passed in 1 until runs
+    /** Passed in some runs and the site failed it in others. */
+    val flaky: Boolean get() = passed > 0 && siteFailures > 0
+
+    /** Passed in some runs and not in others, never because of the site (agents, surroundings, runs that did not check it). */
+    val unsteady: Boolean get() = passed in 1 until runs && siteFailures == 0
 }
 
 /**

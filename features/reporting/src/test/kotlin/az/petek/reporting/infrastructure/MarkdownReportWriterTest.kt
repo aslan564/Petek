@@ -12,6 +12,7 @@
 package az.petek.reporting.infrastructure
 
 import az.petek.reporting.ReportTestData
+import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThan
@@ -97,6 +98,20 @@ class MarkdownReportWriterTest {
         md shouldContain "## Real-time gecikmə"
         md shouldContain "| announcement_created \\#42 | 29 | 28 | 812 ms | 1450 ms | 2210 ms | a17 |"
         md shouldContain "- **announcement_created \\#42**: a02 640 ms, a17 —"
+    }
+
+    @Test
+    fun `a step that varies only because of the testers is not called flaky`() {
+        val rows =
+            listOf(
+                StabilityRow("join", runs = 3, passed = 2, siteFailures = 0, environmentFailures = 1),
+                StabilityRow("read_announce", runs = 3, passed = 1, siteFailures = 0, agentFailures = 1),
+            )
+
+        val md = writer.render(SampleReport.model(stability = rows))
+
+        md shouldContain "| join | 3 | 2 | 67% | qeyri-sabit: mühit (saytın xətası deyil) |"
+        md shouldContain "| read_announce | 3 | 1 | 33% | qeyri-sabit: agent, yoxlanmadı (saytın xətası deyil) |"
     }
 
     @Test

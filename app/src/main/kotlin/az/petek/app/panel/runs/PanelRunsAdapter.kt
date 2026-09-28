@@ -191,7 +191,12 @@ internal class PanelRunsAdapter(
         return StabilityView(
             repeatGroup = repeatGroup,
             runs = runs.map { it.runId },
-            steps = rows.filter { it.scenarioStep != HARNESS_STEP }.map { StepStabilityView(it.scenarioStep, it.runs, it.passed) },
+            steps =
+                rows
+                    .filter { it.scenarioStep != HARNESS_STEP }
+                    .map {
+                        StepStabilityView(it.scenarioStep, it.runs, it.passed, it.siteFailures, it.agentFailures, it.environmentFailures)
+                    },
         )
     }
 

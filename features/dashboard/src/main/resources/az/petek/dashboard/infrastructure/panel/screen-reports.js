@@ -56,9 +56,11 @@
     P.fill(ui.stability, h('div', 'stability', results.filter((r) => r.ok && r.data).map((r) => {
       const s = r.data;
       const flaky = s.steps.filter((x) => x.flaky).length;
+      const unsteady = s.steps.filter((x) => x.unsteady).length;
       return h('article', 'stab-card',
         h('div', 'row wrap', h('strong', { text: 'Təkrar qrupu ' + s.repeatGroup }), h('span', 'spacer'),
-          flaky ? P.badge('amber', flaky + ' qeyri-sabit addım', { dot: true }) : P.badge('green', 'Sabit', { dot: true })),
+          flaky ? P.badge('amber', flaky + ' qeyri-sabit addım', { dot: true }) : P.badge('green', 'Sabit', { dot: true }),
+          unsteady ? P.badge('slate', unsteady + ' addım testerə görə dəyişdi (sayt deyil)', { dot: true }) : null),
         h('div', { class: 'help', text: s.runs.length + ' run · ' + s.steps.length + ' addım' }),
         s.steps.map((x) => {
           const rate = x.runs ? x.passed / x.runs : 0;
