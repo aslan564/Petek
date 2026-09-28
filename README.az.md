@@ -161,11 +161,14 @@ git clone https://github.com/aslan564/Petek.git && cd Petek
 ./gradlew :app:run --args="doctor"                     # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
 ```
 
-Pətək yalnız sizin verdiyiniz saytı test edir. `.env` olmayanda `petek panel` bir sualı olan səhifə açır — hansı sayt
+Pətək yalnız sizin verdiyiniz saytı test edir. Heç bir konfiqurasiya olmayanda (burada `.env` yox, `--env-file` yox,
+mühitdə `PETEK_TARGET` yox və iş qovluğunuzda hələ heç nə yox) `petek panel` bir sualı olan səhifə açır — hansı sayt
 test olunsun — və cavab gələnə qədər başqa heç nə başlatmır: ünvan cavab verməlidir (işləməyən, bloklanan və ya yalnız
-CDN-in xəta səhifəsini göstərən sayt səbəbi ilə rədd edilir), sonra `.env.example`-dən `.env`-ə yazılır (test API
-tokeni, IMAP və ya Mailpit üçün bu faylı sonra redaktə edin) və panel həmin sayt üçün açılır. `cp .env.example .env`
-edib əl ilə doldurmaq da olar. `.env` olmayanda MCP serveri host AI-a sizdən soruşmağı deyir. Cavab verməyən sayt
+CDN-in xəta səhifəsini göstərən sayt səbəbi ilə rədd edilir), sonra `.env.example`-dən iş qovluğunuzun
+`$PETEK_HOME/workspace/.env` faylına yazılır (default `~/.petek/workspace/.env`; test API tokeni, IMAP və ya Mailpit
+üçün bu faylı sonra redaktə edin, quraşdırma ekranı onun yolunu göstərir) və panel həmin sayt üçün açılır. Layihənin
+öz `.env`-i (`cp .env.example .env` edib əl ilə doldurmaq) varsa, həmişə o işlənir. Heç bir konfiqurasiya olmayanda MCP
+serveri host AI-a sizdən soruşmağı deyir. Cavab verməyən sayt
 (işləmir, bloklanıb, ünvan səhvdir) heç bir tester başlamazdan əvvəl olduğu kimi bildirilir, başqa bir şeylə əvəz
 edilmir; heç bir ekran və ya nəticə uydurulmur. Pətəkin öz kontrakt saytı
 (`testing/fake-target`, e2e dəstinin əvəzedicisi) Pətəkin özünü inkişaf etdirmək üçündür və yalnız açıq

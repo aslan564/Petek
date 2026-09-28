@@ -69,8 +69,16 @@ class CliSessionTest {
         val session = CliSession(cli.runtime, envFile = null, verbose = false)
 
         session.hasConfigurationFile shouldBe false
+        session.namesSite shouldBe true
         session.configurationDirectory shouldBe dir
         session.loadConfig().target shouldBe URI("https://ci-site.test")
+    }
+
+    @Test
+    fun `only with no file and no site in the environment is the owner asked for the site`() {
+        val cli = CliHarness(dir).apply { env.remove("PETEK_TARGET") }
+
+        CliSession(cli.runtime, envFile = null, verbose = false).namesSite shouldBe false
     }
 
     @Test

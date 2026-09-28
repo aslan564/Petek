@@ -11,14 +11,19 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.EnvFile
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelWaits
 import az.petek.core.testing.FakeHarnessClock
+import az.petek.dashboard.domain.AccountRequest
+import az.petek.llm.domain.LlmException
 import az.petek.ownership.testing.OwnershipTestKit
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -31,6 +36,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse.BodyHandlers
+import java.nio.file.Files
 import java.nio.file.Path
 
 /** The setup screen ("Quraşdırma"): the site, its ownership, the AI, each checked when the page asks. */
@@ -96,6 +102,35 @@ class PanelReadinessTest {
 
             check.ok shouldBe true
             check.detail shouldBe ""
+        }
+
+    @Test
+    fun `an AI that fails is reported without the secrets its error carries, and clipped`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val key = "sk-ant-" + "a".repeat(40)
+            panel.llm.failure = LlmException.Unavailable("not logged in: key $key was refused. " + "x".repeat(600))
+
+            val check = panel.backend.testAi()
+
+            check.ok shouldBe false
+            check.detail shouldContain "not logged in"
+            check.detail shouldNotContain key
+            (check.detail.length <= 301) shouldBe true
+        }
+
+    @Test
+    fun `an account added in the panel keeps its password in the configuration file the panel was started with`() =
+        runBlocking<Unit> {
+            val staging = dir.resolve("staging.env").also { Files.writeString(it, "PETEK_TARGET=http://127.0.0.1:9\n") }
+            val panel =
+                PanelHarness(dir, site = PanelWaits.site(), configurationFile = staging).also { open += it }
+
+            panel.backend.addAccount(AccountRequest("http://127.0.0.1:9", "admin", "owner@site.example", "s3cret-pass"))
+
+            EnvFile.load(staging).values shouldContain "s3cret-pass"
+            Files.exists(dir.resolve(".env")) shouldBe false
+            panel.backend.readiness().configuration shouldBe staging.toAbsolutePath().toString()
         }
 
     @Test

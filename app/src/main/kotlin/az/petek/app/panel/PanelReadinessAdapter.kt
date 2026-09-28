@@ -26,16 +26,22 @@ import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.ownership.domain.OwnershipStatus
+import az.petek.scenarios.domain.SecretRedactor
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 
+private val logger = KotlinLogging.logger {}
+
 /**
  * The setup screen's checks for the panel's own site, with the same parts `petek doctor` and a run use: the site's
  * reachability ([AppContainer.reachability]), its ownership ([AppContainer.ownership]; a fresh look remembers a proof
  * it finds, as `petek verify` does) and the AI answering the doctor's tiny request ([Doctor.PING]) through its own
- * client with the doctor's timeout. Nothing is written to the site.
+ * client with the doctor's timeout. Nothing is written to the site. What the AI or its provider answered on a failure
+ * reaches the page only redacted ([SecretRedactor]: the configured secrets and anything shaped like a key or a
+ * password) and clipped; the log gets the whole of it, redacted too (AGENTS.md rule 10).
  */
 internal class PanelReadinessAdapter(
     private val container: AppContainer,
@@ -43,6 +49,8 @@ internal class PanelReadinessAdapter(
     private val configurationFile: Path?,
 ) : PanelReadiness {
     private val config: PetekConfig get() = container.config
+    private val redactor =
+        SecretRedactor(listOfNotNull(container.config.testToken, container.config.llmApiKey, container.config.identitySecret))
 
     override suspend fun readiness(): ReadinessView =
         ReadinessView(
@@ -99,19 +107,28 @@ internal class PanelReadinessAdapter(
         return try {
             val response = container.diagnosticLlm().also { client = it }.complete(Doctor.PING)
             val ok = response.output["ok"] == JsonPrimitive(true)
-            AiCheckView(ok, client?.provider?.value ?: provider, response.model, if (ok) "" else "${response.output}", millis())
+            val detail = if (ok) "" else failure("answered, but not as asked: ${response.output}")
+            AiCheckView(ok, client?.provider?.value ?: provider, response.model, detail, millis())
         } catch (e: CancellationException) {
             throw e
         } catch (e: LlmException) {
-            AiCheckView(false, provider, null, e.message.orEmpty(), millis())
+            AiCheckView(false, provider, null, failure(e.message.orEmpty()), millis())
         } catch (e: Exception) {
-            AiCheckView(false, provider, null, HttpProbe.describe(e), millis())
+            AiCheckView(false, provider, null, failure(HttpProbe.describe(e)), millis())
         } finally {
             (client as? AutoCloseable)?.close()
         }
     }
 
+    /** [text] as the page may show it: redacted and clipped; the log keeps all of it, redacted. */
+    private fun failure(text: String): String {
+        val redacted = redactor.redact(text)
+        logger.warn { "The setup screen's AI check failed (${config.llmProvider}): $redacted" }
+        return if (redacted.length <= MAX_DETAIL) redacted else redacted.take(MAX_DETAIL) + "…"
+    }
+
     private companion object {
+        const val MAX_DETAIL = 300
         const val EXEMPT = "EXEMPT"
         const val VERIFIED = "VERIFIED"
         const val UNVERIFIED = "UNVERIFIED"

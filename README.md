@@ -162,11 +162,14 @@ git clone https://github.com/aslan564/Petek.git && cd Petek
 ./gradlew :app:run --args="doctor"                     # target policy, target, Chromium, inbox, test API, AI provider
 ```
 
-Pətək tests only the site you name. Without a `.env`, `petek panel` opens a page with one question, which site to
-test, and starts nothing else until you answer: the address must answer (a site that is down, blocked or shows only a
-CDN's error page is refused with the reason), then it is written to `.env` from `.env.example` (edit that file later
-for a test API token, IMAP or Mailpit) and the panel opens for it. `cp .env.example .env` and editing by hand works
-too. Without a `.env` the MCP server tells the host AI to ask you. A site that does not answer (down, blocked, wrong
+Pətək tests only the site you name. With no configuration (no `.env` here, no `--env-file`, no `PETEK_TARGET` in the
+environment and nothing in your workspace yet), `petek panel` opens a page with one question, which site to test, and
+starts nothing else until you answer: the address must answer (a site that is down, blocked or shows only a CDN's error
+page is refused with the reason), then it is written from `.env.example` to your workspace's
+`$PETEK_HOME/workspace/.env` (default `~/.petek/workspace/.env`; edit that file later for a test API token, IMAP or
+Mailpit, the setup screen shows its path) and the panel opens for it. A project's own `.env` (`cp .env.example .env`
+and editing by hand) is used instead whenever it exists. Without any configuration the MCP server tells the host AI to
+ask you. A site that does not answer (down, blocked, wrong
 address) is reported as such before any tester starts, never tested against something else; no screen or result is
 ever invented. Pətək's own contract site
 (`testing/fake-target`, the stand-in of its e2e suite) is for developing Pətək itself and is reached only through an

@@ -66,6 +66,8 @@ internal class PanelHarness(
     targets: List<ResolvedTarget> = emptyList(),
     /** Changes the panel's overrides further, e.g. to hold its repositories at a gate. */
     decorate: (AppOverrides) -> AppOverrides = { it },
+    /** The file the configuration came from (`--env-file`); null: `.env` of [dir], as the panel assumes by default. */
+    configurationFile: Path? = null,
 ) : AutoCloseable {
     val config =
         PetekConfig(
@@ -109,6 +111,7 @@ internal class PanelHarness(
             capacityAdvice = RecommendCapacityUseCase({ HostResources(16L shl 30, 8L shl 30, 8) }),
             port = 0,
             roleSessions = roleSessions,
+            configurationFile = configurationFile,
         )
 
     val backend get() = panel.backend
@@ -185,7 +188,15 @@ internal class PanelLlm(
 
     private val button = Regex("""\[(\d+)] button "([^"]*)" \(testid=([a-z-]+)\)""")
 
-    val client: ScriptedLlmClient = ScriptedLlmClient { request -> answer(request) }
+    /** When set, every request fails with it (a provider that is down, not logged in, out of credit). */
+    @Volatile
+    var failure: Exception? = null
+
+    val client: ScriptedLlmClient =
+        ScriptedLlmClient { request ->
+            failure?.let { throw it }
+            answer(request)
+        }
 
     val explorerPrompts: List<String> get() =
         client.requests

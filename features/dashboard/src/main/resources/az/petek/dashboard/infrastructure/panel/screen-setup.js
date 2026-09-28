@@ -14,16 +14,25 @@
   'use strict';
   const P = window.Petek;
   const { h, fmt } = P;
-  const DONE_KEY = 'petek.setupDone';
+  // Per site: a panel opened for another site on the same address starts on its own setup.
+  const DONE_KEY = 'petek.setupDone:' + (P.defaultTarget || '');
 
   let ui = null;
   let capacityTimer = null;
+  let doneHere = false;
 
-  /** Whether the owner finished the setup once; until then the panel opens on this screen. */
+  /**
+   * Whether the owner finished the setup for this site once; until then the panel opens on this screen. When the browser
+   * keeps nothing (storage blocked), it is this page's own memory, which starts as not done.
+   */
   P.setupDone = () => {
-    try { return localStorage.getItem(DONE_KEY) === '1'; } catch (e) { return true; }
+    if (doneHere) return true;
+    try { return localStorage.getItem(DONE_KEY) === '1'; } catch (e) { return false; }
   };
-  function markDone() { try { localStorage.setItem(DONE_KEY, '1'); } catch (e) { /* storage blocked */ } }
+  function markDone() {
+    doneHere = true;
+    try { localStorage.setItem(DONE_KEY, '1'); } catch (e) { /* storage blocked: remembered by this page only */ }
+  }
 
   // ---------- one step ----------
   function step(n, title, sub, icon) {

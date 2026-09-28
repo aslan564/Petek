@@ -135,10 +135,12 @@ internal class AppPanelBackend(
                         .resolve(AnswerBook.FILE_NAME),
                 )
             lateinit var runs: PanelRunsAdapter
+            // Passwords go to the file this configuration is read from (`--env-file` included), else `.env` here as before.
+            val envFile = configurationFile ?: workingDirectory.resolve(ENV_FILE)
             val accounts =
                 OwnerAccounts(
                     container.config,
-                    workingDirectory.resolve(ENV_FILE),
+                    envFile,
                     container.config.targetsDir ?: workingDirectory.resolve(TARGETS_DIRECTORY),
                 )
             val sessions =
@@ -150,7 +152,7 @@ internal class AppPanelBackend(
             val scenarios = PanelScenariosAdapter(container, explorer, workingDirectory.resolve(SCENARIO_DIRECTORY), scope)
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
             val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
-            val readiness = PanelReadinessAdapter(container, configurationFile ?: workingDirectory.resolve(ENV_FILE))
+            val readiness = PanelReadinessAdapter(container, envFile)
             return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts, readiness)
         }
 

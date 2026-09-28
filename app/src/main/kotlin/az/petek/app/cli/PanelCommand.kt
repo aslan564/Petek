@@ -50,7 +50,7 @@ class PanelCommand : PetekSubcommand(NAME) {
 
     override suspend fun execute(): Int {
         val runtime = session.runtime
-        if (!session.hasConfigurationFile) return askForTheSite(runtime)
+        if (!session.namesSite) return askForTheSite(runtime)
         startPanel(runtime).use { panel ->
             if (!noOpen && !runtime.openInBrowser(panel.url.toString())) echo("Brauzeri özünüz açın: ${panel.url}")
             awaitCancellation()

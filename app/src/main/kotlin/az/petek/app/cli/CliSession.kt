@@ -58,6 +58,14 @@ class CliSession(
         get() = envFile != null || Files.isRegularFile(localEnvFile) || workspaceEnvFile != null
 
     /**
+     * Whether this invocation names the site to test: a configuration file ([hasConfigurationFile]) or `PETEK_TARGET` in
+     * the environment. Only without either does `petek panel` ask for the site and `petek mcp` answer that none is given
+     * (rule 12); asking while the environment names one would be answered and then overridden by it.
+     */
+    val namesSite: Boolean
+        get() = hasConfigurationFile || !runtime.environment()[TARGET_KEY].isNullOrBlank()
+
+    /**
      * The directory the configuration's relative paths (evidence, scenarios, target profiles) belong to: the owner's
      * workspace when the configuration comes from there, else the working directory.
      */

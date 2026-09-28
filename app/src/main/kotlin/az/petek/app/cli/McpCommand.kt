@@ -41,7 +41,7 @@ class McpCommand : PetekSubcommand(NAME) {
 
     override suspend fun execute(): Int {
         val runtime = session.runtime
-        if (!session.hasConfigurationFile) {
+        if (!session.namesSite) {
             val settings =
                 McpSettings(NO_TARGET, runtime.workingDirectory.resolve(DEFAULT_EVIDENCE_DIR), allowWrites = false, PetekVersion.current)
             McpServer(
