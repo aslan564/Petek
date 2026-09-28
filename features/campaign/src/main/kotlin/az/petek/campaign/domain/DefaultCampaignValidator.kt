@@ -36,8 +36,11 @@ import kotlin.time.Duration
  * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
  *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
- * - templates use only [Placeholder.SUPPORTED_FORMS]; `{tester.<role>.<n>.<field>}` names a tester the quotas have. In `do`/`run` text and a step's own id source, `{last_id}` and
- *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts;
+ * - templates use only [Placeholder.SUPPORTED_FORMS]; `{tester.<role>.<n>.<field>}` names a tester the quotas have. In `do`/`run` text and a step's own id source,
+ *   `{event.<e>.id}` needs an event emitted by an earlier step; assertions run after the step, so its own `emits` counts.
+ *   `{last_id}` is the step's own event only (Faza 24.6): the one it waits for, and in its checks also the one it emits;
+ *   a step without either names another step's object with `{event.<e>.id}` (a target profile's id sources too);
+ * - an event other steps wait for or name, emitted by a step up to several testers run, needs one emitter or a race;
  * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
  *
  * Issue lines come from [Campaign.sourceLines], falling back to [ScenarioStep.line].
@@ -66,6 +69,15 @@ class DefaultCampaignValidator(
                 .groupingBy { it }
                 .eachCount()
         private val emittedAnywhere: Set<String> get() = emittingSteps.keys
+
+        /** Events other steps depend on: waited for, or named by `{event.<name>.id}` in any template. */
+        private val consumedEvents: Set<String> by lazy {
+            campaign.allSteps.mapNotNull { it.waitFor?.event }.toSet() +
+                campaign.allSteps
+                    .flatMap(::stepTemplates)
+                    .flatMap { templates.placeholders(it) }
+                    .mapNotNull { (Placeholder.parse(it) as? Placeholder.EventId)?.event }
+        }
 
         fun check(): List<ValidationIssue> {
             checkSettings()
@@ -242,7 +254,8 @@ class DefaultCampaignValidator(
         // ---- target profile ----
 
         private fun checkTargetProfile() {
-            val anyStep = EventScope(emittedAnywhere, "any step")
+            // The profile's templates run inside the step that uses them, so `{last_id}` is that step's own event there.
+            val anyStep = EventScope(emittedAnywhere, "any step", lastIdEvent = USING_STEP)
             campaign.target.paths.forEach { (key, value) ->
                 val path = "target_profile.paths.$key"
                 relativePathProblem(value)?.let { report(path, "$path $it") }
@@ -328,9 +341,13 @@ class DefaultCampaignValidator(
             emittedBefore: Set<String>,
         ) {
             private val name = "step '${step.id}'"
-            private val beforeScope = EventScope(emittedBefore, "an earlier step")
+            private val beforeScope = EventScope(emittedBefore, "an earlier step", lastIdEvent = step.waitFor?.event)
             private val throughScope =
-                EventScope(emittedBefore + listOfNotNull(step.emits?.event), "this or an earlier step")
+                EventScope(
+                    emittedBefore + listOfNotNull(step.emits?.event),
+                    "this or an earlier step",
+                    lastIdEvent = step.emits?.event ?: step.waitFor?.event,
+                )
 
             fun check(firstLineOfId: MutableMap<String, Int?>) {
                 checkId(firstLineOfId)
@@ -449,6 +466,15 @@ class DefaultCampaignValidator(
                         "emits",
                         "$name: event '${emits.event}' is emitted by more than one step; give every event exactly one emitting " +
                             "step so wait_for and {last_id} cannot pick up an older step's object",
+                    )
+                }
+                val emitters = maxMatches(step.actors)
+                if (emits.event in consumedEvents && emitters > 1 && step.assertions.none { it is AssertionSpec.OnlyOneSucceeds }) {
+                    report(
+                        "emits",
+                        "$name: '${emits.event}' is waited for or named by other steps, but up to $emitters testers emit it here, so " +
+                            "which object they get would depend on who finished last; let one tester emit it (e.g. [n=1]) or " +
+                            "make the step a race (only_one_succeeds)",
                     )
                 }
                 emits.idSource?.let {
@@ -572,18 +598,26 @@ class DefaultCampaignValidator(
                     "oracle field must not be blank".takeIf { oracle.field?.isBlank() == true },
                 ) + actorBound
             }
-
-            private fun assertionTemplates(assertion: AssertionSpec): List<String> =
-                when (assertion) {
-                    is AssertionSpec.VisibleText -> listOf(assertion.text)
-                    is AssertionSpec.NotVisible -> listOfNotNull(assertion.text, assertion.selector)
-                    is AssertionSpec.Oracle -> listOfNotNull(assertion.path, assertion.equals, assertion.contains)
-                    is AssertionSpec.HttpStatus -> listOf(assertion.path)
-                    is AssertionSpec.Count -> listOf(assertion.selector)
-                    is AssertionSpec.LatencyMax -> emptyList()
-                    is AssertionSpec.OnlyOneSucceeds -> listOfNotNull(assertion.oracle?.path, assertion.oracle?.equals)
-                }
         }
+
+        private fun assertionTemplates(assertion: AssertionSpec): List<String> =
+            when (assertion) {
+                is AssertionSpec.VisibleText -> listOf(assertion.text)
+                is AssertionSpec.NotVisible -> listOfNotNull(assertion.text, assertion.selector)
+                is AssertionSpec.Oracle -> listOfNotNull(assertion.path, assertion.equals, assertion.contains)
+                is AssertionSpec.HttpStatus -> listOf(assertion.path)
+                is AssertionSpec.Count -> listOf(assertion.selector)
+                is AssertionSpec.LatencyMax -> emptyList()
+                is AssertionSpec.OnlyOneSucceeds -> listOfNotNull(assertion.oracle?.path, assertion.oracle?.equals)
+            }
+
+        /** Every template of [step]: its `do` text, `run` arguments, own id source and checks. */
+        private fun stepTemplates(step: ScenarioStep): List<String> =
+            when (val action = step.action) {
+                is StepAction.Do -> listOf(action.instruction)
+                is StepAction.Run -> action.args.values.toList()
+                StepAction.None -> emptyList()
+            } + listOfNotNull((step.emits?.idSource as? IdSource.OracleField)?.path) + step.assertions.flatMap(::assertionTemplates)
 
         // ---- templates ----
 
@@ -627,7 +661,10 @@ class DefaultCampaignValidator(
                 }
 
                 Placeholder.LastId -> {
-                    "{$name} needs an event emitted by ${scope.description}".takeIf { scope.events.isEmpty() }
+                    (
+                        "{$name} has no event of its own here: it stands for the event this step waits for (wait_for) and, " +
+                            "in its checks, the one it emits; name another step's object with {event.<name>.id}"
+                    ).takeIf { scope.lastIdEvent == null }
                 }
 
                 is Placeholder.EventId -> {
@@ -723,9 +760,13 @@ class DefaultCampaignValidator(
     private data class EventScope(
         val events: Set<String>,
         val description: String,
+        /** The event `{last_id}` stands for here: the step's own (awaited; in its checks also emitted); null: none. */
+        val lastIdEvent: String? = null,
     )
 
     private companion object {
+        /** `{last_id}` of a target profile template: the event of the step that uses it, known only at run time. */
+        const val USING_STEP = "(the step that uses it)"
         val WEB_SCHEMES = setOf("http", "https")
 
         /**

@@ -18,7 +18,11 @@ package az.petek.campaign.domain
 sealed interface Placeholder {
     val name: String
 
-    /** `{last_id}`: id of the most recently emitted object, as supplied in [TemplateContext.lastId]. */
+    /**
+     * `{last_id}`: id of the object of the step's own event, as supplied in [TemplateContext.lastId]: the event the step
+     * waits for and, in its checks, the one it emits. Never "whatever happened last" (Faza 24.6); another step's object
+     * is `{event.<name>.id}`.
+     */
     data object LastId : Placeholder {
         override val name: String = LAST_ID
     }

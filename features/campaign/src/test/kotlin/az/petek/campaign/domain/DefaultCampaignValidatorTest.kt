@@ -544,7 +544,13 @@ class DefaultCampaignValidatorTest {
         }
 
         private fun race(spec: AssertionSpec.OnlyOneSucceeds) =
-            asserting(spec, actor = "manager[IT] | manager[HR]", parallel = true, action = StepAction.Do("Approve {last_id}"))
+            asserting(
+                spec,
+                actor = "manager[IT] | manager[HR]",
+                parallel = true,
+                waitFor = "announcement_created",
+                action = StepAction.Do("Approve {last_id}"),
+            )
 
         @Test
         fun `only_one_succeeds accepts a request of any mutating method and a path regex`() {
@@ -706,12 +712,19 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
-        fun `last_id in an action needs an event from an earlier step`() {
+        fun `last_id in an action is the event the step waits for, never whatever came last`() {
+            // The step's own emit comes only after its action.
             issue(
                 campaign(step("s", action = StepAction.Do("Open ticket {last_id}"), emits = "ticket_created")),
-                "{last_id} needs an event",
+                "{last_id} has no event of its own here",
             )
-            issues(campaign(announce, step("s", action = StepAction.Do("Open {last_id}")))).shouldBeEmpty()
+            issue(
+                campaign(announce, step("s", action = StepAction.Do("Open {last_id}"))),
+                "name another step's object with {event.<name>.id}",
+            )
+            issues(campaign(announce, step("s", action = StepAction.Do("Open {last_id}"), waitFor = "announcement_created")))
+                .shouldBeEmpty()
+            issues(campaign(announce, step("s", action = StepAction.Do("Open {event.announcement_created.id}")))).shouldBeEmpty()
         }
 
         @Test
@@ -719,7 +732,30 @@ class DefaultCampaignValidatorTest {
             val oracle = AssertionSpec.Oracle("/test/announcements/{last_id}", "status", "published", null)
             val own = step("announce", emits = "announcement_created", assertions = listOf(oracle))
             issues(campaign(own)).shouldBeEmpty()
-            issue(campaign(step("s", assertions = listOf(oracle))), "{last_id} needs an event emitted by this or an earlier step")
+            issue(campaign(step("s", assertions = listOf(oracle))), "{last_id} has no event of its own here")
+            issue(campaign(announce, step("s", assertions = listOf(oracle))), "{last_id} has no event of its own here")
+            issues(campaign(announce, step("s", waitFor = "announcement_created", assertions = listOf(oracle)))).shouldBeEmpty()
+        }
+
+        @Test
+        fun `an event other steps depend on has one emitter or a race`() {
+            val everyone = step("post", actor = "employee", emits = "posted")
+            val reader = step("read", actor = "manager", waitFor = "posted")
+
+            issue(campaign(everyone, reader), "who finished last").message shouldContain "step 'post'"
+            issue(campaign(everyone, step("use", action = StepAction.Do("Open {event.posted.id}"))), "who finished last")
+            issues(campaign(step("post", actor = "employee[n=1]", emits = "posted"), reader)).shouldBeEmpty()
+            // Nobody depends on it: every tester may emit it, each checking its own object with {last_id}.
+            issues(campaign(everyone)).shouldBeEmpty()
+            val race =
+                step(
+                    "post",
+                    actor = "manager[IT] | manager[HR]",
+                    emits = "posted",
+                    parallel = true,
+                    assertions = listOf(AssertionSpec.OnlyOneSucceeds(APPROVE)),
+                )
+            issues(campaign(race, reader)).shouldBeEmpty()
         }
 
         @Test
@@ -733,7 +769,7 @@ class DefaultCampaignValidatorTest {
         @Test
         fun `run arguments are templates too`() {
             val run = StepAction.Run("login", mapOf("as" to "{self.email}", "ticket" to "{last_id}"))
-            issue(campaign(step("s", action = run)), "run argument 'ticket': {last_id} needs an event")
+            issue(campaign(step("s", action = run)), "run argument 'ticket': {last_id} has no event of its own here")
         }
 
         @Test

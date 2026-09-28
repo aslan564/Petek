@@ -105,7 +105,7 @@ class DefaultTemplateRendererTest {
     fun `a missing last id fails instead of producing a wrong URL`() {
         val error = shouldThrow<TemplateException> { renderer.render("/t/{last_id}", context.copy(lastId = null)) }
         error.message shouldContain "{last_id}"
-        error.message shouldContain "no object id has been emitted yet"
+        error.message shouldContain "this step's own event carried no object id"
     }
 
     @Test

@@ -257,9 +257,12 @@ Only the orchestrator sees more than one tester. Each agent owns one browser con
 only its own `Identity`, and knows the others as `Colleague`s (name, role, e-mail, department, registration — no
 password, no phone). What testers share (`SharedRunState`: `company_id`, `company_code`, `invite_link:<email>`) is
 write-once: the first publisher wins and a different later value is refused, so nobody can change what the others act
-on. `{last_id}` resolves to the actor's own emitted object, the object it waited for, or the newest object before the
-step began — never to an object a colleague created concurrently in the same step. The campaign validator lets only the
-admin run `register_owner` and `seed_company` and requires exactly one emitting step per event name. Evidence, events
+on. `{last_id}` is the step's own object only: the one the actor waited for and, in its checks, the one it emitted —
+never an object a colleague created concurrently in the same step and never another step's object; with no id it is a
+template error, not a fallback (Faza 24.6). Another step's object is `{event.<name>.id}`. The campaign validator lets
+only the admin run `register_owner` and `seed_company`, requires exactly one emitting step per event name, refuses
+`{last_id}` in a step without an event of its own, and lets several testers emit an event others depend on only in a
+race. Evidence, events
 and receipts are attributed by harness state, never by the model. The full table and the scale proofs (5 000 testers
 through the orchestrator, 60 real Chromium contexts) are in `docs/requirements/R01-concurrent-multi-agent-testing.md`.
 

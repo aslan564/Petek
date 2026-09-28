@@ -176,7 +176,7 @@ class CompanyPortalCampaignFileTest {
         step("forbidden_approval").assertions shouldContainExactly
             listOf(
                 AssertionSpec.NotVisible(null, "role=button[name=\"Təsdiqlə\"]"),
-                AssertionSpec.HttpStatus("/api/v1/leave-requests/{last_id}/approve", "POST", 403),
+                AssertionSpec.HttpStatus("/api/v1/leave-requests/{event.leave_request_created.id}/approve", "POST", 403),
             )
     }
 

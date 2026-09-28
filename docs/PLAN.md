@@ -218,7 +218,7 @@ steps:
     do: "Ticketi approve etməyə çalış"
     assert:
       - not_visible: {selector: "[data-testid=\"ticket-approve\"]"}
-      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}
+      - http_status: {path: "/api/tickets/{event.ticket_created.id}/approve", method: POST, equals: 403}
 ```
 
 **Addım açarları**
@@ -246,7 +246,7 @@ steps:
 | `latency_max` | `ms` | `wait_for` sonrası ölçülən gecikmə həddi |
 | `only_one_succeeds` | `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}` (`request` məcburidir, Faza 24.5) | paralel aktorlardan yalnız birinin sorğusunu hədəf qəbul edib: brauzerin gördüyü uyğun sorğulardan biri `< 400`, heç biri 403/409/422 deyil (agentin `done(success)` sözü nəzərə alınmır); `oracle` verilibsə, test API-nin son vəziyyəti də yoxlanır. Yarışı uduzan aktor (409/422 və ya obyekt artıq qərarlaşdırılıb) gözlənilən nəticədir: addımı `lost_race` ilə keçir |
 
-`{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = həmin aktorun son `emits` payload-undakı obyekt id-si.
+`{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = addımın öz hadisəsinin obyekt id-si — gözlədiyi hadisə, yoxlamalarında isə emit etdiyi (Faza 24.6); başqa addımın obyekti `{event.<ad>.id}` ilə adlanır.
 
 ### Hədəf axınları (`target_profile.flows`)
 
@@ -1154,7 +1154,7 @@ dərəcədə aiddir (Faza 25).
     deyilsin. Kəşfiyyatçı sorğusunu görmədiyi əməliyyat üçün yarış yazmır və səbəbini qeyd edir. Repodakı nümunələr
     artıq pattern-li idi; test snippet-ləri köçürüldü.
 
-- [ ] **24.6 `{last_id}` yalnız addımın öz hadisəsidir.**
+- [x] **24.6 `{last_id}` yalnız addımın öz hadisəsidir.**
   - *Problem:* `emitted ?: waited ?: lastIdBeforeStep` zənciri hadisənin id-si oxunmayanda başqa adlı hadisənin
     obyektinə sürüşür. `wait_for`/`emits`-siz addımda `{last_id}` "ən son nə olubsa"dır: demo-dakı `forbidden` addımı
     təsadüfən düz işləyir, arada başqa `emits` əlavə olunsa səssizcə başqa obyektə baxar. Qalib olmayan yarışda qrup
@@ -1168,6 +1168,10 @@ dərəcədə aiddir (Faza 25).
     yarışda qrup assert-i.
   - *Sənəd:* bu planın «Ssenari formatı», ARCHITECTURE, `Placeholder` KDoc; nümunələrdə `forbidden` →
     `{event.ticket_created.id}`.
+  - *Vəziyyət:* runtime-da `latestAny` fallback-ı silindi: action-dan əvvəl gözlənilən hadisə, yoxlamalarda emit
+    edilən (emit etmirsə gözlənilən), qrup assert-ində qalibin obyekti; id yoxdursa şablon xətası. Validator hadisəsiz
+    addımda `{last_id}`-i rədd edir (hədəf profilinin şablonlarında isə istifadə edən addımın hadisəsidir) və başqa
+    addımların asılı olduğu hadisəni çox testerin emit etməsinə yalnız yarışda icazə verir. Nümunələr köçürüldü.
 
 - [ ] **24.7 Emitteri olmayan dalğada gözləmə SKIPPED-dir.**
   - *Problem:* kimliklər admin → manager → employee sırasındadır, dalğalar bu siyahını `chunked(wave_size)` ilə kəsir;

@@ -17,6 +17,7 @@ package az.petek.campaign.domain
  * `{tester.<role>.<n>.name|email}`.
  */
 data class TemplateContext(
+    /** The object of the step's own event (Faza 24.6): the one it waited for or, in its checks, emitted; else null. */
     val lastId: String?,
     val self: Map<String, String>,
     val eventIds: Map<String, String>,

@@ -173,7 +173,7 @@ steps:
 
   - id: forbidden_approval
     actor: employee[n=2]
-    do: "Məzuniyyət sorğusunu (/leave/{last_id}) təsdiqləməyə çalış"
+    do: "Məzuniyyət sorğusunu (/leave/{event.leave_request_created.id}) təsdiqləməyə çalış"
     assert:
       - not_visible: {selector: 'role=button[name="Təsdiqlə"]'}
-      - http_status: {path: "{api}/leave-requests/{last_id}/approve", method: POST, equals: 403}
+      - http_status: {path: "{api}/leave-requests/{event.leave_request_created.id}/approve", method: POST, equals: 403}

@@ -71,7 +71,7 @@ class DefaultTemplateRenderer : TemplateRenderer {
     ): String =
         when (val placeholder = Placeholder.parse(name)) {
             Placeholder.LastId -> {
-                "Placeholder {$name} cannot be resolved: no object id has been emitted yet"
+                "Placeholder {$name} cannot be resolved: this step's own event carried no object id (id_unavailable)"
             }
 
             is Placeholder.Self -> {

@@ -46,7 +46,7 @@ Nobody but the orchestrator sees more than one tester. What holds, and where the
 | Passwords never reach a prompt or evidence: own-password redaction plus adapter-side masking of secret fields | `SecretRedaction`, `PlaywrightBrowserSession` snapshots |
 | Shared run values (`company_id`, `company_code`, invite links) are write-once: the first publisher wins, a different later value is refused | `SharedRunState.put`, `InMemorySharedRunState` |
 | Only the admin may run `register_owner` and `seed_company`; every event name has exactly one emitting step | `DefaultCampaignValidator` |
-| `{last_id}` is the actor's own emitted object, the object it waited for, or the state before the step began — never a colleague's id from the same step | `StepExecutor.lastIdBeforeStep` |
+| `{last_id}` is the step's own object only: the one the actor waited for or, in its checks, emitted — never a colleague's id from the same step nor another step's object; no id is a template error (Faza 24.6) | `StepExecutor.runActor`, `DefaultCampaignValidator` |
 | Evidence `agent_id`, event emitters and receipts come from harness state, never from the model | `StepEvidence`, `HarnessEvidence`, `StepExecutor.emit` |
 | Evidence writes are serialized (one SQLite writer thread, atomic artifact files) | `SqliteDatabase`, `FileSystemArtifactStore` |
 | Saved storage states (live cookies, localStorage and the tabs' sessionStorage) are `rw-------` in a `rwx------` directory, one file per (run, agent) | `PlaywrightBrowserSession.saveStorageState`, `SessionStorageState` |

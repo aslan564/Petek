@@ -74,4 +74,4 @@ steps:
     do: "Ticketi approve etməyə çalış"
     assert:
       - not_visible: {selector: "[data-testid=\"ticket-approve\"]"}
-      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}
+      - http_status: {path: "/api/tickets/{event.ticket_created.id}/approve", method: POST, equals: 403}

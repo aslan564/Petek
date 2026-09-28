@@ -153,7 +153,7 @@ class ContractDemoCampaignFileTest {
         step("forbidden").assertions shouldContainExactly
             listOf(
                 AssertionSpec.NotVisible(null, "[data-testid=\"ticket-approve\"]"),
-                AssertionSpec.HttpStatus("/api/tickets/{last_id}/approve", "POST", 403),
+                AssertionSpec.HttpStatus("/api/tickets/{event.ticket_created.id}/approve", "POST", 403),
             )
     }
 

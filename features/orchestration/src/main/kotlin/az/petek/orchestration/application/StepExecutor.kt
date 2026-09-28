@@ -137,9 +137,6 @@ internal class StepExecutor(
     suspend fun execute(step: ScenarioStep): StepResult {
         board.stepStarted(step.id)
         run.stepStarted(step.id)
-        // What `{last_id}` means for an actor that neither waits for nor emits an event in this step: the newest object
-        // before the step began, taken once, so concurrent actors never see each other's ids through it.
-        val lastIdBeforeStep = run.bus.latestAny()?.objectId
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors.merge(step.id, chosen.map { it.agentId }) { before, now -> before + now }
@@ -174,7 +171,6 @@ internal class StepExecutor(
                                         barrier,
                                         race,
                                         pacer,
-                                        lastIdBeforeStep,
                                     ).also {
                                         if (it is ActorRun.Raced) {
                                             raced +=
@@ -215,7 +211,6 @@ internal class StepExecutor(
         barrier: StartBarrier?,
         race: AssertionSpec.OnlyOneSucceeds?,
         pacer: StartPacer,
-        lastIdBeforeStep: String?,
     ): ActorRun {
         var arrived = false
         try {
@@ -231,7 +226,8 @@ internal class StepExecutor(
                     }
                 }
             val reception = waited?.let { receive(actor, it) }
-            val templates = templateContext(identity, waited?.event?.objectId ?: lastIdBeforeStep)
+            // `{last_id}` is the step's own event only (Faza 24.6): before the action, the one it waited for.
+            val templates = templateContext(identity, waited?.event?.objectId)
             val action =
                 try {
                     render(step.action, templates)
@@ -254,7 +250,8 @@ internal class StepExecutor(
             failureScreenshot(actor, performed.outcome)
             val succeeded = requests?.succeeded ?: performed.outcome.succeeded
             val emitted = if (succeeded) step.emits?.let { emit(actor, it, performed.outcome, templates) } else null
-            val lastId = emitted?.event?.objectId ?: waited?.event?.objectId ?: lastIdBeforeStep
+            // In the checks: the object this actor emitted when the step emits, else the one it waited for; never another's.
+            val lastId = if (step.emits != null) emitted?.event?.objectId else waited?.event?.objectId
             val checks =
                 verifyActor(actor, actor.stepId, afterActionSpecs(step), templateContext(identity, lastId), waited?.event?.t0)
             val acted = Acted(actor, performed, requests, emitted, listOfNotNull(reception, checks))
@@ -833,8 +830,17 @@ internal class StepExecutor(
         val started = clock.now()
         val stepId = ids.stepId()
         val correlationId = ids.correlationId()
-        // The group verdict comes after every actor acted: `{last_id}` is the winner's object (the only emitted one).
-        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, run.bus.latestAny()?.objectId), null)
+        // The group verdict comes after every actor acted: `{last_id}` is the object the winner emitted when the step emits,
+        // else the one the racers waited for; nothing of another step.
+        val own = step.emits?.event ?: step.waitFor?.event
+        val lastId =
+            own?.let { event ->
+                run.bus
+                    .latest(event)
+                    ?.takeIf { it.sequence > run.eventCursor(event) }
+                    ?.objectId
+            }
+        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, lastId), null)
         val actorResults =
             results.map {
                 ActorResult(
@@ -956,7 +962,7 @@ internal class StepExecutor(
 
     // --- helpers --------------------------------------------------------------------------------------------------
 
-    /** [lastId] is the actor's own emitted object, the one it waited for, or the newest before the step (see [execute]). */
+    /** [lastId] is the step's own object for this actor: the one it emitted or the one it waited for (see [runActor]). */
     private fun templateContext(
         identity: Identity?,
         lastId: String?,

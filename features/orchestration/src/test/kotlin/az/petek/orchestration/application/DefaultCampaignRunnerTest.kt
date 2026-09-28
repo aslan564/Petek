@@ -309,6 +309,7 @@ class DefaultCampaignRunnerTest {
                                 "open",
                                 managers("IT"),
                                 StepAction.Do("Open ticket {last_id} as {self.name} ({self.role}, {self.department})"),
+                                waitFor = "ticket_created",
                             ),
                             step(
                                 "approve",
