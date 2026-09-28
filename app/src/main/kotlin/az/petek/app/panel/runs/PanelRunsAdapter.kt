@@ -521,6 +521,14 @@ internal class PanelRunsAdapter(
                         uncovered.joinToString { it.id },
                 )
             }
+            CampaignScaler.waitsWithoutEmitter(campaign, identities, DefaultActorResolver()).forEach { gap ->
+                val never = if (gap.covered) "" else " Heç bir dalğada ikisi bir yerdə deyil, ona görə bu addım heç yoxlanmayacaq."
+                board.message(
+                    "Diqqət: dalğa ölçüsü ${campaign.settings.waveSize} olduğu üçün '${gap.step.id}' addımı " +
+                        "${gap.waves.joinToString()} nömrəli dalğada '${gap.step.waitFor?.event}' hadisəsini gözləyir, amma orada onu " +
+                        "emit edən '${gap.emitter.id}' addımının testeri yoxdur; oradakı qəbul edənlər buraxılacaq.$never",
+                )
+            }
             CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
                 val where =
                     if (split.waves.size ==

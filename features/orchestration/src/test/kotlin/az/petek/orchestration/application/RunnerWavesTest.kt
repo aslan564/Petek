@@ -27,6 +27,7 @@ import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
 import az.petek.orchestration.testing.managers
 import az.petek.orchestration.testing.step
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -76,12 +77,78 @@ class RunnerWavesTest {
                     .map { it.detail }
             waves shouldContainExactly listOf("wave 1 of 2: 3 testers (a01..a03)", "wave 2 of 2: 2 testers (a04..a05)")
             maxLive.get() shouldBe 3
-            // The admin (wave 1) posts; wave 1's readers get it, wave 2's readers do not: no event crosses waves.
+            // The admin (wave 1) posts; wave 1's readers get it. No event crosses waves, and wave 2 has nobody to post:
+            // its readers are skipped at once, saying why, instead of failing after a pointless wait.
             val read = f.evidence.stepList.filter { it.scenarioStep == "read" && it.action.startsWith("wait_for") }
             read.filter { it.agentId?.value in setOf("a02", "a03") }.map { it.status }.toSet() shouldBe setOf(StepStatus.PASSED)
-            read.filter { it.agentId?.value in setOf("a04", "a05") }.map { it.status }.toSet() shouldBe setOf(StepStatus.FAILED)
-            summary.outcome shouldBe RunOutcome.FAILED
+            val skipped = read.filter { it.agentId?.value in setOf("a04", "a05") }
+            skipped.map { it.status }.toSet() shouldBe setOf(StepStatus.SKIPPED)
+            skipped.first().detail.orEmpty() shouldStartWith "emitter_absent: step 'post', which emits note_posted, had no tester here"
+            f.evidence.stepList.single { it.action == "coverage" }.let {
+                it.status shouldBe StepStatus.PASSED
+                it.detail shouldBe
+                    "2 of 4 receivers could wait for the event of 'read'; 2 were in a wave without a tester of the step that emits it"
+            }
+            summary.outcome shouldBe RunOutcome.PASSED
             f.buses.size shouldBe 2
+        }
+
+    @Test
+    fun `a step no wave can check with its emitter is not covered, and the run says so`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 0,
+                    employees = 2,
+                    steps =
+                        listOf(
+                            step("post", admin(), emits = "note_posted"),
+                            step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
+                        ),
+                )
+
+            // Waves of one: the admin posts alone, every reader is in a wave without it.
+            val summary = f.runner().run(base.copy(settings = base.settings.copy(waveSize = 1)))
+
+            val coverage = f.evidence.stepList.single { it.action == "coverage" }
+            coverage.status shouldBe StepStatus.FAILED
+            coverage.detail.orEmpty() shouldStartWith "not_covered: 0 of 2 receivers could wait for the event of 'read'"
+            summary.outcome shouldBe RunOutcome.FAILED
+        }
+
+    @Test
+    fun `a race whose event has no emitter in the wave is skipped, not failed as a race nobody ran`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 2,
+                    employees = 1,
+                    steps =
+                        listOf(
+                            step("ticket", employees(), emits = "ticket_created"),
+                            step(
+                                "race",
+                                managers(),
+                                waitFor = "ticket_created",
+                                parallel = true,
+                                assertions = listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))),
+                            ),
+                        ),
+                )
+
+            // a01..a03 (admin, both managers) are wave 1 without the employee who writes the ticket; a04 is wave 2.
+            f.runner().run(base.copy(settings = base.settings.copy(waveSize = 3)))
+
+            f.verify.groupCalls.shouldBeEmpty()
+            f.evidence.assertionList
+                .single { it.type == "only_one_succeeds" }
+                .verdict shouldBe Verdict.SKIPPED
+            f.evidence.stepList
+                .single { it.action == "coverage" }
+                .detail
+                .orEmpty() shouldStartWith "not_covered:"
         }
 
     @Test

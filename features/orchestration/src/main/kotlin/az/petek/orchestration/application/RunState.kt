@@ -46,6 +46,7 @@ internal class RunState(
             field = value
             // A new bus counts its sequences from the start: where the old one stood says nothing about it.
             stepStarts.clear()
+            emptySteps.clear()
         }
 
     /** The testers of the wave now running; null when everyone runs at once. */
@@ -70,8 +71,32 @@ internal class RunState(
 
     /** Remembers where the bus stands as [stepId] begins; see [eventCursor]. */
     fun stepStarted(stepId: String) {
-        stepStarts[stepId.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX)] = bus.latestAny()?.sequence ?: 0L
+        val base = stepId.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX)
+        stepStarts[base] = bus.latestAny()?.sequence ?: 0L
+        emptySteps -= base
     }
+
+    /** Steps that had no tester to run them on this bus (a wave without their testers), by id without the swap suffix. */
+    private val emptySteps: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** [stepId] had no tester here: nothing it emits can arrive on this bus. */
+    fun stepHadNoTester(stepId: String) {
+        emptySteps += stepId.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX)
+    }
+
+    /** The step that emits [event] when it had no tester on this bus (Faza 24.7); null when it ran or never started. */
+    fun absentEmitter(event: String): String? = emitters[event]?.takeIf { it in emptySteps }
+
+    /** How the receivers of one `wait_for` step fared: waited for the event, or had no emitter in their wave. */
+    class ReceiverCoverage {
+        val waited = AtomicInteger()
+        val withoutEmitter = AtomicInteger()
+    }
+
+    /** Per `wait_for` step as it ran (`read`, `read@swap`), in the order the steps first had receivers. */
+    val receivers: MutableMap<String, ReceiverCoverage> = java.util.Collections.synchronizedMap(LinkedHashMap())
+
+    fun receiversOf(stepId: String): ReceiverCoverage = synchronized(receivers) { receivers.getOrPut(stepId) { ReceiverCoverage() } }
 
     /**
      * The sequence an [event] must come after to belong to the latest execution of the step that emits it; 0 when that

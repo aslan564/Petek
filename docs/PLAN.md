@@ -1173,7 +1173,7 @@ dərəcədə aiddir (Faza 25).
     addımda `{last_id}`-i rədd edir (hədəf profilinin şablonlarında isə istifadə edən addımın hadisəsidir) və başqa
     addımların asılı olduğu hadisəni çox testerin emit etməsinə yalnız yarışda icazə verir. Nümunələr köçürüldü.
 
-- [ ] **24.7 Emitteri olmayan dalğada gözləmə SKIPPED-dir.**
+- [x] **24.7 Emitteri olmayan dalğada gözləmə SKIPPED-dir.**
   - *Problem:* kimliklər admin → manager → employee sırasındadır, dalğalar bu siyahını `chunked(wave_size)` ilə kəsir;
     sonrakı dalğalarda adətən emitter olmur, receiver-lər `not_received` alır və run FAILED olur. Judge WAIT-i
     finding-dən çıxardığı üçün səbəb heç yerdə görünmür. `RunnerWavesTest` bu davranışı hazırda təsdiqləyir.
@@ -1184,6 +1184,10 @@ dərəcədə aiddir (Faza 25).
     dalğalar arasında daşımaq 24.11-in işidir.
   - *Test:* `RunnerWavesTest` yeni semantikaya keçir; heç bir dalğada yoxlanmayan addım.
   - *Sənəd:* ARCHITECTURE (dalğalar), R05, Faza 21 qeydi.
+  - *Vəziyyət:* `RunState.absentEmitter`: emit edən addım bu bus-da testersiz qalıbsa, qəbul edən dərhal SKIPPED
+    (`emitter_absent: step 'post', which emits ..., had no tester here`), əhatə sayılır; bütün iştirakçıları belə olan
+    yarışın qrup hökmü verilmir. Run sonunda `coverage` qeydi ("N of M receivers could wait"); heç kim gözləyə bilməyibsə
+    `not_covered` (FAILED). `petek run` və panel əvvəlcədən deyir (`CampaignScaler.waitsWithoutEmitter`).
 
 - [ ] **24.8 Loop detector səhifənin vəziyyətinə baxır.**
   - *Problem:* ref-lər hər snapshot-da 1-dən nömrələnir, `ConsecutiveLoopDetector` isə yalnız ardıcıl eyni action-ı

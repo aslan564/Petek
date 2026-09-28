@@ -34,14 +34,26 @@ import az.petek.orchestration.domain.Waves
  * A campaign without companies (`tenant: none`) shares its own roles and gates out the same way instead.
  *
  * Steps whose actors can no longer match anyone would be skipped silently by the runner; [uncoveredSteps] finds them
- * so the command can warn before the run starts, and [racesSplitByWaves] finds the races `wave_size` leaves with a
- * single racer in a wave, where they fail.
+ * so the command can warn before the run starts, [racesSplitByWaves] finds the races `wave_size` leaves with a
+ * single racer in a wave, where they fail, and [waitsWithoutEmitter] the receivers it puts in a wave without the tester
+ * that emits their event, where they are skipped.
  */
 object CampaignScaler {
     /** A race step and the waves (numbered from 1) that hold only one of its racers. */
     data class SplitRace(
         val step: ScenarioStep,
         val waves: List<Int>,
+    )
+
+    /**
+     * A `wait_for` [step], the [emitter] step of its event, and the [waves] (from 1) that hold receivers but no emitter;
+     * [covered] when some other wave holds both, so the step is still checked there.
+     */
+    data class WaitWithoutEmitter(
+        val step: ScenarioStep,
+        val emitter: ScenarioStep,
+        val waves: List<Int>,
+        val covered: Boolean,
     )
 
     /** `petek run --testers N`: [resize], with the new size in the campaign's name so reports tell the runs apart. */
@@ -167,6 +179,27 @@ object CampaignScaler {
                 val alone = waves.withIndex().filter { (_, wave) -> resolver.resolve(step.actors, wave).size == 1 }
                 SplitRace(step, alone.map { it.index + 1 })
             }.filter { it.waves.isNotEmpty() }
+    }
+
+    /**
+     * `wait_for` steps whose receivers some wave of `wave_size` holds without a tester of the step that emits their
+     * event (Faza 24.7): the runner skips those receivers, and a step no wave holds with its emitter is never checked
+     * (`not_covered`). Empty without waves.
+     */
+    fun waitsWithoutEmitter(
+        campaign: Campaign,
+        identities: List<Identity>,
+        resolver: ActorResolver,
+    ): List<WaitWithoutEmitter> {
+        val waves = Waves.of(identities, campaign.settings.waveSize)
+        if (waves.isEmpty()) return emptyList()
+        val emitters = campaign.allSteps.mapNotNull { step -> step.emits?.let { it.event to step } }.toMap()
+        return campaign.allSteps.mapNotNull { step ->
+            val emitter = step.waitFor?.let { emitters[it.event] } ?: return@mapNotNull null
+            val withReceivers = waves.withIndex().filter { (_, wave) -> resolver.resolve(step.actors, wave).isNotEmpty() }
+            val alone = withReceivers.filter { (_, wave) -> resolver.resolve(emitter.actors, wave).isEmpty() }
+            if (alone.isEmpty()) null else WaitWithoutEmitter(step, emitter, alone.map { it.index + 1 }, alone.size < withReceivers.size)
+        }
     }
 
     /**

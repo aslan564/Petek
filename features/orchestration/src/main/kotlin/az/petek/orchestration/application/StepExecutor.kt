@@ -141,6 +141,7 @@ internal class StepExecutor(
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors.merge(step.id, chosen.map { it.agentId }) { before, now -> before + now }
         if (chosen.isEmpty()) {
+            run.stepHadNoTester(step.id)
             evidence.system(run, null, "skip", StepStatus.SKIPPED, "no active actor matches '${step.actors.raw}'", step.id)
             return StepResult(step, emptyList(), groupFailed = false)
         }
@@ -189,6 +190,12 @@ internal class StepExecutor(
                 throw e
             }
         val results = settle(runs)
+        // Every racer was skipped because the event's step had no tester here: there was no race to judge.
+        if (results.all { it.outcome == null && !it.failed } && groupSpecs(step).isNotEmpty()) {
+            val reason = "not evaluated: none of the actors could wait for their event here"
+            evidence.skippedAssertions(run, ids.stepId(), step.id, null, groupSpecs(step), reason)
+            return StepResult(step, results, groupFailed = false)
+        }
         return StepResult(step, results, groupFailed = verifyGroup(step, results))
     }
 
@@ -220,6 +227,8 @@ internal class StepExecutor(
             actor.session.setCorrelationId(actor.correlationId.value)
             val waited =
                 step.waitFor?.let { spec ->
+                    run.absentEmitter(spec.event)?.let { emitter -> return ActorRun.Settled(withoutEmitter(actor, spec, emitter)) }
+                    run.receiversOf(step.id).waited.incrementAndGet()
                     when (val result = awaitEvent(actor, spec)) {
                         is WaitResult.Received -> result.waited
                         is WaitResult.TimedOut -> return ActorRun.Settled(notReceived(actor, spec, result.startedAt))
@@ -321,6 +330,38 @@ internal class StepExecutor(
         board.update(actor.agentId, AgentState.IDLE, actor.step.id, "$NOT_RECEIVED ${spec.event}")
         tasks.update(actor.step.id, actor.agentId, TaskState.FAILED, detail)
         return ActorStepResult(actor.identity, null, NOT_RECEIVED)
+    }
+
+    /**
+     * The step that emits [spec]'s event had no tester here, a wave without its testers (Faza 24.7): nothing can arrive,
+     * so the receiver is skipped at once, saying why, instead of failing after a pointless wait. The run's coverage
+     * counts it ([DefaultCampaignRunner]): a step no receiver could check anywhere is `not_covered`.
+     */
+    private suspend fun withoutEmitter(
+        actor: ActorContext,
+        spec: WaitForSpec,
+        emitter: String,
+    ): ActorStepResult {
+        run.receiversOf(actor.step.id).withoutEmitter.incrementAndGet()
+        val detail = "$EMITTER_ABSENT: step '$emitter', which emits ${spec.event}, had no tester here (another wave holds them)"
+        evidence.step(
+            run,
+            actor.agentId,
+            actor.step.id,
+            StepKind.WAIT,
+            "wait_for ${spec.event}",
+            clock.now(),
+            StepStatus.SKIPPED,
+            detail,
+            actor.correlationId,
+            Tally.NONE,
+        )
+        val reason = "not evaluated: $detail"
+        skipAction(actor, reason)
+        evidence.skippedAssertions(run, actor.stepId, actor.step.id, actor.agentId, actorSpecs(actor.step), reason)
+        board.update(actor.agentId, AgentState.IDLE, actor.step.id, EMITTER_ABSENT)
+        tasks.update(actor.step.id, actor.agentId, TaskState.SKIPPED, detail)
+        return ActorStepResult(actor.identity, null, failureKey = null)
     }
 
     /** Reception checks and the receipt for the awaited event (see the class KDoc). */
@@ -1162,6 +1203,9 @@ internal class StepExecutor(
     companion object {
         private const val TOO_MANY_REQUESTS = 429
         const val NOT_RECEIVED = "not_received"
+
+        /** A receiver whose wave had no tester for the step that emits its event (Faza 24.7). */
+        const val EMITTER_ABSENT = "emitter_absent"
         const val TEMPLATE_ERROR = "template_error"
         const val ID_UNAVAILABLE = "id_unavailable"
         const val ASSERTION_FAILED = "assertion_failed"

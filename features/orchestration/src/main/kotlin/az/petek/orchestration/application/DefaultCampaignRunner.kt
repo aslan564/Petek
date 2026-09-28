@@ -202,10 +202,33 @@ class DefaultCampaignRunner(
                 } else {
                     runWaves(run, board, tasks, waves)
                 }
+                reportCoverage(run)
                 true
             }
         if (completed == null) {
             run.abort("time budget of ${run.campaign.settings.budget.maxMinutes} min exceeded")
+        }
+    }
+
+    /**
+     * Receivers skipped because their wave had no tester for the step that emits their event (Faza 24.7) are counted
+     * per step: a step some receivers could wait for says how many did; one no receiver could wait for anywhere is
+     * `not_covered`, a failure of the run, since the campaign asked for a check no wave could make.
+     */
+    private suspend fun reportCoverage(run: RunState) {
+        val coverage = synchronized(run.receivers) { run.receivers.toList() }
+        coverage.forEach { (stepId, receivers) ->
+            val skipped = receivers.withoutEmitter.get()
+            if (skipped == 0) return@forEach
+            val waited = receivers.waited.get()
+            val detail =
+                "$waited of ${waited + skipped} receivers could wait for the event of '$stepId'; $skipped were in a wave " +
+                    "without a tester of the step that emits it"
+            if (waited > 0) {
+                evidence.system(run, null, "coverage", StepStatus.PASSED, detail, stepId)
+            } else {
+                evidence.system(run, null, "coverage", StepStatus.FAILED, "$NOT_COVERED: $detail", stepId, tally = Tally.FAIL)
+            }
         }
     }
 
@@ -666,5 +689,8 @@ class DefaultCampaignRunner(
 
         /** Suffix of the scenario steps run again after the account swap. */
         const val SWAP_SUFFIX = "@swap"
+
+        /** A `wait_for` step no receiver could wait for in any wave: its check was never made (Faza 24.7). */
+        const val NOT_COVERED = "not_covered"
     }
 }

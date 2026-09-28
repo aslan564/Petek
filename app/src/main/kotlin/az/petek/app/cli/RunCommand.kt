@@ -101,7 +101,7 @@ class RunCommand : PetekSubcommand("run") {
                     )
                 }
             }
-            warnAboutSplitRaces(container, campaign)
+            warnAboutWaves(container, campaign)
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(
@@ -161,13 +161,26 @@ class RunCommand : PetekSubcommand("run") {
                 RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
             ).identities
 
-    /** A race step that `campaign.wave_size` leaves with one racer in a wave fails there: say so before the run starts. */
-    private fun warnAboutSplitRaces(
+    /**
+     * What `campaign.wave_size` does to the steps, said before the run starts: a race left with one racer in a wave fails
+     * there; receivers in a wave without the tester that emits their event are skipped there.
+     */
+    private fun warnAboutWaves(
         container: AppContainer,
         campaign: Campaign,
     ) {
         val size = campaign.settings.waveSize ?: return
-        CampaignScaler.racesSplitByWaves(campaign, previewIdentities(container, campaign), DefaultActorResolver()).forEach { split ->
+        val identities = previewIdentities(container, campaign)
+        CampaignScaler.waitsWithoutEmitter(campaign, identities, DefaultActorResolver()).forEach { gap ->
+            val never = if (gap.covered) "" else "; no wave holds both, so it is never checked (not_covered)"
+            echo(
+                "Warning: with campaign.wave_size $size, step '${gap.step.id}' (line ${gap.step.line}) waits for " +
+                    "'${gap.step.waitFor?.event}' in wave ${gap.waves.joinToString()}, which has no tester of step " +
+                    "'${gap.emitter.id}' that emits it; its receivers there are skipped$never.",
+                err = true,
+            )
+        }
+        CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
             echo(
                 "Warning: with campaign.wave_size $size, race step '${split.step.id}' (line ${split.step.line}) has a single " +
                     "racer in wave ${split.waves.joinToString()}, where it fails: a race needs at least 2 racers in the same wave.",
