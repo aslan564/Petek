@@ -13,6 +13,7 @@ package az.petek.app.cli
 
 import az.petek.app.campaign.IdentitySpecs
 import az.petek.campaign.domain.Campaign
+import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
 import az.petek.identity.domain.Identity
@@ -40,6 +41,8 @@ class PlanCommand : PetekSubcommand("plan") {
         withContainer { container ->
             val path = session.resolve(file)
             val campaign = withContext(Dispatchers.IO) { container.campaigns.execute(path, container.knownRunFunctions) }
+            // Valid, but likely not what was meant (Faza 24.15): said on stderr, so a JSON answer stays clean.
+            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { echo("Warning: $it", err = true) }
             val runId = planRunId(campaign)
             val tag = RunTags.forPlan(campaign.sourceHash, campaign.settings.seed)
             val plan =

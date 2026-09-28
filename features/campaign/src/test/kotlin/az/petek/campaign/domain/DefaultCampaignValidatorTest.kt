@@ -787,6 +787,29 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `a race with more racers than the pacing limit is warned about, never refused`() {
+            val race =
+                step(
+                    "race",
+                    actor = "manager",
+                    parallel = true,
+                    assertions = listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))),
+                    line = 70,
+                )
+            val crowd = step("read", actor = "employee", line = 80)
+            val paced = campaign(race, crowd, settings = settings().copy(pacing = Pacing(maxParallelActors = 2)))
+
+            issues(paced).shouldBeEmpty()
+            val warning = validator.warnings(paced).single()
+            warning.line shouldBe 70
+            warning.message shouldContain "race 'race' starts up to 3 testers at the same instant"
+            warning.message shouldContain "campaign.pacing.max_parallel_actors (2)"
+            // Without a limit, or with one the race fits into, there is nothing to say.
+            validator.warnings(campaign(race, crowd)).shouldBeEmpty()
+            validator.warnings(campaign(race, crowd, settings = settings().copy(pacing = Pacing(maxParallelActors = 3)))).shouldBeEmpty()
+        }
+
+        @Test
         fun `the request an event is written by follows the form of a race request`() {
             val written = { request: RequestPattern ->
                 step("announce", emits = "announcement_created").let { it.copy(emits = it.emits!!.copy(request = request)) }

@@ -54,6 +54,8 @@ class DefaultCampaignValidator(
         knownRunFunctions: Set<String>,
     ): List<ValidationIssue> = Rules(campaign, knownRunFunctions, templates).check()
 
+    override fun warnings(campaign: Campaign): List<ValidationIssue> = Rules(campaign, emptySet(), templates).warnings()
+
     /** One validation pass; holds the issues found so far. */
     private class Rules(
         private val campaign: Campaign,
@@ -85,6 +87,29 @@ class DefaultCampaignValidator(
             checkTargetProfile()
             checkSteps()
             return issues.toList()
+        }
+
+        /**
+         * A `parallel` step (every race) starts all its actors at the same instant and so ignores
+         * `campaign.pacing.max_parallel_actors` (Faza 24.15): with more actors than the limit, the site may turn the
+         * extra ones away (429) exactly where the race needs every racer.
+         */
+        fun warnings(): List<ValidationIssue> {
+            val limit = settings.pacing.maxParallelActors ?: return emptyList()
+            val located =
+                campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
+                    campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
+            return located.mapNotNull { (path, step) ->
+                val actors = maxMatches(step.actors)
+                if (!step.parallel || actors <= limit) return@mapNotNull null
+                val what = if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) "race" else "parallel step"
+                ValidationIssue(
+                    campaign.sourceLines.lineOf("$path.parallel") ?: campaign.sourceLines.lineOf(path) ?: step.line,
+                    "$what '${step.id}' starts up to $actors testers at the same instant, more than " +
+                        "campaign.pacing.max_parallel_actors ($limit): a parallel step ignores the limit so its actors start " +
+                        "together, and the site may refuse the extra ones (429); give it fewer actors or raise the limit",
+                )
+            }
         }
 
         private fun report(

@@ -71,6 +71,40 @@ class PlanCommandTest {
         }
 
     @Test
+    fun `a race that outnumbers the pacing limit is planned, with a warning`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write(
+                "race.yaml",
+                """
+                campaign:
+                  name: plan-race
+                  testers: 4
+                  seed: 11
+                  roles: {admin: 1, manager: 3, employee: 0}
+                  departments: [IT, HR]
+                  registration: {invite: 3, company_code: 0}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                  pacing: {max_parallel_actors: 2}
+                steps:
+                  - id: race
+                    actor: manager[*]
+                    parallel: true
+                    do: "Approve the same ticket"
+                    assert:
+                      - only_one_succeeds: {request: "POST .*/approve"}
+                """,
+            )
+
+            val result = cli.run("plan", "race.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "Warning: line"
+            result.stderr shouldContain "race 'race' starts up to 3 testers at the same instant"
+            result.stdout shouldContain "4 identities"
+        }
+
+    @Test
     fun `passwords are never printed`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)

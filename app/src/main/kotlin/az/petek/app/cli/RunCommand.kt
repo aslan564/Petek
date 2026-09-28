@@ -102,6 +102,8 @@ class RunCommand : PetekSubcommand("run") {
                 }
             }
             warnAboutWaves(container, campaign)
+            // Valid, but likely not what was meant (Faza 24.15); never blocks the run.
+            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { echo("Warning: $it", err = true) }
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(

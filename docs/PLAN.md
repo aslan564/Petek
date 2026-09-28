@@ -1281,7 +1281,10 @@ dərəcədə aiddir (Faza 25).
 - [ ] **24.14 Kompozisiya matrisi.** Orkestrasiya testlərində {dalğa, swap, setup uğursuzluğu, emitter uğursuzluğu,
   yarış} × {`emits`/`wait_for`, `{last_id}`, `only_one_succeeds`, qadağan addım} cədvəli; hər bənd öz xanasını
   doldurur, faza sonunda boş xana qalmır.
-- [ ] **24.15 Xırdalar.** Yarış iştirakçıları `pacing.max_parallel_actors`-dan çoxdursa validator xəbərdarlığı.
+- [x] **24.15 Xırdalar.** Yarış iştirakçıları `pacing.max_parallel_actors`-dan çoxdursa validator xəbərdarlığı.
+  - *Vəziyyət:* `CampaignValidator.warnings` (bloklamayan, xətalardan ayrı): `parallel` addım (hər yarış) limiti
+    saymır, aktorları eyni anda başlayır; limitdən çox aktoru ola bilən belə addım üçün sətir nömrəsi ilə xəbərdarlıq.
+    `petek plan` və `petek run` stderr-ə, panel lövhəyə yazır.
 
 #### Auditdə baxılıb, dəyişiklik lazım deyil
 

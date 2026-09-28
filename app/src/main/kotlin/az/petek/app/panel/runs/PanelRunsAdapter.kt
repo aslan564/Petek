@@ -519,6 +519,7 @@ internal class PanelRunsAdapter(
                         IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
                         RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
                     ).identities
+            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { board.message("Diqqət: $it") }
             val uncovered = CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver())
             if (uncovered.isNotEmpty()) {
                 board.message(

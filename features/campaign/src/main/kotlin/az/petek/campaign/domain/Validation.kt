@@ -49,4 +49,10 @@ interface CampaignValidator {
         campaign: Campaign,
         knownRunFunctions: Set<String>,
     ): List<ValidationIssue>
+
+    /**
+     * What is valid but likely not what the owner meant, said before a run and never blocking it (Faza 24.15); the
+     * default says nothing.
+     */
+    fun warnings(campaign: Campaign): List<ValidationIssue> = emptyList()
 }

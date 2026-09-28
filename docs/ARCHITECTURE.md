@@ -104,7 +104,9 @@ sequenceDiagram
      additionally starts them at the same instant (a barrier), which race tests need. Otherwise `campaign.pacing`
      starts their actions `start_stagger_ms` apart in agent id order (measured from the step's start, so waiting for an
      event is not paced) and at most `max_parallel_actors` at once, against the per-IP limits of a real site. A step
-     that only asserts (no `do` or `run`) sends nothing to the site and is not paced.
+     that only asserts (no `do` or `run`) sends nothing to the site and is not paced. A `parallel` step ignores the
+     limit, so `petek plan`, `petek run` and the panel warn (never block) when one can start more actors than
+     `max_parallel_actors` (`CampaignValidator.warnings`, Faza 24.15).
    - With `emits`, the object id is read from the configured id source and the event is published with t0: the
      answer to the actor's own write request (`emits.request`, else its first accepted one), the publish time kept
      apart; without a write the page showed, the publish, and latencies become a range.
