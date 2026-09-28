@@ -404,7 +404,7 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 19 | Xırda xəta kartları | Ümumi kataloq, mağaza, xəbər və vitrin naxışları | 1–2 həftə |
 | 20 | İki qatlı, üç rəfli hesabat | Müştəri üçün sadə qat, detal qatı, JUnit XML və SARIF | 1 həftə |
 | 21 | Tutum, dalğalar və ayrı IP | Böyük sürü dalğalarla; hər testerə ayrı IP seçimi | 1 həftə |
-| 22 | Demo hədəfləri | Ghost və WooCommerce sahibin serverində, real tapıntılar | sonra |
+| 22 | Demo hədəfləri | açıq mənbəli xəbər və mağaza platformaları sahibin serverində, real tapıntılar | sonra |
 
 Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablanıb. Faza 8–14 "Pətək 2: universal alət" planıdır
 (aşağıda, Faza 7-dən sonra); köhnə Faza 8 ("Universal platforma") onun içində əridilib.
@@ -1032,7 +1032,7 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 22 — Demo hədəfləri
 
-- [ ] Ghost (xəbər) və WooCommerce (mağaza) sahibin serverində; hər biri üçün kampaniya və qısa video. Fake target
+- [ ] açıq mənbəli bir xəbər platforması və bir mağaza platforması sahibin serverində; hər biri üçün kampaniya və qısa video. Fake target
   yalnız e2e üçündür (qayda 12).
 
 ## Sübut bazası və hesabat

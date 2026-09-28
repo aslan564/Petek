@@ -46,7 +46,7 @@ Bu bölmə üstündür: aşağıdakı bölmələr onunla toqquşarsa, bu bölmə
 14. **Poçt.** Əvvəl sahibin öz poçt qutusu və "artı ünvan" IMAP ilə, developer üçün lokal Mailpit. Pətəkin öz
     serverindəki qutu sonra gəlir, ödənişli modul kimi: yalnız qəbul edir, məktubları bir gündən sonra silir, yalnız
     run sahibinə göstərir.
-15. **Demo.** Ghost (xəbər) və WooCommerce (mağaza) sahibin öz serverində qaldırılır.
+15. **Demo.** açıq mənbəli bir xəbər platforması və bir mağaza platforması sahibin öz serverində qaldırılır.
 16. **Sahiblik.** Tam test yalnız sahibliyi təsdiqlənmiş sayta aparılır: saytın kökündə Pətəkin verdiyi kodla fayl və
     ya DNS qeydi. Bu, bir dəfə edilir və yadda qalır. Localhost və daxili şəbəkə ünvanları təsdiqsiz qəbul olunur.
     Təsdiq yoxdursa, Pətək yalnız oxuyur.
@@ -240,7 +240,7 @@ axtarır, hesabat sahibin dilində yazılır.
 | İki qatlı hesabat, JUnit/SARIF | HTML hesabat var; JUnit/SARIF yoxdur | yoxdur |
 | Tutum | `capacity` əmri var | dalğalar yoxdur |
 | Backend kiti | yoxdur | Faza 14 kontrakt kitləri |
-| Demo: Ghost və WooCommerce sahibin serverində | fake target yalnız e2e üçündür | Faza 13: ikinci fake sayt (e2e üçün qalır) |
+| Demo: açıq mənbəli xəbər və mağaza platformaları sahibin serverində | fake target yalnız e2e üçündür | Faza 13: ikinci fake sayt (e2e üçün qalır) |
 
 İdeyaların təxminən yarısı planın davamıdır. Tam yeni olanlar: saytın növünü təyin etmək, sahiblik təsdiqi, artı ünvanlı
 poçt, qapını bir dəfə öyrənib kodla təkrarlamaq və baryer, kart yer tutucuları ilə tam izolyasiya, icazə ilə hesab
@@ -256,7 +256,7 @@ dalğalar.
 5. Xırda xəta kartları: mağaza və xəbər üçün ilk üç naxış
 6. İki qatlı, üç rəfli hesabat, JUnit/SARIF
 7. Tutum, dalğalar və "hər testerə ayrı IP"
-8. Demo: Ghost və WooCommerce sahibin serverində
+8. Demo: açıq mənbəli xəbər və mağaza platformaları sahibin serverində
 
 ## 11. Suallar — hamısı bağlanıb (2026-09-26)
 
@@ -271,7 +271,7 @@ dalğalar.
 | 7. Sahiblik | fayl və ya DNS təsdiqi; localhost və daxili şəbəkə istisna (bənd 16) |
 | 8. Tək IP | "hər testerə ayrı IP" seçimi; seçilməyibsə "alət boşluğu" rəfi (bənd 13) |
 | 9. Pətəkin serverindəki poçt qutusu | əvvəl sahibin qutusu + artı ünvan; server sonra, ödənişli (bənd 14) |
-| 10. Demo sayt | Ghost və WooCommerce sahibin serverində (bənd 15) |
+| 10. Demo sayt | açıq mənbəli xəbər və mağaza platformaları sahibin serverində (bənd 15) |
 | N1. Təlimatda parol | yalnız test hesabları, istifadə qaydalarında yazılır; kod parolu `Secret` saxlayır (bənd 5, bölmə 4) |
 | N2. Run zamanı kəşfiyyat | proses bitənə qədər davam edir, növbəti run-ın ssenarisini genişləndirir (bənd 8) |
 | N3. Hesab növbəsi | testi aparan adamın icazəsi ilə, testini bitirənlər arasında (bənd 4) |
