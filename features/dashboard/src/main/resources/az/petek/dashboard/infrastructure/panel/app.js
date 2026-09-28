@@ -159,9 +159,12 @@
   pollCodes();
   setInterval(pollCodes, 3000);
 
-  // ---------- first screen: the live board while a run goes on, the instructions otherwise ----------
+  // ---------- first screen: the live board while a run goes on, the setup until it is done once, else the instructions ----------
   let firstRun = null;
-  P.defaultScreen = () => (firstRun && firstRun.phase === 'RUNNING' ? 'agentler' : 'telimat');
+  P.defaultScreen = () => {
+    if (firstRun && firstRun.phase === 'RUNNING') return 'agentler';
+    return P.setupDone && !P.setupDone() ? 'qurasdirma' : 'telimat';
+  };
   renderStatus();
   if (location.hash.length > 2) P.startRouter();
   else {

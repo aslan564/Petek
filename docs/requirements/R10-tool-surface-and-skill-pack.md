@@ -31,7 +31,8 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     message, a protocol mistake a JSON-RPC error (-32700, -32600, -32601, -32602). `McpSettings.allowWrites`
     (`--allow-writes`) gates `cancel_exploration`, `approve_scenario`, `freeze_scenario`, `run_campaign`, `cancel_run`,
     `teardown` and `explore_site` with `allowWrites`; `explore_site` and `run_campaign` take `wait`. Without a `.env`
-    the server still answers the handshake, but every tool returns `UnavailablePanelBackend.NO_TARGET`: the host AI
+    (in the project, or in the owner's workspace `$PETEK_HOME/workspace` that the panel's first question writes, Faza
+    23) the server still answers the handshake, but every tool returns `UnavailablePanelBackend.NO_TARGET`: the host AI
     asks the owner which site to test and waits (rule 12, R06). `PanelRuns` gained
     `findings(runId)` (the judged findings with A/B/C and artifact ids, whose artifacts `get_evidence` then resolves
     to absolute paths) and `teardown(runId)` (finished runs of the configured site only).

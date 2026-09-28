@@ -30,7 +30,7 @@ ordered by number everywhere.
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
 | `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
-| `features/dashboard` | Local web panel: live agent board, instructions, explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 25 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
+| `features/dashboard` | Local web panel: live agent board, instructions, explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 25 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`, `PanelReadiness`, ...); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
 | `features/explorer` | Explorer agent (PLAN.md Faza 6–7): learns a site model, records findings, generates campaign drafts, diffs model versions | `ExplorationRepository`, `ExplorationObserver`, `TestTargetCheck` | SQLite repository |
 | `app` | CLI (`init`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`; `--json` on doctor/init/plan/run/report/teardown), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
 | `launcher/` | The `petek` npm package: `npx petek` downloads the release bundle for the machine once (SHA-256 checked) and runs it; no dependencies, tested with `node --test` against a local stand-in release | — | Node 18+ |
@@ -234,6 +234,19 @@ finished run's surprises into explainable verdicts. The web panel (Faza 8) is bu
   questions) builds its draft on top of that one, so the newest triage draft of a run carries all of its changes.
   Re-running triage resumes: decided surprises are not asked again.
 ## Web panel (`features/dashboard`)
+
+`petek` with no arguments serves the panel on loopback (`PanelCommand`). `CliSession` finds the configuration:
+`--env-file`; `.env` in the working directory; the environment alone when it sets `PETEK_TARGET` (CI); else the owner's
+workspace, `$PETEK_HOME/workspace/.env` (`PETEK_HOME` defaults to `~/.petek`), whose relative paths (evidence,
+scenarios, target profiles) resolve inside it. Without any, the setup page (`SetupServer`, `PanelSetup`) asks for the
+site (rule 12) and writes the workspace's `.env`, so a bare `petek` finds it from any directory afterwards.
+
+The page opens on **Quraşdırma** until the owner marks it done once. `PanelReadiness` (`PanelReadinessAdapter` in the
+app) shows the site, the configuration file and the configured AI without contacting anything, and checks each part
+when the page asks: the site answering (`TargetReachability`), its ownership (`SiteOwnership.check`, or `verify` for a
+fresh look that remembers a proof it finds) and the AI answering `petek doctor`'s tiny request through its own client.
+The tester count set there is the instruction screen's (`P.testers`).
+
 ## Tester isolation
 
 Only the orchestrator sees more than one tester. Each agent owns one browser context on one confined thread, reads

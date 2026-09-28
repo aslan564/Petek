@@ -93,7 +93,40 @@ class McpCommandTest {
         }
 
     @Test
-    fun `without a site to test the server answers the handshake and every tool asks the owner for one`() =
+    fun `a site named by the environment alone is served, as CI names it`() =
+        runBlocking<Unit> {
+            val requests =
+                listOf(
+                    """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""",
+                    """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_targets"}}""",
+                )
+            val output = ByteArrayOutputStream()
+            val cli =
+                CliHarness(dir).apply {
+                    env["PETEK_TARGET"] = CliHarness.UNUSED_TARGET
+                    standardInput = ByteArrayInputStream((requests.joinToString("\n") + "\n").toByteArray())
+                    standardOutput = output
+                }
+
+            cli.run("mcp").statusCode shouldBe 0
+
+            val targets =
+                output
+                    .toString(Charsets.UTF_8)
+                    .lines()
+                    .filter { it.isNotBlank() }
+                    .map { Json.parseToJsonElement(it).jsonObject }
+                    .single { it["id"]!!.jsonPrimitive.content == "2" }["result"]!!
+                    .jsonObject["content"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["text"]!!
+                    .jsonPrimitive.content
+            targets shouldContain "\"target\":\"${CliHarness.UNUSED_TARGET}\""
+        }
+
+    @Test
+    fun `with no site in a file or the environment the server answers the handshake and every tool asks for one`() =
         runBlocking<Unit> {
             val requests =
                 listOf(
@@ -104,6 +137,7 @@ class McpCommandTest {
             val output = ByteArrayOutputStream()
             val cli =
                 CliHarness(dir).apply {
+                    env.remove("PETEK_TARGET")
                     standardInput = ByteArrayInputStream((requests.joinToString("\n") + "\n").toByteArray())
                     standardOutput = output
                 }

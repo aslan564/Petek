@@ -37,6 +37,8 @@ import kotlin.time.Duration.Companion.seconds
  * @property openInBrowser opens a local file or URL in the user's browser; returns false when that is impossible.
  * @property siteReachability how `petek panel`'s setup page looks at the site the owner names before writing `.env`;
  *   null: a real HTTP request.
+ * @property home Pətək's own directory on this machine: `PETEK_HOME`, else `~/.petek` (where the launcher keeps its
+ *   versions too). Its `workspace` holds the owner's own configuration ([workspace]).
  */
 class CliRuntime(
     val environment: () -> Map<String, String> = System::getenv,
@@ -51,4 +53,20 @@ class CliRuntime(
     /** The process's stdin and stdout, which `petek mcp` speaks its protocol over; tests pass pipes. */
     val standardInput: InputStream = System.`in`,
     val standardOutput: OutputStream = FileOutputStream(FileDescriptor.out),
-)
+    val home: Path = defaultHome(environment()),
+) {
+    /**
+     * The owner's own workspace (`<home>/workspace`): its `.env`, evidence, scenarios and target profiles, used from
+     * any directory when that directory has no configuration of its own ([CliSession]).
+     */
+    val workspace: Path get() = home.resolve(WORKSPACE)
+
+    companion object {
+        const val WORKSPACE = "workspace"
+
+        /** `PETEK_HOME` when set, else `~/.petek`. */
+        fun defaultHome(environment: Map<String, String>): Path =
+            environment["PETEK_HOME"]?.trim()?.takeIf { it.isNotEmpty() }?.let { Path.of(it).toAbsolutePath() }
+                ?: Path.of(System.getProperty("user.home")).resolve(".petek")
+    }
+}

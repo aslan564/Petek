@@ -43,7 +43,8 @@ import kotlin.time.Duration
 /**
  * Runs `petek` command lines in-process against a temporary working directory, with production wiring except for
  * the LLM (scripted), the browser (fake) and the monitor (silent). Logging is not reconfigured; the requested
- * settings are recorded instead. The identity secret comes from the environment, never from the real `~/.petek`.
+ * settings are recorded instead. The identity secret comes from the environment, never from the real `~/.petek`, and
+ * Pətək's home (the owner's workspace) is [home], inside the temporary directory, never the real one either.
  */
 class CliHarness(
     val workingDirectory: Path,
@@ -64,6 +65,10 @@ class CliHarness(
     /** What `petek mcp` reads and writes its protocol on; empty input ends the server at once. */
     var standardInput: InputStream = ByteArrayInputStream(ByteArray(0))
     var standardOutput: OutputStream = ByteArrayOutputStream()
+
+    /** Pətək's home for this harness: the owner's workspace lives in its `workspace` directory. */
+    val home: Path get() = workingDirectory.resolve("petek-home")
+    val workspace: Path get() = home.resolve(CliRuntime.WORKSPACE)
 
     val evidenceDir: Path get() = workingDirectory.resolve("evidence")
     val dbPath: Path get() = evidenceDir.resolve("petek.db")
@@ -101,6 +106,7 @@ class CliHarness(
                 siteReachability = reachability,
                 standardInput = standardInput,
                 standardOutput = standardOutput,
+                home = home,
             )
 
     suspend fun run(vararg args: String): CliktCommandTestResult = PetekCommand(runtime).test(args.toList(), width = WIDE)

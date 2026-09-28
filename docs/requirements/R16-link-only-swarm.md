@@ -28,7 +28,7 @@ account between concurrent testers, and never lets testers see each other.
 - **Faza 19 — small-bug cards**: the general catalogue and the first three patterns per site type.
 - **Faza 20 — report**: customer layer, detail layer, JUnit XML, SARIF.
 - **Faza 21 — capacity**: waves; a distinct IP per tester on verified sites only.
-- **Faza 22 — demo targets**: Ghost and WooCommerce on the owner's server.
+- **Faza 22 — demo targets**: an open-source news platform and an open-source shop on the owner's server.
 
 ## Modules and key types
 

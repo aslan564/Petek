@@ -63,12 +63,13 @@ class PetekCliTest {
     }
 
     @Test
-    fun `the panel without a site to test asks for it in the browser, then writes env and opens for the answer`() =
+    fun `the panel without a site to test asks for it in the browser, then writes the workspace env and opens for the answer`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir).apply { env.remove("PETEK_TARGET") }
             val command = launch(Dispatchers.Default) { cli.run("panel", "--port", "0") }
             try {
                 val question = withTimeout(30.seconds) { awaitOpened(cli) }
+                Files.exists(cli.workspace.resolve(".env")) shouldBe false
                 Files.exists(dir.resolve(".env")) shouldBe false
                 Files.exists(cli.evidenceDir) shouldBe false
 
@@ -83,7 +84,9 @@ class PetekCliTest {
                         .jsonObject["panel"]
                         .shouldNotBeNull()
                         .jsonPrimitive.content
-                EnvFile.load(dir.resolve(".env"))["PETEK_TARGET"] shouldBe "http://127.0.0.1:9"
+                // The answer is kept in the owner's workspace, not in whatever directory the panel was started from.
+                EnvFile.load(cli.workspace.resolve(".env"))["PETEK_TARGET"] shouldBe "http://127.0.0.1:9"
+                Files.exists(dir.resolve(".env")) shouldBe false
                 http.send(get(panel), BodyHandlers.ofString()).statusCode() shouldBe 200
                 http
                     .send(get(question), BodyHandlers.discarding())

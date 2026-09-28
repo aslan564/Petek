@@ -13,6 +13,7 @@ package az.petek.dashboard.infrastructure
 
 import az.petek.dashboard.domain.AccountRequest
 import az.petek.dashboard.domain.AccountView
+import az.petek.dashboard.domain.AiCheckView
 import az.petek.dashboard.domain.CapacityView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.EventView
@@ -20,11 +21,13 @@ import az.petek.dashboard.domain.ExplorationView
 import az.petek.dashboard.domain.FieldProblem
 import az.petek.dashboard.domain.ManualCodeView
 import az.petek.dashboard.domain.OrchestratorSnapshot
+import az.petek.dashboard.domain.OwnershipView
 import az.petek.dashboard.domain.PanelBudget
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.PanelRequestException
 import az.petek.dashboard.domain.PhaseState
 import az.petek.dashboard.domain.PlanStepView
+import az.petek.dashboard.domain.ReadinessView
 import az.petek.dashboard.domain.RegistrationSplit
 import az.petek.dashboard.domain.RoleSplit
 import az.petek.dashboard.domain.RunPlanView
@@ -33,6 +36,7 @@ import az.petek.dashboard.domain.RunStartView
 import az.petek.dashboard.domain.RunSummaryView
 import az.petek.dashboard.domain.ScenarioVersionView
 import az.petek.dashboard.domain.ScenarioView
+import az.petek.dashboard.domain.SiteCheckView
 import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.dashboard.domain.StabilityView
 import az.petek.dashboard.domain.TriageView
@@ -247,6 +251,45 @@ internal object PanelJson {
                     }
                 }
             }
+        }
+
+    fun readiness(view: ReadinessView): JsonElement =
+        buildJsonObject {
+            put("target", view.target)
+            put("configuration", view.configuration)
+            putJsonObject("ai") {
+                put("provider", view.ai.provider)
+                put("model", view.ai.model)
+                put("reason", view.ai.reason)
+                strings("fallbacks", view.ai.fallbacks)
+                put("configured", view.ai.configured)
+            }
+        }
+
+    fun siteCheck(view: SiteCheckView): JsonElement =
+        buildJsonObject {
+            put("reachable", view.reachable)
+            put("detail", view.detail)
+        }
+
+    fun ownership(view: OwnershipView): JsonElement =
+        buildJsonObject {
+            put("state", view.state)
+            put("host", view.host)
+            put("method", view.method)
+            put("fileUrl", view.fileUrl)
+            put("proofLine", view.proofLine)
+            put("dnsName", view.dnsName)
+            strings("looked", view.looked)
+        }
+
+    fun aiCheck(view: AiCheckView): JsonElement =
+        buildJsonObject {
+            put("ok", view.ok)
+            put("provider", view.provider)
+            put("model", view.model)
+            put("detail", view.detail)
+            put("millis", view.millis)
         }
 
     fun triage(view: TriageView?): JsonElement =

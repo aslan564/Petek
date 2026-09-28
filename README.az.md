@@ -103,6 +103,13 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 
 ## Sürətli başlanğıc
 
+**Bir əmr.** Bir dəfə quraşdırın (aşağıdakı buraxılış paketi və ya `npx petek`), sonra istənilən yerdən arqumentsiz
+`petek` yazın. İlk dəfə brauzer hansı saytın test ediləcəyini soruşur və cavabı sizin şəxsi iş qovluğunuzda
+(`~/.petek/workspace/.env`) saxlayır, sonra istənilən qovluqda sadəcə `petek` paneli həmin sayt üçün açır. Panel
+**Quraşdırma** ekranı ilə açılır: sayt cavab verirmi, sahiblik (kopyalanan təsdiq sətri və "Yoxla" düyməsi), AI (bir
+kliklə sınaq) və tester sayı; sonra "Kəşf et". Layihənin öz `.env`-i (və ya `--env-file`, ya da CI-ın verdiyi kimi
+mühitdəki `PETEK_TARGET`) həmişə əvvəlki kimi birinci gəlir.
+
 **Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.example.com` (`.env`,
 `.petek/`, skill paketi və AI-nızın MCP qeydi), `npx petek verify` (staging saytın sizin olduğunu təsdiqləyir), sonra
 `npx petek dev`: tətbiqin health ünvanını (`.petek/petek.yaml`-da `health_url`) gözləyir və paneli yanında açır. AI
@@ -154,11 +161,14 @@ git clone https://github.com/aslan564/Petek.git && cd Petek
 ./gradlew :app:run --args="doctor"                     # hədəf siyasəti, hədəf, Chromium, poçt qutusu, test API, AI
 ```
 
-Pətək yalnız sizin verdiyiniz saytı test edir. `.env` olmayanda `petek panel` bir sualı olan səhifə açır — hansı sayt
+Pətək yalnız sizin verdiyiniz saytı test edir. Heç bir konfiqurasiya olmayanda (burada `.env` yox, `--env-file` yox,
+mühitdə `PETEK_TARGET` yox və iş qovluğunuzda hələ heç nə yox) `petek panel` bir sualı olan səhifə açır — hansı sayt
 test olunsun — və cavab gələnə qədər başqa heç nə başlatmır: ünvan cavab verməlidir (işləməyən, bloklanan və ya yalnız
-CDN-in xəta səhifəsini göstərən sayt səbəbi ilə rədd edilir), sonra `.env.example`-dən `.env`-ə yazılır (test API
-tokeni, IMAP və ya Mailpit üçün bu faylı sonra redaktə edin) və panel həmin sayt üçün açılır. `cp .env.example .env`
-edib əl ilə doldurmaq da olar. `.env` olmayanda MCP serveri host AI-a sizdən soruşmağı deyir. Cavab verməyən sayt
+CDN-in xəta səhifəsini göstərən sayt səbəbi ilə rədd edilir), sonra `.env.example`-dən iş qovluğunuzun
+`$PETEK_HOME/workspace/.env` faylına yazılır (default `~/.petek/workspace/.env`; test API tokeni, IMAP və ya Mailpit
+üçün bu faylı sonra redaktə edin, quraşdırma ekranı onun yolunu göstərir) və panel həmin sayt üçün açılır. Layihənin
+öz `.env`-i (`cp .env.example .env` edib əl ilə doldurmaq) varsa, həmişə o işlənir. Heç bir konfiqurasiya olmayanda MCP
+serveri host AI-a sizdən soruşmağı deyir. Cavab verməyən sayt
 (işləmir, bloklanıb, ünvan səhvdir) heç bir tester başlamazdan əvvəl olduğu kimi bildirilir, başqa bir şeylə əvəz
 edilmir; heç bir ekran və ya nəticə uydurulmur. Pətəkin öz kontrakt saytı
 (`testing/fake-target`, e2e dəstinin əvəzedicisi) Pətəkin özünü inkişaf etdirmək üçündür və yalnız açıq
@@ -222,8 +232,11 @@ və səbəbi kodunuzda düzəlt.
 
 ## Konfiqurasiya
 
-Hər şey `.env`-dən (və ya `--env-file`) və mühitdən gəlir; real mühit dəyişənləri üstün gəlir. Sirlər `Secret` ilə
-gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET` məcburidir.
+Hər şey `.env`-dən (və ya `--env-file`) və mühitdən gəlir; real mühit dəyişənləri üstün gəlir. Fayl bu ardıcıllıqla
+axtarılır: `--env-file`; cari qovluqdakı `.env`; `PETEK_TARGET` verilibsə yalnız mühit (CI); yoxdursa sizin şəxsi iş
+qovluğunuz `$PETEK_HOME/workspace/.env` (`PETEK_HOME` default `~/.petek`). Onu panelin ilk sualı yazır; `evidence/`,
+`scenarios/` və `targets/` də onun yanında olur. Sirlər `Secret` ilə gəzir, loga və AI-a düşmür. Yalnız `PETEK_TARGET`
+məcburidir.
 
 | Açar | Default | Məna |
 |---|---|---|
@@ -304,6 +317,8 @@ ilə birinci dərəcəli rejim edir).
 ## Veb panel
 
 Arqumentsiz `petek` (və ya `petek panel`) yalnız loopback-ə bağlanan Ktor serveri qaldırır və brauzeri açır. Ekranlar:
+**Quraşdırma** (bir dəfə tamamlanana qədər ilk ekran: sayt cavab verirmi, kopyalama və "Yoxla" düyməli sahiblik
+sübutu, bir kliklə AI sınağı, bu kompüterin tutum tövsiyəsi ilə tester sayı),
 **Təlimat** (hədəf, sadə dildə təlimat, komanda, büdcə, "Kəşf et"), **Kəşfiyyat** (kəşfiyyatçı canlı: fazalar, sayt
 modeli, tapıntılar, cavablanacaq suallar), **Ssenarilər** (versiyalar, YAML, diff, təsdiq/dondurma, triaj),
 **Orkestrator** (addım zolaqları × agentlər matrisi, zaman xətti), **Agentlər** (screenshot-lu canlı lövhə),

@@ -50,6 +50,18 @@ internal fun Route.panelRoutes(backend: PanelBackend) {
     runRoutes(backend)
     manualCodeRoutes(backend)
     accountRoutes(backend)
+    readinessRoutes(backend)
+}
+
+/** The setup screen: what is configured, and the checks the page runs one by one (each contacts something). */
+private fun Route.readinessRoutes(backend: PanelBackend) {
+    get("/api/readiness") { call.answer { PanelJson.readiness(backend.readiness()) } }
+    post("/api/readiness/site") { call.answer { PanelJson.siteCheck(backend.checkSite()) } }
+    post("/api/readiness/ownership") {
+        val fresh = call.request.queryParameters["fresh"] == "true"
+        call.answer { PanelJson.ownership(backend.checkOwnership(fresh)) }
+    }
+    post("/api/readiness/ai") { call.answer { PanelJson.aiCheck(backend.testAi()) } }
 }
 
 private fun Route.accountRoutes(backend: PanelBackend) {

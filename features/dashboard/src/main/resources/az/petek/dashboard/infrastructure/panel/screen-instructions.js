@@ -31,6 +31,18 @@
   let visible = false;
   let form = load();
   let capacityTimer = null;
+
+  /** The tester count, shared with the setup screen: set there, it is the count here and in runs. */
+  P.testers = {
+    get: () => form.testers,
+    set: (n) => {
+      if (!(n >= 1 && n <= 999)) return;
+      if (ui) { setTesters(n); return; }
+      form.testers = n;
+      balance();
+      save();
+    },
+  };
   let scenarios = [];
 
   function load() {

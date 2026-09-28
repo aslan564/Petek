@@ -63,6 +63,7 @@ internal class PanelCore private constructor(
             workingDirectory: Path,
             capacityAdvice: RecommendCapacityUseCase,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
+            configurationFile: Path? = null,
         ): PanelCore {
             val dashboard = LiveDashboard(SystemHarnessClock())
             val tasks = DerivedTaskStates(dashboard)
@@ -89,6 +90,7 @@ internal class PanelCore private constructor(
                         board = dashboard,
                         derive = { other -> containers(other, overrides.copy(database = container.database)) },
                         roleSessions = roleSessions,
+                        configurationFile = configurationFile,
                     )
                 return PanelCore(dashboard, container, backend)
             } catch (e: Exception) {
@@ -133,8 +135,9 @@ internal class WebPanel private constructor(
             capacityAdvice: RecommendCapacityUseCase,
             port: Int,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
+            configurationFile: Path? = null,
         ): WebPanel {
-            val core = PanelCore.start(config, containers, workingDirectory, capacityAdvice, roleSessions)
+            val core = PanelCore.start(config, containers, workingDirectory, capacityAdvice, roleSessions, configurationFile)
             try {
                 val (server, url) = bind(core.dashboard, core.container, core.backend, port)
                 return WebPanel(core, server, url)

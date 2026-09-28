@@ -404,7 +404,8 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 19 | Xırda xəta kartları | Ümumi kataloq, mağaza, xəbər və vitrin naxışları | 1–2 həftə |
 | 20 | İki qatlı, üç rəfli hesabat | Müştəri üçün sadə qat, detal qatı, JUnit XML və SARIF | 1 həftə |
 | 21 | Tutum, dalğalar və ayrı IP | Böyük sürü dalğalarla; hər testerə ayrı IP seçimi | 1 həftə |
-| 22 | Demo hədəfləri | Ghost və WooCommerce sahibin serverində, real tapıntılar | sonra |
+| 22 | Demo hədəfləri | açıq mənbəli xəbər və mağaza platformaları sahibin serverində, real tapıntılar | sonra |
+| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı; sonra "Test et", AI seçimi, saytlar siyahısı | gedir |
 
 Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablanıb. Faza 8–14 "Pətək 2: universal alət" planıdır
 (aşağıda, Faza 7-dən sonra); köhnə Faza 8 ("Universal platforma") onun içində əridilib.
@@ -905,7 +906,7 @@ hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniyası dəyişməz nə
 | `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (Faza 8-də var), `imap`, `manual` (hədəf profili üstünlük alır) |
 | `PETEK_TEST_API_URL` | hədəf | `/test/...` API-nin ayrıca baza ünvanı (Faza 8-də var) |
 | `PETEK_TARGETS_DIR` | `targets` | hədəf profilləri qovluğu |
-| `PETEK_HOME` | repo kökü | dist rejimində iş qovluğu |
+| `PETEK_HOME` | `~/.petek` | Pətəkin bu kompüterdəki qovluğu: başladıcının versiyaları və sahibin şəxsi iş qovluğu `workspace/` (layihədə `.env` olmayanda konfiqurasiya, sübutlar, ssenarilər, profillər) |
 
 ### Qərar gözləyən suallar (Pətək 2)
 
@@ -1032,8 +1033,24 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 22 — Demo hədəfləri
 
-- [ ] Ghost (xəbər) və WooCommerce (mağaza) sahibin serverində; hər biri üçün kampaniya və qısa video. Fake target
-  yalnız e2e üçündür (qayda 12).
+- [ ] Açıq mənbəli bir xəbər platforması və bir mağaza platforması sahibin serverində; hər biri üçün kampaniya və qısa
+  video. Fake target yalnız e2e üçündür (qayda 12).
+
+### Faza 23 — Bir əmrlə başlanğıc (sahibin qərarı, 2026-09-28)
+
+Məqsəd: bir dəfə quraşdırılandan sonra sadəcə `petek`, sonra panelin quraşdırma ekranı. Heç bir işləyən axın dəyişmir:
+layihənin `.env`-i, `--env-file` və CI-ın mühit dəyişənləri əvvəlki kimi birinci gəlir.
+
+- [x] Arqumentsiz `petek` paneli açır (əvvəldən var idi).
+- [x] Sahibin şəxsi iş qovluğu: `$PETEK_HOME/workspace` (default `~/.petek`). Layihədə konfiqurasiya yoxdursa oradan
+  oxunur; panelin ilk sualı (hansı sayt) ora yazılır, sonra `petek` istənilən qovluqdan işləyir (`CliSession`).
+- [x] "Quraşdırma" ekranı (bir dəfə tamamlanana qədər ilk ekran): sayt cavab verirmi, sahiblik (təsdiq sətri,
+  "Kopyala", "Yoxla"), AI (bir kliklə sınaq, `doctor`-un sorğusu), tester sayı (tutum tövsiyəsi ilə, "Təlimat"-la
+  ortaq). `PanelReadiness` portu, `/api/readiness*`.
+- [ ] Bir düymə "Test et": kəşf et → ssenari → run, ssenarini baxıb düzəltmək istəyənlər üçün köhnə yol qalır.
+- [ ] AI-ı paneldən seçmək (yalnız göstərmək və sınamaq deyil).
+- [ ] Paneldə saytlar siyahısı: bir neçə sayt, hər biri öz ayarları ilə, panel yenidən başlamadan.
+- [ ] Quraşdırma kanalları: `brew` (macOS), `scoop` (Windows); npm paketinin dərci (`NPM_TOKEN`).
 
 ## Sübut bazası və hesabat
 
