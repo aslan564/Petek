@@ -115,6 +115,27 @@ data class WaitOutcome(
     val observedAt: HarnessTimestamp?,
 )
 
+/**
+ * What a page watching for a text saw ([BrowserSession.watchText]): a receiver starts watching before the change it
+ * waits for is written, so the moment the text appears is timed by the page itself instead of by whenever the
+ * receiver looks next (docs/adr/0006).
+ */
+sealed interface TextWatch {
+    /** The text appeared after the watch began; [at] is the harness time the page saw it. */
+    data class Seen(
+        val at: HarnessTimestamp,
+    ) : TextWatch
+
+    /** Watching; the text has not appeared yet. */
+    data object NotYet : TextWatch
+
+    /** The text was visible already when the watch began, so its appearance cannot be timed or told apart from it. */
+    data object WasThere : TextWatch
+
+    /** No watch: the page it lived in was replaced (a navigation, a reload), or the session cannot watch. */
+    data object Lost : TextWatch
+}
+
 data class HttpProbeResult(
     val status: Int,
     val body: String,
@@ -293,6 +314,24 @@ interface BrowserSession {
     ): WaitOutcome
 
     suspend fun isTextVisible(text: String): Boolean
+
+    /**
+     * Starts watching the current page for [text] (matched like [waitForText]) under [key], replacing an earlier watch
+     * with that key. Answers [TextWatch.WasThere] when the text is visible already (nothing to watch for), else
+     * [TextWatch.NotYet]; the page then times the text's first appearance on its own, without further calls, until
+     * [stopTextWatch]. A watch lives in the page: navigating away or reloading ends it. Sessions that cannot watch
+     * keep the default: [TextWatch.Lost].
+     */
+    suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch = TextWatch.Lost
+
+    /**
+     * Ends the watch [key] and says what it saw: [TextWatch.Seen] with the harness time the text appeared,
+     * [TextWatch.NotYet], [TextWatch.WasThere], or [TextWatch.Lost] when there is no such watch in the current page.
+     */
+    suspend fun stopTextWatch(key: String): TextWatch = TextWatch.Lost
 
     suspend fun isSelectorVisible(selector: String): Boolean
 

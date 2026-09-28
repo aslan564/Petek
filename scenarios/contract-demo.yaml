@@ -36,7 +36,8 @@ steps:
   - id: announce
     actor: admin
     do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
-    emits: announcement_created
+    # The form's post is when the announcement reached the site: the readers' latency is measured from its answer.
+    emits: {event: announcement_created, request: "POST /announcements"}
     assert:
       - oracle: {path: "/test/announcements/{last_id}", field: status, equals: published}
 

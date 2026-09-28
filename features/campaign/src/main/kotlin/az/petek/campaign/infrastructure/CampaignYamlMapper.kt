@@ -442,7 +442,21 @@ internal class CampaignYamlMapper(
             val event = fields.text("event", required = true)
             val idSource = fields["id_from"]?.let { idSource(it, fields.pathOf("id_from")) }
             if (fields.has("id_from") && idSource == null) return null
-            return event?.let { EmitSpec(it, idSource) }
+            val request = requestPattern(fields, "POST .*/announcements")
+            if (fields.declares("request") && request == null) return null
+            return event?.let { EmitSpec(it, idSource, request) }
+        }
+
+        /** `request: "<METHOD> <path regex>"` of [fields], or null (reported when it is given but malformed). */
+        private fun requestPattern(
+            fields: YamlFields,
+            example: String,
+        ): RequestPattern? {
+            val requestPath = fields.pathOf("request")
+            return fields.valued("request")?.let { reader.text(it, requestPath) }?.let { raw ->
+                RequestPattern.parse(raw)
+                    ?: reader.problem(requestPath, "'$requestPath' must be \"<METHOD> <path regex>\", e.g. \"$example\", was '$raw'")
+            }
         }
 
         private fun waitFor(
@@ -581,15 +595,7 @@ internal class CampaignYamlMapper(
             path: String,
         ): AssertionSpec? {
             val fields = reader.map(node, path, ONLY_ONE_SUCCEEDS_KEYS) ?: return null
-            val requestPath = fields.pathOf("request")
-            val request =
-                fields.valued("request")?.let { reader.text(it, requestPath) }?.let { raw ->
-                    RequestPattern.parse(raw)
-                        ?: reader.problem(
-                            requestPath,
-                            "'$requestPath' must be \"<METHOD> <path regex>\", e.g. \"POST .+/approve\", was '$raw'",
-                        )
-                }
+            val request = requestPattern(fields, "POST .+/approve")
             val oracle =
                 fields.valued("oracle")?.let { reader.map(it, fields.pathOf("oracle"), RACE_ORACLE_KEYS) }?.let { oracle ->
                     oracle.text("path", required = true)?.let { OracleCondition(it, oracle.text("field"), oracle.text("equals")) }
@@ -631,7 +637,7 @@ internal class CampaignYamlMapper(
         val DOM_ID_KEYS = linkedSetOf("selector", "attribute")
         val STEP_KEYS = linkedSetOf("id", "actor", "do", "run", "emits", "wait_for", "parallel", "on_fail", "assert")
         val RUN_KEYS = linkedSetOf("function", "args")
-        val EMITS_KEYS = linkedSetOf("event", "id_from")
+        val EMITS_KEYS = linkedSetOf("event", "id_from", "request")
         val WAIT_FOR_KEYS = linkedSetOf("event", "timeout_s")
         val ASSERTION_TYPES =
             listOf("visible_text", "not_visible", "oracle", "http_status", "count", "latency_max", "only_one_succeeds")

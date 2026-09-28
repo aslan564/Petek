@@ -12,12 +12,14 @@
 package az.petek.verification.domain
 
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.WaitOutcome
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.OracleCondition
 import az.petek.campaign.domain.TemplateException
 import az.petek.campaign.domain.TemplateRenderer
 import az.petek.core.time.HarnessClock
+import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.Verdict
 import az.petek.oracle.domain.JsonFieldSelector
@@ -40,9 +42,16 @@ import kotlin.time.Duration.Companion.milliseconds
  *   use; `expected` shows the rendered values. In `oracle` and `http_status` paths the substituted values are
  *   percent-encoded and the result must be a plain path on the target ([TargetPath]); anything else is FAILED
  *   without sending a request.
- * - `visible_text` measured against t0 waits only for what is left of `t0 + within`. When less than
- *   [MIN_WAIT] is left it checks once without waiting (a zero browser timeout would mean "wait forever") and
- *   reports the latency as an upper bound.
+ * - `visible_text` measured against t0 ([AssertionInput.eventTime]: the write when the emitter's page showed it) uses
+ *   the receiver's watch when there is one for the same text ([AssertionInput.watch], Faza 24.10): a text it saw appear
+ *   is timed then, one the page showed before the change was written proves nothing and fails as `stale_text`.
+ *   Otherwise it waits only for what is left of `t0 + within`; without a watch it checks the page first, and a text
+ *   visible at once gives only an upper bound. When less than [MIN_WAIT] is left it checks once without waiting (a
+ *   zero browser timeout would mean "wait forever"). A text seen, but only after `t0 + within` for certain, fails.
+ * - `latency_max` compares the range the delay lies in, not only the measured value: it passes when even the longest
+ *   possible delay is within the limit and fails when even the shortest exceeds it; when only a bound is known (the
+ *   text was there at the first look, the write was not seen) and the limit lies inside the range, it fails with a
+ *   note saying the limit cannot be confirmed.
  * - Sources follow the three-source model: screen checks are RECEIVER, oracle and the target's own HTTP answers
  *   are ORACLE, `latency_max` is HARNESS and `only_one_succeeds` is SENDER.
  * - `only_one_succeeds` trusts only [ActorResult.succeeded] (derived by the caller from each actor's own requests,
@@ -150,45 +159,158 @@ class DefaultAssertionEvaluator(
 
     // --- visible_text / latency_max -------------------------------------------------------------------------------
 
-    /** A `visible_text` result plus whether its latency is only an upper bound (window elapsed before the check). */
+    /** A `visible_text` result plus, when it measured a latency, the range the real delivery latency lies in. */
     private class VisibleTextCheck(
         val result: AssertionResult,
-        val latencyIsUpperBound: Boolean,
+        val range: LatencyRange? = null,
+    )
+
+    /**
+     * Where the real latency lies: [low] <= real <= [high], [measured] (from t0) in between. The range is a point when
+     * both ends are known: the write (the emitter's request) and the moment the text appeared (a watch, or a wait that
+     * saw it appear). [upperBoundBecause] and [lowerBoundBecause] say why an end is open.
+     */
+    private class LatencyRange(
+        val measured: Duration,
+        val low: Duration,
+        val high: Duration,
+        val upperBoundBecause: String?,
+        val lowerBoundBecause: String?,
+    )
+
+    /** When the text was found ([at]); [appeared] is false when it was visible already at the first look. */
+    private class Sighting(
+        val at: HarnessTimestamp,
+        val appeared: Boolean,
     )
 
     private suspend fun visibleText(
         spec: AssertionSpec.VisibleText,
         input: AssertionInput,
     ): VisibleTextCheck {
-        var upperBound = false
+        var range: LatencyRange? = null
         val result =
             guarded(spec, input) {
                 val rendered = spec.rendered(input)
                 val session = input.session ?: return@guarded noSession(spec, rendered)
-                val t0 = input.eventEmittedAt
-                val remaining =
-                    if (t0 == null) spec.within else (spec.within - t0.elapsedUntil(clock.now())).coerceAtMost(spec.within)
-                val waited = remaining >= MIN_WAIT
-                val outcome = if (waited) session.waitForText(rendered.text, remaining) else checkNow(session, rendered.text)
-                val latency =
-                    if (t0 != null && outcome.found) {
-                        t0.elapsedUntil(outcome.observedAt ?: clock.now()).coerceAtLeast(Duration.ZERO)
-                    } else {
-                        null
-                    }
-                upperBound = !waited && latency != null
+                val time = input.eventTime ?: return@guarded untimed(spec, rendered, session)
+                val reading = input.watch?.takeIf { it.text == rendered.text }?.reading
+                if (reading == TextWatch.WasThere) return@guarded seenBeforeTheWrite(spec, rendered, time)
+                val remaining = (spec.within - time.t0.elapsedUntil(clock.now())).coerceAtMost(spec.within)
+                val sighting =
+                    sight(session, rendered.text, remaining, reading)
+                        ?: return@guarded notSeen(spec, rendered, noWaitNote(false, remaining, spec.within, measuredFromT0 = true))
+                val measured = latencyRange(time, sighting).also { range = it }
+                val late = measured.low > spec.within
                 AssertionResult(
                     spec = spec,
-                    verdict = if (outcome.found) Verdict.PASSED else Verdict.FAILED,
+                    verdict = if (late) Verdict.FAILED else Verdict.PASSED,
                     source = EvidenceSource.RECEIVER,
                     expected = AssertionText.describe(rendered),
-                    observed = visibleTextObserved(outcome.found, latency, spec.within),
-                    latency = latency,
-                    note = if (waited) null else noWaitNote(outcome.found, remaining, spec.within, measuredFromT0 = t0 != null),
+                    observed = visibleTextObserved(true, measured.measured, spec.within),
+                    latency = measured.measured,
+                    note = sightingNote(time, sighting, measured, remaining, spec.within, late),
                 )
             }
-        return VisibleTextCheck(result, upperBound)
+        return VisibleTextCheck(result, range.takeIf { result.verdict == Verdict.PASSED })
     }
+
+    /**
+     * Finds the text for a receiver whose event has a time: a watch that saw it appear gives that moment; a watch still
+     * waiting, or none, waits for what is left of the window (a text that shows up meanwhile is timed as it appears).
+     * Without a watch the page is checked first: a text visible at once was there before anyone looked, so that
+     * moment is only an upper bound. Null when the text was not seen.
+     */
+    private suspend fun sight(
+        session: BrowserSession,
+        text: String,
+        remaining: Duration,
+        reading: TextWatch?,
+    ): Sighting? {
+        when (reading) {
+            is TextWatch.Seen -> return Sighting(reading.at, appeared = true)
+            TextWatch.NotYet -> Unit
+            else -> if (session.isTextVisible(text)) return Sighting(clock.now(), appeared = false)
+        }
+        if (remaining < MIN_WAIT) {
+            // The watch saw nothing a moment ago: a text there now appeared since. Without a watch it was checked above.
+            return if (reading == TextWatch.NotYet) checkNow(session, text).observedAt?.let { Sighting(it, appeared = true) } else null
+        }
+        val outcome = session.waitForText(text, remaining)
+        return if (outcome.found) Sighting(outcome.observedAt ?: clock.now(), appeared = true) else null
+    }
+
+    private fun latencyRange(
+        time: EventTime,
+        sighting: Sighting,
+    ): LatencyRange {
+        val measured = time.t0.elapsedUntil(sighting.at).coerceAtLeast(Duration.ZERO)
+        val high = time.earliest.elapsedUntil(sighting.at).coerceAtLeast(Duration.ZERO)
+        val low = if (sighting.appeared) time.latest.elapsedUntil(sighting.at).coerceAtLeast(Duration.ZERO) else Duration.ZERO
+        val upper =
+            listOfNotNull(
+                "the text was visible already when first checked".takeUnless { sighting.appeared },
+                "t0 is ${time.source}".takeIf { !time.exact && time.t0 == time.earliest },
+            ).joinToString(" and ").ifEmpty { null }
+        val lower = "t0 is ${time.source}".takeIf { !time.exact && time.t0 != time.earliest }
+        return LatencyRange(measured, low.coerceAtMost(measured), high.coerceAtLeast(measured), upper, lower)
+    }
+
+    /** A `visible_text` without an event time (no `wait_for`): it only has to be seen within its window. */
+    private suspend fun untimed(
+        spec: AssertionSpec.VisibleText,
+        rendered: AssertionSpec.VisibleText,
+        session: BrowserSession,
+    ): AssertionResult {
+        val waited = spec.within >= MIN_WAIT
+        val outcome = if (waited) session.waitForText(rendered.text, spec.within) else checkNow(session, rendered.text)
+        return AssertionResult(
+            spec = spec,
+            verdict = if (outcome.found) Verdict.PASSED else Verdict.FAILED,
+            source = EvidenceSource.RECEIVER,
+            expected = AssertionText.describe(rendered),
+            observed = visibleTextObserved(outcome.found, null, spec.within),
+            latency = null,
+            note = if (waited) null else noWaitNote(outcome.found, spec.within, spec.within, measuredFromT0 = false),
+        )
+    }
+
+    private fun notSeen(
+        spec: AssertionSpec.VisibleText,
+        rendered: AssertionSpec.VisibleText,
+        note: String?,
+    ): AssertionResult =
+        AssertionResult(
+            spec = spec,
+            verdict = Verdict.FAILED,
+            source = EvidenceSource.RECEIVER,
+            expected = AssertionText.describe(rendered),
+            observed = visibleTextObserved(false, null, spec.within),
+            latency = null,
+            note = note,
+        )
+
+    /**
+     * The receiver's page showed the text before the change was written: whatever it shows now cannot be told apart
+     * from that earlier text (the same text published again in a later wave, the account swap, or text the page always
+     * shows), so it proves no delivery and measures no latency.
+     */
+    private fun seenBeforeTheWrite(
+        spec: AssertionSpec.VisibleText,
+        rendered: AssertionSpec.VisibleText,
+        time: EventTime,
+    ): AssertionResult =
+        AssertionResult(
+            spec = spec,
+            verdict = Verdict.FAILED,
+            source = EvidenceSource.RECEIVER,
+            expected = AssertionText.describe(rendered),
+            observed = "visible before the change was written",
+            latency = null,
+            note =
+                "$STALE_TEXT: the receiver's page showed ${AssertionText.quote(rendered.text)} already when the emitting step " +
+                    "began, before ${time.source}, so seeing it proves no delivery; use a text only this change shows",
+        )
 
     /** Zero-wait check: some browser APIs treat a zero timeout as "wait forever", so it is never passed down. */
     private suspend fun checkNow(
@@ -207,6 +329,31 @@ class DefaultAssertionEvaluator(
             else -> "seen"
         }
 
+    /** What the evidence should know about a sighting that is not plainly "appeared X ms after the write". */
+    private fun sightingNote(
+        time: EventTime,
+        sighting: Sighting,
+        range: LatencyRange,
+        remaining: Duration,
+        within: Duration,
+        late: Boolean,
+    ): String? =
+        listOfNotNull(
+            if (!sighting.appeared && remaining < MIN_WAIT) {
+                noWaitNote(true, remaining, within, measuredFromT0 = true)
+            } else {
+                range.upperBoundBecause?.let { "latency is an upper bound: $it" }
+            },
+            range.lowerBoundBecause?.let {
+                "the delay may be up to ${AssertionText.ms(range.high)} ($it, and the change was written after the action began)"
+            },
+            time.t0
+                .elapsedUntil(sighting.at)
+                .takeIf { it.isNegative() }
+                ?.let { "the text appeared ${AssertionText.ms(-it)} before t0, counted as 0 ms" },
+            "seen only after the ${AssertionText.ms(within)} window".takeIf { late },
+        ).joinToString("; ").ifEmpty { null }
+
     private fun noWaitNote(
         found: Boolean,
         remaining: Duration,
@@ -223,12 +370,17 @@ class DefaultAssertionEvaluator(
         return if (found) "$late; latency is an upper bound" else late
     }
 
+    /**
+     * `latency_max` over the latency of the preceding `visible_text`: PASSED when even the longest the delivery can
+     * have taken is within [AssertionSpec.LatencyMax.max], FAILED when even the shortest exceeds it, and FAILED with a
+     * note saying so when the measurement cannot tell (only a bound of the delay is known).
+     */
     private fun latencyMax(
         spec: AssertionSpec.LatencyMax,
         measured: VisibleTextCheck?,
     ): AssertionResult {
-        val latency = measured?.result?.latency
-        if (latency == null) {
+        val range = measured?.range
+        if (range == null) {
             val reason =
                 when {
                     measured == null -> "no preceding visible_text"
@@ -237,28 +389,28 @@ class DefaultAssertionEvaluator(
                 }
             return result(spec, Verdict.FAILED, observed = null, note = "no latency measured: $reason")
         }
-        val withinLimit = latency <= spec.max
-        val note =
+        val max = AssertionText.ms(spec.max)
+        val latency = AssertionText.ms(range.measured)
+        val (verdict, note) =
             when {
-                withinLimit -> {
-                    null
+                range.high <= spec.max -> {
+                    Verdict.PASSED to null
                 }
 
-                measured.latencyIsUpperBound -> {
-                    "${AssertionText.ms(latency)} exceeds ${AssertionText.ms(spec.max)}, but it is only an upper bound " +
-                        "(the text was checked after its window had elapsed)"
+                range.low > spec.max -> {
+                    Verdict.FAILED to "$latency exceeds $max"
+                }
+
+                range.measured > spec.max -> {
+                    Verdict.FAILED to "$latency exceeds $max, but it is only an upper bound (${range.upperBoundBecause ?: UNBOUNDED})"
                 }
 
                 else -> {
-                    "${AssertionText.ms(latency)} exceeds ${AssertionText.ms(spec.max)}"
+                    Verdict.FAILED to "$latency is within $max, but the delay may be up to ${AssertionText.ms(range.high)} " +
+                        "(${range.lowerBoundBecause ?: UNBOUNDED}), so the limit cannot be confirmed"
                 }
             }
-        return result(
-            spec,
-            if (withinLimit) Verdict.PASSED else Verdict.FAILED,
-            observed = AssertionText.ms(latency),
-            note = note,
-        )
+        return result(spec, verdict, observed = latency, note = note)
     }
 
     // --- other screen checks ----------------------------------------------------------------------------------------
@@ -487,6 +639,15 @@ class DefaultAssertionEvaluator(
         }
 
     private companion object {
+        /**
+         * Leads the note of a `visible_text` whose receiver saw the text before the change was written (Faza 24.10): the
+         * check proves nothing about this delivery.
+         */
+        const val STALE_TEXT = "stale_text"
+
+        /** Why a latency is only a bound, when no reason was recorded. */
+        const val UNBOUNDED = "only a bound of the delay is known"
+
         /** The note of an oracle check on a target without a test API (Faza 10). */
         const val NO_ORACLE = "N/A (no oracle)"
 

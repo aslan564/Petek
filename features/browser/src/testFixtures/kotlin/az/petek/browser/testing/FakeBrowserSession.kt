@@ -21,6 +21,7 @@ import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
@@ -37,6 +38,9 @@ import kotlin.time.Duration
  * Dialogs: [openDialog] queues one for [drainDialogs]; [onAction] lets a dialog appear as the effect of an action.
  * Requests: [observedMutations] is what [mutations] reads (filtered by time); [mutated] adds one at the clock's now.
  * Reading mutations is not an action and is not listed in [actions].
+ * Text watches: [showText] makes a text visible at the clock's now; a watch started before sees it at that time, one
+ * started while the text is visible already answers [TextWatch.WasThere]; [navigate] ends every watch like a new page
+ * does; [canWatch] false plays a session that cannot watch. Watching is not an action either; [watched] lists the watches.
  */
 class FakeBrowserSession(
     override val label: String = "fake",
@@ -72,6 +76,8 @@ class FakeBrowserSession(
     override suspend fun navigate(pathOrUrl: String) {
         record("navigate $pathOrUrl")
         url = pathOrUrl
+        // A new page: the watches of the old one are gone with it.
+        watches.clear()
     }
 
     override suspend fun snapshot(): PageSnapshot = snapshotProvider()
@@ -119,6 +125,55 @@ class FakeBrowserSession(
     ): WaitOutcome = WaitOutcome(selector in visibleSelectors, if (selector in visibleSelectors) clock?.now() else null)
 
     override suspend fun isTextVisible(text: String): Boolean = text in visibleTexts
+
+    /** When each text became visible through [showText]. */
+    val shownAt = ConcurrentHashMap<String, HarnessTimestamp>()
+
+    /** Every watch started, as `key` to `text`, in order. */
+    val watched = CopyOnWriteArrayList<Pair<String, String>>()
+
+    /** False plays a session that cannot watch the page: every watch is [TextWatch.Lost]. */
+    @Volatile
+    var canWatch: Boolean = true
+
+    private class Watch(
+        val text: String,
+        val armedAt: HarnessTimestamp,
+        val before: Boolean,
+    )
+
+    private val watches = ConcurrentHashMap<String, Watch>()
+
+    /** The keys of the watches running now: started, not stopped, the page not left. */
+    val activeWatches: Set<String> get() = watches.keys.toSet()
+
+    /** The page shows [text] from now on (the clock's now), as a live update would. */
+    fun showText(text: String) {
+        shownAt[text] = now()
+        visibleTexts += text
+    }
+
+    override suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch {
+        if (!canWatch) return TextWatch.Lost
+        watched += key to text
+        val before = text in visibleTexts
+        watches[key] = Watch(text, now(), before)
+        return if (before) TextWatch.WasThere else TextWatch.NotYet
+    }
+
+    override suspend fun stopTextWatch(key: String): TextWatch {
+        val watch = watches.remove(key) ?: return TextWatch.Lost
+        return when {
+            watch.before -> TextWatch.WasThere
+            watch.text !in visibleTexts -> TextWatch.NotYet
+            else -> TextWatch.Seen(shownAt[watch.text]?.takeIf { it.monotonicNanos >= watch.armedAt.monotonicNanos } ?: now())
+        }
+    }
+
+    private fun now(): HarnessTimestamp = clock?.now() ?: HarnessTimestamp(Instant.EPOCH, 0)
 
     override suspend fun isSelectorVisible(selector: String): Boolean = selector in visibleSelectors
 

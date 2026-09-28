@@ -110,6 +110,8 @@ internal class TestSite : AutoCloseable {
                 }
                 get("/csp.js") { call.respondText(CSP_SCRIPT, ContentType.Text.JavaScript) }
                 get("/shadow") { call.respondText(SHADOW_PAGE, ContentType.Text.Html) }
+                get("/reveal") { call.respondText(REVEAL_PAGE, ContentType.Text.Html) }
+                get("/late-shadow") { call.respondText(LATE_SHADOW_PAGE, ContentType.Text.Html) }
                 get("/dialogs") { call.respondText(DIALOG_PAGE, ContentType.Text.Html) }
                 get("/ticket") { call.respondText(ticketPage(call.request.queryParameters["id"].orEmpty()), ContentType.Text.Html) }
                 post("/tickets/{id}/approve") {
@@ -441,6 +443,42 @@ internal class TestSite : AutoCloseable {
                   setTimeout(function () {
                     root.innerHTML = '<style>div { color: teal }</style><div class="toast">' + message + '</div><button>Bağla</button>';
                   }, 300);
+                }
+              });
+            </script>
+            </body></html>
+            """.trimIndent()
+
+        /** A text that is in the page from the start, hidden, and shown after one second by a style change. */
+        val REVEAL_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Gizli</title></head><body>
+            <p id="late" style="display:none">Gizli elan</p>
+            <script>
+              setTimeout(function () {
+                var late = document.getElementById('late');
+                late.style.display = 'block';
+                late.dataset.shownAt = String(performance.timeOrigin + performance.now());
+              }, 1000);
+            </script>
+            </body></html>
+            """.trimIndent()
+
+        /** A shadow root that shows its text after one second: no change in the document itself announces it. */
+        val LATE_SHADOW_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Gec kölgə</title></head><body>
+            <petek-late id="host"></petek-late>
+            <script>
+              customElements.define('petek-late', class extends HTMLElement {
+                connectedCallback() {
+                  const root = this.attachShadow({ mode: 'open' });
+                  setTimeout(function () {
+                    const shownAt = String(performance.timeOrigin + performance.now());
+                    root.innerHTML = '<div>Kölgədən gələn elan</div><i id="stamp" data-shown-at="' + shownAt + '"></i>';
+                  }, 1000);
                 }
               });
             </script>

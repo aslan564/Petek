@@ -787,6 +787,20 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `the request an event is written by follows the form of a race request`() {
+            val written = { request: RequestPattern ->
+                step("announce", emits = "announcement_created").let { it.copy(emits = it.emits!!.copy(request = request)) }
+            }
+
+            issues(campaign(written(RequestPattern("POST", "/api/announcements")))).shouldBeEmpty()
+            issues(campaign(written(RequestPattern(null, "/api/.*")))).shouldBeEmpty()
+            val read = issue(campaign(written(RequestPattern("GET", "/api/announcements"))), "request method 'GET'")
+            read.message shouldContain "step 'announce', emits"
+            read.message shouldContain "only requests that change something mark when the change reached the target"
+            issue(campaign(written(RequestPattern("POST", "/api/(unclosed"))), "is not a valid regular expression")
+        }
+
+        @Test
         fun `an id source of a step may only use events from earlier steps`() {
             val oracle = IdSource.OracleField("/test/tickets/{event.ticket_created.id}", "id")
             issue(campaign(step("t", emits = "ticket_created", idSource = oracle)), "emits.id_from: {event.ticket_created.id}")

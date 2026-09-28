@@ -21,6 +21,7 @@ import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.SessionOptions
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
@@ -52,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Consumer
 import kotlin.io.path.exists
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 
 private val logger = KotlinLogging.logger {}
 
@@ -73,6 +75,10 @@ private val logger = KotlinLogging.logger {}
  *   Text matching follows `getByText`: case-insensitive, whitespace-normalized substring of the rendered text,
  *   open shadow roots included.
  *   Selectors that are plain CSS are probed the same way; Playwright-only syntax (`text=…`) uses a locator wait.
+ * - [watchText] leaves a watch in the page (`text-watch.js`): the same text match, run on every DOM change (at most every
+ *   [WATCH_GAP_MS] ms) and every [PROBE_POLLING_INTERVAL_MS] ms, timed with the page's monotonic clock. [stopTextWatch]
+ *   turns that time into harness time from the middle of the round trip that started the watch, so t1 is off by at
+ *   most half that round trip plus one check. A navigation or reload ends the watch with the document it lived in.
  * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
  * - JavaScript dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are accepted as they open and kept until
@@ -100,6 +106,9 @@ internal class PlaywrightBrowserSession private constructor(
 
     /** Text this session typed into secret fields; masked in everything read back later. Session thread only. */
     private val typedSecrets = LinkedHashSet<String>()
+
+    /** Where each running text watch began, to turn the page's times into harness times. Session thread only. */
+    private val watchOrigins = HashMap<String, WatchOrigin>()
 
     /** The saved state's sessionStorage not put back yet, by origin ([SessionStorageState]). Session thread only. */
     private val pendingSessionStorage: MutableMap<String, List<List<String>>> by lazy(LazyThreadSafetyMode.NONE) {
@@ -233,6 +242,39 @@ internal class PlaywrightBrowserSession private constructor(
         }
 
     override suspend fun isTextVisible(text: String): Boolean = perform("check text \"$text\"") { probe(mapOf("text" to text)) }
+
+    override suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch =
+        perform("watch for text \"$text\"") {
+            val arguments =
+                mapOf(
+                    "key" to key,
+                    "text" to text,
+                    "gapMs" to WATCH_GAP_MS,
+                    "pollMs" to PROBE_POLLING_INTERVAL_MS,
+                    "maxMs" to WATCH_MAX_MS,
+                )
+            val before = clock.now()
+            val armed = surviveNavigation { page.evaluate(BundledScripts.textWatch, arguments) } as? Map<*, *>
+            val after = clock.now()
+            val armedAt = (armed?.get("armedAt") as? Number)?.toDouble() ?: return@perform TextWatch.Lost
+            // The page took its time somewhere inside this round trip: its middle is the harness time closest to it.
+            watchOrigins[key] = WatchOrigin(armedAt, before + before.elapsedUntil(after) / 2)
+            if (armed["before"] == true) TextWatch.WasThere else TextWatch.NotYet
+        }
+
+    override suspend fun stopTextWatch(key: String): TextWatch =
+        perform("read the text watch") {
+            val origin = watchOrigins.remove(key)
+            val state = surviveNavigation { page.evaluate(BundledScripts.textWatchRead, mapOf("key" to key)) } as? Map<*, *>
+            when {
+                origin == null || state == null -> TextWatch.Lost
+                state["before"] == true -> TextWatch.WasThere
+                else -> (state["seenAt"] as? Number)?.let { TextWatch.Seen(origin.harnessTime(it.toDouble())) } ?: TextWatch.NotYet
+            }
+        }
 
     override suspend fun isSelectorVisible(selector: String): Boolean =
         perform("check $selector") { page.locator(selector).filter(visibleOnly()).count() > 0 }
@@ -570,6 +612,15 @@ internal class PlaywrightBrowserSession private constructor(
 
     private fun secretValues(): List<String> = (page.evaluate(BundledScripts.secretValues) as? List<*>).orEmpty().filterIsInstance<String>()
 
+    /** A text watch's start: the page's `performance.now()` then ([pageMillis]) and the harness time it matches. */
+    private class WatchOrigin(
+        val pageMillis: Double,
+        val harness: HarnessTimestamp,
+    ) {
+        /** The harness time of a later page time of the same document (both clocks are monotonic). */
+        fun harnessTime(pageTime: Double): HarnessTimestamp = harness + ((pageTime - pageMillis) * NANOS_PER_MILLI).toLong().nanoseconds
+    }
+
     companion object {
         /** Joins a request in the target's own logs to Pətək's evidence (Faza 14). */
         const val CORRELATION_HEADER = "X-Petek-Correlation-Id"
@@ -579,6 +630,13 @@ internal class PlaywrightBrowserSession private constructor(
 
         /** How often a wait re-checks the page: the resolution of every measured latency (t1). */
         const val PROBE_POLLING_INTERVAL_MS = 50.0
+
+        /** A text watch checks at most this often after DOM changes, so a busy page cannot keep it probing. */
+        private const val WATCH_GAP_MS = 20.0
+
+        /** A text watch nobody reads stops itself after this long (30 minutes) instead of probing forever. */
+        private const val WATCH_MAX_MS = 1_800_000.0
+        private const val NANOS_PER_MILLI = 1_000_000.0
 
         private const val LINKS_SCRIPT =
             "() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href'))" +

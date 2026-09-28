@@ -12,6 +12,7 @@
 package az.petek.verification.domain
 
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.TextWatch
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.TemplateContext
 import az.petek.core.ids.AgentId
@@ -31,8 +32,39 @@ data class AssertionInput(
     /** The actor's own browser session (receiver view "B"). */
     val session: BrowserSession?,
     val templates: TemplateContext,
-    /** Harness time the awaited event was emitted (t0); visible_text latency is measured from here. */
-    val eventEmittedAt: HarnessTimestamp?,
+    /** When the awaited event's change reached the target (t0); `visible_text` latency is measured from here. */
+    val eventTime: EventTime?,
+    /** What the receiver's page saw while it watched for a `visible_text` before the change was written (Faza 24.10). */
+    val watch: WatchedText? = null,
+)
+
+/**
+ * When the change a receiver waits for reached the target (docs/adr/0006). The latency t1 − t0 is measured from [t0];
+ * the write itself happened between [earliest] and [latest], one instant when the emitter's page showed the request
+ * that made it. [source] says what t0 is, for the evidence.
+ */
+data class EventTime(
+    val t0: HarnessTimestamp,
+    val earliest: HarnessTimestamp,
+    val latest: HarnessTimestamp,
+    val source: String,
+) {
+    /** The write's moment is known, not only a window around it. */
+    val exact: Boolean get() = earliest.monotonicNanos == latest.monotonicNanos
+
+    companion object {
+        /** A change whose write time is known exactly. */
+        fun at(
+            t0: HarnessTimestamp,
+            source: String = "the event",
+        ): EventTime = EventTime(t0, t0, t0, source)
+    }
+}
+
+/** A receiver's watch for [text] (rendered as it was when the watch began) and what it saw by the time it was read. */
+data class WatchedText(
+    val text: String,
+    val reading: TextWatch,
 )
 
 /** Result of one typed check. Evaluated by code only (AGENTS.md rule 2). */

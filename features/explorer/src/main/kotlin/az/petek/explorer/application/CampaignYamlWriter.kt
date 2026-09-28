@@ -113,11 +113,13 @@ internal object CampaignYamlWriter {
                 StepAction.None -> Unit
             }
             step.emits?.let { emits ->
-                val source = emits.idSource
-                out.add(
-                    "    emits: " +
-                        if (source == null) quote(emits.event) else "{event: ${quote(emits.event)}, id_from: ${idSource(source)}}",
-                )
+                val long =
+                    listOfNotNull(
+                        emits.idSource?.let { "id_from: ${idSource(it)}" },
+                        emits.request?.let { "request: ${quote(it.describe())}" },
+                    )
+                val event = quote(emits.event)
+                out.add("    emits: " + if (long.isEmpty()) event else "{event: $event, ${long.joinToString(", ")}}")
             }
             step.waitFor?.let { out.add("    wait_for: {event: ${quote(it.event)}, timeout_s: ${seconds(it.timeout)}}") }
             if (step.parallel) out.add("    parallel: true")

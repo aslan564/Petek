@@ -116,7 +116,7 @@ class ContractDemoCampaignFileTest {
     @Test
     fun `the announcement flow emits, waits and asserts`() {
         val announce = step("announce")
-        announce.emits shouldBe EmitSpec("announcement_created", null)
+        announce.emits shouldBe EmitSpec("announcement_created", null, RequestPattern("POST", "/announcements"))
         announce.assertions shouldContainExactly
             listOf(AssertionSpec.Oracle("/test/announcements/{last_id}", "status", "published", null))
 

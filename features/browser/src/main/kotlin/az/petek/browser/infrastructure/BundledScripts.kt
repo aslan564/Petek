@@ -34,6 +34,15 @@ internal object BundledScripts {
     /** Page predicate: is a text (`{text}`) or a CSS selector match (`{selector}`) visible? Polled in the page. */
     val visibilityProbe: String = load("visibility-probe.js")
 
+    /**
+     * Page function starting a text watch (`{key, text, gapMs, pollMs, maxMs}` -> `{before, armedAt}`); it matches text
+     * with [visibilityProbe], embedded into it here. See [PlaywrightBrowserSession.watchText].
+     */
+    val textWatch: String = load("text-watch.js").replace(PROBE_PLACEHOLDER, withoutLeadingComments(visibilityProbe))
+
+    /** Page function ending a text watch (`{key}` -> `{before, armedAt, seenAt}` or null). */
+    val textWatchRead: String = load("text-watch-read.js")
+
     /** Page function telling whether a selector is plain CSS (as opposed to Playwright-only syntax). */
     val isCssSelector: String = load("is-css-selector.js")
 
@@ -45,4 +54,20 @@ internal object BundledScripts {
 
     private fun load(name: String): String =
         requireNotNull(BundledScripts::class.java.getResource(name)) { "missing bundled script $name" }.readText()
+
+    /** Where text-watch.js takes the visibility probe. */
+    private const val PROBE_PLACEHOLDER = "__VISIBILITY_PROBE__"
+
+    /** [script] from its first code on: without the license header and the description, to embed it in another script. */
+    private fun withoutLeadingComments(script: String): String {
+        var rest = script.trimStart()
+        while (true) {
+            rest =
+                when {
+                    rest.startsWith("/*") -> rest.substringAfter("*/").trimStart()
+                    rest.startsWith("//") -> rest.substringAfter('\n', "").trimStart()
+                    else -> return rest.trimEnd()
+                }
+        }
+    }
 }

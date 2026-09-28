@@ -227,10 +227,16 @@ sealed interface StepAction {
     data object None : StepAction
 }
 
-/** `emits: announcement_created` or the long form with an explicit id source. */
+/**
+ * `emits: announcement_created`, or the long form with an explicit id source and the request that makes the change
+ * (`request: "POST /api/announcements"`). The request's answer, as the emitter's own page saw it, is when the change reached
+ * the target: its receivers' delivery latency is measured from there (Faza 24.10). Without it the action's first
+ * accepted mutating request counts, as an upper bound when it sent several.
+ */
 data class EmitSpec(
     val event: String,
     val idSource: IdSource?,
+    val request: RequestPattern? = null,
 )
 
 /** Where the harness reads the id of the object a step created (so the LLM is not the source of truth). */

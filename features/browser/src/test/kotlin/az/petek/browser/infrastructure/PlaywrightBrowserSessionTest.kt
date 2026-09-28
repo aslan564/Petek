@@ -19,9 +19,11 @@ import az.petek.browser.domain.BrowserTopology
 import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.browser.domain.SessionOptions
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.core.time.SystemHarnessClock
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
@@ -36,6 +38,7 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -442,6 +445,57 @@ class PlaywrightBrowserSessionTest {
             val snapshot = session.snapshot()
             snapshot.elements.map { it.name } shouldContainExactly listOf("Bağla")
             snapshot.visibleText shouldBe "Adi mətn\nKölgədə bildiriş\nBağla"
+        }
+
+    @Test
+    fun `a text watch times the moment the text appears without being asked`() =
+        withSession { session ->
+            for ((path, text, stamp) in LATE_TEXTS) {
+                session.navigate(path)
+                session.watchText("late", text) shouldBe TextWatch.NotYet
+
+                delay(1_500.milliseconds)
+                val seen = session.stopTextWatch("late").shouldBeInstanceOf<TextWatch.Seen>()
+
+                // The page stamped the moment it showed the text; the watch saw it within one check or so, without a call.
+                val shownAtEpochMillis = session.readAttribute(stamp, "data-shown-at").shouldNotBeNull().toDouble()
+                val lagMillis = seen.at.wall.toEpochMilli() - shownAtEpochMillis
+                withClue(path) {
+                    lagMillis shouldBeGreaterThanOrEqualTo -30.0
+                    lagMillis shouldBeLessThan 150.0
+                }
+            }
+        }
+
+    @Test
+    fun `a text that is visible when the watch starts was there already`() =
+        withSession { session ->
+            session.navigate("/form")
+
+            session.watchText("old", "Qeydiyyat") shouldBe TextWatch.WasThere
+            session.stopTextWatch("old") shouldBe TextWatch.WasThere
+        }
+
+    @Test
+    fun `a watch that has not seen its text says so and ends when read`() =
+        withSession { session ->
+            session.navigate("/form")
+
+            session.watchText("none", "Gizli mətn") shouldBe TextWatch.NotYet
+            session.stopTextWatch("none") shouldBe TextWatch.NotYet
+            session.stopTextWatch("none") shouldBe TextWatch.Lost
+            session.stopTextWatch("never-started") shouldBe TextWatch.Lost
+        }
+
+    @Test
+    fun `a watch ends with the page it lived in`() =
+        withSession { session ->
+            session.navigate("/slow")
+            session.watchText("gone", "Hazırdır") shouldBe TextWatch.NotYet
+
+            session.navigate("/form")
+
+            session.stopTextWatch("gone") shouldBe TextWatch.Lost
         }
 
     @Test
@@ -923,4 +977,17 @@ class PlaywrightBrowserSessionTest {
             .keys
             .filter { it.isAlive }
             .map { it.name }
+
+    private companion object {
+        /**
+         * Pages whose text appears one second after they load, the element stamped with that moment: appended to the
+         * document, revealed by a style change, and inside a shadow root, which no change of the document announces.
+         */
+        val LATE_TEXTS =
+            listOf(
+                Triple("/slow", "Hazırdır", "#ready"),
+                Triple("/reveal", "Gizli elan", "#late"),
+                Triple("/late-shadow", "Kölgədən gələn elan", "#stamp"),
+            )
+    }
 }

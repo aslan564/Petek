@@ -288,6 +288,25 @@ class YamlCampaignSourceTest {
         }
 
         @Test
+        fun `emits names the request that writes its change`() {
+            val campaign =
+                load(
+                    withSteps(
+                        """
+                        steps:
+                          - id: make
+                            actor: admin
+                            do: x
+                            emits: {event: made, request: "post /api/items", id_from: {url_regex: "/items/(\\d+)"}}
+                        """,
+                    ),
+                )
+
+            campaign.steps.single().emits shouldBe
+                EmitSpec("made", IdSource.UrlRegex("/items/(\\d+)"), RequestPattern("POST", "/api/items"))
+        }
+
+        @Test
         fun `only_one_succeeds takes a request pattern and an oracle condition`() {
             val campaign =
                 load(
@@ -529,6 +548,10 @@ class YamlCampaignSourceTest {
             issue(assertion("only_one_succeeds: [a]"), "must be a single value")
             issue(assertion("only_one_succeeds: {request: approve}"), "must be \"<METHOD> <path regex>\"")
                 .message shouldContain "was 'approve'"
+            issue(
+                withSteps("steps:\n  - actor: admin\n    do: x\n    emits: {event: e, request: post}"),
+                "'steps[0].emits.request' must be",
+            ).message shouldContain "e.g. \"POST .*/announcements\""
             issue(assertion("only_one_succeeds: {request: }"), "'steps[0].assert[0].only_one_succeeds.request' has no value")
             issue(assertion("only_one_succeeds: {request: [POST, /x]}"), "must be a single value")
             issue(assertion("only_one_succeeds: {oracle: {field: status}}"), "missing required key 'path'")

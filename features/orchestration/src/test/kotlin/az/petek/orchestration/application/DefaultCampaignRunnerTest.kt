@@ -240,7 +240,9 @@ class DefaultCampaignRunnerTest {
             f.steps("read_announce", StepKind.WAIT) shouldHaveSize 4
             val emit = f.step("announce", StepKind.EMIT, "a01")
             emit.status shouldBe StepStatus.PASSED
-            emit.detail shouldBe "announcement_created id=a1 (agent_report)"
+            emit.detail shouldBe
+                "announcement_created id=a1 (agent_report); the page sent no accepted request to the site; " +
+                "latency is measured from this publish"
             val wait = f.step("read_announce", StepKind.WAIT, "a05")
             val action = f.step("read_announce", StepKind.DO, "a05")
             wait.correlationId shouldBe action.correlationId
@@ -286,7 +288,7 @@ class DefaultCampaignRunnerTest {
                 f.agents.runtimes
                     .getValue(receiptCheck.second.agentId!!)
                     .identity.email
-            receiptCheck.second.eventEmittedAt shouldBe
+            receiptCheck.second.eventTime?.t0 shouldBe
                 f.buses
                     .single()
                     .latest("announcement_created")

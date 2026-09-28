@@ -192,10 +192,13 @@ class GenerateScenarioUseCaseTest {
         (announce.action as StepAction.Do).instruction shouldContain "/announcements"
         (announce.action as StepAction.Do).instruction shouldContain "'Dərc et'"
         announce.emits!!.event shouldBe "announcements_created"
+        // The form's request is the write its readers' delivery is measured from (Faza 24.10).
+        announce.emits!!.request shouldBe RequestPattern("POST", "/announcements")
         announce.assertions shouldContainExactly listOf(AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit", 10.seconds))
         val ticket = campaign.step("ticket-submit-happy")
         ticket.actors.raw shouldBe "employee[n=1]"
         ticket.emits!!.idSource shouldBe IdSource.UrlRegex("/tickets/([^/?#]+)")
+        ticket.emits!!.request shouldBe RequestPattern("POST", "/tickets")
     }
 
     @Test

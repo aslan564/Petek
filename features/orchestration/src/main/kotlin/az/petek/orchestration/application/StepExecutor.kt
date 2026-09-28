@@ -19,6 +19,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.TextWatch
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.Pacing
@@ -47,12 +48,16 @@ import az.petek.evidence.domain.Verdict
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.ActorResolver
 import az.petek.orchestration.domain.AgentState
+import az.petek.orchestration.domain.EventOrigin
+import az.petek.orchestration.domain.EventWrite
 import az.petek.orchestration.domain.PublishedEvent
 import az.petek.orchestration.domain.TaskState
 import az.petek.verification.application.VerifyStepUseCase
 import az.petek.verification.domain.ActorResult
 import az.petek.verification.domain.AssertionInput
+import az.petek.verification.domain.EventTime
 import az.petek.verification.domain.RaceEvidence
+import az.petek.verification.domain.WatchedText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -140,11 +145,13 @@ internal class StepExecutor(
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors.merge(step.id, chosen.map { it.agentId }) { before, now -> before + now }
+        releaseWatches(step.id, keep = chosen.map { it.agentId }.toSet())
         if (chosen.isEmpty()) {
             run.stepHadNoTester(step.id)
             evidence.system(run, null, "skip", StepStatus.SKIPPED, "no active actor matches '${step.actors.raw}'", step.id)
             return StepResult(step, emptyList(), groupFailed = false)
         }
+        armReceivers(step, chosen)
         val race = raceSpec(step)
         val barrier = if (step.parallel) StartBarrier(chosen.size) else null
         // A step without an action only checks the page: nothing reaches the target that pacing would spread out.
@@ -227,11 +234,20 @@ internal class StepExecutor(
             actor.session.setCorrelationId(actor.correlationId.value)
             val waited =
                 step.waitFor?.let { spec ->
-                    run.absentEmitter(spec.event)?.let { emitter -> return ActorRun.Settled(withoutEmitter(actor, spec, emitter)) }
+                    run.absentEmitter(spec.event)?.let { emitter ->
+                        releaseWatch(actor)
+                        return ActorRun.Settled(withoutEmitter(actor, spec, emitter))
+                    }
                     run.receiversOf(step.id).waited.incrementAndGet()
                     when (val result = awaitEvent(actor, spec)) {
-                        is WaitResult.Received -> result.waited
-                        is WaitResult.TimedOut -> return ActorRun.Settled(notReceived(actor, spec, result.startedAt))
+                        is WaitResult.Received -> {
+                            result.waited
+                        }
+
+                        is WaitResult.TimedOut -> {
+                            releaseWatch(actor)
+                            return ActorRun.Settled(notReceived(actor, spec, result.startedAt))
+                        }
                     }
                 }
             val reception = waited?.let { receive(actor, it) }
@@ -244,7 +260,8 @@ internal class StepExecutor(
                     return ActorRun.Settled(templateFailed(actor, e))
                 }
             val forbidden = forbiddenRequests(step, templates)
-            val watchStart = if (race != null || forbidden.isNotEmpty()) startWatching(actor) else null
+            // A race, a forbidden action and an emitted event are all judged or timed from the actor's own requests.
+            val watchStart = if (race != null || forbidden.isNotEmpty() || step.emits != null) startWatching(actor) else null
             if (barrier != null) {
                 barrier.arrive()
                 arrived = true
@@ -258,11 +275,11 @@ internal class StepExecutor(
             if (requests == null) recordAction(actor, performed, actionRecord(step, performed.outcome, race = null, lost = null))
             failureScreenshot(actor, performed.outcome)
             val succeeded = requests?.succeeded ?: performed.outcome.succeeded
-            val emitted = if (succeeded) step.emits?.let { emit(actor, it, performed.outcome, templates) } else null
+            val emitted = if (succeeded) step.emits?.let { emit(actor, it, performed, templates, watchStart) } else null
             // In the checks: the object this actor emitted when the step emits, else the one it waited for; never another's.
             val lastId = if (step.emits != null) emitted?.event?.objectId else waited?.event?.objectId
             val checks =
-                verifyActor(actor, actor.stepId, afterActionSpecs(step), templateContext(identity, lastId), waited?.event?.t0)
+                verifyActor(actor, actor.stepId, afterActionSpecs(step), templateContext(identity, lastId), waited?.event?.let(::eventTime))
             val acted = Acted(actor, performed, requests, emitted, listOfNotNull(reception, checks))
             return if (requests == null) ActorRun.Settled(conclude(acted, lost = null)) else ActorRun.Raced(acted)
         } finally {
@@ -364,18 +381,24 @@ internal class StepExecutor(
         return ActorStepResult(actor.identity, null, failureKey = null)
     }
 
-    /** Reception checks and the receipt for the awaited event (see the class KDoc). */
+    /**
+     * Reception checks and the receipt for the awaited event (see the class KDoc). Latency is measured from the write
+     * behind the event ([eventTime]); the text check reads the watch this receiver started before that write, when it
+     * has one ([armReceivers]).
+     */
     private suspend fun receive(
         actor: ActorContext,
         waited: Waited,
     ): Verification {
         val specs = receptionSpecs(actor.step)
-        val verification =
-            verifyActor(actor, waited.stepId, specs, templateContext(actor.identity, waited.event.objectId), waited.event.t0)
+        val time = eventTime(waited.event)
+        val watch = run.takeWatch(actor.step.id, actor.agentId)?.let { WatchedText(it.text, read(actor, it)) }
+        val templates = templateContext(actor.identity, waited.event.objectId)
+        val verification = verifyActor(actor, waited.stepId, specs, templates, time, watch)
         val visible = verification.records.firstOrNull { it.type == VISIBLE_TEXT_TYPE }
         when {
             visible != null && visible.verdict == Verdict.PASSED -> {
-                val t0 = waited.event.t0.wall
+                val t0 = time.t0.wall
                 val t1 = visible.latencyMs?.let(t0::plusMillis) ?: clock.now().wall
                 recordReceipt(actor, waited.event, received = true, t1 = t1, latencyMs = visible.latencyMs)
             }
@@ -776,16 +799,23 @@ internal class StepExecutor(
 
     // --- emits ----------------------------------------------------------------------------------------------------
 
+    /**
+     * Publishes the step's event for this actor with the write behind it ([writeOf]): the id comes from the configured
+     * source, t0 from the request the actor's page sent during [performed] ([watchStart] is set when its requests were
+     * watched), the publish time is kept apart.
+     */
     private suspend fun emit(
         actor: ActorContext,
         spec: EmitSpec,
-        outcome: ActionOutcome,
+        performed: Performed,
         templates: TemplateContext,
+        watchStart: HarnessTimestamp?,
     ): Emitted {
         val started = clock.now()
         val source = spec.idSource ?: run.campaign.target.idSource(spec.event)
-        val resolution = services.objectIds.read(source, actor.session, outcome, templates)
-        val event = run.bus.publish(spec.event, resolution.objectId, actor.agentId)
+        val resolution = services.objectIds.read(source, actor.session, performed.outcome, templates)
+        val write = writeOf(actor, spec.request ?: raceSpec(actor.step)?.request, performed.startedAt, watched = watchStart != null)
+        val event = run.bus.publish(spec.event, resolution.objectId, actor.agentId, EventOrigin(performed.startedAt, write.write))
         tasks.eventPublished(event)
         services.recorder.event(
             EventRecord(
@@ -808,11 +838,57 @@ internal class StepExecutor(
             "emit ${spec.event}",
             started,
             if (failed) StepStatus.FAILED else StepStatus.PASSED,
-            emitDetail(event, resolution),
+            emitDetail(event, resolution, write.note),
             actor.correlationId,
             if (failed) Tally.FAIL else Tally.PASS,
         )
         return Emitted(event, resolution.problem)
+    }
+
+    /**
+     * The write behind an event (Faza 24.10): the first request of the action ([since] on) that the target accepted and
+     * that matches [pattern] (`emits.request`, in a race the race's request); without a pattern the action's first
+     * accepted mutating request, exact only when it was the only one. None, or requests that could not be read, leave
+     * the publish as t0, and the note says so.
+     */
+    private suspend fun writeOf(
+        actor: ActorContext,
+        pattern: RequestPattern?,
+        since: HarnessTimestamp,
+        watched: Boolean,
+    ): WriteLookup {
+        val fromPublish = "latency is measured from this publish"
+        if (!watched) return WriteLookup(null, "the actor's requests were not watched; $fromPublish")
+        val accepted =
+            try {
+                actor.session.mutations(since).filter { it.status < RaceEvidence.ACCEPTED_BELOW }
+            } catch (e: Exception) {
+                rethrowIfCancelled(e)
+                return WriteLookup(null, "the actor's requests could not be read (${e::class.simpleName}); $fromPublish")
+            }
+        if (pattern != null) {
+            val match =
+                accepted.firstOrNull { pattern.matches(it.method, it.path) }
+                    ?: return WriteLookup(null, "no accepted request matched `${pattern.describe()}`; $fromPublish")
+            return WriteLookup(EventWrite(match.describe(), match.at, exact = true), "written by ${match.describe()}")
+        }
+        val first = accepted.firstOrNull() ?: return WriteLookup(null, "the page sent no accepted request to the site; $fromPublish")
+        if (accepted.size == 1) return WriteLookup(EventWrite(first.describe(), first.at, exact = true), "written by ${first.describe()}")
+        return WriteLookup(
+            EventWrite(first.describe(), first.at, exact = false),
+            "written by ${first.describe()} or a later one of ${accepted.size} accepted requests (emits.request names the write)",
+        )
+    }
+
+    /** When the change behind [event] reached the target, as a receiver's latency is measured (see [writeOf]). */
+    private fun eventTime(event: PublishedEvent): EventTime {
+        val origin = event.origin ?: return EventTime.at(event.publishedAt, "the publish")
+        val write = origin.write
+        return when {
+            write == null -> EventTime(event.publishedAt, origin.actionStartedAt, event.publishedAt, "the publish (no write seen)")
+            write.exact -> EventTime.at(write.at, "the write ${write.request}")
+            else -> EventTime(write.at, write.at, event.publishedAt, "the first of several writes, ${write.request}")
+        }
     }
 
     private fun payload(
@@ -824,6 +900,8 @@ internal class StepExecutor(
             put("id", event.objectId)
             put("actor", event.emitter.value)
             put("t0", event.t0.wall.toString())
+            put("published_at", event.publishedAt.wall.toString())
+            put("write", event.origin?.write?.request)
             put("sequence", event.sequence)
             put("scenario_step", actor.step.id)
             put("id_source", resolution.source)
@@ -832,13 +910,126 @@ internal class StepExecutor(
     private fun emitDetail(
         event: PublishedEvent,
         resolution: ObjectIdResolution,
+        write: String,
     ): String =
         buildString {
             append("${event.name} id=${event.objectId ?: "-"}")
             resolution.source?.let { append(" ($it)") }
             resolution.problem?.let { append("; $ID_UNAVAILABLE: $it") }
             resolution.note?.let { append("; $it") }
+            append("; ").append(write)
         }
+
+    // --- receivers watching ahead ---------------------------------------------------------------------------------
+
+    /**
+     * Before this step's actors act, the receivers of the event it emits start watching their own pages for the text of
+     * their reception check (Faza 24.10): the first `visible_text` of each later step that waits for the event, rendered
+     * for each receiver (not the emitters themselves). Their pages then time the text as it appears, however long the
+     * emitter's agent keeps working after the write, and a text already on the page shows that seeing it would prove
+     * nothing ([TextWatch.WasThere]). A text that names the event's own object (`{last_id}`, `{event.<it>.id}`) cannot be
+     * known before the object exists: such a receiver checks after the event, as before, and its latency is an upper
+     * bound when the text is there at the first look.
+     */
+    private suspend fun armReceivers(
+        step: ScenarioStep,
+        emitters: List<Identity>,
+    ) {
+        val event = step.emits?.event ?: return
+        val base = step.id.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX)
+        val pass = step.id.removePrefix(base)
+        val emitting = emitters.map { it.agentId }.toSet()
+        val arms =
+            run.campaign.allSteps
+                .dropWhile { it.id != base }
+                .drop(1)
+                .filter { it.waitFor?.event == event }
+                .flatMap { receiver ->
+                    val text = receptionSpecs(receiver).firstNotNullOfOrNull { it as? AssertionSpec.VisibleText }?.text
+                    if (text == null) return@flatMap emptyList()
+                    resolver
+                        .resolve(receiver.actors, run.activeIdentities())
+                        .filter { it.agentId !in emitting }
+                        .map { Triple(receiver.id + pass, it, text) }
+                }
+        if (arms.isEmpty()) return
+        coroutineScope {
+            arms
+                .map { (stepId, identity, text) ->
+                    async(services.diagnostics.of(run.runId, identity.agentId)) { arm(stepId, identity, text) }
+                }.awaitAll()
+        }
+    }
+
+    private suspend fun arm(
+        stepId: String,
+        identity: Identity,
+        template: String,
+    ) {
+        val text =
+            try {
+                services.renderer.render(template, templateContext(identity, lastId = null))
+            } catch (_: TemplateException) {
+                // It names the event's own object, which does not exist yet.
+                return
+            }
+        val session = run.sessions[identity.agentId] ?: return
+        val reading =
+            try {
+                session.watchText(stepId, text)
+            } catch (e: Exception) {
+                rethrowIfCancelled(e)
+                logger.debug { "${identity.agentId}: could not start watching for \"$text\" (${e.message})" }
+                return
+            }
+        if (reading == TextWatch.NotYet ||
+            reading == TextWatch.WasThere
+        ) {
+            run.armed(stepId, identity.agentId, RunState.ArmedWatch(stepId, text, reading))
+        }
+    }
+
+    /** What [armed] saw; a text on the page before the write stays so, whatever the page did since. */
+    private suspend fun read(
+        actor: ActorContext,
+        armed: RunState.ArmedWatch,
+    ): TextWatch {
+        val now =
+            try {
+                actor.session.stopTextWatch(armed.key)
+            } catch (e: Exception) {
+                rethrowIfCancelled(e)
+                TextWatch.Lost
+            }
+        return if (armed.reading == TextWatch.WasThere) TextWatch.WasThere else now
+    }
+
+    /** Ends the watch [actor] started for its step, when it will not check the text after all. */
+    private suspend fun releaseWatch(actor: ActorContext) {
+        run.takeWatch(actor.step.id, actor.agentId)?.let { stopQuietly(actor.session, it) }
+    }
+
+    /** Ends the watches for [stepId] of receivers that do not run it now (they failed since the watch began). */
+    private suspend fun releaseWatches(
+        stepId: String,
+        keep: Set<AgentId>,
+    ) {
+        run.watchersOf(stepId).filterNot { it in keep }.forEach { agentId ->
+            val watch = run.takeWatch(stepId, agentId) ?: return@forEach
+            run.sessions[agentId]?.let { stopQuietly(it, watch) }
+        }
+    }
+
+    private suspend fun stopQuietly(
+        session: BrowserSession,
+        watch: RunState.ArmedWatch,
+    ) {
+        try {
+            session.stopTextWatch(watch.key)
+        } catch (e: Exception) {
+            rethrowIfCancelled(e)
+        }
+    }
 
     // --- assertions -----------------------------------------------------------------------------------------------
 
@@ -847,10 +1038,11 @@ internal class StepExecutor(
         stepId: StepId,
         specs: List<AssertionSpec>,
         templates: TemplateContext,
-        t0: HarnessTimestamp?,
+        time: EventTime?,
+        watch: WatchedText? = null,
     ): Verification {
         if (specs.isEmpty()) return Verification(emptyList(), error = false)
-        val input = AssertionInput(run.runId, stepId, actor.step.id, actor.agentId, actor.session, templates, t0)
+        val input = AssertionInput(run.runId, stepId, actor.step.id, actor.agentId, actor.session, templates, time, watch)
         return try {
             val records = services.verify.verifyActor(specs, input)
             records.filter { it.verdict == Verdict.FAILED }.forEach { run.tally.assertionFailed(actor.agentId) }
@@ -881,7 +1073,7 @@ internal class StepExecutor(
                     ?.takeIf { it.sequence > run.eventCursor(event) }
                     ?.objectId
             }
-        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, lastId), null)
+        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, lastId), eventTime = null)
         val actorResults =
             results.map {
                 ActorResult(
@@ -1191,6 +1383,12 @@ internal class StepExecutor(
     private data class Emitted(
         val event: PublishedEvent,
         val problem: String?,
+    )
+
+    /** The write behind an event, when the actor's requests showed it, and what the emit record says about it. */
+    private class WriteLookup(
+        val write: EventWrite?,
+        val note: String,
     )
 
     private data class Verification(

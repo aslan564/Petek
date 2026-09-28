@@ -59,6 +59,7 @@ import az.petek.orchestration.domain.TaskUpdate
 import az.petek.verification.application.VerifyStepUseCase
 import az.petek.verification.domain.ActorResult
 import az.petek.verification.domain.AssertionInput
+import az.petek.verification.domain.AssertionResult
 import az.petek.verification.domain.DefaultAssertionEvaluator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,7 +170,8 @@ class DottedFieldSelector : JsonFieldSelector {
  * visible texts and measures latency from t0; latency_max reads that latency; oracle renders its path (so template
  * errors surface) and asks [oracleVerdict]; everything else passes. A race (`only_one_succeeds`) gets the real verdict,
  * which is pure code over the actors' results, so runner tests see the real race rules; its oracle condition is not
- * asked.
+ * asked. With [realScreenChecks] visible_text and latency_max get the real verdicts too: the receiver's watch, the
+ * write the event stands for and the range of the delay.
  */
 class FakeVerify(
     private val recorder: EvidenceRecorder,
@@ -183,25 +185,50 @@ class FakeVerify(
     @Volatile
     var oracleVerdict: (String, AssertionInput) -> Verdict = { _, _ -> Verdict.PASSED }
 
+    /** Judge visible_text and latency_max with the real evaluator (see the class KDoc). */
+    @Volatile
+    var realScreenChecks: Boolean = false
+
     override suspend fun verifyActor(
         specs: List<AssertionSpec>,
         input: AssertionInput,
     ): List<AssertionRecord> {
         actorCalls += specs to input
+        val screen = specs.filter { it is AssertionSpec.VisibleText || it is AssertionSpec.LatencyMax }
+        val real = if (realScreenChecks) races.evaluate(screen, input).iterator() else null
         var latencyMs: Long? = null
         return specs.map { spec ->
             val record =
                 when (spec) {
                     is AssertionSpec.VisibleText -> {
-                        val page = (input.session as? RestoringBrowserSession)?.active ?: input.session
-                        val seen = (page as? FakeBrowserSession)?.visibleTexts?.contains(spec.text) == true
-                        latencyMs = if (seen) input.eventEmittedAt?.elapsedUntil(clock.now())?.inWholeMilliseconds else null
-                        record(input, spec, EvidenceSource.RECEIVER, spec.text, if (seen) Verdict.PASSED else Verdict.FAILED, latencyMs)
+                        real?.let { recordOf(input, it.next()) } ?: run {
+                            val page = (input.session as? RestoringBrowserSession)?.active ?: input.session
+                            val seen = (page as? FakeBrowserSession)?.visibleTexts?.contains(spec.text) == true
+                            latencyMs =
+                                if (seen) {
+                                    input.eventTime
+                                        ?.t0
+                                        ?.elapsedUntil(clock.now())
+                                        ?.inWholeMilliseconds
+                                } else {
+                                    null
+                                }
+                            record(input, spec, EvidenceSource.RECEIVER, spec.text, if (seen) Verdict.PASSED else Verdict.FAILED, latencyMs)
+                        }
                     }
 
                     is AssertionSpec.LatencyMax -> {
-                        val ok = latencyMs != null && latencyMs <= spec.max.inWholeMilliseconds
-                        record(input, spec, EvidenceSource.HARNESS, "${spec.max}", if (ok) Verdict.PASSED else Verdict.FAILED, latencyMs)
+                        real?.let { recordOf(input, it.next()) } ?: run {
+                            val ok = latencyMs?.let { it <= spec.max.inWholeMilliseconds } == true
+                            record(
+                                input,
+                                spec,
+                                EvidenceSource.HARNESS,
+                                "${spec.max}",
+                                if (ok) Verdict.PASSED else Verdict.FAILED,
+                                latencyMs,
+                            )
+                        }
                     }
 
                     is AssertionSpec.Oracle -> {
@@ -234,6 +261,24 @@ class FakeVerify(
                 .also { recorder.assertion(it) }
         }
     }
+
+    private fun recordOf(
+        input: AssertionInput,
+        result: AssertionResult,
+    ) = AssertionRecord(
+        stepId = input.stepId,
+        runId = input.runId,
+        agentId = input.agentId,
+        scenarioStep = input.scenarioStep,
+        type = result.spec.type,
+        source = result.source,
+        expected = result.expected,
+        observed = result.observed,
+        verdict = result.verdict,
+        latencyMs = result.latency?.inWholeMilliseconds,
+        note = result.note,
+        artifactIds = emptyList(),
+    )
 
     private fun record(
         input: AssertionInput,

@@ -20,6 +20,7 @@ import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessTimestamp
@@ -133,6 +134,14 @@ internal class RestoringBrowserSession(
     ): WaitOutcome = guarded { it.waitForSelector(selector, timeout) }
 
     override suspend fun isTextVisible(text: String): Boolean = guarded { it.isTextVisible(text) }
+
+    // A watch lives in the page: after a restore the new context has none, and stopTextWatch says it is lost.
+    override suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch = guarded { it.watchText(key, text) }
+
+    override suspend fun stopTextWatch(key: String): TextWatch = guarded { it.stopTextWatch(key) }
 
     override suspend fun isSelectorVisible(selector: String): Boolean = guarded { it.isSelectorVisible(selector) }
 

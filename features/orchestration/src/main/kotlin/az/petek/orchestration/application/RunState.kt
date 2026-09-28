@@ -15,6 +15,7 @@ import az.petek.agent.application.TesterAgent
 import az.petek.agent.domain.SharedRunState
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
+import az.petek.browser.domain.TextWatch
 import az.petek.campaign.domain.Campaign
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
@@ -47,6 +48,7 @@ internal class RunState(
             // A new bus counts its sequences from the start: where the old one stood says nothing about it.
             stepStarts.clear()
             emptySteps.clear()
+            watches.clear()
         }
 
     /** The testers of the wave now running; null when everyone runs at once. */
@@ -86,6 +88,37 @@ internal class RunState(
 
     /** The step that emits [event] when it had no tester on this bus (Faza 24.7); null when it ran or never started. */
     fun absentEmitter(event: String): String? = emitters[event]?.takeIf { it in emptySteps }
+
+    /**
+     * A receiver's watch for the text of its reception check, started before the change it waits for was written (Faza
+     * 24.10): the page's watch [key], the [text] as rendered then and what the page answered ([TextWatch.NotYet] or
+     * [TextWatch.WasThere]).
+     */
+    class ArmedWatch(
+        val key: String,
+        val text: String,
+        val reading: TextWatch,
+    )
+
+    /** Watches not read yet, by the executed step id of the receiving step (`read`, `read@swap`) and the receiver. */
+    private val watches = ConcurrentHashMap<Pair<String, AgentId>, ArmedWatch>()
+
+    fun armed(
+        stepId: String,
+        agentId: AgentId,
+        watch: ArmedWatch,
+    ) {
+        watches[stepId to agentId] = watch
+    }
+
+    /** Takes the watch [agentId] started for [stepId], if any; each watch is taken once. */
+    fun takeWatch(
+        stepId: String,
+        agentId: AgentId,
+    ): ArmedWatch? = watches.remove(stepId to agentId)
+
+    /** The receivers with a watch for [stepId] not taken yet. */
+    fun watchersOf(stepId: String): List<AgentId> = watches.keys.filter { it.first == stepId }.map { it.second }
 
     /** How the receivers of one `wait_for` step fared: waited for the event, or had no emitter in their wave. */
     class ReceiverCoverage {

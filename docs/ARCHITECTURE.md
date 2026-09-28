@@ -95,14 +95,19 @@ sequenceDiagram
    add them to the step detail and to what the model sees next.
 3. **Steps.** For each step:
    - Resolve its actors.
+   - A step with `emits` first has the receivers of its event start watching their own pages for the text of their
+     `visible_text` (Faza 24.10), so the moment the text appears is timed by the page, whatever the agents do until
+     the receivers' step runs; a text already there is `stale_text`, not a delivery.
    - With `wait_for`, each actor waits on the event bus. The receipt is recorded when the event text shows up on
-     screen (`visible_text`).
+     screen (`visible_text`), with the latency from the write behind the event (t0) to that moment (t1).
    - Each actor performs its `do` (LLM loop) or `run` (code). All actors of a step run concurrently. `parallel: true`
      additionally starts them at the same instant (a barrier), which race tests need. Otherwise `campaign.pacing`
      starts their actions `start_stagger_ms` apart in agent id order (measured from the step's start, so waiting for an
      event is not paced) and at most `max_parallel_actors` at once, against the per-IP limits of a real site. A step
      that only asserts (no `do` or `run`) sends nothing to the site and is not paced.
-   - With `emits`, the object id is read from the configured id source and the event is published with t0.
+   - With `emits`, the object id is read from the configured id source and the event is published with t0: the
+     answer to the actor's own write request (`emits.request`, else its first accepted one), the publish time kept
+     apart; without a write the page showed, the publish, and latencies become a range.
    - Assertions are evaluated per actor. `only_one_succeeds` is evaluated per group, from evidence (see "Races").
    - `on_fail: abort` stops the run; `continue` goes on.
 4. **Watchdog.** An agent with no progress for `inactivityTimeout` is marked `blocked`. Its current action is cancelled
@@ -306,7 +311,7 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
 | Invitation or company code? | Both, per tester. `campaign.registration` splits the non-admin testers (by default half by invitation, never fewer than the managers). Managers always join by invitation: the `/join` form has no role field, so a company-code sign-up becomes an employee on the target. The validator therefore requires `registration.invite >= roles.manager`; the invitations left after the managers go to employees (seeded, spread over the departments), and company-code identities are employees only. Each identity carries its `RegistrationMode`, and `register_and_login` follows the matching flow. |
 | A site without companies? | `campaign.tenant: none` (Faza 13): `roles` names the site's own roles (`{editor: 2, reader: 3}`, any lowercase key), departments are optional, and `registration` deals the testers to gates (`self`, `login`, `guest`; omitted, everyone signs up). `register_owner`/`seed_company` are refused, the prompt carries a short test context instead of the company roster, and a `login` tester takes an owner's account of its role from the target profile. Oracle checks without a test API (`PETEK_ORACLE=none` or a profile's `test_api.mode: none`) are "N/A (no oracle)"; a profile may move the test API's own paths (`test_api.paths`). Explorer drafts follow the profile's `tenant` (else companies only when the test API can seed one). |
 | More testers than one machine or one IP carries? | `campaign.wave_size` splits the testers in agent order into waves: each opens its browsers, runs every step with its own testers and its own event bus (a live event never crosses waves) and closes them before the next. A receiver whose wave has no tester of the step that emits its event is skipped at once (`emitter_absent`), a race whose racers all are is not judged, and a `wait_for` step no wave could check is `not_covered`, a failure of the run; `petek run` and the panel say beforehand which receivers and races the waves split (Faza 24.1, 24.7). `PETEK_PROXIES` gives tester *n* of a wave proxy *n*; with fewer proxies than live testers the run does not start. Without proxies, an action the site answered with 429 is `rate_limited`, an environment gap, not a site bug. A crashed browser context is restored with the same identity and its storage state (`RestoringBrowserSession`). |
-| Which real-time mechanism? | Detected automatically; Pətək does not depend on it. Latency is measured in the DOM (t1 − t0). The transport (WebSocket, SSE or polling) is detected from network traffic and shown in the report. |
+| Which real-time mechanism? | Detected automatically; Pətək does not depend on it. Latency is measured in the DOM (t1 − t0): t0 is the emitter's write as its page saw it, t1 the moment the text appeared on the receiver's page, which watched for it from before the write. The transport (WebSocket, SSE or polling) is detected from network traffic and shown in the report. |
 | Does the backend store "read" receipts? | Yes (confirmed). The `receipts` oracle assertion is part of the default campaign. |
 | LLM provider? | Whatever AI the owner has, no vendor preferred (ADR-0008, R09): `PETEK_LLM_PROVIDER=auto` resolves, with a reason `doctor` shows, from an explicit value, then settings and API keys in the environment (`PETEK_LLM_BIN`, `PETEK_LLM_BASE_URL`, OpenAI, Grok, OpenRouter, Gemini, Anthropic keys), then the project's AI markers (`AGENTS.md`, `GEMINI.md`) when that CLI is installed, then the known agent CLIs on `PATH` and Ollama; the other CLIs found are fallbacks; nothing found is `none`, whose calls say how to set one up |
 | How many testers? | Any number: there is no fixed limit (30 was only the first campaign's size). Agent ids grow past `a99`/`a999`, identity names never run out, browsers are sharded by load. `petek capacity` recommends a maximum for the machine, `run` warns above it and still starts. |

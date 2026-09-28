@@ -84,7 +84,7 @@ Beş qərar bütün kodun sərhədlərini çəkir; hər biri pozulanda sistemin 
 
 **2. Hər agent öz brauzer kontekstində ****və öz thread-ində ****yaşayır.** Bir Chromium prosesi (browser server kimi qaldırılır), N browser context: cookie, localStorage, sessionStorage tam ayrıdır, sessiyalar qarışmır. Playwright-ın browser context mexanizmi məhz bunun üçündür — hər test üçün ayrıca brauzer açmadan izolyasiya olunmuş mühitlər verir və çoxistifadəçili ssenariləri birbaşa dəstəkləyir ([mənbə](https://thegtmdirectory.com/tools/playwright/md)). Playwright Java thread-safe deyil — metodları Playwright obyektinin yaradıldığı thread-də çağırılmalıdır, hər thread-də ayrıca instans yaratmaq olar ([mənbə](https://playwright.dev/java/docs/multithreading)); ona görə hər agent öz Playwright instansı ilə serverə `BrowserType.connect(ws)` edir və bütün brauzer çağırışları onun `newSingleThreadContext` dispetçerində (`withContext(agent.dispatcher)`) icra olunur. Login sonrası `storage_state` faylı saxlanılır; kontekst çökərsə eyni kimliklə yenidən qaldırılır. Sübut: hər agent login sonrası ekranda öz adını oxuyur və reyestrlə tutuşdurur.
 
-**3. Real-time koordinasiya ssenaridə asılı addım kimi yazılır.** "Admin elan verir, işçilər oxuyur" iki müstəqil agent deyil, `emits` / `wait_for` cütüdür. Admin agenti `announcement_created(id, t0)` yayır; 29 işçi agenti həmin hadisəni gözləyir, ekranda görəndə `seen(id, t1)` qaytarır; t1 − t0 real gecikmədir. MVP-də şin tək prosesdə `kotlinx.coroutines CompletableDeferred` + payload-dur; Faza 8-də eyni interfeys Redis pub/sub və ya NATS ilə əvəz olunur. Vaxtı həmişə harness saatı ölçür: t0 = emit anı, t1 = Playwright `wait_for_selector`-in qayıtdığı an; timeout = `not_received`.
+**3. Real-time koordinasiya ssenaridə asılı addım kimi yazılır.** "Admin elan verir, işçilər oxuyur" iki müstəqil agent deyil, `emits` / `wait_for` cütüdür. Admin agenti `announcement_created(id, t0)` yayır; 29 işçi agenti həmin hadisəni gözləyir, ekranda görəndə `seen(id, t1)` qaytarır; t1 − t0 real gecikmədir. MVP-də şin tək prosesdə `kotlinx.coroutines CompletableDeferred` + payload-dur; Faza 8-də eyni interfeys Redis pub/sub və ya NATS ilə əvəz olunur. Vaxtı həmişə harness saatı ölçür: t0 = dəyişikliyin sayta yazıldığı an (emitter-in öz səhifəsinin gördüyü yazı sorğusunun cavabı, `emits.request`; publish anı ayrıca saxlanır), t1 = mətnin receiver-in səhifəsində göründüyü an: receiver-lər emitter addımı başlayanda öz səhifələrində mətni izləməyə başlayır, anı səhifənin özü qeyd edir (Faza 24.10); timeout = `not_received`.
 
 **4. Doğruluğu üç mənbənin uyğunluğu təsdiqləyir, AI-nin fikri yox.** A = göndərənin etdiyi (agentin addım logu), B = alanların gördüyü (DOM-da tapılan mətn, screenshot), C = hədəfin özü (oracle API). Qayda: A = B = C → keçdi; A ≠ C → backend xətası; C ≠ B → çatdırılma və ya UI xətası; A ≠ B, C yoxdursa → araşdırılmalı tapıntı. MVP-də yalnız typed assertlər var; LLM hakim (screenshot əsaslı "mətn düzgün görünür?") Faza 8-də əlavə olunur və hər hökmün yanında screenshot saxlanır ki, insan yoxlaya bilsin.
 
@@ -180,7 +180,8 @@ steps:
   - id: announce
     actor: admin
     do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
-    emits: announcement_created
+    # The form's post is when the announcement reached the site: the readers' latency is measured from its answer.
+    emits: {event: announcement_created, request: "POST /announcements"}
     assert:
       - oracle: {path: "/test/announcements/{last_id}", field: status, equals: published}
 
@@ -228,7 +229,7 @@ steps:
 | `actor` | Kim edir: `admin`, `manager[IT]`, `employee[*]` (hamısı), `employee[dept=IT, n=1]` (departamentdən n-ci), siyahı = bir neçə aktor |
 | `do` | Təbii dil tapşırığı; LLM whitelist əməliyyatlarla icra edir |
 | `run` | Sabit Playwright və ya API funksiyası; LLM iştirak etmir |
-| `emits` | Addım bitəndə hadisə yayır; payload = `{id, actor, t0}` |
+| `emits` | Addım bitəndə hadisə yayır; payload = `{id, actor, t0, published_at, write}`; uzun forma `{event, id_from, request}`: `request` (`"POST /api/announcements"`) dəyişikliyi yazan sorğudur, gecikmə onun cavabından ölçülür |
 | `wait_for` | Hadisə gələnə qədər gözləyir; `timeout_s` (default 30) |
 | `parallel` | Aktorlar eyni anda başlayır (yarış testləri üçün) |
 | `assert` | Bir və ya bir neçə typed yoxlama; hamısı keçməlidir |
@@ -238,7 +239,7 @@ steps:
 
 | Assert | Parametrlər | Necə yoxlanır |
 |---|---|---|
-| `visible_text` | `text`, `within_s` | Playwright `wait_for_selector(text=)`; gecikmə = t1 − t0 |
+| `visible_text` | `text`, `within_s` | receiver-in səhifəsi mətni yazıdan əvvəl izləyir (və ya hadisədən sonra gözləyir); gecikmə = t1 − t0; yazıdan əvvəl görünən mətn `stale_text` |
 | `not_visible` | `text` və ya `selector` | element DOM-da yoxdur və ya gizlidir |
 | `oracle` | `path`, `field`, `equals` / `contains` | oracle API cavabı ilə müqayisə |
 | `http_status` | `path`, `method` (default `GET`), `equals` | agentin sessiyası ilə birbaşa HTTP çağırışı |
@@ -1220,7 +1221,7 @@ dərəcədə aiddir (Faza 25).
     olduğu yerdə qalır) və ora yazmır (sorğu kəsilir); real Chromium testi ilə. Yol üstündə: profildəki `tenant:`
     oxunurdu, amma `TargetSpec`-ə ötürülmürdü — düzəldildi.
 
-- [ ] **24.10 Gecikmə yazı anından ölçülür, receiver-lər əvvəlcədən baxır.**
+- [x] **24.10 Gecikmə yazı anından ölçülür, receiver-lər əvvəlcədən baxır.**
   - *Problem:* `t0` emitter-in bütün `do`-su bitəndən sonrakı publish anıdır, submit-dən sonrakı LLM dövrəsi də
     içindədir; receiver-lər isə emitter addımı bitəndən sonra baxmağa başlayır. Çatdırılma yavaşdırsa ölçü real
     gecikmədən LLM quyruğu qədər az çıxır və `latency_max` yalançı PASSED verir. Eyni mətn eyni şirkətdə ikinci dəfə
@@ -1232,6 +1233,16 @@ dərəcədə aiddir (Faza 25).
     dəyişsə, arming olmadan ölçü əks tərəfə şişər. `{last_id}` olan mətn əvvəlcədən bilinmir, orada köhnə üsul qalır
     və nəticə "yuxarı həd" kimi işarələnir (mutation `t0`-ı ilə bu, həqiqətən yuxarı həddir).
   - *Sənəd:* ADR-0006 (yeni seçim), R05, bu planın «Əsas dizayn qərarları» 3-cü bəndi.
+  - *Vəziyyət:* t0 = emitter-in öz sorğusunun cavabı (`emits.request`; yoxdursa action-ın ilk qəbul olunan yazısı, bir
+    neçə idisə yuxarı həd kimi); publish anı `published_at` kimi ayrıca qalır, yazı görünməyibsə gecikmə publish ilə
+    action-ın başlanğıcı arasında aralıq kimi verilir. Emitter addımı başlayanda receiver-lər öz səhifələrində
+    `visible_text` mətnini izləməyə başlayır (`BrowserSession.watchText`, `text-watch.js`: DOM dəyişikliyində və hər
+    50 ms-dən bir, kölgə DOM daxil); mətnin göründüyü anı səhifə özü qeyd edir. İzləmə başlayanda mətn artıq varsa
+    `stale_text` (swap-ın ikinci nəşri də belə tutulur). `{last_id}` mətni əvvəlcədən bilinmir: hadisədən sonra
+    yoxlanır, ilk baxışda görünürsə yuxarı həddir. `latency_max` gecikmənin aralığına baxır: ən uzunu da limitdədirsə
+    PASSED, ən qısası da keçirsə FAILED, arada "təsdiq oluna bilmir" (hələlik FAILED; 24.12-də `INCONCLUSIVE`).
+    Kəşfiyyatçı yaratma addımına formun sorğusunu `emits.request` kimi yazır. Real Chromium testi, `WatchedDeliveryTest`,
+    `RunnerDeliveryTest` (gecikən çatdırılma daha `latency_max`-dan yalançı keçmir).
 
 - [ ] **24.11 Hər dalğa addımlarının ehtiyac duyduğu rolları daşıyır.** Rollar dalğalara növbə ilə paylanır (indi
   kimliklər rol sırası ilə kəsilir); tək nəfərlik rol (məs. şirkətin sahibi) bütün dalğalarda canlı qalır, onun setup
@@ -1277,6 +1288,12 @@ dərəcədə aiddir (Faza 25).
   bəli, 24.10-dan sonra.
 - [x] **24.5 və 24.6 DSL-i pozur:** dərhal xəta, yoxsa bir buraxılış xəbərdarlıq, sonra xəta? Tövsiyə: dərhal xəta,
   çünki köhnə forma yalançı nəticə verir; validator mesajı düzgün formanı göstərir.
+- [ ] **24.10-dan çıxan sual — hər nəşrin öz mətni.** Swap-da (və 24.11-dən sonra dalğalarda) eyni elan mətni eyni
+  şirkətdə ikinci dəfə nəşr olunur; receiver-in səhifəsində birinci nəşr artıq göründüyü üçün yoxlama indi düzgün
+  şəkildə `stale_text` olur, amma ssenari müəllifinin mətni nəşrə görə dəyişdirməyə yolu yoxdur (`{self.*}` hesabla
+  birlikdə keçir, dəyişmir). Emitter-in `do`-sunda və receiver-in `visible_text`-ində işlənən, hər icrada fərqli bir
+  yer tutucu (məs. `{pass}`: 1-ci keçid, swap, dalğa nömrəsi) əlavə edilsinmi? Tövsiyə: bəli, `{pass}` kimi sadə və
+  deterministik; kəşfiyyatçının marker-i də onu işlətsin.
 
 Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; `wave_size: 2` ilə iki managerli yarış PASSED ola bilmir;
 qadağan əməliyyatı qəbul edən sayt FAILED alır; swap + `wait_for` yalançı `DELIVERY_UI` vermir; xarici ünvan rədd

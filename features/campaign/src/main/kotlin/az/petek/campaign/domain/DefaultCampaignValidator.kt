@@ -32,7 +32,8 @@ import kotlin.time.Duration
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
  *   actors that can match two or more testers; its `request` is required and names a mutating method (or `*`) and a
- *   regex that compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder;
+ *   regex that compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder; an `emits`
+ *   `request` (the write its receivers' latency is measured from) follows the same form;
  * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
  *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
@@ -480,6 +481,9 @@ class DefaultCampaignValidator(
                 emits.idSource?.let {
                     checkIdSource(it, "$path.emits.id_from", "$name, emits.id_from", beforeScope, step.line)
                 }
+                requestProblems(emits.request, "mark when the change reached the target").forEach {
+                    report("emits", "$name, emits: $it")
+                }
             }
 
             private fun checkWaitFor() {
@@ -562,16 +566,20 @@ class DefaultCampaignValidator(
                             "may appear only once per step".takeIf {
                                 step.assertions.take(index).any { it is AssertionSpec.OnlyOneSucceeds }
                             },
-                        ) + requestProblems(assertion.request) + raceOracleProblems(assertion.oracle)
+                        ) + requestProblems(assertion.request, "decide a race") + raceOracleProblems(assertion.oracle)
                     }
                 }
 
-            private fun requestProblems(request: RequestPattern?): List<String> {
+            /** What is wrong with [request]; only requests that change something can [purpose]. */
+            private fun requestProblems(
+                request: RequestPattern?,
+                purpose: String,
+            ): List<String> {
                 request ?: return emptyList()
                 val method =
                     request.method?.takeIf { it !in RequestPattern.MUTATING_METHODS }?.let {
                         "request method '$it' is not one of ${RequestPattern.MUTATING_METHODS.joinToString(", ")} " +
-                            "(or ${RequestPattern.ANY_METHOD} for any of them): only requests that change something decide a race"
+                            "(or ${RequestPattern.ANY_METHOD} for any of them): only requests that change something $purpose"
                     }
                 val regex =
                     try {

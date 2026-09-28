@@ -401,7 +401,7 @@ internal class ScenarioComposer(
                 ?: return Outcome.Skipped("a race needs two testers of a role that was offered '$name' (seen: $seen)")
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
         val request =
-            raceRequest(action)
+            requestOf(action)
                 ?: return Outcome.Skipped("the request '$name' sends was not seen, so code could not decide who won a race")
         val id = stepId(action, "race")
         steps +=
@@ -499,7 +499,8 @@ internal class ScenarioComposer(
                         StepAction.Do(
                             "$open səhifəsini aç və '${site(action.name)}' ilə yeni qeyd yarat; mətn sahələrinə '$marker' yaz",
                         ),
-                    emits = EmitSpec(event, idSource),
+                    // The form's request is the write the receivers' delivery latency is measured from (Faza 24.10).
+                    emits = EmitSpec(event, idSource, requestOf(action)),
                     assertions = assertions,
                 )
             return Creator(id, event, marker, prerequisites, open).also {
@@ -559,10 +560,11 @@ internal class ScenarioComposer(
     }
 
     /**
-     * The requests that decide a race: the action's form, any object id in its path (`POST /tickets/[^/]+/approve`).
-     * Null (every mutating request) when the action submits no form the explorer saw.
+     * The request an action sends, as its form showed it, any object id in its path (`POST /tickets/[^/]+/approve`): it
+     * decides a race and marks when a created object reached the target. Null when the action submits no form the
+     * explorer saw.
      */
-    private fun raceRequest(action: ActionModel): RequestPattern? {
+    private fun requestOf(action: ActionModel): RequestPattern? {
         val path = action.httpPath ?: return null
         val method = action.httpMethod?.uppercase()?.takeIf { it in RequestPattern.MUTATING_METHODS } ?: return null
         return RequestPattern(method, path.split('/').joinToString("/") { if (it == UrlPatterns.ID) "[^/]+" else escapeRegex(it) })

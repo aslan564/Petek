@@ -139,7 +139,7 @@ class RecordingVerifyStepUseCaseTest {
             val records =
                 useCase().verifyActor(
                     listOf(VisibleText("Sabah 10:00 ümumi iclas", 5.seconds), LatencyMax(1.seconds)),
-                    assertionInput(session, eventEmittedAt = t0),
+                    assertionInput(session, t0 = t0),
                 )
 
             evidence.assertionList shouldContainExactly records
@@ -327,7 +327,7 @@ class RecordingVerifyStepUseCaseTest {
                     HttpStatus("/api/x", "GET", 200),
                 )
 
-            val withSession = useCase().verifyActor(specs, assertionInput(session, eventEmittedAt = t0))
+            val withSession = useCase().verifyActor(specs, assertionInput(session, t0 = t0))
             val withoutSession = useCase().verifyActor(specs, assertionInput(session = null, agentId = AgentId("a02")))
             val skipped = useCase(target = FakeTargetOracle(isAvailable = false)).verifyActor(specs, assertionInput(session))
 
