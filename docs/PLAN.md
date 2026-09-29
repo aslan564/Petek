@@ -694,7 +694,9 @@ tool-use yoxdur). 2026-09-26: vendor adı koddan və sənədlərdən çıxarıld
   repodakı işarələr — `AGENTS.md`/`.codex/` → codex-cli, `GEMINI.md`/`.gemini/` → gemini-cli,
   `.github/copilot-instructions.md` → OpenAI-uyğun endpoint tələb olunur; (4) PATH-dakı binarlar (`codex`, `gemini`,
   `opencode`, `ollama`). Tapılan digər agent CLI-ləri ehtiyatdır; heç nə tapılmasa `none`. Hər addım səbəbi ilə
-  loglanır və `doctor`-da göstərilir.
+  loglanır və `doctor`-da göstərilir. `auto`-nun açarla (və ya `ollama` ilə) tapdığı provayderin `PETEK_LLM_MODEL`-i
+  yoxdursa, AI-sız əmrləri dayandırmır: PATH-dakı AI CLI, yoxsa `none` işlənir və səbəb deyilir; sahibin adını
+  verdiyi provayder isə əvvəlki kimi konfiqurasiya xətasıdır (plan yoxlaması, 2026-09-29).
 - [x] `doctor`: aşkarlanan provayder + səbəb, ehtiyatlar və hansının cavab verdiyi; binar `--version`; PING. Neytral
   mətnlər (`CapacityAdvisor` "AI provayderinin limitləri"; login ipucları provayderə görə).
 - [x] `TextRedactor` və triaj `SecretRedactor`: bütün provayder açar formatları (`sk-`, `sk-ant-`, `AIza`, `gsk_`...).

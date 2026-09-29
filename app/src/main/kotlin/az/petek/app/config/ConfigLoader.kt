@@ -90,9 +90,10 @@ class ConfigLoader(
             val mailInbox = mailInbox()
             val mailDomain = mailInbox?.substringAfter('@') ?: mailDomain()
             val imap = if (mailSource == MailSource.IMAP) imap(mailInbox) else null
-            val resolution = provider()
-            val provider = resolution?.provider
             val model = text(Keys.LLM_MODEL)
+            val auto = text(Keys.LLM_PROVIDER)?.lowercase().let { it == null || it == AUTO }
+            val resolution = provider()?.let { if (auto) usable(it, model) else it }
+            val provider = resolution?.provider
             val bin = text(Keys.LLM_BIN)
             val llmArgs = llmArgs()
             val llmEnvUnset =
@@ -339,6 +340,26 @@ class ConfigLoader(
             return LlmProviderResolver(workingDirectory, onPath).resolve(explicit, values)
         }
 
+        /**
+         * An AI `auto` found by an API key or a local server (R09) is used only with what calling it needs: without
+         * `PETEK_LLM_MODEL` it would stop every command, also those that need no AI (`plan`, a run of `run` steps,
+         * `doctor`). Then an AI command-line tool on PATH is used instead, else none, and the reason says so (the doctor
+         * shows it). A provider the owner named stays a configuration error.
+         */
+        private fun usable(
+            resolution: LlmProviderResolver.Resolution,
+            model: String?,
+        ): LlmProviderResolver.Resolution {
+            if (resolution.provider !in NEEDS_MODEL || model != null) return resolution
+            val why = "${resolution.reason}, but ${Keys.LLM_MODEL} is not set"
+            val cli = resolution.fallbacks.firstOrNull()
+            return if (cli != null) {
+                LlmProviderResolver.Resolution(cli, "$why; $cli on PATH is used instead", fallbacks = resolution.fallbacks - cli)
+            } else {
+                LlmProviderResolver.Resolution(LlmProviderKey.NONE, "$why, so no AI provider is used")
+            }
+        }
+
         /** `PETEK_LLM_API_KEY`, else the variable auto-detection went by, else the provider's usual ones (never echoed). */
         private fun apiKey(
             provider: LlmProviderKey,
@@ -535,6 +556,9 @@ class ConfigLoader(
         const val DEFAULT_TARGETS_DIR = "targets"
         val MAILBOX = Regex("[a-z0-9._-]{1,48}@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
         const val AUTO = "auto"
+
+        /** Providers that cannot be called without a model name. */
+        val NEEDS_MODEL = setOf(LlmProviderKey.OPENAI_COMPAT, LlmProviderKey.ANTHROPIC_API)
         const val MIN_SECRET_LENGTH = 16
         val WEB_SCHEMES = setOf("http", "https")
         val TRUE = setOf("true", "yes", "on", "1")

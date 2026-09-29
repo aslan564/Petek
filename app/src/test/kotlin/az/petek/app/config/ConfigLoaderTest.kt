@@ -19,6 +19,7 @@ import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.infrastructure.http.StructuredMode
 import az.petek.mail.infrastructure.ImapSettings
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
@@ -253,6 +254,28 @@ class ConfigLoaderTest {
         openAi.llmProvider shouldBe LlmProviderKey.OPENAI_COMPAT
         openAi.llmBaseUrl shouldBe URI("https://api.openai.com/v1")
         openAi.llmProviderReason shouldBe "auto: OPENAI_API_KEY is set"
+    }
+
+    @Test
+    fun `an API key auto found without a model stops nothing that needs no AI, and says why`() {
+        val none = load(target, "OPENAI_API_KEY" to "sk-0123456789abcdef")
+        none.llmProvider shouldBe LlmProviderKey.NONE
+        none.llmProviderReason shouldBe "auto: OPENAI_API_KEY is set, but PETEK_LLM_MODEL is not set, so no AI provider is used"
+
+        // An AI command-line tool on PATH is used instead.
+        val cli =
+            ConfigLoader(emptyMap(), dir, fileSecret, onPath = { it == "codex" }).fromValues(
+                mapOf(
+                    target,
+                    "XAI_API_KEY" to "xai-0123456789",
+                ),
+            )
+        cli.llmProvider shouldBe LlmProviderKey.CODEX_CLI
+        cli.llmProviderReason shouldContain "codex-cli on PATH is used instead"
+
+        // A provider the owner named is still a configuration error without its model.
+        problems(target, "PETEK_LLM_PROVIDER" to "anthropic-api", "ANTHROPIC_API_KEY" to "sk-ant-0123456789") shouldContain
+            "PETEK_LLM_MODEL is required when PETEK_LLM_PROVIDER is anthropic-api"
     }
 
     @Test
