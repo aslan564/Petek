@@ -82,8 +82,8 @@ class ExploreSiteUseCase(
     private val testApi: TestApiProbe = TestApiProbe.NONE,
 ) {
     /**
-     * Explores [request]'s site; [accounts] are the e-mail addresses the logged-in [roleSessions] are signed in with (by
-     * role), for asking the test API about what the trial touch creates ([TestApiProbe]).
+     * Explores [request]'s site with logged-in [roleSessions] opened beforehand; [accounts] are the e-mail addresses they
+     * are signed in with (by role), for asking the test API about what the trial touch creates ([TestApiProbe]).
      */
     suspend fun execute(
         request: ExplorationRequest,
@@ -91,9 +91,21 @@ class ExploreSiteUseCase(
         accounts: Map<String, String> = emptyMap(),
         observer: ExplorationObserver = ExplorationObserver.NONE,
     ): ExplorationResult {
+        requireValidRoles(roleSessions.keys)
+        return execute(request, RoleWalkSource { RoleWalk(roleSessions, accounts) }, observer)
+    }
+
+    /**
+     * Explores [request]'s site; the logged-in side comes from [roles] once the visitor's walk is done, so the way in
+     * follows what the site showed (Faza 25.1), and only when a phase needs it.
+     */
+    suspend fun execute(
+        request: ExplorationRequest,
+        roles: RoleWalkSource,
+        observer: ExplorationObserver = ExplorationObserver.NONE,
+    ): ExplorationResult {
         val verdict = targetPolicy.verify(request.target)
         if (verdict is TargetVerdict.Refused) throw ExplorationRefusedException(verdict.reason)
-        requireValidRoles(roleSessions.keys)
         val id = ExplorationId.from(ids.runId())
         val started = clock.now()
         repository.create(ExplorationRecord(id, request, ExplorationStatus.RUNNING, started.wall))
@@ -115,7 +127,7 @@ class ExploreSiteUseCase(
         emitter.emit {
             ExplorationEvent.Started(it, request.target, request.phases.sorted(), request.grounding, request.budget, request.allowWrites)
         }
-        val phases = Phases(context, roleSessions, accounts)
+        val phases = Phases(context, roles)
         var status = ExplorationStatus.COMPLETED
         var failure: Exception? = null
         try {
@@ -191,10 +203,17 @@ class ExploreSiteUseCase(
     /** Runs the requested phases in order and owns the anonymous session. */
     private inner class Phases(
         private val context: ExplorationContext,
-        private val roleSessions: Map<String, BrowserSession>,
-        private val accounts: Map<String, String>,
+        private val roles: RoleWalkSource,
     ) {
         private var anonymousSession: BrowserSession? = null
+        private var walk: RoleWalk? = null
+
+        /** The logged-in side, opened once, after the visitor's walk: what the site showed decides the way in. */
+        private suspend fun walk(): RoleWalk =
+            walk ?: roles.open(context.accumulator.build(SNAPSHOT_VERSION, context.id, clock.now().wall, partial = true)).also {
+                requireValidRoles(it.sessions.keys)
+                walk = it
+            }
 
         suspend fun run(): Boolean {
             for (phase in context.request.phases.sorted()) {
@@ -216,6 +235,7 @@ class ExploreSiteUseCase(
         }
 
         private suspend fun roleBased() {
+            val roleSessions = walk().sessions
             if (roleSessions.isEmpty()) return skipped(ExplorationPhase.ROLE_BASED, "no logged-in sessions were given")
             val roles = roleSessions.keys.sorted()
             started(ExplorationPhase.ROLE_BASED, roles)
@@ -227,6 +247,8 @@ class ExploreSiteUseCase(
 
         private suspend fun trialTouch() {
             if (!context.request.allowWrites) return skipped(ExplorationPhase.TRIAL_TOUCH, "allowWrites is false")
+            val walk = walk()
+            val roleSessions = walk.sessions
             // Only a logged-in role writes into the test company, which teardown removes as a whole; what a visitor
             // creates (a contact or demo request) belongs to no company and would stay on the target for good.
             if (roleSessions.isEmpty()) {
@@ -240,7 +262,7 @@ class ExploreSiteUseCase(
                     putAll(roleSessions)
                     anonymousSession?.let { put(SiteModelAccumulator.ANONYMOUS, it) }
                 }
-            when (val check = testTargetCheck.check(context.request.target)) {
+            when (val check = (walk.testCheck ?: testTargetCheck).check(context.request.target)) {
                 is TestTargetVerdict.Refused -> {
                     return skipped(ExplorationPhase.TRIAL_TOUCH, "the target is not confirmed as test data: ${check.reason}")
                 }
@@ -250,7 +272,7 @@ class ExploreSiteUseCase(
                 }
             }
             started(ExplorationPhase.TRIAL_TOUCH, roleSessions.keys.sorted())
-            TrialToucher(context, roleSessions, watchers, clock, testApi, accounts).run()
+            TrialToucher(context, roleSessions, watchers, clock, testApi, walk.accounts).run()
         }
 
         private suspend fun started(
@@ -284,5 +306,8 @@ class ExploreSiteUseCase(
     private companion object {
         val ROLE_NAME = Regex("[a-z][a-z0-9_-]{0,39}")
         const val SAVE_ATTEMPTS = 3
+
+        /** The version of the model the logged-in side is shown mid-exploration; the saved model gets the real one. */
+        const val SNAPSHOT_VERSION = 1
     }
 }

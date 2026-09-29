@@ -303,10 +303,12 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
 - **Three-phase walk** (`ExploreSiteUseCase`, budget `ExplorationBudget`: pages and minutes). `ANONYMOUS` always
   runs, through a `ReadOnlyBrowserSession` that cannot click, type or submit; `CrawlPass` follows same-site links
   under `LinkPolicy`, `RobotsRules` and `UrlPatterns`, marks pages a 401/403 or a redirect to sign-in denies, and only
-  reads the sign-in and sign-up pages. `ROLE_BASED` walks with the logged-in sessions the caller hands in per role;
-  the panel gets them from `TestCompanyRoleSessions`, a setup-only campaign (owner sign-up, seeding, one manager and
-  one employee joining, by run functions over the site's own target profile from the scenario catalog) whose company
-  is torn down when the exploration ends. `TRIAL_TOUCH` (`TrialToucher`) submits harmless actions only with the
+  reads the sign-in and sign-up pages. `ROLE_BASED` walks with the logged-in sessions the caller opens per role once
+  the visitor's walk is done (`RoleWalkSource`, with the site as that walk saw it); the panel's sign-in chain may get
+  them from `TestCompanyRoleSessions`, a setup-only campaign (owner sign-up, seeding, one manager and one employee
+  joining, by run functions over the site's own target profile from the scenario catalog) whose company is torn down
+  when the exploration ends, but only where the site has companies: the profile's `tenant: company`, or a form to join
+  by invitation or company code that walk saw (`GateMaps.joinPages`, Faza 25.1). `TRIAL_TOUCH` (`TrialToucher`) submits harmless actions only with the
   owner's "Sınaq toxunuşu" and a target the `TestTargetCheck` confirms as test data, and never touches login, sign-up,
   verification, password or file forms. Without sessions the last two phases are skipped and the screen says why.
 - **Reading a page.** Code first: `HtmlScanner` (links, forms, fields, buttons), `PageHeuristics`, `FormClassifier` and

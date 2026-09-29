@@ -32,6 +32,8 @@ import az.petek.campaign.domain.Tenant
 import az.petek.core.ids.RunId
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
+import az.petek.explorer.domain.GateMaps
+import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.identity.domain.IdentityStatus
@@ -53,6 +55,11 @@ internal data class RoleSessionRequest(
     val allowWrites: Boolean,
     /** The owner's departments; the first one names the department of the session testers. */
     val departments: List<String>,
+    /**
+     * The site as the explorer's visitor walk saw it, when the sessions are opened after that walk (Faza 25.1): the
+     * way in follows it. Null: opened before any walk (the site's gate is not known then).
+     */
+    val seen: SiteModel? = null,
 )
 
 /**
@@ -131,6 +138,7 @@ internal class TestCompanyRoleSessions(
         progress: (String) -> Unit,
     ): RoleSessions {
         refusal(request)?.let { return RoleSessions.none(it) }
+        withoutCompanies(request)?.let { return RoleSessions.none(it) }
         testApi.refusal()?.let { return RoleSessions.none("Rollarla gəzinti buraxıldı: $it") }
         val profile = profiles.profile()
         val campaign = campaign(request, profile.profile)
@@ -263,6 +271,27 @@ internal class TestCompanyRoleSessions(
             else -> {
                 null
             }
+        }
+    }
+
+    /**
+     * Why no test company is made on this site (Faza 25.1): a test company only where the site has companies, as the
+     * owner says (the profile's `tenant`) or, without the owner's word, as the visitor's walk showed it (a form to join by
+     * invitation or company code, [GateMaps.joinPages]). A test API alone is no such sign: it is for oracle checks and
+     * teardown. Null when one may be made; also when no walk came first (nothing is known of the gate then).
+     */
+    private fun withoutCompanies(request: RoleSessionRequest): String? {
+        val owner =
+            container.config
+                .profileFor(request.target)
+                ?.spec
+                ?.tenant
+        val seen = request.seen
+        return when {
+            owner == Tenant.COMPANY -> null
+            owner == Tenant.NONE -> "hədəf profili saytı şirkətsiz sayır (tenant: none); test şirkəti yaradılmadı."
+            seen == null || GateMaps.joinPages(seen).isNotEmpty() -> null
+            else -> "saytda şirkətə qoşulma yolu (dəvət və ya şirkət kodu ilə forma) görünmədi; test şirkəti yaradılmadı."
         }
     }
 

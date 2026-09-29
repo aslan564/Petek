@@ -19,7 +19,9 @@ explorer to get in by the best available means, and to test sites that offer no 
 - **Sign-in chain** (`SignInStrategy` port, ordered): `test_company` → `own_accounts` → `self_register` → `anonymous`.
   Each attempt and each fallback is an event in the evidence and a line in the report. The explorer's role sessions
   and the testers' `register_and_login` share the chain. Sessions (`storage_state`) are kept per (target, identity)
-  and reused; a stale session falls back to the `login` flow.
+  and reused; a stale session falls back to the `login` flow. Since Faza 25.1 the explorer opens the chain once the
+  visitor's walk is done, and `test_company` only where the site has companies: the profile's `tenant: company`, or
+  a form to join by invitation or company code that walk saw.
 - **Mail sources**: `mailpit`, `test-api`, `imap` (catch-all or plus addressing), `manual` (the panel asks the owner
   for the code; meant for the explorer's few sessions, only a warning for the swarm).
 - **Capability probe** before exploration records what the target supports (test API, mail source, realtime

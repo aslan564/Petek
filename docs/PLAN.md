@@ -1357,7 +1357,10 @@ mərhələsindən sonra.
     gördükdə (`GateMaps.companyWay`: dəvət və ya şirkət kodu alan qoşulma forması və daxil olmuş rolun onları verən
     əməliyyatı) və test API test şirkətini toxuya bildikdə; test API tək başına heç vaxt şirkət draftı yaratmır.
     Panel (draft, avtomatik önizləmə) bunu işlədir; kəşfiyyatçının öz hesabı (`self_register`) yalnız sahib
-    `tenant: company` deyəndə şirkət açır. Fake target-də kəşfiyyatçı `/join` formasını və adminin "Dəvət et"
+    `tenant: company` deyəndə şirkət açır. Kəşfiyyatçının rollu sessiyaları ziyarətçi gəzintisindən sonra açılır
+    (`RoleWalkSource`); test şirkəti (`test_company`) yalnız sahib `tenant: company` deyəndə və ya ziyarətçi gəzintisi
+    dəvət və ya şirkət kodu ilə qoşulma formu görəndə yaradılır (`GateMaps.joinPages`), `tenant: none` olanda heç
+    vaxt: test API tək başına kəşfiyyat zamanı da heç nə yazdırmır (plan yoxlaması, 2026-09-29). Fake target-də kəşfiyyatçı `/join` formasını və adminin "Dəvət et"
     əməliyyatını görür, draft yenə şirkət draftıdır (e2e bunu indi yoxlayır); kodu kimin verdiyini görmədiyi saytda
     (kəşfiyyatçı özü soruşur) draft `tenant: none` olur.
 

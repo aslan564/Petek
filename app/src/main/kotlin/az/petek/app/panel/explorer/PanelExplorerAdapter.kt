@@ -29,6 +29,8 @@ import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.explorer.application.ExploreSiteUseCase
 import az.petek.explorer.application.ExplorerSettings
+import az.petek.explorer.application.RoleWalk
+import az.petek.explorer.application.RoleWalkSource
 import az.petek.explorer.application.ScenarioRequest
 import az.petek.explorer.domain.ExplorationBudget
 import az.petek.explorer.domain.ExplorationEvent
@@ -280,16 +282,23 @@ internal class PanelExplorerAdapter(
             // Logged-in sessions and trial touches write to the site: only on one whose owner proved it (ADR-0012).
             val ownership = container.ownership.check(run.target)
             val writable = ownership.allowsWrites
-            sessions =
-                if (ownership is OwnershipStatus.Unverified) {
-                    RoleSessions.none(PanelTargets.readOnlyExploration(ownership))
-                } else {
-                    roleSessions.open(
-                        RoleSessionRequest(run.target, request?.allowWrites == true, request?.departments.orEmpty()),
-                        factory,
-                    ) { line -> note(run, ExplorationTracker.SESSIONS, line) }
+            // The logged-in side opens once the visitor's walk is done: what the site showed decides the way in
+            // (Faza 25.1), e.g. a test company only where the site has a way to join one.
+            val walk =
+                RoleWalkSource { seen ->
+                    val opened =
+                        if (ownership is OwnershipStatus.Unverified) {
+                            RoleSessions.none(PanelTargets.readOnlyExploration(ownership))
+                        } else {
+                            roleSessions.open(
+                                RoleSessionRequest(run.target, request?.allowWrites == true, request?.departments.orEmpty(), seen),
+                                factory,
+                            ) { line -> note(run, ExplorationTracker.SESSIONS, line) }
+                        }
+                    sessions = opened
+                    opened.note?.let { note(run, ExplorationTracker.SESSIONS, it) }
+                    RoleWalk(opened.sessions, opened.accounts, opened.testCheck)
                 }
-            sessions.note?.let { note(run, ExplorationTracker.SESSIONS, it) }
             val explorer =
                 ExploreSiteUseCase(
                     sessions = factory,
@@ -299,7 +308,6 @@ internal class PanelExplorerAdapter(
                     clock = container.clock,
                     ids = container.ids,
                     targetPolicy = container.config.targetPolicy,
-                    testTargetCheck = sessions.testCheck,
                     settings = settings,
                     testApi = if (testApi(run.target)) OracleResourceProbe(container.oracle) else TestApiProbe.NONE,
                 )
@@ -313,8 +321,7 @@ internal class PanelExplorerAdapter(
                         ExplorationPhase.entries.toSet(),
                         request?.allowWrites == true && writable,
                     ),
-                    sessions.sessions,
-                    sessions.accounts,
+                    walk,
                 ) { event -> onEvent(run, event) }
             conclude(run, result.record.id)
         } catch (e: CancellationException) {

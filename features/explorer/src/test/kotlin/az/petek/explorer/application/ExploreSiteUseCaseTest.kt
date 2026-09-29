@@ -27,6 +27,7 @@ import az.petek.explorer.domain.ExplorationStatus
 import az.petek.explorer.domain.FindingKind
 import az.petek.explorer.domain.Provenance
 import az.petek.explorer.domain.Severity
+import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.TestApiProbe
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
@@ -578,6 +579,40 @@ class ExploreSiteUseCaseTest {
             refused.message shouldContain "production host"
             repository.records.shouldBeEmpty()
             site.sessions.shouldBeEmpty()
+        }
+
+    @Test
+    fun `the logged-in side opens once, after the visitor's walk, with the pages that walk found`() =
+        runTest {
+            loggedInSite()
+            val asked = CopyOnWriteArrayList<SiteModel>()
+            val roles =
+                RoleWalkSource { seen ->
+                    asked += seen
+                    RoleWalk(mapOf("admin" to site.session("admin")))
+                }
+
+            val result =
+                useCase().execute(request(phases = setOf(ExplorationPhase.ANONYMOUS, ExplorationPhase.ROLE_BASED)), roles, observer)
+
+            // What a visitor sees, and nothing only the admin reaches.
+            val seen = asked.single()
+            seen.pages.map { it.urlPattern } shouldContain "/"
+            seen.pages.map { it.urlPattern } shouldNotContain "/company"
+            seen.roles.map { it.name } shouldContainExactly listOf("anonymous")
+            result.model.roles
+                .map { it.name }
+                .toSet() shouldBe setOf("anonymous", "admin")
+        }
+
+    @Test
+    fun `an exploration without a logged-in phase never opens the logged-in side`() =
+        runTest {
+            publicSite()
+
+            useCase().execute(request(), RoleWalkSource { error("the logged-in side must not be opened") }, observer)
+
+            repository.records.single().status shouldBe ExplorationStatus.COMPLETED
         }
 
     @Test

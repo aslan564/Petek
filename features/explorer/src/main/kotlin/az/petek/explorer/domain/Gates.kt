@@ -183,20 +183,27 @@ object GateMaps {
      * alone does not say who gives the code, and an invitation feature alone does not say how one joins with it.
      */
     fun companyWay(model: SiteModel): CompanyWay? {
-        val join =
-            model.pages
-                .filter { page ->
-                    page.forms.any { form ->
-                        form.fields.any { INVITE.containsMatchIn("${it.name} ${it.label} ${it.testId.orEmpty()}") }
-                    }
-                }.map { it.urlPattern }
+        val join = joinPages(model)
         val issued =
             model.actions.filter { action ->
                 action.allowedRoles.any { it != SiteModelAccumulator.ANONYMOUS } &&
                     INVITE.containsMatchIn("${action.name} ${action.httpPath.orEmpty()} ${action.selector}")
             }
-        return if (join.isEmpty() || issued.isEmpty()) null else CompanyWay(join.distinct(), issued.map { it.id })
+        return if (join.isEmpty() || issued.isEmpty()) null else CompanyWay(join, issued.map { it.id })
     }
+
+    /**
+     * The pages with a form to join a company by invitation or company code: what even a visitor sees of a site with
+     * companies. Before any test company is made for the explorer, the site must show one (Faza 25.1).
+     */
+    fun joinPages(model: SiteModel): List<String> =
+        model.pages
+            .filter { page ->
+                page.forms.any { form ->
+                    form.fields.any { INVITE.containsMatchIn("${it.name} ${it.label} ${it.testId.orEmpty()}") }
+                }
+            }.map { it.urlPattern }
+            .distinct()
 
     /**
      * Whether a draft is for a site with companies (Faza 25.1): the owner's word when given (the target profile's

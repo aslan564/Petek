@@ -29,8 +29,12 @@ must be able to register, read the OTP, and fall back to provided credentials if
   the owner's tester count. Its site-wide checks (`site_health`, `page_checks`) are done by every tester on every page,
   each in its own browser, the links shared out (`share: links`); where people sign in, the pages a visitor sees are
   checked before anyone signs in and each role's own pages after the scenario (owner's decision, 2026-09-27).
-- Logged-in sessions come from `TestCompanyRoleSessions` (app): a setup-only campaign creates a test company through
-  the test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8).
+- Logged-in sessions are opened once the visitor's walk is done (`RoleWalkSource`, Faza 25.1), with the site as that
+  walk saw it, and only when a phase needs them. `TestCompanyRoleSessions` (app) then creates a test company through the
+  test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8), but only
+  where the site has companies: the profile's `tenant: company`, or, without the owner's word, a form to join by
+  invitation or company code the visitor's walk saw (`GateMaps.joinPages`); `tenant: none` never. A test API alone
+  is no such sign.
 - Findings are recorded by code, never judged by the AI: broken links, HTTP errors, slow pages, accessibility gaps,
   leaked error text, and what the browser itself saw go wrong on each page since it started loading (script errors
   and uncaught exceptions, failed requests to the site: `CONSOLE_ERROR`, `FAILED_REQUEST`), plus the page measured at
@@ -51,8 +55,9 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 - `SignInChain` (app): the methods of the site's target profile (`sign_in`, default `test_company` → `own_accounts` →
   `self_register` → `anonymous`) are tried in order until one yields logged-in sessions; every attempt and fallback
-  is a line of the exploration's activity. `self_register` opens a company only when the profile says `tenant:
-  company`; otherwise the explorer signs up as a plain user (Faza 25.1).
+  is a line of the exploration's activity. `test_company` is used only where the site has companies (above);
+  `self_register` opens a company only when the profile says `tenant: company`; otherwise the explorer signs up as a
+  plain user (Faza 25.1).
 - Drafts choose their tenant by `GateMaps.tenantFor` (Faza 25.1): the profile's `tenant`, else companies only when
   the explorer saw the site's own way into one (`GateMaps.companyWay`: a form taking an invitation or company code,
   and an operation of a signed-in role handing them out) and the test API can seed the test company; a test API

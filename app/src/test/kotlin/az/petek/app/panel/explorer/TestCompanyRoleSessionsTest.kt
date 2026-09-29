@@ -11,19 +11,30 @@
 
 package az.petek.app.panel.explorer
 
+import az.petek.app.config.ResolvedTarget
 import az.petek.app.testing.PanelHarness
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.TargetProfile
+import az.petek.campaign.domain.TargetSpec
+import az.petek.campaign.domain.Tenant
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
 import az.petek.core.security.Secret
+import az.petek.explorer.domain.ActionKind
+import az.petek.explorer.domain.ExplorationId
+import az.petek.explorer.domain.FieldModel
+import az.petek.explorer.domain.FormModel
+import az.petek.explorer.domain.PageModel
+import az.petek.explorer.domain.Provenance
+import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.TestTargetVerdict
+import az.petek.explorer.domain.UrlPatterns
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityPlan
 import az.petek.identity.domain.IdentityStatus
@@ -48,6 +59,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
 class TestCompanyRoleSessionsTest {
@@ -64,7 +76,63 @@ class TestCompanyRoleSessionsTest {
     @AfterEach
     fun close() = open.forEach { it.close() }
 
-    private fun harness(testToken: String? = "dev-token") = PanelHarness(dir, testToken = testToken).also { open += it }
+    private fun harness(
+        testToken: String? = "dev-token",
+        tenant: Tenant? = null,
+    ) = PanelHarness(
+        dir,
+        testToken = testToken,
+        targets =
+            listOfNotNull(
+                tenant?.let {
+                    ResolvedTarget(
+                        TargetSpec("demo", URI("http://127.0.0.1:9"), tenant = it),
+                        testToken = Secret("dev-token"),
+                        accounts = emptyList(),
+                    )
+                },
+            ),
+    ).also { open += it }
+
+    /** What the explorer's visitor walk saw (Faza 25.1): one page with a form of these fields. */
+    private fun seen(vararg fields: String): SiteModel {
+        val form =
+            FormModel(
+                "join form",
+                ActionKind.REGISTER,
+                fields.map { FieldModel(it, it, "text", true, "f-$it", "[data-testid=\"f-$it\"]", emptyList()) },
+                "[data-testid=\"join-submit\"]",
+                "POST",
+                "/join",
+                Provenance.OBSERVED,
+                emptyList(),
+            )
+        val page =
+            PageModel(
+                id = UrlPatterns.pageId("/join"),
+                urlPattern = "/join",
+                title = "Qoşul",
+                purpose = "",
+                reachableBy = setOf("anonymous"),
+                forms = listOf(form),
+                testIds = emptyList(),
+                linkCount = 1,
+                loadMs = 100,
+                provenance = Provenance.OBSERVED,
+                evidence = emptyList(),
+            )
+        return SiteModel(
+            version = 1,
+            explorationId = ExplorationId("exp_seen"),
+            target = URI("http://127.0.0.1:9"),
+            createdAt = Instant.EPOCH,
+            pages = listOf(page),
+            actions = emptyList(),
+            roles = emptyList(),
+            realtime = emptyList(),
+            unknowns = emptyList(),
+        )
+    }
 
     private fun request(
         panel: PanelHarness,
@@ -119,6 +187,47 @@ class TestCompanyRoleSessionsTest {
             roles.note shouldBe "Rollarla gəzinti buraxıldı: hədəfdə test API-si yoxdur"
             real.open(request(panel), factory) { }.note.shouldNotBeNull() shouldContain "test API-si cavab vermədi"
             campaigns.shouldBeEmpty()
+        }
+
+    @Test
+    fun `no test company where the visitor's walk saw no way to join one, whatever the test API says`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val source = sessions(panel) { error("nothing may be created") }
+
+            val roles = source.open(request(panel).copy(seen = seen("email", "password")), factory) { progress += it }
+
+            roles.note.shouldNotBeNull() shouldContain "şirkətə qoşulma yolu"
+            campaigns.shouldBeEmpty()
+            opened.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a site whose visitor walk shows a form to join by company code gets its test company`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val source = sessions(panel) { null }
+
+            source.open(request(panel).copy(seen = seen("email", "company_code")), factory) { progress += it }
+
+            campaigns.single().settings.name shouldBe TestCompanyRoleSessions.NAME
+        }
+
+    @Test
+    fun `the owner's word on the site's companies wins over what the visitor's walk saw`() =
+        runBlocking<Unit> {
+            val companies = harness(tenant = Tenant.COMPANY)
+            sessions(companies) { null }.open(request(companies).copy(seen = seen("email")), factory) { progress += it }
+            campaigns.single().settings.name shouldBe TestCompanyRoleSessions.NAME
+            open.removeAt(0).close()
+
+            val plain = harness(tenant = Tenant.NONE)
+            val roles =
+                sessions(plain) { error("nothing may be created") }
+                    .open(request(plain).copy(seen = seen("email", "company_code")), factory) { progress += it }
+
+            roles.note.shouldNotBeNull() shouldContain "tenant: none"
+            campaigns.size shouldBe 1
         }
 
     @Test

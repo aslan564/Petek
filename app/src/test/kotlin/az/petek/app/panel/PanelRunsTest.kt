@@ -442,7 +442,10 @@ class PanelRunsTest {
 
             panel.backend.cancelRun() shouldBe false
             panel.backend.runs() shouldBe emptyList()
-            llm.client.requests.shouldBeEmpty()
+            // The visitor's walk comes first (Faza 25.1); no tester of the stopped run ever asked the AI.
+            llm.client.requests
+                .filterNot { it.label.startsWith("explorer/") }
+                .shouldBeEmpty()
         }
 
     /** [store] whose run creation waits for [gate] (after telling [creating]). */
