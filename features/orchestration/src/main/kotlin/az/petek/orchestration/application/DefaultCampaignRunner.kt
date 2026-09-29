@@ -302,7 +302,18 @@ class DefaultCampaignRunner(
                 run.wave = wave.map { it.agentId }.toSet()
                 runSteps(run, board, tasks, run.campaign.setup.filter { step -> actors.resolve(step.actors, wave).isNotEmpty() })
                 run.wave = live
-                runSteps(run, board, tasks, run.campaign.steps)
+                val (again, done) = run.campaign.steps.partition { step -> repeats(step, wave, run.campaign) }
+                if (done.isNotEmpty()) {
+                    evidence.system(
+                        run,
+                        null,
+                        "wave",
+                        StepStatus.SKIPPED,
+                        "wave ${index + 1}: ${done.joinToString { it.id }} not repeated: done by the testers in every wave " +
+                            "alone, with no event of this wave, so the first wave did it already",
+                    )
+                }
+                runSteps(run, board, tasks, again)
             }
             if (index < plan.waves.lastIndex) {
                 val leaving = wave.map { it.agentId }.toSet()
@@ -315,6 +326,23 @@ class DefaultCampaignRunner(
                 }
             }
         }
+    }
+
+    /**
+     * Whether [step] runs again in a later wave with its [wave] testers: always when any of them acts in it; a step the
+     * residents do alone only when it emits (the wave's receivers wait for it) or waits for an event of a main step
+     * (each wave has its own). Otherwise it would redo what the residents did in the first wave on the same objects: a
+     * race between the owner and the only manager on a setup object would find it decided and fail for no fault of the
+     * site.
+     */
+    private fun repeats(
+        step: ScenarioStep,
+        wave: List<Identity>,
+        campaign: Campaign,
+    ): Boolean {
+        if (actors.resolve(step.actors, wave).isNotEmpty()) return true
+        val waveEvents = campaign.steps.mapNotNullTo(HashSet()) { it.emits?.event }
+        return step.emits != null || step.waitFor?.event in waveEvents
     }
 
     /** `wave 2 of 3: 4 testers (a03, a07, a11, a15); in every wave: a01 (admin), set up in wave 1`. */

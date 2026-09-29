@@ -163,6 +163,8 @@ class DefaultAssertionEvaluator(
     private class VisibleTextCheck(
         val result: AssertionResult,
         val range: LatencyRange? = null,
+        /** [AssertionInput.earlierDelivery]: there was no delivery to time, so a following `latency_max` does not apply. */
+        val earlierDelivery: String? = null,
     )
 
     /**
@@ -193,6 +195,10 @@ class DefaultAssertionEvaluator(
             guarded(spec, input) {
                 val rendered = spec.rendered(input)
                 val session = input.session ?: return@guarded noSession(spec, rendered)
+                input.earlierDelivery?.let { reason ->
+                    val shown = untimed(spec, rendered, session)
+                    return@guarded shown.copy(note = listOfNotNull(shown.note, reason).joinToString("; "))
+                }
                 val time = input.eventTime ?: return@guarded untimed(spec, rendered, session)
                 val reading = input.watch?.takeIf { it.text == rendered.text }?.reading
                 if (reading == TextWatch.WasThere) return@guarded seenBeforeTheWrite(spec, rendered, time)
@@ -212,7 +218,7 @@ class DefaultAssertionEvaluator(
                     note = sightingNote(time, sighting, measured, remaining, spec.within, late),
                 )
             }
-        return VisibleTextCheck(result, range.takeIf { result.verdict == Verdict.PASSED })
+        return VisibleTextCheck(result, range.takeIf { result.verdict == Verdict.PASSED }, input.earlierDelivery)
     }
 
     /**
@@ -381,6 +387,9 @@ class DefaultAssertionEvaluator(
     ): AssertionResult {
         val range = measured?.range
         if (range == null) {
+            measured?.earlierDelivery?.let { reason ->
+                return result(spec, Verdict.NOT_APPLICABLE, observed = null, note = "no delivery to time here: $reason")
+            }
             if (measured?.result?.verdict == Verdict.INCONCLUSIVE) {
                 val note = "no latency measured: the preceding visible_text proves no delivery"
                 return result(spec, Verdict.INCONCLUSIVE, observed = null, note = note)

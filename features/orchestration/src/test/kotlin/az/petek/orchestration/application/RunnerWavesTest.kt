@@ -164,6 +164,74 @@ class RunnerWavesTest {
         }
 
     @Test
+    fun `a step the residents do alone is not repeated in later waves unless a wave needs its event`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 1,
+                    employees = 4,
+                    setup = listOf(step("seed", admin(), phase = StepPhase.SETUP, emits = "ticket_ready")),
+                    steps =
+                        listOf(
+                            // The owner and the only manager: both live in every wave, the ticket is the setup's.
+                            step("decide", managers(), StepAction.Do("Approve the ticket the setup prepared")),
+                            step("post", admin(), emits = "note_posted"),
+                            step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
+                        ),
+                )
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            f.runner().run(waved)
+
+            f.agents.callsFor("decide").map { it.agentId.value } shouldContainExactly listOf("a02")
+            f.agents.callsFor("post").map { it.agentId.value } shouldContainExactly listOf("a01", "a01")
+            f.agents
+                .callsFor("read")
+                .map { it.agentId.value }
+                .size shouldBe 4
+            f.evidence.stepList
+                .single { it.action == "wave" && it.status == StepStatus.SKIPPED }
+                .detail!! shouldStartWith "wave 2: decide not repeated"
+        }
+
+    @Test
+    fun `a later wave reads a setup event's text as shown, without timing the first wave's delivery`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler)).apply { verify.realScreenChecks = true }
+            f.browser.configure = { session -> session.showText("Xoş gəldiniz") }
+            val base =
+                campaign(
+                    managers = 0,
+                    employees = 4,
+                    setup = listOf(step("welcome", admin(), phase = StepPhase.SETUP, emits = "welcomed")),
+                    steps =
+                        listOf(
+                            step(
+                                "greet",
+                                employees(),
+                                waitFor = "welcomed",
+                                waitTimeout = 5.seconds,
+                                assertions =
+                                    listOf(
+                                        AssertionSpec.VisibleText("Xoş gəldiniz", 5.seconds),
+                                        AssertionSpec.LatencyMax(2.seconds),
+                                    ),
+                            ),
+                        ),
+                )
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            f.runner().run(waved)
+
+            val checks = f.evidence.assertionList.filter { it.scenarioStep == "greet" }
+            val secondWave = checks.filter { it.agentId?.value in setOf("a03", "a05") }
+            secondWave.filter { it.type == "visible_text" }.map { it.verdict } shouldContainExactly List(2) { Verdict.PASSED }
+            secondWave.filter { it.type == "latency_max" }.map { it.verdict } shouldContainExactly List(2) { Verdict.NOT_APPLICABLE }
+            secondWave.first { it.type == "latency_max" }.note!! shouldContain "was published in pass 1 and is read in pass 2"
+        }
+
+    @Test
     fun `the admin's setup runs in the first wave only and its setup event serves every wave`() =
         runTest {
             val f = RunnerFixture(VirtualClock(testScheduler))

@@ -121,9 +121,11 @@ internal data class StepResult(
  * evidence, the action records of a race step are written once all its actors are done (with their own start and end
  * times); when the step is interrupted first (budget, abort), the racers that already acted are recorded unjudged.
  *
- * Forbidden actions: in a main step that expects a refusal, the requests the actor's own page sent during the action
- * are read like a racer's; one the site accepted on the method and path of an `http_status` assertion that expects
- * 401/403 fails the action with `forbidden_accepted`, a defect of the site ([refusalBreached]).
+ * Forbidden actions: in a main step that expects a refusal, the mutating requests (POST, PUT, PATCH, DELETE) the
+ * actor's own page sent during the action are read like a racer's; one the site accepted on the method and path of an
+ * `http_status` assertion that expects 401/403 fails the action with `forbidden_accepted`, a defect of the site
+ * ([refusalBreached]). A page the role must not see (a GET) is not among them: the `http_status` probe itself, sent
+ * with the actor's session, catches a site that shows it.
  *
  * Every task transition (waiting, running, final state) and every event published or received is reported to the
  * [TaskBoard].
@@ -404,7 +406,13 @@ internal class StepExecutor(
         val time = eventTime(waited.event)
         val watch = run.takeWatch(actor.step.id, actor.agentId)?.let { WatchedText(it.text, read(actor, it)) }
         val templates = templateContext(actor.identity, waited.event.objectId, passOf(actor.step, waited.event))
-        val verification = verifyActor(actor, waited.stepId, specs, templates, time, watch)
+        // An event of an earlier pass (a setup event carried into a later wave, or read in the swap) was delivered then:
+        // its text is checked as shown, never timed from a write long past.
+        val earlier =
+            waited.event
+                .takeIf { it.pass < run.pass }
+                ?.let { "'${it.name}' was published in pass ${it.pass} and is read in pass ${run.pass}" }
+        val verification = verifyActor(actor, waited.stepId, specs, templates, time, watch, earlier)
         val visible = verification.records.firstOrNull { it.type == VISIBLE_TEXT_TYPE }
         when {
             visible != null && visible.verdict == Verdict.PASSED -> {
@@ -1055,9 +1063,10 @@ internal class StepExecutor(
         templates: TemplateContext,
         time: EventTime?,
         watch: WatchedText? = null,
+        earlierDelivery: String? = null,
     ): Verification {
         if (specs.isEmpty()) return Verification(emptyList(), error = false)
-        val input = AssertionInput(run.runId, stepId, actor.step.id, actor.agentId, actor.session, templates, time, watch)
+        val input = AssertionInput(run.runId, stepId, actor.step.id, actor.agentId, actor.session, templates, time, watch, earlierDelivery)
         return try {
             val records = services.verify.verifyActor(specs, input)
             records.filter { it.verdict == Verdict.FAILED }.forEach { run.tally.assertionFailed(actor.agentId) }

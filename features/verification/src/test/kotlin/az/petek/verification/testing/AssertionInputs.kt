@@ -40,6 +40,7 @@ fun assertionInput(
     runId: RunId = RunId("run_test"),
     eventTime: EventTime? = t0?.let { EventTime.at(it) },
     watch: WatchedText? = null,
+    earlierDelivery: String? = null,
 ): AssertionInput =
     AssertionInput(
         runId = runId,
@@ -50,4 +51,5 @@ fun assertionInput(
         templates = templates,
         eventTime = eventTime,
         watch = watch,
+        earlierDelivery = earlierDelivery,
     )

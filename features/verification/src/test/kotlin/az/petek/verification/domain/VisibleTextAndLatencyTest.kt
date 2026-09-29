@@ -61,6 +61,27 @@ class VisibleTextAndLatencyTest {
         }
 
     @Test
+    fun `an event delivered in an earlier pass is checked as shown and its delivery is not timed again`() =
+        runTest {
+            val t0 = clock.now()
+            clock.advance(10.seconds)
+            session.fake.visibleTexts += announcement
+            val carried = "'announcement_created' was published in pass 1 and is read in pass 2"
+
+            val (visible, latency) =
+                evaluator.evaluate(
+                    listOf(VisibleText(announcement, 5.seconds), LatencyMax(1.seconds)),
+                    assertionInput(session, t0, earlierDelivery = carried),
+                )
+
+            visible.verdict shouldBe Verdict.PASSED
+            visible.latency.shouldBeNull()
+            visible.note!! shouldContain carried
+            latency.verdict shouldBe Verdict.NOT_APPLICABLE
+            latency.note shouldBe "no delivery to time here: $carried"
+        }
+
+    @Test
     fun `visible_text renders templates in the awaited text`() =
         runTest {
             session.fake.visibleTexts += "Salam, Aysel Məmmədova"

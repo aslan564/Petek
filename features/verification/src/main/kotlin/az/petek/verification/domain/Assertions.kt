@@ -36,6 +36,12 @@ data class AssertionInput(
     val eventTime: EventTime?,
     /** What the receiver's page saw while it watched for a `visible_text` before the change was written (Faza 24.10). */
     val watch: WatchedText? = null,
+    /**
+     * Why the awaited event has no delivery to time here: it was published in an earlier execution of the steps (a
+     * setup event of the first wave read in a later wave, or in the account swap). `visible_text` then only checks
+     * that the text is shown, and `latency_max` does not apply; [eventTime] would time a delivery long past.
+     */
+    val earlierDelivery: String? = null,
 )
 
 /**
