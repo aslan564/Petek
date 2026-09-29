@@ -144,6 +144,38 @@ class PageChecksRunFunctionTest {
         }
 
     @Test
+    fun `a list the visitor saw passes while it shows one object and fails when it shows none`() =
+        runTest {
+            browser.pageFactsByUrl["/blog"] =
+                clean(
+                    title = "Blog",
+                    links = listOf(LinkFact("Post", "https://site.test/posts/17-first-post"), LinkFact("About", "/about")),
+                )
+            // An archive link is no post: the explorer's own rule tells ids from words.
+            browser.pageFactsByUrl["/news"] = clean(title = "News", links = listOf(LinkFact("Archive", "/news/archive")))
+            val lists = "/blog>/posts/*>12,/news>/news/*>5"
+
+            val outcome = fixture.run("page_checks", mapOf("checks" to "lists", "pages" to "/blog,/news", "lists" to lists))
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.summary shouldContain "/news shows no /news/* of its list (the explorer saw 5 there as a visitor)"
+            outcome.summary shouldNotContain "/blog shows"
+        }
+
+    @Test
+    fun `a list is looked at on the desktop only, since a phone layout may fold it away`() =
+        runTest {
+            browser.facts = clean(title = "News")
+
+            val args = mapOf("checks" to "lists", "pages" to "/news", "lists" to "/news>/news/*>5", "share" to "work")
+            val phone = fixture.run("page_checks", args, share = ActorShare(0, 3))
+            val desktop = fixture.run("page_checks", args, share = ActorShare(2, 3))
+
+            phone.status shouldBe ActionStatus.SUCCEEDED
+            desktop.status shouldBe ActionStatus.FAILED
+        }
+
+    @Test
     fun `two pages with the same title are named`() =
         runTest {
             browser.pageFactsByUrl["/"] = clean(title = "Home")

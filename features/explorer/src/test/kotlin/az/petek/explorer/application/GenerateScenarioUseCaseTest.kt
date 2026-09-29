@@ -536,6 +536,29 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `a list the visitor saw is checked on its page, with the id written so that no placeholder is read`() {
+        val blog =
+            Models.model(
+                listOf(
+                    Models.page("/").copy(lists = mapOf("/posts/{id}" to 12)),
+                    Models.page("/about"),
+                ),
+                emptyList(),
+                roles = listOf("anonymous"),
+            )
+        val tenant = GateMaps.tenantFor(blog, owner = null, testApi = false)
+
+        val composed = useCase().compose(blog, request(maxIdeas = 50).copy(tenant = tenant, testers = 3))
+
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+        val args = (composed.campaign.step("site-content").action as StepAction.Run).args
+        args["checks"]!!.split(',') shouldContain "lists"
+        args["lists"] shouldBe "/>/posts/*>12"
+        composed.covered.single { it.idea.pattern == TestPattern.EMPTY_LISTS }.stepIds shouldBe listOf("site-content")
+        reload(composed.yaml).steps.single { it.id == "site-content" }.action shouldBe composed.campaign.step("site-content").action
+    }
+
+    @Test
     fun `objects visitors see are not checked as leaks, but a draft must not open for anyone else`() {
         val editor = setOf("member")
         val trial = Models.trial(emptySet(), urlPatternAfter = "/posts/{id}", role = "member")

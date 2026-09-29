@@ -248,6 +248,10 @@ internal object ExplorerTexts {
                 TestPattern.LANGUAGE_MIRRORS -> {
                     "səhifənin hər dil versiyası (hreflang) cavab verməli, öz dilini bildirməli və səhifəyə geri istinad etməlidir."
                 }
+
+                TestPattern.EMPTY_LISTS -> {
+                    "ziyarətçinin gördüyü siyahılar (məqalələr, məhsullar və s.) testerlərə boş görünməməlidir."
+                }
             }
         val matched = if (idea.rationale.endsWith(MATCHES_INSTRUCTIONS)) " Təlimatınıza uyğundur." else ""
         if (idea.pattern.siteWide) return "Bütün sayt: $why$matched"

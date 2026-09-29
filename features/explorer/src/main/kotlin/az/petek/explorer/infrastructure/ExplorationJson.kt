@@ -139,6 +139,7 @@ internal data class PageDto(
     val loadMs: Long?,
     val provenance: String,
     val evidence: List<String>,
+    val lists: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
@@ -496,6 +497,7 @@ internal object ExplorationJsonMapper {
             loadMs,
             provenance.name,
             evidence.ids(),
+            lists,
         )
 
     private fun PageDto.toDomain() =
@@ -511,6 +513,7 @@ internal object ExplorationJsonMapper {
             loadMs,
             enumValueOf<Provenance>(provenance),
             evidence.artifacts(),
+            lists,
         )
 
     private fun TrialTouch.toDto() =

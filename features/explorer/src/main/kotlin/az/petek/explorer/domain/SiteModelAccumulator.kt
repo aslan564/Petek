@@ -28,6 +28,8 @@ data class PageObservation(
     val linkCount: Int,
     val loadMs: Long?,
     val evidence: List<ArtifactId>,
+    /** Object pages the page lists, with how many objects: recorded for the anonymous viewpoint only ([PageModel.lists]). */
+    val lists: Map<String, Int> = emptyMap(),
 )
 
 /**
@@ -236,6 +238,7 @@ class SiteModelAccumulator(
         private var linkCount = 0
         private var loadMs: Long? = null
         private val evidence = LinkedHashSet<ArtifactId>()
+        private val lists = LinkedHashMap<String, Int>()
 
         val formCount: Int get() = forms.size
 
@@ -256,6 +259,7 @@ class SiteModelAccumulator(
             linkCount = maxOf(linkCount, observation.linkCount)
             if (loadMs == null) loadMs = observation.loadMs
             evidence.addCapped(observation.evidence)
+            observation.lists.forEach { (pattern, count) -> lists.merge(pattern, count, ::maxOf) }
         }
 
         fun build() =
@@ -271,6 +275,7 @@ class SiteModelAccumulator(
                 loadMs = loadMs,
                 provenance = Provenance.OBSERVED,
                 evidence = evidence.toList(),
+                lists = lists.toMap(),
             )
     }
 

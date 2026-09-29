@@ -225,6 +225,27 @@ class ExploreSiteUseCaseTest {
         }
 
     @Test
+    fun `the lists a visitor sees are learned with how many objects they show, a single link is no list`() =
+        runTest {
+            site.page("/", "Home") {
+                link("Blog", "/blog")
+                link("Featured", "/stories/7")
+            }
+            site.page("/blog", "Blog") {
+                link("First", "/posts/1")
+                link("Second", "/posts/2")
+                link("First again", "/posts/1/")
+                link("Archive", "/posts/archive")
+            }
+            listOf(1, 2, 7).forEach { site.page(if (it == 7) "/stories/7" else "/posts/$it", "Item $it") }
+
+            val result = useCase().execute(request())
+
+            result.model.pageByPattern("/blog")!!.lists shouldBe mapOf("/posts/{id}" to 2)
+            result.model.pageByPattern("/")!!.lists shouldBe emptyMap()
+        }
+
+    @Test
     fun `a page that renders after load is captured once it shows content`() =
         runTest {
             publicSite()

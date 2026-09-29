@@ -200,11 +200,14 @@ internal class ScenarioComposer(
                 if (phase == StepPhase.SETUP) beforeSignIn += step else steps += step
                 healthChecks.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
             }
-            if (content.isNotEmpty()) {
+            // A group checks lists only where its pages have some (the visitor's).
+            val lists = listsOf(pages)
+            val checks = if (lists.isEmpty()) content - LISTS else content
+            if (checks.isNotEmpty()) {
                 val id = Slugs.firstFree("$prefix-content") { it !in stepIds }
-                val step = checkStep(id, phase, actor, settings.setup.pageChecks, content, pages)
+                val step = checkStep(id, phase, actor, settings.setup.pageChecks, checks, pages, lists)
                 if (phase == StepPhase.SETUP) beforeSignIn += step else steps += step
-                content.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
+                checks.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
             }
         }
 
@@ -235,6 +238,7 @@ internal class ScenarioComposer(
         function: String,
         checks: List<String>,
         pages: List<String>,
+        lists: String = "",
     ): ScenarioStep =
         step(
             id = id,
@@ -248,9 +252,22 @@ internal class ScenarioComposer(
                         "pages" to pages.joinToString(","),
                         SHARE to SHARE_WORK,
                         DEVICES to ALL_DEVICES,
-                    ),
+                    ) + (if (lists.isEmpty()) emptyMap() else mapOf(LISTS to lists)),
                 ),
         )
+
+    /**
+     * The `lists` argument of `page_checks` for [pages]: `page>objects>seen` per list the visitor saw, with the object
+     * page's id segment written as an asterisk (braces would be read as a placeholder).
+     */
+    private fun listsOf(pages: List<String>): String =
+        pages
+            .flatMap { page ->
+                model.pageByPattern(page)?.lists.orEmpty().toSortedMap().map { (objects, seen) ->
+                    "$page>${objects.replace(UrlPatterns.ID, "*")}>$seen"
+                }
+            }.filter { literal(it.substringBefore('>')) }
+            .joinToString(",")
 
     /** The site's own pages (no object id) seen by whom [seen] accepts, at most [MAX_SITE_PAGES]. */
     private fun pagesSeenBy(seen: (PageModel) -> Boolean): List<String> =
@@ -698,6 +715,7 @@ internal class ScenarioComposer(
         /** The most pages one group of site-wide checks visits. */
         const val MAX_SITE_PAGES = 20
         const val SESSION = "session"
+        const val LISTS = "lists"
         const val SHARE = "share"
         const val SHARE_WORK = "work"
         const val DEVICES = "devices"
@@ -723,11 +741,12 @@ internal class ScenarioComposer(
                 TestPattern.PAGE_META to "meta",
                 TestPattern.OUTBOUND_LINKS to "outbound",
                 TestPattern.LANGUAGE_MIRRORS to "mirrors",
+                TestPattern.EMPTY_LISTS to LISTS,
             )
 
         /** The order checks are written in, so a draft reads the same whatever the ideas' order. */
         val CHECK_ORDER =
-            listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound", "mirrors")
+            listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound", "mirrors", LISTS)
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
     }

@@ -18,6 +18,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.PageFacts
+import az.petek.core.model.PathSegments
 import az.petek.evidence.domain.StepStatus
 import java.net.URI
 
@@ -37,7 +38,11 @@ import java.net.URI
  * - `mirrors`: the page's language versions (`hreflang`, the showcase card "language mirrors differ"): each answers
  *   (a version that answers 404 is the card "a deep link is 404 in one language"), and one on the same site says it is
  *   in the language it is named for and names the page back among its own versions; up to `max_mirrors` (default 30)
- *   distinct versions are looked at once. A version on another site is only asked whether it answers.
+ *   distinct versions are looked at once. A version on another site is only asked whether it answers;
+ * - `lists`: a list everyone sees is not empty (the showcase card "empty list"). The argument `lists` names, per page,
+ *   the object pages it lists and how many objects the explorer saw there as a visitor (`page>objects>seen`, the id
+ *   segment of the object page written as an asterisk); the page must show at least one link to such an object. It is
+ *   looked at on a desktop screen only, as the explorer saw it: a phone layout may fold a list away.
  *
  * With `share: work` the step's testers split the pages and devices between them (each job a page on a phone, tablet
  * or desktop), with `share: pages` the pages (duplicate titles are then compared within a tester's pages only), and
@@ -72,6 +77,7 @@ internal class PageChecksRunFunction(
             val outbound = LinkedHashMap<String, String>()
             // One entry per page, whatever its spelling (`/en/about` and `/en/about/`), holding the address first named.
             val mirrors = LinkedHashMap<String, Pair<String, Mirror>>()
+            val lists = listsOf(args[LISTS])
             val screens = Screens(this)
             var firstFailing: PageShare.Job? = null
             try {
@@ -109,6 +115,18 @@ internal class PageChecksRunFunction(
                         facts.links
                             .filter { external(it.url, here) }
                             .forEach { outbound.putIfAbsent(withoutFragment(it.url), path) }
+                    }
+                    if (LISTS in checks && (job.device == null || job.device == Device.DESKTOP)) {
+                        lists[ref].orEmpty().forEach { list ->
+                            val shown =
+                                facts.links
+                                    .mapNotNull { linkPath(it.url) }
+                                    .filter(list::lists)
+                                    .distinct()
+                            if (shown.isEmpty()) {
+                                problems += "$where shows no ${list.objects} of its list (the explorer saw ${list.seen} there as a visitor)"
+                            }
+                        }
                     }
                     if ("mirrors" in checks && job.asksLinks) {
                         val here = runtime.session.currentUrl()
@@ -164,6 +182,30 @@ internal class PageChecksRunFunction(
                 screens.restore()
             }
         }
+
+    /**
+     * A list of [objects] (an object page, its id segment an asterisk) the explorer saw a page show [seen] of; a link is
+     * one of them when its path, its ids written the same way ([PathSegments], the explorer's own rule), is [objects].
+     */
+    private class ListOf(
+        val objects: String,
+        val seen: Int,
+    ) {
+        fun lists(path: String): Boolean = PathSegments.generalize(path, "*") == PathSegments.generalize(objects, "*")
+    }
+
+    /** The `lists` argument by page; entries that are not `page>objects>seen` are left out. */
+    private fun listsOf(text: String?): Map<String, List<ListOf>> =
+        list(text)
+            .mapNotNull { entry ->
+                val parts = entry.split('>')
+                val seen = parts.getOrNull(2)?.trim()?.toIntOrNull()
+                if (parts.size != LIST_PARTS || seen == null || !parts[1].trim().startsWith("/")) return@mapNotNull null
+                parts[0].trim() to ListOf(parts[1].trim(), seen)
+            }.groupBy({ it.first }, { it.second })
+
+    /** The path of [url] (absolute or not), or null when it is not an address. */
+    private fun linkPath(url: String): String? = runCatching { URI(withoutFragment(url)).rawPath }.getOrNull()?.takeIf { it.isNotEmpty() }
 
     /** A language version named by the page [page] (at [from]) as its [language] version. */
     private data class Mirror(
@@ -278,7 +320,9 @@ internal class PageChecksRunFunction(
             .filter { it.isNotEmpty() }
 
     companion object {
-        val ALL_CHECKS: List<String> = listOf("anchors", "images", "alt", "meta", "outbound", "mirrors")
+        const val LISTS = "lists"
+        val ALL_CHECKS: List<String> = listOf("anchors", "images", "alt", "meta", "outbound", "mirrors", LISTS)
+        private const val LIST_PARTS = 3
         const val DEFAULT_MAX_OUTBOUND = 40
         const val DEFAULT_MAX_MIRRORS = 30
 

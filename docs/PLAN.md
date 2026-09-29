@@ -1082,6 +1082,15 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   `html lang`-ı ilə adlandırıldığı dildə olduğunu deməli və səhifəni öz versiyaları arasında geri göstərməlidir.
   Başqa saytdakı versiyadan yalnız cavab verib-vermədiyi soruşulur (tester saytdan çıxmır); hər versiya bir dəfə
   soruşulur (`/en/about` və `/en/about/` eynidir). `PageChecksRunFunctionTest`, `PlaywrightBrowserSessionTest`.
+- [x] Vitrin kartı "boş siyahı" kodla: `page_checks`-in `lists` yoxlaması, naxış `EMPTY_LISTS` (sayt boyu,
+  `UI_NETWORK`). Kəşfiyyatçı ziyarətçi kimi gördüyü səhifədə eyni növ obyekt səhifəsinə (`/posts/{id}`) ən azı iki
+  fərqli link görübsə, bunu siyahı kimi modelə yazır (`PageModel.lists`, neçə obyekt gördüyü ilə); testerlər o səhifədə
+  ən azı bir belə link görməlidir, yoxsa tapıntıdır. Yalnız ziyarətçinin siyahıları (hər rolun öz siyahısı yeni
+  testerdə boş ola bilər, bu xəta deyil), yalnız masaüstü ekranda (telefon düzümü siyahını gizlədə bilər). Obyekt linkini
+  sözdən ayıran qayda (`/posts/17` obyekt, `/posts/archive` deyil) kəşfiyyatçı ilə testerlərin ortaq qaydasıdır
+  (`core` `PathSegments`). Vitrinin üç naxışı beləcə tamdır: ölü link (`BROKEN_LINKS`, `OUTBOUND_LINKS`), dil
+  güzgüləri (`LANGUAGE_MIRRORS`), boş siyahı (`EMPTY_LISTS`); "ölü düymə" isə hələ yox: klik etmədən düymənin heç nə
+  etmədiyini kod bilə bilmir.
 - [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
 - [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
   vitrin (ölü link, dil güzgüsü, boş siyahı).

@@ -84,6 +84,11 @@ data class PageModel(
     val loadMs: Long?,
     val provenance: Provenance,
     val evidence: List<ArtifactId>,
+    /**
+     * The kinds of object page this page lists as the anonymous visitor saw it (`/posts/{id}`), with how many different
+     * objects it showed: a list everyone sees, whose emptiness is the showcase card "empty list" (Faza 19).
+     */
+    val lists: Map<String, Int> = emptyMap(),
 )
 
 /**

@@ -135,7 +135,7 @@
       DIRECT_URL: 'Birbaşa ünvan', BROKEN_LINKS: 'Qırıq linklər', CONSOLE_ERRORS: 'Konsol xətaları', SLOW_ENDPOINTS: 'Yavaş sorğular',
       BACK_BUTTON: 'Geri düyməsi', MOBILE_VIEWPORT: 'Mobil görünüş', SESSION_EXPIRY: 'Sessiyanın bitməsi',
       PAGE_ANCHORS: 'Səhifədaxili keçidlər', BROKEN_IMAGES: 'Qırıq şəkillər', IMAGE_ALT: 'Şəkil alt mətni', PAGE_META: 'Başlıq və meta',
-      OUTBOUND_LINKS: 'Xarici keçidlər', LANGUAGE_MIRRORS: 'Dil versiyaları' },
+      OUTBOUND_LINKS: 'Xarici keçidlər', LANGUAGE_MIRRORS: 'Dil versiyaları', EMPTY_LISTS: 'Boş siyahı' },
     actionKind: { REGISTER: 'Qeydiyyat', LOGIN: 'Giriş', CREATE: 'Yaratma', UPDATE: 'Yeniləmə', DELETE: 'Silmə', APPROVE: 'Təsdiq', REJECT: 'Rədd', ASSIGN: 'Təyin', SUBMIT: 'Göndərmə', NAVIGATE: 'Keçid', OTHER: 'Digər' },
     scenarioStatus: { DRAFT: 'Qaralama', APPROVED: 'Təsdiqlənib', FROZEN: 'Dondurulub', SUPERSEDED: 'Köhnəlib' },
     scenarioSource: { USER: 'İstifadəçi', EXPLORER: 'Kəşfiyyatçı', TRIAGE: 'Triaj' },
