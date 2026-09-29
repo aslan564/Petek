@@ -536,6 +536,60 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `objects visitors see are not checked as leaks, but a draft must not open for anyone else`() {
+        val editor = setOf("member")
+        val trial = Models.trial(emptySet(), urlPatternAfter = "/posts/{id}", role = "member")
+        val news =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/admin/posts",
+                        Models.form(ActionKind.CREATE, "post-publish", "/admin/posts", Models.field("title", required = true)),
+                        reachableBy = editor,
+                    ),
+                    Models.page("/posts/{id}", reachableBy = setOf("anonymous", "member")),
+                ),
+                listOf(
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action("post-publish", ActionKind.CREATE, "/admin/posts", name = "Dərc et", allowed = editor, trial = trial),
+                    Models.action(
+                        "post-draft",
+                        ActionKind.CREATE,
+                        "/admin/posts",
+                        name = "Qaralama kimi saxla",
+                        allowed = editor,
+                        trial = trial,
+                    ),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(news, owner = null, testApi = false)
+
+        val composed = useCase().compose(news, request(maxIdeas = 50).copy(tenant = tenant, testers = 4))
+
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+        composed.skipped
+            .single { it.idea.pattern == TestPattern.DIRECT_URL && it.idea.actionId == "post-publish" }
+            .reason shouldContain "shows them to everyone"
+        val draft = composed.covered.single { it.idea.pattern == TestPattern.DIRECT_URL && it.idea.actionId == "post-draft" }
+        draft.idea.rationale shouldContain "a draft must not open"
+        composed.campaign.allSteps
+            .filter { it.id in draft.stepIds }
+            .mapNotNull { (it.action as? StepAction.Run)?.function } shouldContain "direct_url"
+    }
+
+    @Test
     fun `the written YAML is read back by the campaign loader as the same campaign`() {
         listOf(request(), request(maxIdeas = 50), request(maxIdeas = 50, testApi = true)).forEach { scenario ->
             val composed = useCase().compose(Models.portal(), scenario)

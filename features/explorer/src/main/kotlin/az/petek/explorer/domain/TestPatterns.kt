@@ -214,7 +214,11 @@ class TestPatternLibrary {
                 }
 
                 TestPattern.DIRECT_URL -> {
-                    "what it creates must not open for another tester who types its address"
+                    if (Drafts.saves(action)) {
+                        "a draft must not open for anyone else who types its address, even where published ones are public"
+                    } else {
+                        "what it creates must not open for another tester who types its address"
+                    }
                 }
 
                 else -> {

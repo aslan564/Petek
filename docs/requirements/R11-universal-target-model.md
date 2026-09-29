@@ -48,7 +48,9 @@ functions), `orchestration` (teardown), `explorer` (`TestPatterns`, `ScenarioCom
 - `TenantlessEndToEndTest` (real Chromium): a `tenant: none` campaign against `FakeNotesServer` (no companies, no test
   API) signs testers up, keeps a visitor anonymous, reports oracle checks as "N/A (no oracle)", passes `site_health`
   and `direct_url` on a correct site and finds the deliberate `FOREIGN_NOTE_VISIBLE` hole. Explorer drafts for such a
-  site are covered by `GenerateScenarioUseCaseTest`; the company portal example and the panel e2e are unchanged.
+  site are covered by `GenerateScenarioUseCaseTest`; the company portal example and the panel e2e are unchanged. On a
+  site whose objects the visitor sees (news, a public blog) a draft checks no public object as a leak, only a draft
+  (`Drafts`, Faza 19).
 - The universal success criterion (PLAN.md "Uğur meyarları", Faza 25.4) is checked in code: on a site unlike the
   contract (a recipe site with a test API but no companies) every main step of the draft belongs to an idea of an
   action the explorer saw or to the checks of pages it visited, every tester signs up through the form it found, and no

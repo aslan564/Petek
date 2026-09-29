@@ -27,6 +27,7 @@ import az.petek.core.model.Role
 import az.petek.explorer.domain.ActionKind
 import az.petek.explorer.domain.ActionModel
 import az.petek.explorer.domain.CoveredIdea
+import az.petek.explorer.domain.Drafts
 import az.petek.explorer.domain.Keywords
 import az.petek.explorer.domain.PageModel
 import az.petek.explorer.domain.Resources
@@ -266,7 +267,8 @@ internal class ScenarioComposer(
     /**
      * What [action] creates, opened by its address by a second tester who did not create it: the same role's second
      * tester when there is one, else another role's. Needs the object's own page (`/notes/{id}`) in the model or seen
-     * after the trial touch.
+     * after the trial touch. Not written for objects whose pages the visitor saw (an article, a public post: the site
+     * shows them to everyone), except a draft, which must not open for anyone else ([Drafts], Faza 19).
      */
     private fun directUrl(
         action: ActionModel,
@@ -279,6 +281,10 @@ internal class ScenarioComposer(
                 pattern.split('/').count { it == UrlPatterns.ID } == 1 && Resources.objectOf(pattern) == resource
             } ?: action.trial?.urlPatternAfter?.takeIf { pattern -> pattern.split('/').count { it == UrlPatterns.ID } == 1 }
                 ?: return Outcome.Skipped("no page of one ${site(resource)} object was seen, so there is no address to type")
+        // What a visitor sees is the site's to show to everyone; a draft must not open for anyone else all the same.
+        if (Drafts.public(model, objectPattern) && !Drafts.saves(action)) {
+            return Outcome.Skipped("visitors see ${site(resource)} pages ($objectPattern): the site shows them to everyone")
+        }
         val other =
             when {
                 settings.team.count(role) >= 2 -> {

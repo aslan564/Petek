@@ -1071,6 +1071,11 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   kampaniyalar üçündür). Giriş varsa ziyarətçinin gördüyü səhifələr girişdən əvvəl (setup), hər rolun öz səhifələri
   ssenaridən sonra yoxlanır; giriş yoxdursa hamı ziyarətçidir. Layihə sahibin tester sayı ilə
   yazılır və sayt başına bir adı var (`explorer-<host>`), hər yeni kəşfiyyat onun növbəti versiyasıdır.
+- [x] Açıq obyekt sızma deyil, qaralama isə sızmamalıdır (xəbər kartı "qaralama sızmasın"; 2026-09-29 tapıldı).
+  **Vəziyyət:** `DIRECT_URL` ziyarətçinin də gördüyü obyekt səhifələrində (məqalə, açıq yazı) yazılmır, səbəbi ilə
+  buraxılır: sayt onları hamıya göstərir, başqasının açması xəta deyil (əvvəl bu, yalançı `access_not_refused`
+  verərdi). Qaralama saxlayan əməliyyat (`Drafts`: adında "draft", "qaralama", "taslak", "черновик" və s.) isə açıq
+  səhifələrdə də yoxlanır: qaralama heç kimə açılmamalıdır. `GenerateScenarioUseCaseTest`.
 - [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
 - [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
   vitrin (ölü link, dil güzgüsü, boş siyahı).

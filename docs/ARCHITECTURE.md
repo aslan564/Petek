@@ -192,7 +192,7 @@ by name; the `run` functions execute them through the agent's `FlowRunner`:
 | `login` / `verify_identity` | `login` / `verify_identity` |
 | `site_health` | no flow: blind checks decided by code from what the browser saw (links, console/network errors, slow requests, back button, phone width, session expiry, then `login` again) over `pages`; `share: pages` deals the pages out among the step's testers, `share: links` has each tester check every page but ask about only its share of the links |
 | `page_checks` | no flow: what a visitor sees on each page, checked by code (in-page anchors, broken images, alt texts, title, one `h1`, description and language, duplicate titles, links to other sites asked once) over `pages`; `share` as for `site_health` |
-| `direct_url` | no flow: opens someone else's object by its `path`; passes when the site refuses (401/403/404, another page, or the object's `text` not shown) |
+| `direct_url` | no flow: opens someone else's object by its `path`; passes when the site refuses (401/403/404, another page, or the object's `text` not shown). Drafts write it only for objects the visitor never saw, or for a draft (`Drafts`, Faza 19) |
 
 The defaults (`TargetProfile.DEFAULT_FLOWS`) are the contract flows, written against the profile's selector keys, so the
 fake target needs no flows and a campaign that overrides a selector changes them too. A flow is a list of steps
