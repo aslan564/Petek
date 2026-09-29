@@ -43,7 +43,8 @@ import kotlin.time.Duration.Companion.seconds
 class CliRuntime(
     val environment: () -> Map<String, String> = System::getenv,
     val workingDirectory: Path = Path.of("").toAbsolutePath(),
-    val identitySecrets: IdentitySecretSource = IdentitySecretFile(IdentitySecretFile.defaultDirectory()),
+    val identitySecrets: IdentitySecretSource =
+        IdentitySecretFile(defaultHome(environment()), earlier = IdentitySecretFile.defaultDirectory()),
     val containers: (PetekConfig) -> AppContainer = { AppContainer(it) },
     val configureLogging: (LoggingSettings) -> Unit = LoggingSetup::apply,
     val observationWindow: Duration = 3.seconds,

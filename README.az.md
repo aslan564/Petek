@@ -261,7 +261,7 @@ məcburidir.
 | `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün) |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `petek.test` | Test kimliklərinin e-poçt domeni |
-| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Test parollarının derivasiyası **və** `petek verify`-ın verdiyi sahiblik kodunun açarı (≥ 16 simvol). Eyni saytı test edən hər maşında eyni olsun: başqa açar başqa kod verir və dərc olunmuş sübut artıq uyğun gəlmir |
+| `PETEK_IDENTITY_SECRET` | `$PETEK_HOME/identity.secret` (`~/.petek`) | Test parollarının derivasiyası **və** `petek verify`-ın verdiyi sahiblik kodunun açarı (≥ 16 simvol). Eyni saytı test edən hər maşında eyni olsun: başqa açar başqa kod verir və dərc olunmuş sübut artıq uyğun gəlmir |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` mühitdəki ayar və açarlara, layihənin AI işarəsinə (`AGENTS.md`, `GEMINI.md`) və `PATH`-dakı agent CLI-lərinə görə seçir, qalanlarını ehtiyat saxlayır, heç nə tapmasa sizin yerinizə vendor seçmir, `doctor` səbəbini deyir |
 | `PETEK_LLM_MODEL` | alətin öz modeli | Model; boş olanda alət və ya provayder necə qurulubsa o işləyir; `anthropic-api` və `openai-compat` üçün məcburidir |
 | `PETEK_LLM_BIN` | — | İşlədiləcək AI CLI (`cli`), və ya `codex-cli`, `gemini-cli`, `opencode-cli` üçün başqa binar |

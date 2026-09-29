@@ -36,22 +36,25 @@ fun interface IdentitySecretSource {
  * passwords for teardown or login) and must not be guessable. It is created once with 32 bytes from [SecureRandom],
  * stored as hex, readable by the owner only (`600`, directory `700`, where the file system supports POSIX
  * permissions) and never printed. A file that became readable by others is tightened again. Creation is safe against
- * a concurrent process doing the same: the first file to appear wins and both read it.
+ * a concurrent process doing the same: the first file to appear wins and both read it. When [directory] has none yet
+ * but [earlier] (where an earlier setup kept it, `~/.petek` before `PETEK_HOME` was set) has one, that one is used, so
+ * the passwords of earlier runs stay the same.
  */
 class IdentitySecretFile(
     private val directory: Path,
     private val random: SecureRandom = SecureRandom(),
+    private val earlier: Path? = null,
 ) : IdentitySecretSource {
     val path: Path get() = directory.resolve(FILE_NAME)
 
     override fun secret(): Secret =
         try {
-            readExisting() ?: create()
+            readExisting(path) ?: earlier?.resolve(FILE_NAME)?.takeIf { it != path }?.let(::readExisting) ?: create()
         } catch (e: IOException) {
             throw ConfigException(listOf("cannot read or create the identity secret $path (${e::class.simpleName}: ${e.message})"))
         }
 
-    private fun readExisting(): Secret? {
+    private fun readExisting(path: Path): Secret? {
         val text =
             try {
                 Files.readString(path)
@@ -81,7 +84,7 @@ class IdentitySecretFile(
             Files.writeString(temporary, secret + "\n")
             publish(temporary)
         } catch (_: FileAlreadyExistsException) {
-            return readExisting() ?: throw IOException("the identity secret disappeared while it was being created")
+            return readExisting(path) ?: throw IOException("the identity secret disappeared while it was being created")
         } finally {
             Files.deleteIfExists(temporary)
         }

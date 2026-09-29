@@ -264,7 +264,7 @@ question writes and whose `evidence/`, `scenarios/` and `targets/` then live nex
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / the box / — / `true` / `INBOX` | How `imap` reads that box (Jakarta Mail/Angus); the password is a `Secret` |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `petek.test` | E-mail domain of the test identities |
-| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
+| `PETEK_IDENTITY_SECRET` | `$PETEK_HOME/identity.secret` (`~/.petek`) | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` picks by settings and keys in the environment, your project's AI marker (`AGENTS.md`, `GEMINI.md`) and the agent CLIs on `PATH`, keeps the others as fallbacks, picks no vendor for you when nothing is found, and `doctor` says why |
 | `PETEK_LLM_MODEL` | the tool's own | The model; empty keeps the one the tool or provider is configured for; required for `anthropic-api` and `openai-compat` |
 | `PETEK_LLM_BIN` | — | The AI command-line tool to run (`cli`), or another binary for `codex-cli`, `gemini-cli`, `opencode-cli` |
