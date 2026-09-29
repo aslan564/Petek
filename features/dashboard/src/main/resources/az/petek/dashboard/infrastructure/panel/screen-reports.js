@@ -59,7 +59,7 @@
       const unsteady = s.steps.filter((x) => x.unsteady).length;
       return h('article', 'stab-card',
         h('div', 'row wrap', h('strong', { text: 'Təkrar qrupu ' + s.repeatGroup }), h('span', 'spacer'),
-          flaky ? P.badge('amber', flaky + ' qeyri-sabit addım', { dot: true }) : P.badge('green', 'Sabit', { dot: true }),
+          flaky ? P.badge('amber', flaky + ' qeyri-sabit (flaky) addım: sayt gah keçdi, gah yox', { dot: true }) : P.badge('green', 'Sabit', { dot: true }),
           unsteady ? P.badge('slate', unsteady + ' addım testerə görə dəyişdi (sayt deyil)', { dot: true }) : null),
         h('div', { class: 'help', text: s.runs.length + ' run · ' + s.steps.length + ' addım' }),
         s.steps.map((x) => {

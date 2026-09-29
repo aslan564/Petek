@@ -356,7 +356,8 @@ internal class McpTools(
             Tool(
                 name = "get_findings",
                 description =
-                    "The judged findings of a run: class (BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE), step, " +
+                    "The judged findings of a run: class (BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE, " +
+                        "INCONCLUSIVE: the evidence could not decide it), step, " +
                         "agent, the three sources A (what the sender did), B (what receivers saw), C (what the target's API " +
                         "says), and the evidence artifact ids for get_evidence. A root-cause investigation starts here.",
                 schema = { string("runId", "run id", required = true) },

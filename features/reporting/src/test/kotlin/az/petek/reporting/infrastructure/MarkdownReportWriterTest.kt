@@ -110,8 +110,8 @@ class MarkdownReportWriterTest {
 
         val md = writer.render(SampleReport.model(stability = rows))
 
-        md shouldContain "| join | 3 | 2 | 67% | qeyri-sabit: mühit (saytın xətası deyil) |"
-        md shouldContain "| read_announce | 3 | 1 | 33% | qeyri-sabit: agent, yoxlanmadı (saytın xətası deyil) |"
+        md shouldContain "| join | 3 | 2 | 67% | testerə görə dəyişdi: mühit (saytın xətası deyil) |"
+        md shouldContain "| read_announce | 3 | 1 | 33% | testerə görə dəyişdi: agent, yoxlanmadı (saytın xətası deyil) |"
     }
 
     @Test

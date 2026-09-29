@@ -108,7 +108,7 @@ internal object ReportFormat {
     fun stability(row: StabilityRow): String =
         when {
             row.flaky -> "flaky"
-            row.unsteady -> "qeyri-sabit: ${testerCauses(row)} (saytın xətası deyil)"
+            row.unsteady -> "testerə görə dəyişdi: ${testerCauses(row)} (saytın xətası deyil)"
             row.runs > 0 && row.passed == row.runs -> "sabit"
             else -> "həmişə keçmir"
         }
