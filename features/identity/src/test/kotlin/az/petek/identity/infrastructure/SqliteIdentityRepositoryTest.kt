@@ -346,13 +346,13 @@ class SqliteIdentityRepositoryTest {
             plan.identities
                 .map { identity ->
                     async {
-                        repository.updateStatus(runId, identity.agentId, IdentityStatus.REGISTERED)
+                        repository.updateStatus(runId, identity.agentId, IdentityStatus.ACTIVE)
                         repository.updateStorageState(runId, identity.agentId, "${identity.agentId}.json")
                     }
                 }.awaitAll()
 
             val stored = repository.findByRun(runId)
-            stored.map { it.status }.toSet() shouldBe setOf(IdentityStatus.REGISTERED)
+            stored.map { it.status }.toSet() shouldBe setOf(IdentityStatus.ACTIVE)
             stored.forEach { it.storageStatePath shouldBe "${it.agentId}.json" }
         }
 

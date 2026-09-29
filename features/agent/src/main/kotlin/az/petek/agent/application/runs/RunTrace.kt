@@ -61,12 +61,19 @@ internal class RunTrace(
         block: suspend () -> T,
     ): T = probe(description, block) { true }
 
+    /** Like [act], with [detail] of the result kept in the step's detail (e.g. which e-mail a code came from). */
+    suspend fun <T> act(
+        description: String,
+        detail: (T) -> String?,
+        block: suspend () -> T,
+    ): T = probeDescribed(block, { description }, detail) { true }
+
     /** Like [act], but the step is FAILED when the returned value does not satisfy [passed]. */
     suspend fun <T> probe(
         description: String,
         block: suspend () -> T,
         passed: (T) -> Boolean,
-    ): T = probeDescribed(block, { description }, passed)
+    ): T = probeDescribed(block, { description }, passed = passed)
 
     /**
      * Like [probe], for a sub-action best described by what it found (`wait for session.user_name`). [describe] gets
@@ -75,6 +82,7 @@ internal class RunTrace(
     suspend fun <T> probeDescribed(
         block: suspend () -> T,
         describe: (T?) -> String,
+        detail: (T) -> String? = { null },
         passed: (T) -> Boolean,
     ): T {
         val started = evidence.now()
@@ -89,7 +97,8 @@ internal class RunTrace(
                 record(describe(null), started, StepStatus.ERROR, withNote(reason, session.dialogNote()))
                 throw e
             }
-        record(describe(result), started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, session.dialogNote())
+        val noted = listOfNotNull(detail(result), session.dialogNote()).joinToString(" ").ifEmpty { null }
+        record(describe(result), started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, noted)
         return result
     }
 

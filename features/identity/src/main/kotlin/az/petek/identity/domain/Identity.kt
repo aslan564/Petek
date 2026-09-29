@@ -39,7 +39,11 @@ data class Identity(
     val storageStatePath: String? = null,
 )
 
-enum class IdentityStatus { PLANNED, REGISTERED, ACTIVE, FAILED }
+/**
+ * Where a tester stands in its run: planned, active once its setup (sign-up, verification, sign-in) passed, or failed
+ * with the reason. An account the site created before a later failure is named in that step's detail.
+ */
+enum class IdentityStatus { PLANNED, ACTIVE, FAILED }
 
 /** Input for the registry generator, mapped from the campaign by the orchestrator. */
 data class IdentitySpec(

@@ -50,7 +50,8 @@ internal class TargetFlows(
     suspend fun awaitEmailCode(trace: RunTrace): String {
         val identity = trace.runtime.identity
         val mail =
-            trace.act("await e-mail code for ${identity.email}") {
+            // Which message the code came from is kept with the step, so the report can point at that very e-mail.
+            trace.act("await e-mail code for ${identity.email}", { "message ${it.messageId}" }) {
                 verification.await(
                     identity.email,
                     trace.runtime.runStartedAt,

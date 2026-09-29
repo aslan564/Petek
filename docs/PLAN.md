@@ -105,7 +105,7 @@ MVP-də bütün poçt Mailpit-ə gedir, telefon kodu hədəfin test rejimindən 
 | `phone` | `+99450` + 7 rəqəm | uydurma, real nömrə deyil; test rejimində validasiya olunmur |
 | `role` | `admin` / `manager` / `employee` | campaign.yaml-dakı bölgüyə görə |
 | `department` | `IT` | manager və employee üçün; admin-də boş |
-| `status` | `planned` → `registered` → `active` → `failed` | orkestrator yeniləyir |
+| `status` | `planned` → `active` və ya `failed` | orkestrator yeniləyir; sonra alınmayan addımdan əvvəl saytda yaranan hesab həmin addımın detalında yazılır |
 | `storage_state` | fayl yolu | login sonrası cookie/storage; bərpa üçün |
 
 Rol bölgüsü deterministikdir: admin = 1 (agent `a01`), hər departamentə 1 manager, qalan agentlər departamentlərə növbə ilə paylanır (5 departament × 5–6 nəfər). Managerlər həmişə dəvətlə qoşulur (`/join` formasında rol sahəsi yoxdur, şirkət kodu ilə qoşulan işçi olur); qalan dəvətlər işçilərə seed-ə görə departamentlər üzrə paylanır, şirkət kodu ilə yalnız işçilər qoşulur.
