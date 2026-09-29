@@ -308,6 +308,18 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `an unknown option lists the options containing it first, so a long list still shows the likely ones`() =
+        withSession { session ->
+            session.navigate("/form")
+            session.snapshot()
+
+            val failure = shouldThrow<BrowserActionException> { session.select(4, "atı") }
+
+            failure.message shouldBe
+                "option \"atı\" not found; available options, those containing it first: \"Satış\", \"—\", \"Marketinq\""
+        }
+
+    @Test
     fun `a ref that is not on the page asks for a new snapshot`() =
         withSession { session ->
             session.navigate("/form")

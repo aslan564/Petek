@@ -539,7 +539,7 @@ internal class PlaywrightBrowserSession private constructor(
             val reason = resolution["error"] as? String
             if (reason != null) throw BrowserActionException("cannot select \"$option\": $reason")
             val available = (resolution["available"] as? List<*>).orEmpty().joinToString(", ") { "\"$it\"" }
-            throw BrowserActionException("option \"$option\" not found; available options: $available")
+            throw BrowserActionException("option \"$option\" not found; available options, those containing it first: $available")
         }
         element.selectOption(SelectOption().setIndex(index))
     }
