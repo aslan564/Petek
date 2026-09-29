@@ -580,7 +580,25 @@ class DefaultAssertionEvaluator(
             currentCoroutineContext().ensureActive()
             checkFailed(spec, input, e)
         } catch (e: TemplateException) {
-            result(spec, Verdict.FAILED, expected = describeBestEffort(spec, input), observed = null, note = "template error: ${e.message}")
+            // An object no event carried (the emitter failed, or no id came back): the check cannot be made, which says
+            // nothing about the site; any other template error is the scenario's and fails.
+            if (e.missingObject) {
+                result(
+                    spec,
+                    Verdict.INCONCLUSIVE,
+                    expected = describeBestEffort(spec, input),
+                    observed = null,
+                    note = "$ID_UNAVAILABLE: ${e.message}",
+                )
+            } else {
+                result(
+                    spec,
+                    Verdict.FAILED,
+                    expected = describeBestEffort(spec, input),
+                    observed = null,
+                    note = "template error: ${e.message}",
+                )
+            }
         } catch (e: Exception) {
             checkFailed(spec, input, e)
         }
@@ -657,6 +675,9 @@ class DefaultAssertionEvaluator(
          * check proves nothing about this delivery.
          */
         const val STALE_TEXT = "stale_text"
+
+        /** Leads the note of a check whose object no event carried: nothing to check it on. */
+        const val ID_UNAVAILABLE = "id_unavailable"
 
         /** Why a latency is only a bound, when no reason was recorded. */
         const val UNBOUNDED = "only a bound of the delay is known"

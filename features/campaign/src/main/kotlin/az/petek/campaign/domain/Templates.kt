@@ -40,4 +40,9 @@ interface TemplateRenderer {
 
 class TemplateException(
     message: String,
+    /**
+     * Every placeholder that failed names an object no event carried (`{last_id}`, `{event.<name>.id}`): the step or
+     * event behind it produced no id, so a check using it cannot be made, rather than being written wrong.
+     */
+    val missingObject: Boolean = false,
 ) : az.petek.core.error.PetekException(message)

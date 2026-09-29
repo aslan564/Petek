@@ -72,6 +72,15 @@ class DefaultTemplateRendererTest {
     }
 
     @Test
+    fun `a missing object is told apart from a template written wrong`() {
+        val empty = TemplateContext(null, emptyMap(), emptyMap())
+
+        shouldThrow<TemplateException> { renderer.render("/t/{last_id}/{event.ticket_created.id}", empty) }.missingObject shouldBe true
+        shouldThrow<TemplateException> { renderer.render("/t/{last_id}/{self.email}", empty) }.missingObject shouldBe false
+        shouldThrow<TemplateException> { renderer.render("{nickname}", context) }.missingObject shouldBe false
+    }
+
+    @Test
     fun `text without braces is returned unchanged`() {
         val text = "Sabah 10:00 ümumi iclas"
         renderer.render(text, context) shouldBe text

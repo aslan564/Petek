@@ -24,12 +24,17 @@ class DefaultTemplateRenderer : TemplateRenderer {
     ): String {
         if ('{' !in template) return template
         val problems = mutableListOf<String>()
+        var objectsOnly = true
         val rendered =
             PLACEHOLDER.replace(template) { match ->
                 val name = match.groupValues[1]
-                resolve(name, context) ?: match.value.also { problems += problem(name, context) }
+                resolve(name, context) ?: match.value.also {
+                    problems += problem(name, context)
+                    val placeholder = Placeholder.parse(name)
+                    if (placeholder != Placeholder.LastId && placeholder !is Placeholder.EventId) objectsOnly = false
+                }
             }
-        if (problems.isNotEmpty()) throw TemplateException(problems.joinToString("; "))
+        if (problems.isNotEmpty()) throw TemplateException(problems.joinToString("; "), missingObject = objectsOnly)
         return rendered
     }
 
