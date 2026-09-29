@@ -20,6 +20,7 @@ import az.petek.browser.domain.TextWatch
 import az.petek.campaign.domain.Campaign
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
+import az.petek.core.ids.RunTags
 import az.petek.core.time.HarnessTimestamp
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityStatus
@@ -57,6 +58,19 @@ internal class RunState(
     /** The testers of the wave now running; null when everyone runs at once. */
     @Volatile
     var wave: Set<AgentId>? = null
+
+    /**
+     * Which execution of the steps runs now (`{pass}`): 1 in the first pass, the wave's number in later waves, the next
+     * number in the account swap.
+     */
+    @Volatile
+    var pass: Int = 1
+
+    private val tag: String = RunTags.forRun(runId).value
+
+    /** `{pass}` of execution [pass]: `<run tag>-<n>`, so a text marked with it is new in every execution and every run. */
+    fun passMark(pass: Int = this.pass): String = "$tag-$pass"
+
     val budget: Duration = campaign.settings.budget.maxMinutes.minutes
 
     /** The events setup steps published, in order: every wave's bus starts with them (Faza 24.11). */

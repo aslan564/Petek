@@ -678,7 +678,27 @@ class DefaultCampaignValidatorTest {
         fun `unknown placeholders are rejected`() {
             val issue = issue(campaign(step("s", action = StepAction.Do("Open {page}"), line = 5)), "unknown placeholder {page}")
             issue.line shouldBe 5
-            issue.message shouldContain "{last_id}, {self.email}, {self.name}"
+            issue.message shouldContain "{last_id}, {pass}, {self.email}, {self.name}"
+        }
+
+        @Test
+        fun `every step may mark its texts with the pass it runs in`() {
+            val posting =
+                campaign(
+                    step("post", action = StepAction.Do("Post the note 'Hello {pass}'"), emits = "note_posted"),
+                    step(
+                        "read",
+                        actor = "employee[*]",
+                        waitFor = "note_posted",
+                        assertions =
+                            listOf(
+                                AssertionSpec.VisibleText("Hello {pass}", 5.seconds),
+                                AssertionSpec.Count("li:has-text(\"Hello {pass}\")", 1),
+                            ),
+                    ),
+                )
+
+            issues(posting).shouldBeEmpty()
         }
 
         @Test

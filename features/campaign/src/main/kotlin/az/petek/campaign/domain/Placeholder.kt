@@ -27,6 +27,17 @@ sealed interface Placeholder {
         override val name: String = LAST_ID
     }
 
+    /**
+     * `{pass}`: which execution of the steps a text belongs to, as `<run tag>-<n>` from [TemplateContext.pass], so a
+     * text a step publishes differs in every execution and in every run: n is 1 in the first pass, the wave's number in
+     * later waves and the next number in the account swap. Like [LastId] it follows the step's own event: in a step that
+     * emits, the pass now running; in one that waits, the pass its event was published in (a setup event of the first
+     * wave read in a later one); else the pass now running.
+     */
+    data object Pass : Placeholder {
+        override val name: String = PASS
+    }
+
     /** `{self.<field>}`: a field of the acting tester's identity, read from [TemplateContext.self]. */
     data class Self(
         val field: String,
@@ -81,6 +92,7 @@ sealed interface Placeholder {
         val TESTER_FIELDS: Set<String> = linkedSetOf("name", "email")
 
         private const val LAST_ID = "last_id"
+        private const val PASS = "pass"
         private const val TESTER_PREFIX = "tester."
         private const val SELF_PREFIX = "self."
         private const val EVENT_PREFIX = "event."
@@ -91,6 +103,10 @@ sealed interface Placeholder {
             when {
                 name == LAST_ID -> {
                     LastId
+                }
+
+                name == PASS -> {
+                    Pass
                 }
 
                 name.startsWith(SELF_PREFIX) && name.length > SELF_PREFIX.length -> {
@@ -121,7 +137,7 @@ sealed interface Placeholder {
         /** Human-readable list of the forms a campaign may use, for error messages. */
         val SUPPORTED_FORMS: String =
             (
-                listOf("{$LAST_ID}") + CAMPAIGN_SELF_FIELDS.map { "{$SELF_PREFIX$it}" } + "{event.<event>.id}" +
+                listOf("{$LAST_ID}", "{$PASS}") + CAMPAIGN_SELF_FIELDS.map { "{$SELF_PREFIX$it}" } + "{event.<event>.id}" +
                     "{tester.<role>.<n>.name|email}"
             ).joinToString(", ")
     }

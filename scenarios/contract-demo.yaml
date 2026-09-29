@@ -35,7 +35,7 @@ setup:
 steps:
   - id: announce
     actor: admin
-    do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
+    do: "Elan yarat: 'Sabah 10:00 ümumi iclas {pass}'"
     # The form's post is when the announcement reached the site: the readers' latency is measured from its answer.
     emits: {event: announcement_created, request: "POST /announcements"}
     assert:
@@ -46,7 +46,7 @@ steps:
     wait_for: announcement_created
     do: "Bildirişləri aç və yeni elanı oxu"
     assert:
-      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 5}
+      - visible_text: {text: "Sabah 10:00 ümumi iclas {pass}", within_s: 5}
       - latency_max: {ms: 5000}
       - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
 

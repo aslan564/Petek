@@ -16,6 +16,7 @@ import az.petek.agent.domain.ActionStatus
 import az.petek.browser.domain.BrowserProxy
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.RequestPattern
+import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
@@ -41,6 +42,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
 
@@ -95,6 +97,70 @@ class RunnerWavesTest {
             f.evidence.stepList.none { it.action == "coverage" } shouldBe true
             summary.outcome shouldBe RunOutcome.PASSED
             f.buses.size shouldBe 2
+        }
+
+    @Test
+    fun `every wave writes and reads texts marked with its own pass, and a setup event keeps the pass it was written in`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler)).apply { verify.realScreenChecks = true }
+            // The site keeps what was posted: a page opened later shows it from the start.
+            val posted = CopyOnWriteArraySet<String>()
+            f.browser.configure = { session -> posted.forEach(session::showText) }
+            f.agents.script = { call, _ ->
+                val instruction = (call.action as StepAction.Do).instruction
+                if (instruction.startsWith("Post")) {
+                    val text = instruction.substringAfter("'").substringBefore("'")
+                    posted += text
+                    f.browser.sessions.values
+                        .forEach { it.showText(text) }
+                }
+                ActionOutcome(ActionStatus.SUCCEEDED, "ok")
+            }
+            val base =
+                campaign(
+                    managers = 0,
+                    employees = 4,
+                    setup = listOf(step("welcome", admin(), StepAction.Do("Post 'Welcome {pass}'"), StepPhase.SETUP, emits = "welcomed")),
+                    steps =
+                        listOf(
+                            step("post", admin(), StepAction.Do("Post 'Note {pass}'"), emits = "note_posted"),
+                            step(
+                                "greet",
+                                employees(),
+                                StepAction.Do("Answer 'Welcome {pass}'"),
+                                waitFor = "welcomed",
+                                waitTimeout = 5.seconds,
+                            ),
+                            step(
+                                "read",
+                                employees(),
+                                StepAction.None,
+                                waitFor = "note_posted",
+                                waitTimeout = 5.seconds,
+                                assertions = listOf(AssertionSpec.VisibleText("Note {pass}", 10.seconds)),
+                            ),
+                        ),
+                )
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            f.runner().run(waved)
+
+            val tag =
+                f.evidence.runList
+                    .single()
+                    .runTag.value
+
+            fun said(step: String) = f.agents.callsFor(step).map { it.agentId.value to (it.action as StepAction.Do).instruction }
+            said("welcome") shouldContainExactly listOf("a01" to "Post 'Welcome $tag-1'")
+            said("post") shouldContainExactly listOf("a01" to "Post 'Note $tag-1'", "a01" to "Post 'Note $tag-2'")
+            // The welcome was written once, in the first pass: the second wave looks for that text, not for a new one.
+            said("greet").toSet() shouldBe listOf("a02", "a04", "a03", "a05").map { it to "Answer 'Welcome $tag-1'" }.toSet()
+            // Each wave's note is new on its readers' pages, although the first wave's is still there: no stale_text.
+            f.evidence.assertionList
+                .filter { it.type == "visible_text" && it.scenarioStep == "read" }
+                .map { Triple(it.agentId?.value, it.verdict, it.expected.substringBefore(" visible")) } shouldContainExactly
+                listOf("a02", "a04").map { Triple(it, Verdict.PASSED, "\"Note $tag-1\"") } +
+                listOf("a03", "a05").map { Triple(it, Verdict.PASSED, "\"Note $tag-2\"") }
         }
 
     @Test

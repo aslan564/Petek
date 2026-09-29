@@ -41,6 +41,7 @@ import kotlin.time.Duration
  *   `{event.<e>.id}` needs an event emitted by an earlier step; assertions run after the step, so its own `emits` counts.
  *   `{last_id}` is the step's own event only (Faza 24.6): the one it waits for, and in its checks also the one it emits;
  *   a step without either names another step's object with `{event.<e>.id}` (a target profile's id sources too);
+ *   `{pass}` is allowed in every campaign template (see [Placeholder.Pass]);
  * - an event other steps wait for or name, emitted by a step up to several testers run, needs one emitter or a race;
  * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
  *
@@ -698,6 +699,11 @@ class DefaultCampaignValidator(
                         "{$name} has no event of its own here: it stands for the event this step waits for (wait_for) and, " +
                             "in its checks, the one it emits; name another step's object with {event.<name>.id}"
                     ).takeIf { scope.lastIdEvent == null }
+                }
+
+                // Every step runs in some pass, so the harness always has one to write in.
+                Placeholder.Pass -> {
+                    null
                 }
 
                 is Placeholder.EventId -> {

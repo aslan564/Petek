@@ -252,7 +252,7 @@ internal class StepExecutor(
                 }
             val reception = waited?.let { receive(actor, it) }
             // `{last_id}` is the step's own event only (Faza 24.6): before the action, the one it waited for.
-            val templates = templateContext(identity, waited?.event?.objectId)
+            val templates = templateContext(identity, waited?.event?.objectId, passOf(step, waited?.event))
             val action =
                 try {
                     render(step.action, templates)
@@ -279,7 +279,13 @@ internal class StepExecutor(
             // In the checks: the object this actor emitted when the step emits, else the one it waited for; never another's.
             val lastId = if (step.emits != null) emitted?.event?.objectId else waited?.event?.objectId
             val checks =
-                verifyActor(actor, actor.stepId, afterActionSpecs(step), templateContext(identity, lastId), waited?.event?.let(::eventTime))
+                verifyActor(
+                    actor,
+                    actor.stepId,
+                    afterActionSpecs(step),
+                    templateContext(identity, lastId, passOf(step, waited?.event)),
+                    waited?.event?.let(::eventTime),
+                )
             val acted = Acted(actor, performed, requests, emitted, listOfNotNull(reception, checks))
             return if (requests == null) ActorRun.Settled(conclude(acted, lost = null)) else ActorRun.Raced(acted)
         } finally {
@@ -397,7 +403,7 @@ internal class StepExecutor(
         val specs = receptionSpecs(actor.step)
         val time = eventTime(waited.event)
         val watch = run.takeWatch(actor.step.id, actor.agentId)?.let { WatchedText(it.text, read(actor, it)) }
-        val templates = templateContext(actor.identity, waited.event.objectId)
+        val templates = templateContext(actor.identity, waited.event.objectId, passOf(actor.step, waited.event))
         val verification = verifyActor(actor, waited.stepId, specs, templates, time, watch)
         val visible = verification.records.firstOrNull { it.type == VISIBLE_TEXT_TYPE }
         when {
@@ -821,7 +827,8 @@ internal class StepExecutor(
         val source = spec.idSource ?: run.campaign.target.idSource(spec.event)
         val resolution = services.objectIds.read(source, actor.session, performed.outcome, templates)
         val write = writeOf(actor, spec.request ?: raceSpec(actor.step)?.request, performed.startedAt, watched = watchStart != null)
-        val event = run.bus.publish(spec.event, resolution.objectId, actor.agentId, EventOrigin(performed.startedAt, write.write))
+        val event =
+            run.bus.publish(spec.event, resolution.objectId, actor.agentId, EventOrigin(performed.startedAt, write.write), run.pass)
         if (actor.step.phase == StepPhase.SETUP) run.setupEvents += event
         tasks.eventPublished(event)
         services.recorder.event(
@@ -975,7 +982,8 @@ internal class StepExecutor(
     ) {
         val text =
             try {
-                services.renderer.render(template, templateContext(identity, lastId = null))
+                // The receivers read what the emitter writes now, in the pass now running.
+                services.renderer.render(template, templateContext(identity, lastId = null, pass = run.pass))
             } catch (_: TemplateException) {
                 // It names the event's own object, which does not exist yet.
                 return
@@ -1074,14 +1082,14 @@ internal class StepExecutor(
         // The group verdict comes after every actor acted: `{last_id}` is the object the winner emitted when the step emits,
         // else the one the racers waited for; nothing of another step.
         val own = step.emits?.event ?: step.waitFor?.event
-        val lastId =
-            own?.let { event ->
+        val event =
+            own?.let { name ->
                 run.bus
-                    .latest(event)
-                    ?.takeIf { it.sequence > run.eventCursor(event) }
-                    ?.objectId
+                    .latest(name)
+                    ?.takeIf { it.sequence > run.eventCursor(name) }
             }
-        val input = AssertionInput(run.runId, stepId, step.id, null, null, templateContext(null, lastId), eventTime = null)
+        val templates = templateContext(null, event?.objectId, passOf(step, event))
+        val input = AssertionInput(run.runId, stepId, step.id, null, null, templates, eventTime = null)
         val actorResults =
             results.map {
                 ActorResult(
@@ -1218,17 +1226,32 @@ internal class StepExecutor(
 
     // --- helpers --------------------------------------------------------------------------------------------------
 
-    /** [lastId] is the step's own object for this actor: the one it emitted or the one it waited for (see [runActor]). */
+    /**
+     * [lastId] is the step's own object for this actor: the one it emitted or the one it waited for (see [runActor]);
+     * [pass] the execution its own event belongs to ([passOf]).
+     */
     private fun templateContext(
         identity: Identity?,
         lastId: String?,
+        pass: Int,
     ): TemplateContext =
         TemplateContext(
             lastId = lastId,
             self = identity?.let(::selfFields).orEmpty(),
             eventIds = latestEventIds(),
             testers = testers,
+            pass = run.passMark(pass),
         )
+
+    /**
+     * `{pass}` of [step] (see [az.petek.campaign.domain.Placeholder.Pass]): the pass now running when the step emits,
+     * since it writes its event now; else the pass of the event it waited for ([waited], a setup event of the first
+     * wave read in a later one); else the pass now running.
+     */
+    private fun passOf(
+        step: ScenarioStep,
+        waited: PublishedEvent?,
+    ): Int = if (step.emits != null) run.pass else waited?.pass ?: run.pass
 
     /**
      * `{tester.<role>.<n>.<field>}` (Faza 18): every tester of the run by role and 1-based agent order, with only the

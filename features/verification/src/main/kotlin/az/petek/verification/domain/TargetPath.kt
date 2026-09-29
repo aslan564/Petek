@@ -36,6 +36,8 @@ internal object TargetPath {
             lastId = context.lastId?.let(::encode),
             self = context.self.mapValues { encode(it.value) },
             eventIds = context.eventIds.mapValues { encode(it.value) },
+            testers = context.testers.mapValues { (_, fields) -> fields.mapValues { encode(it.value) } },
+            pass = context.pass?.let(::encode),
         )
 
     /** Percent-encodes [value] as UTF-8 so it can only ever be one path segment or one query value. */

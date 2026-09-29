@@ -45,6 +45,10 @@ class DefaultTemplateRenderer : TemplateRenderer {
                 context.lastId
             }
 
+            Placeholder.Pass -> {
+                context.pass
+            }
+
             is Placeholder.Self -> {
                 context.self[placeholder.field]
             }
@@ -74,6 +78,10 @@ class DefaultTemplateRenderer : TemplateRenderer {
                 "Placeholder {$name} cannot be resolved: this step's own event carried no object id (id_unavailable)"
             }
 
+            Placeholder.Pass -> {
+                "Placeholder {$name} cannot be resolved: this text is not rendered within a run"
+            }
+
             is Placeholder.Self -> {
                 "Placeholder {$name} cannot be resolved: the tester has no '${placeholder.field}' " +
                     "(available: ${context.self.filterValues { it.isNotBlank() }.keys.sorted().joinToString(", ").ifEmpty { "none" }})"
@@ -89,7 +97,8 @@ class DefaultTemplateRenderer : TemplateRenderer {
             }
 
             null -> {
-                "Unknown placeholder {$name}; supported forms: {last_id}, {self.<field>}, {event.<event>.id}, {tester.<role>.<n>.<field>}"
+                "Unknown placeholder {$name}; supported forms: {last_id}, {pass}, {self.<field>}, {event.<event>.id}, " +
+                    "{tester.<role>.<n>.<field>}"
             }
         }
 

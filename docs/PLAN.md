@@ -179,7 +179,7 @@ setup:
 steps:
   - id: announce
     actor: admin
-    do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
+    do: "Elan yarat: 'Sabah 10:00 ümumi iclas {pass}'"
     # The form's post is when the announcement reached the site: the readers' latency is measured from its answer.
     emits: {event: announcement_created, request: "POST /announcements"}
     assert:
@@ -190,7 +190,7 @@ steps:
     wait_for: announcement_created
     do: "Bildirişləri aç və yeni elanı oxu"
     assert:
-      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 5}
+      - visible_text: {text: "Sabah 10:00 ümumi iclas {pass}", within_s: 5}
       - latency_max: {ms: 5000}
       - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
 
@@ -1333,12 +1333,19 @@ dərəcədə aiddir (Faza 25).
   bəli, 24.10-dan sonra.
 - [x] **24.5 və 24.6 DSL-i pozur:** dərhal xəta, yoxsa bir buraxılış xəbərdarlıq, sonra xəta? Tövsiyə: dərhal xəta,
   çünki köhnə forma yalançı nəticə verir; validator mesajı düzgün formanı göstərir.
-- [ ] **24.10-dan çıxan sual — hər nəşrin öz mətni.** Swap-da (və 24.11-dən sonra dalğalarda) eyni elan mətni eyni
+- [x] **24.10-dan çıxan sual — hər nəşrin öz mətni.** Swap-da (və 24.11-dən sonra dalğalarda) eyni elan mətni eyni
   şirkətdə ikinci dəfə nəşr olunur; receiver-in səhifəsində birinci nəşr artıq göründüyü üçün yoxlama indi düzgün
   şəkildə `stale_text` olur, amma ssenari müəllifinin mətni nəşrə görə dəyişdirməyə yolu yoxdur (`{self.*}` hesabla
   birlikdə keçir, dəyişmir). Emitter-in `do`-sunda və receiver-in `visible_text`-ində işlənən, hər icrada fərqli bir
   yer tutucu (məs. `{pass}`: 1-ci keçid, swap, dalğa nömrəsi) əlavə edilsinmi? Tövsiyə: bəli, `{pass}` kimi sadə və
   deterministik; kəşfiyyatçının marker-i də onu işlətsin.
+  *Qərar (sahib, 2026-09-29):* bəli. *Vəziyyət:* `{pass}` = `<run tag>-<n>` (`RunState.passMark`): n 1-ci keçiddə 1,
+  sonrakı dalğalarda dalğanın nömrəsi, swap-da növbəti nömrə; run tag-i sayəsində eyni hesabla təkrarlanan run-da da
+  (şirkətsiz sayt, `login` testerləri) mətn yenidir. `{last_id}` kimi addımın öz hadisəsinə bağlıdır: emit edən
+  addımda indiki keçid, gözləyən addımda gözlədiyi hadisənin keçidi (`PublishedEvent.pass`: 1-ci dalğanın setup
+  hadisəsi sonrakı dalğada da öz mətni ilə oxunur), qalanında indiki keçid. Validator onu hər kampaniya şablonunda
+  qəbul edir, axınlarda (flows) yoxdur. Kəşfiyyatçının marker-ləri (`Pətək yoxlaması …`, `Pətək təkrar …`) və
+  nümunə ssenarilərin elan mətni `{pass}` daşıyır. `RunnerWavesTest`, `RunnerDeliveryTest`.
 
 Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; dalğadan böyük yarış (`wave_size: 2` ilə üç manager;
 24.11-dən iki manager bir dalğada qalır) PASSED ola bilmir, tək yarışan INCONCLUSIVE-dir (24.12);

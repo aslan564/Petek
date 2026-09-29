@@ -34,6 +34,8 @@ data class PublishedEvent(
     /** Monotonic publish order within the run. */
     val sequence: Long,
     val origin: EventOrigin? = null,
+    /** The execution of the steps the emitter ran in (`{pass}`): 1 in the first pass, the wave's number, the swap's. */
+    val pass: Int = 1,
 ) {
     /** t0 of a delivery latency: the write when the emitter's page showed it, else the publish. */
     val t0: HarnessTimestamp get() = origin?.write?.at ?: publishedAt
@@ -65,12 +67,16 @@ data class EventWrite(
  * Events are retained for the whole run, so a waiter that arrives late still sees an event emitted earlier.
  */
 interface EventBus {
-    /** Publishes an event now; [origin] is when its change reached the target, when the emitter's page showed it. */
+    /**
+     * Publishes an event now; [origin] is when its change reached the target, when the emitter's page showed it, and
+     * [pass] the execution of the steps it was published in.
+     */
     suspend fun publish(
         name: String,
         objectId: String?,
         emitter: AgentId,
         origin: EventOrigin? = null,
+        pass: Int = 1,
     ): PublishedEvent
 
     /**

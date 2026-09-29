@@ -13,8 +13,8 @@ package az.petek.campaign.domain
 
 /**
  * Values available to `{placeholder}` templates in steps and assertions.
- * `{last_id}`, `{self.email}`, `{self.name}`, `{self.agent_id}`, `{self.department}`, `{self.role}`, `{event.<name>.id}`,
- * `{tester.<role>.<n>.name|email}`.
+ * `{last_id}`, `{pass}`, `{self.email}`, `{self.name}`, `{self.agent_id}`, `{self.department}`, `{self.role}`,
+ * `{event.<name>.id}`, `{tester.<role>.<n>.name|email}`.
  */
 data class TemplateContext(
     /** The object of the step's own event (Faza 24.6): the one it waited for or, in its checks, emitted; else null. */
@@ -23,6 +23,8 @@ data class TemplateContext(
     val eventIds: Map<String, String>,
     /** Other testers by `<role>.<n>` (1-based, agent order): only [Placeholder.TESTER_FIELDS]. */
     val testers: Map<String, Map<String, String>> = emptyMap(),
+    /** `{pass}`: the mark of the execution the step's own event belongs to (see [Placeholder.Pass]); null outside a run. */
+    val pass: String? = null,
 )
 
 /** Pure template rendering. Unknown or unresolvable placeholders fail loudly instead of producing wrong URLs. */

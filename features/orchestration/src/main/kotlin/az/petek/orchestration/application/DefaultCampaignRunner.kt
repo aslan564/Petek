@@ -283,6 +283,8 @@ class DefaultCampaignRunner(
         for ((index, wave) in plan.waves.withIndex()) {
             if (run.aborted) break
             val live = plan.live(index).map { it.agentId }.toSet()
+            // `{pass}`: every wave publishes its own texts; a carried setup event keeps the pass it was written in.
+            run.pass = index + 1
             if (index > 0) {
                 run.bus = busFactory()
                 run.setupEvents.forEach { run.bus.carry(it) }
@@ -377,6 +379,8 @@ class DefaultCampaignRunner(
         board.message("accounts swapped among ${finished.size} testers; the main steps run again")
         val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
         run.wave = finished.map { it.agentId }.toSet()
+        // `{pass}`: the swap writes new texts, so the first pass's, still on the pages, are not taken for them.
+        run.pass += 1
         try {
             runSteps(run, board, tasks, again)
         } finally {

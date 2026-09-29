@@ -36,9 +36,12 @@ looking at the server alone or by one browser.
   of its event start watching their own pages for the text of their `visible_text` (`BrowserSession.watchText`; the
   page times the text itself, on DOM changes and every 50 ms), so neither the emitter's agent working on after the
   write nor the steps in between are counted or hidden. A text already on the page when the watch began proves nothing
-  (`stale_text`: the same text published again in a later wave or the account swap, or text the page always shows). A
-  text naming the event's own object (`{last_id}`) cannot be watched for before the object exists; it is checked after
-  the event, and a text visible at the first look gives only an upper bound.
+  (`stale_text`: the same text published again in a later wave or the account swap, or text the page always shows).
+  A campaign keeps every publication's text new with `{pass}` in the emitter's `do` and the receivers' `visible_text`:
+  it is `<run tag>-<n>`, n the pass (1, the wave's number, the swap's), and in a step that waits it is the pass of the
+  event it waited for, so a setup event of the first wave read in a later one keeps its text. A text naming the
+  event's own object (`{last_id}`) cannot be watched for before the object exists; it is checked after the event, and
+  a text visible at the first look gives only an upper bound.
 - **Latency.** `latency_max` asserts per receiver on the range the delay lies in: PASSED when even its longest is
   within the limit, FAILED when even its shortest exceeds it, and INCONCLUSIVE in between (Faza 24.12); a
   `stale_text` is INCONCLUSIVE too, never a delivery defect of the site. The
@@ -59,7 +62,9 @@ looking at the server alone or by one browser.
 
 - `orchestration`: bus and scheduler tests (t0 stamping, timeouts, emitter failure handling); `RunnerDeliveryTest`: a
   slow delivery hidden behind the emitter's long answer fails `latency_max`, the step's request is the write, a text
-  already on the page and the swap's second publication are `stale_text`, every watch ends.
+  already on the page and the swap's second publication are `stale_text`, a text marked with `{pass}` is new in the
+  swap and its delivery is measured, every watch ends; `RunnerWavesTest`: every wave's texts carry its own pass, a
+  setup event's text keeps the first.
 - `browser`: real-Chromium watches of a text appended, revealed by a style change and inside a shadow root.
 - `verification`: latency assertions with `FakeHarnessClock`; `WatchedDeliveryTest` for watches and latency ranges.
 - `e2e`: announcement scenario on the fake target (SSE) — receivers measure independently, no serialisation.

@@ -36,10 +36,23 @@ class TargetPathTest {
     fun `every template value is encoded`() {
         val encoded =
             TargetPath.encodeValues(
-                TemplateContext(lastId = "a/b", self = mapOf("name" to "Ə b"), eventIds = mapOf("ticket_created" to "t 1")),
+                TemplateContext(
+                    lastId = "a/b",
+                    self = mapOf("name" to "Ə b"),
+                    eventIds = mapOf("ticket_created" to "t 1"),
+                    testers = mapOf("manager.1" to mapOf("email" to "m 1@test.example")),
+                    pass = "k7x2 2",
+                ),
             )
 
-        encoded shouldBe TemplateContext("a%2Fb", mapOf("name" to "%C6%8F%20b"), mapOf("ticket_created" to "t%201"))
+        encoded shouldBe
+            TemplateContext(
+                "a%2Fb",
+                mapOf("name" to "%C6%8F%20b"),
+                mapOf("ticket_created" to "t%201"),
+                mapOf("manager.1" to mapOf("email" to "m%201@test.example")),
+                "k7x2%202",
+            )
         TargetPath.encodeValues(TemplateContext(null, emptyMap(), emptyMap())).lastId.shouldBeNull()
     }
 

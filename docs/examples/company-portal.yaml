@@ -137,24 +137,24 @@ setup:
 steps:
   - id: announce
     actor: admin
-    do: "Elanlar səhifəsində (/announcements) 'Yeni elan' ilə elan yarat: başlıq 'Sabah 10:00 ümumi iclas', mesaj 'Hamı iştirak etsin', hədəf bütün işçilər; yadda saxla"
+    do: "Elanlar səhifəsində (/announcements) 'Yeni elan' ilə elan yarat: başlıq 'Sabah 10:00 ümumi iclas {pass}', mesaj 'Hamı iştirak etsin', hədəf bütün işçilər; yadda saxla"
     emits: announcement_created
     assert:
-      - oracle: {path: "/test/announcements/{last_id}", field: title, equals: "Sabah 10:00 ümumi iclas"}
+      - oracle: {path: "/test/announcements/{last_id}", field: title, equals: "Sabah 10:00 ümumi iclas {pass}"}
 
   # Only the bell badge is live on the portal (SSE); the notifications and announcement pages load once. The receipt is
   # therefore checked in the test API and the text on the page after reading, not as a delivery latency.
   - id: read_announce
     actor: employee[*]
     wait_for: {event: announcement_created, timeout_s: 60}
-    do: "Yuxarıdakı bildiriş zənginə bax, elanlar səhifəsini (/announcements) aç, 'Sabah 10:00 ümumi iclas' elanını tap və 'Oxundu' ilə oxunmuş kimi qeyd et"
+    do: "Yuxarıdakı bildiriş zənginə bax, elanlar səhifəsini (/announcements) aç, 'Sabah 10:00 ümumi iclas {pass}' elanını tap və 'Oxundu' ilə oxunmuş kimi qeyd et"
     assert:
       - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
 
   - id: announce_seen
     actor: employee[*]
     assert:
-      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 10}
+      - visible_text: {text: "Sabah 10:00 ümumi iclas {pass}", within_s: 10}
 
   - id: leave_request
     actor: employee[dept=IT, n=1]

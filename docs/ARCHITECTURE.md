@@ -97,7 +97,8 @@ sequenceDiagram
    - Resolve its actors.
    - A step with `emits` first has the receivers of its event start watching their own pages for the text of their
      `visible_text` (Faza 24.10), so the moment the text appears is timed by the page, whatever the agents do until
-     the receivers' step runs; a text already there is `stale_text`, not a delivery.
+     the receivers' step runs; a text already there is `stale_text`, not a delivery (`{pass}` in the text makes every
+     wave's and the swap's publication new).
    - With `wait_for`, each actor waits on the event bus. The receipt is recorded when the event text shows up on
      screen (`visible_text`), with the latency from the write behind the event (t0) to that moment (t1).
    - Each actor performs its `do` (LLM loop) or `run` (code). All actors of a step run concurrently. `parallel: true`
@@ -293,7 +294,9 @@ password, no phone). What testers share (`SharedRunState`: `company_id`, `compan
 write-once: the first publisher wins and a different later value is refused, so nobody can change what the others act
 on. `{last_id}` is the step's own object only: the one the actor waited for and, in its checks, the one it emitted —
 never an object a colleague created concurrently in the same step and never another step's object; with no id it is a
-template error, not a fallback (Faza 24.6). Another step's object is `{event.<name>.id}`. The campaign validator lets
+template error, not a fallback (Faza 24.6). Another step's object is `{event.<name>.id}`. `{pass}` marks a text with
+the execution of the steps it belongs to (`<run tag>-<n>`: the first pass, a later wave, the account swap), following
+the step's own event like `{last_id}`, so a text published again is never taken for the earlier one. The campaign validator lets
 only the admin run `register_owner` and `seed_company`, requires exactly one emitting step per event name, refuses
 `{last_id}` in a step without an event of its own, and lets several testers emit an event others depend on only in a
 race. Evidence, events

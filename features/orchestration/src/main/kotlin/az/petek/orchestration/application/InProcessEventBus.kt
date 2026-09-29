@@ -45,6 +45,7 @@ class InProcessEventBus(
         objectId: String?,
         emitter: AgentId,
         origin: EventOrigin?,
+        pass: Int,
     ): PublishedEvent =
         publishLock.withLock {
             val current = state.value
@@ -57,6 +58,7 @@ class InProcessEventBus(
                     publishedAt = clock.now(),
                     sequence = current.lastSequence + 1,
                     origin = origin,
+                    pass = pass,
                 )
             state.value = current.with(event)
             event

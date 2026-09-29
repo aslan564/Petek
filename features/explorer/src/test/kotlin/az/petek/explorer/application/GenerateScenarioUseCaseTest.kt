@@ -196,7 +196,7 @@ class GenerateScenarioUseCaseTest {
         announce.emits!!.event shouldBe "announcements_created"
         // The form's request is the write its readers' delivery is measured from (Faza 24.10).
         announce.emits!!.request shouldBe RequestPattern("POST", "/announcements")
-        announce.assertions shouldContainExactly listOf(AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit", 10.seconds))
+        announce.assertions shouldContainExactly listOf(AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit {pass}", 10.seconds))
         val ticket = campaign.step("ticket-submit-happy")
         ticket.actors.raw shouldBe "employee[n=1]"
         ticket.emits!!.idSource shouldBe IdSource.UrlRegex("/tickets/([^/?#]+)")
@@ -213,7 +213,7 @@ class GenerateScenarioUseCaseTest {
         realtime.waitFor!!.event shouldBe "announcements_created"
         realtime.assertions shouldContainExactly
             listOf(
-                AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit", 10.seconds),
+                AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit {pass}", 10.seconds),
                 AssertionSpec.LatencyMax(5000.milliseconds),
             )
         campaign.step("ticket-submit-realtime").actors.raw shouldBe "manager[*]"
@@ -276,7 +276,7 @@ class GenerateScenarioUseCaseTest {
             .step("ticket-submit-idempotency")
             .assertions
             .single() shouldBe
-            AssertionSpec.Count("[data-testid=\"ticket-item\"]:has-text(\"Pətək təkrar ticket-submit\")", 1)
+            AssertionSpec.Count("[data-testid=\"ticket-item\"]:has-text(\"Pətək təkrar ticket-submit {pass}\")", 1)
         val skipped = composed.skipped.associate { (it.idea.actionId to it.idea.pattern) to it.reason }
         skipped.getValue("ticket-submit" to TestPattern.BOUNDARY) shouldContain "input rules"
         skipped.getValue("login-submit" to TestPattern.BOUNDARY) shouldContain "setup run functions"
@@ -305,7 +305,7 @@ class GenerateScenarioUseCaseTest {
 
         campaign.target.idSources["announcements_created"] shouldBe IdSource.OracleField("/test/announcements/latest?by={self.email}", "id")
         campaign.step("announcement-submit-happy").assertions.last() shouldBe
-            AssertionSpec.Oracle("/test/announcements/{last_id}", null, null, "Pətək yoxlaması announcement-submit")
+            AssertionSpec.Oracle("/test/announcements/{last_id}", null, null, "Pətək yoxlaması announcement-submit {pass}")
         campaign.step("ticket-submit-happy").emits!!.idSource shouldBe null
         validator.validate(campaign, runFunctions).shouldBeEmpty()
     }

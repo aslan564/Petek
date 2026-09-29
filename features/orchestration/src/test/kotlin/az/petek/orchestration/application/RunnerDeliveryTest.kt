@@ -16,6 +16,7 @@ import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.FailureReason
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.RequestPattern
+import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.core.ids.AgentId
 import az.petek.evidence.domain.StepKind
@@ -198,6 +199,51 @@ class RunnerDeliveryTest {
             visible["read"] shouldBe listOf(Verdict.PASSED, Verdict.PASSED)
             visible["read@swap"] shouldBe listOf(Verdict.INCONCLUSIVE, Verdict.INCONCLUSIVE)
             f.checks("visible_text").filter { it.scenarioStep == "read@swap" }.forEach { it.note!! shouldStartWith "stale_text" }
+        }
+
+    @Test
+    fun `a text marked with its pass is new in the account swap, so the swap's delivery is measured too`() =
+        runTest {
+            val f = fixture()
+            val published = CopyOnWriteArraySet<String>()
+            f.browser.configure = { session -> published.forEach(session::showText) }
+            f.agents.script = { call, _ ->
+                if (call.scenarioStep.startsWith("announce")) {
+                    // The agent writes what its task says, with the pass's mark in it.
+                    val written = (call.action as StepAction.Do).instruction.substringAfter("'").substringBefore("'")
+                    f.browser.sessions.values
+                        .forEach { it.showText(written) }
+                    published += written
+                }
+                ok
+            }
+            val marked = "$text {pass}"
+            val campaign =
+                campaign(
+                    managers = 0,
+                    employees = 2,
+                    steps =
+                        listOf(
+                            step("announce", admin(), StepAction.Do("Announce '$marked'"), emits = "announcement_created"),
+                            step(
+                                "read",
+                                employees(),
+                                waitFor = "announcement_created",
+                                assertions = listOf(AssertionSpec.VisibleText(marked, 5.seconds)),
+                            ),
+                        ),
+                )
+
+            f.runner().run(campaign, RunOptions(swapAccounts = true))
+
+            val tag =
+                f.evidence.runList
+                    .single()
+                    .runTag.value
+            val visible = f.checks("visible_text").groupBy({ it.scenarioStep }, { it.verdict to it.expected.substringBefore(" visible") })
+            visible["read"] shouldBe List(2) { Verdict.PASSED to "\"$text $tag-1\"" }
+            visible["read@swap"] shouldBe List(2) { Verdict.PASSED to "\"$text $tag-2\"" }
+            f.evidence.receiptList.map { it.received } shouldContainExactly List(4) { true }
         }
 
     @Test

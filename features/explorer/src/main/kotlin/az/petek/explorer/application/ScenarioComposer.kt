@@ -436,7 +436,8 @@ internal class ScenarioComposer(
                 )
         if (!literal(item)) return braces(Selectors.testId(item))
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
-        val marker = "Pətək təkrar ${Slugs.of(action.id)}"
+        // `{pass}`: every wave and the account swap submit their own text, so each count sees only its own pass.
+        val marker = "Pətək təkrar ${Slugs.of(action.id)} {pass}"
         val id = stepId(action, "idempotency")
         steps +=
             step(
@@ -477,7 +478,8 @@ internal class ScenarioComposer(
             val (open, prerequisites) = objectPage(page) ?: return null
             val resource = Resources.created(action, page)
             val event = Slugs.firstFree(Slugs.identifier(resource, "item") + "_created", "_") { it !in idSources && it !in usedEvents() }
-            val marker = "Pətək yoxlaması ${Slugs.of(action.id)}"
+            // `{pass}`: a later wave or the account swap creates a new text, never one the pages show already.
+            val marker = "Pətək yoxlaması ${Slugs.of(action.id)} {pass}"
             val assertions = mutableListOf<AssertionSpec>(AssertionSpec.VisibleText(marker, settings.visibleWithin))
             val idSource =
                 if (testApi && servedByTestApi(action, resource)) {

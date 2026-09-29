@@ -125,7 +125,7 @@ class ContractDemoCampaignFileTest {
         read.waitFor shouldBe WaitForSpec("announcement_created", 30.seconds)
         read.assertions shouldContainExactly
             listOf(
-                AssertionSpec.VisibleText("Sabah 10:00 ümumi iclas", 5.seconds),
+                AssertionSpec.VisibleText("Sabah 10:00 ümumi iclas {pass}", 5.seconds),
                 AssertionSpec.LatencyMax(5000.milliseconds),
                 AssertionSpec.Oracle("/test/announcements/{last_id}/receipts", null, null, "{self.email}"),
             )

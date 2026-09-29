@@ -35,6 +35,7 @@ class DefaultTemplateRendererTest {
                 ),
             eventIds = mapOf("announcement_created" to "17", "ticket_created" to "99"),
             testers = mapOf("manager.1" to mapOf("name" to "Sahil Quliyev", "email" to "sahil.k7x2.a02@test.portal.example")),
+            pass = "k7x2-2",
         )
 
     @Test
@@ -61,6 +62,13 @@ class DefaultTemplateRendererTest {
         shouldThrow<TemplateException> { renderer.render("{tester.manager.2.email}", context) }.message shouldContain
             "there is no tester 2 of role 'manager'"
         shouldThrow<TemplateException> { renderer.render("{tester.manager.1.password}", context) }
+    }
+
+    @Test
+    fun `pass marks a text with the execution it belongs to, and only a run has one`() {
+        renderer.render("Həftəlik xəbər {pass}", context) shouldBe "Həftəlik xəbər k7x2-2"
+        shouldThrow<TemplateException> { renderer.render("Həftəlik xəbər {pass}", context.copy(pass = null)) }.message shouldContain
+            "not rendered within a run"
     }
 
     @Test

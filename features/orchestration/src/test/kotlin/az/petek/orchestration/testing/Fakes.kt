@@ -151,6 +151,7 @@ class SimpleTemplateRenderer : TemplateRenderer {
     ): String? =
         when {
             name == "last_id" -> context.lastId
+            name == "pass" -> context.pass
             name.startsWith("self.") -> context.self[name.removePrefix("self.")]
             name.startsWith("event.") && name.endsWith(".id") -> context.eventIds[name.removePrefix("event.").removeSuffix(".id")]
             else -> null
