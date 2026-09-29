@@ -14,6 +14,8 @@ package az.petek.dashboard.infrastructure
 import az.petek.dashboard.domain.AccountRequest
 import az.petek.dashboard.domain.AccountView
 import az.petek.dashboard.domain.AiCheckView
+import az.petek.dashboard.domain.AiChoice
+import az.petek.dashboard.domain.AiOptionsView
 import az.petek.dashboard.domain.CapacityView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.EventView
@@ -282,6 +284,32 @@ internal object PanelJson {
                 put("configured", view.ai.configured)
             }
         }
+
+    /** The AIs to choose from on the setup screen; whether a key is set, never the key. */
+    fun aiOptions(view: AiOptionsView): JsonElement =
+        buildJsonObject {
+            putJsonArray("options") {
+                view.options.forEach { option ->
+                    addJsonObject {
+                        put("provider", option.provider)
+                        put("label", option.label)
+                        put("available", option.available)
+                        strings("needs", option.needs)
+                    }
+                }
+            }
+            put("chosen", view.chosen)
+            put("model", view.model)
+            put("endpoint", view.endpoint)
+            put("keySet", view.keySet)
+            put("unavailable", view.unavailable)
+        }
+
+    /** `{"provider", "model"?, "endpoint"?, "key"?}` from the setup screen's AI card; a missing or blank key keeps it. */
+    fun aiChoice(body: String): AiChoice {
+        val root = parse(body)
+        return AiChoice(root.string("provider"), root.optionalString("model"), root.optionalString("endpoint"), root.optionalString("key"))
+    }
 
     fun siteCheck(view: SiteCheckView): JsonElement =
         buildJsonObject {

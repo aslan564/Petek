@@ -188,6 +188,9 @@ internal class PanelExplorerAdapter(
         }
     }
 
+    /** Whether an exploration is going. */
+    fun busy(): Boolean = synchronized(lock) { job?.isActive == true }
+
     override suspend fun cancelExploration(): Boolean {
         val running = synchronized(lock) { job?.takeIf { it.isActive } } ?: return false
         running.cancel()

@@ -194,6 +194,9 @@ internal class PanelRunsAdapter(
     /** The history row of [runId]; null for an unknown run. */
     suspend fun summary(runId: RunId): RunSummaryView? = container.runs.find(runId)?.let { summary(it, scenarios.versionsByHash()) }
 
+    /** Whether a run is going. */
+    fun busy(): Boolean = synchronized(lock) { current?.isActive == true }
+
     override suspend fun cancelRun(): Boolean {
         val running = synchronized(lock) { current?.takeIf { it.isActive } } ?: return false
         running.cancel()

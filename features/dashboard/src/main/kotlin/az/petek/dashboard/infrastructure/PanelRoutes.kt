@@ -76,6 +76,8 @@ private fun Route.readinessRoutes(backend: PanelBackend) {
         call.answer { PanelJson.ownership(backend.checkOwnership(fresh)) }
     }
     post("/api/readiness/ai") { call.answer { PanelJson.aiCheck(backend.testAi()) } }
+    get("/api/readiness/ai-options") { call.answer { PanelJson.aiOptions(backend.aiOptions()) } }
+    post("/api/readiness/ai-choice") { call.answer { PanelJson.readiness(backend.chooseAi(PanelJson.aiChoice(call.jsonBody()))) } }
 }
 
 private fun Route.accountRoutes(backend: PanelBackend) {

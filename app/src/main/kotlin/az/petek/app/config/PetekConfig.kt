@@ -152,6 +152,26 @@ data class PetekConfig(
     /** The profile of [site] (same scheme, host and port), if `targets/` has one. */
     fun profileFor(site: URI): ResolvedTarget? = targets.firstOrNull { sameSite(it.spec.url, site) }
 
+    /**
+     * These settings with the AI of [other]: the provider (and why it was chosen), its fallbacks, model, binary,
+     * arguments, environment, endpoint, key, JSON mode and effort. The panel switches the AI this way while it runs
+     * (Faza 23); how many calls run at once stays as the container was built with.
+     */
+    fun withAiOf(other: PetekConfig): PetekConfig =
+        copy(
+            llmProvider = other.llmProvider,
+            llmProviderReason = other.llmProviderReason,
+            llmFallbacks = other.llmFallbacks,
+            llmModel = other.llmModel,
+            llmBin = other.llmBin,
+            llmArgs = other.llmArgs,
+            llmEnvUnset = other.llmEnvUnset,
+            llmBaseUrl = other.llmBaseUrl,
+            llmApiKey = other.llmApiKey,
+            llmStructured = other.llmStructured,
+            llmEffort = other.llmEffort,
+        )
+
     /** Where the log file lives: `<evidenceDir>/logs`. */
     val logDirectory: Path get() = evidenceDir.resolve("logs")
 

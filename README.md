@@ -111,7 +111,7 @@ campaign you write yourself runs the same way (`petek run scenarios/<campaign>.y
 anywhere. The first time, the browser asks which site to test and keeps the answer in your own workspace
 (`~/.petek/workspace/.env`), so later a bare `petek` in any directory opens the panel for it. The panel opens on
 **Quraşdırma** (setup): the site answers, its ownership (with the proof line to copy and a "check" button), the AI
-(a one-click test) and how many testers; then **Test et** on the instruction screen: the explorer learns the site, the
+(a one-click test, and which AI to use) and how many testers; then **Test et** on the instruction screen: the explorer learns the site, the
 scenario is drafted only from what it found there, approved and run by the testers, and you write no scenario file.
 A project's own `.env` (or `--env-file`, or `PETEK_TARGET` in the environment, as CI sets it) always comes first,
 exactly as before.
@@ -332,7 +332,8 @@ what its proof rests on (evidence tier: oracle-confirmed, screen/network, or a m
 
 `petek` with no arguments (or `petek panel`) starts a loopback-only Ktor server and opens the browser. Screens:
 **Quraşdırma** (setup, the first screen until it is done once: the site answering, its ownership proof with a copy and a
-check button, the AI with a one-click test, the tester count with this machine's capacity advice),
+check button, the AI with a one-click test and a choice of provider, kept in the configuration file and used
+without a restart, the tester count with this machine's capacity advice),
 **Təlimat** (target, plain-language instructions, tester count, budget; **Test et**, which explores, drafts from what
 was found, approves and runs in one go, or the same parts one by one; the roles and ways in are the explorer's to find
 unless you switch the automatic split off), **Kəşfiyyat** (the explorer live: phases,

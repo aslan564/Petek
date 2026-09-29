@@ -402,7 +402,7 @@ Faza 0–5 MVP-dir, 6–25 sonrasıdır; hər faza yalnız "hazır sayılır" ş
 | 20 | İki qatlı, üç rəfli hesabat | Müştəri üçün sadə qat, detal qatı, JUnit XML və SARIF | 1 həftə |
 | 21 | Tutum, dalğalar və ayrı IP | Böyük sürü dalğalarla; hər testerə ayrı IP seçimi | 1 həftə |
 | 22 | Demo hədəfləri | açıq mənbəli xəbər və mağaza platformaları sahibin serverində, real tapıntılar | sonra |
-| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı + "Test et"; sonra AI seçimi, saytlar siyahısı | gedir |
+| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı + "Test et" + paneldən AI seçimi; sonra saytlar siyahısı | gedir |
 | 24 | Orkestratorun kompozisiya auditi | Rol, tester sayı, dalğa, swap, yarış və hadisənin hər birləşməsində yalançı nəticə yoxdur | 1 həftə |
 | 25 | Ssenari kəşfiyyatdan doğulur | "Test et" yalnız saytda görünəni yoxlayır; universal uğur meyarları | 1 həftə |
 
@@ -1114,7 +1114,12 @@ layihənin `.env`-i, `--env-file` və CI-ın mühit dəyişənləri əvvəlki ki
   ortaq). `PanelReadiness` portu, `/api/readiness*`.
 - [x] Bir düymə "Test et": kəşf et → ssenari → run, ssenarini baxıb düzəltmək istəyənlər üçün köhnə yol qalır.
   **Vəziyyət:** Faza 25.3-də (panel, `petek test`, MCP `test_site`).
-- [ ] AI-ı paneldən seçmək (yalnız göstərmək və sınamaq deyil).
+- [x] AI-ı paneldən seçmək (yalnız göstərmək və sınamaq deyil). **Vəziyyət:** "Quraşdırma"nın AI addımında "Dəyiş":
+  `auto`, `codex-cli`, `gemini-cli`, `opencode-cli`, `openai-compat`, `anthropic-api`, `none`; model, ünvan və açar
+  yalnız lazım olanda soruşulur, açar yalnız konfiqurasiya faylına yazılır, boş açar faylda olanı saxlayır. Seçim
+  `.env`-ə yazılır, konfiqurasiya yenidən oxunur və növbəti AI çağırışları yenisi ilə gedir, panel yenidən başlamır
+  (`AppContainer.refresh`, `SwitchableLlmClient`). Mühit dəyişəni fayldakını üstələyirsə seçim rədd olunur və fayl
+  geri qaytarılır; kəşfiyyat, test və ya run gedəndə AI dəyişmir (`/api/readiness/ai-options`, `/api/readiness/ai-choice`).
 - [ ] Paneldə saytlar siyahısı: bir neçə sayt, hər biri öz ayarları ilə, panel yenidən başlamadan.
 - [ ] Quraşdırma kanalları: `brew` (macOS), `scoop` (Windows); npm paketinin dərci (`NPM_TOKEN`).
 

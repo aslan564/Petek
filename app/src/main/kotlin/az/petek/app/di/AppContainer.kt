@@ -111,6 +111,8 @@ import az.petek.ownership.infrastructure.SqliteOwnershipLedger
 import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
+import az.petek.reporting.domain.ReportModel
+import az.petek.reporting.domain.ReportWriter
 import az.petek.reporting.domain.ThreeSourceJudge
 import az.petek.reporting.domain.TraceSource
 import az.petek.reporting.infrastructure.CustomerSummaryWriter
@@ -141,6 +143,7 @@ import com.github.ajalt.mordant.terminal.Terminal
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 import java.net.URI
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = KotlinLogging.logger {}
@@ -168,10 +171,18 @@ private val logger = KotlinLogging.logger {}
  * what was created (monitor, browser engine, HTTP clients, LLM client, database), in reverse order of creation.
  */
 class AppContainer(
-    val config: PetekConfig,
+    initial: PetekConfig,
     private val overrides: AppOverrides = AppOverrides(),
 ) : AutoCloseable {
     private val resources = Resources()
+
+    /**
+     * The configuration the container was built with; only [refresh] changes it, and only in what may change while a
+     * panel runs: the sites' target profiles and the AI.
+     */
+    @Volatile
+    var config: PetekConfig = initial
+        private set
 
     val clock: HarnessClock = overrides.clock ?: SystemHarnessClock()
     val ids: IdGenerator = UuidV7IdGenerator()
@@ -256,7 +267,21 @@ class AppContainer(
     /** LLM usage per agent since the last flush (see [finalizer]). */
     val usageMeter: UsageMeter by lazy { UsageMeter(telemetry) }
 
-    private val llmProvider: LlmClient by lazy { overrides.llm ?: resources.track(LlmProviders.create(config)) }
+    private val llmProvider: SwitchableLlmClient by lazy {
+        SwitchableLlmClient(overrides.llm ?: resources.track(LlmProviders.create(config)))
+    }
+
+    /**
+     * Takes from [fresh], a configuration read again from its file, what may change while a panel runs (Faza 23): the
+     * target profiles (a site added in the panel) and the AI (chosen on the setup screen), whose client is switched
+     * for the next calls; calls in flight finish with the one they started with. Everything else stays as built.
+     */
+    fun refresh(fresh: PetekConfig) {
+        val before = config
+        val next = before.copy(targets = fresh.targets).withAiOf(fresh)
+        config = next
+        if (overrides.llm == null && next.withAiOf(before) != next) llmProvider.switchTo(resources.track(LlmProviders.create(next)))
+    }
 
     /** The client agents use: metered, retried and limited to `PETEK_LLM_CONCURRENCY` calls in flight. */
     val llm: LlmClient by lazy {
@@ -358,7 +383,15 @@ class AppContainer(
                     HtmlReportWriter(),
                     JUnitReportWriter(),
                     SarifReportWriter(),
-                    ShareableHtmlReportWriter(config.llmProvider.value, config.llmModelLabel),
+                    // Named at write time: the panel may have switched the AI since the container was built.
+                    object : ReportWriter {
+                        override val fileName: String = SHARE_REPORT
+
+                        override fun write(
+                            model: ReportModel,
+                            directory: Path,
+                        ): Path = ShareableHtmlReportWriter(config.llmProvider.value, config.llmModelLabel).write(model, directory)
+                    },
                     CustomerSummaryWriter(english = config.language.value.startsWith("en", ignoreCase = true)),
                 ),
         )
@@ -611,5 +644,8 @@ class AppContainer(
 
         /** Where scenario texts are written briefly to be loaded and checked: `<evidence>/scenario-checks/`. */
         const val SCENARIO_CHECK_DIRECTORY = "scenario-checks"
+
+        /** The single-file report to share (`ShareableHtmlReportWriter`'s own file name). */
+        private const val SHARE_REPORT = "share.html"
     }
 }

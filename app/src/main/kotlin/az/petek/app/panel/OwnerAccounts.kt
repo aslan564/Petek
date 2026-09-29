@@ -32,7 +32,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * knows it too; the database never sees it (rule 10).
  */
 internal class OwnerAccounts(
-    private val config: PetekConfig,
+    /** The panel's configuration as it is now (its target profiles may change while the panel runs, Faza 23). */
+    private val settings: () -> PetekConfig,
     private val envFile: Path,
     private val targetsDir: Path,
 ) {
@@ -40,7 +41,7 @@ internal class OwnerAccounts(
 
     fun views(): List<AccountView> {
         val fromProfiles =
-            config.targets.flatMap { target ->
+            settings().targets.flatMap { target ->
                 target.spec.accounts.map { AccountView(target.spec.name, it.role, it.email, it.password?.variable) }
             }
         val fromPanel = added.map { (site, account) -> AccountView(site, account.role, account.email, variable(site, account.role)) }
@@ -50,11 +51,11 @@ internal class OwnerAccounts(
     /** Accounts for [site]: the panel's own first (the latest the owner gave), then the profile's. */
     fun accountsFor(site: URI): List<ResolvedAccount> {
         val name = siteName(site)
-        return added.filter { it.first == name }.map { it.second }.reversed() + config.profileFor(site)?.accounts.orEmpty()
+        return added.filter { it.first == name }.map { it.second }.reversed() + settings().profileFor(site)?.accounts.orEmpty()
     }
 
     fun add(request: AccountRequest): List<AccountView> {
-        val target = PanelTargets.allowed(request.target, config.targetPolicy, TARGET)
+        val target = PanelTargets.allowed(request.target, settings().targetPolicy, TARGET)
         val role = request.role.trim().lowercase()
         val email = request.email.trim()
         val problems = mutableListOf<FieldProblem>()
@@ -75,7 +76,7 @@ internal class OwnerAccounts(
 
     /** The profile's name for [site], else a name made from its host (`staging.shop.example` → `staging-shop-az`). */
     private fun siteName(site: URI): String =
-        config.profileFor(site)?.spec?.name
+        settings().profileFor(site)?.spec?.name
             ?: site.host
                 .orEmpty()
                 .lowercase()

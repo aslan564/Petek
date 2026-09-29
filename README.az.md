@@ -110,7 +110,7 @@ run olunur; özünüzün yazdığı kampaniya da eyni cür işləyir (`petek run
 `petek` yazın. İlk dəfə brauzer hansı saytın test ediləcəyini soruşur və cavabı sizin şəxsi iş qovluğunuzda
 (`~/.petek/workspace/.env`) saxlayır, sonra istənilən qovluqda sadəcə `petek` paneli həmin sayt üçün açır. Panel
 **Quraşdırma** ekranı ilə açılır: sayt cavab verirmi, sahiblik (kopyalanan təsdiq sətri və "Yoxla" düyməsi), AI (bir
-kliklə sınaq) və tester sayı; sonra "Təlimat" ekranında **Test et**: kəşfiyyatçı saytı öyrənir, ssenari yalnız onun
+kliklə sınaq və hansı AI-ın işlədiləcəyi) və tester sayı; sonra "Təlimat" ekranında **Test et**: kəşfiyyatçı saytı öyrənir, ssenari yalnız onun
 orada tapdıqlarından yazılır, təsdiqlənir və testerlərlə run olunur; heç bir ssenari faylı yazmırsınız. Layihənin öz
 `.env`-i (və ya `--env-file`, ya da CI-ın verdiyi kimi mühitdəki `PETEK_TARGET`) həmişə əvvəlki kimi birinci gəlir.
 
@@ -329,7 +329,8 @@ ilə birinci dərəcəli rejim edir).
 
 Arqumentsiz `petek` (və ya `petek panel`) yalnız loopback-ə bağlanan Ktor serveri qaldırır və brauzeri açır. Ekranlar:
 **Quraşdırma** (bir dəfə tamamlanana qədər ilk ekran: sayt cavab verirmi, kopyalama və "Yoxla" düyməli sahiblik
-sübutu, bir kliklə AI sınağı, bu kompüterin tutum tövsiyəsi ilə tester sayı),
+sübutu, bir kliklə AI sınağı və AI seçimi: konfiqurasiya faylına yazılır, panel yenidən başlamadan işə düşür, bu
+kompüterin tutum tövsiyəsi ilə tester sayı),
 **Təlimat** (hədəf, sadə dildə təlimat, tester sayı, büdcə; **Test et**: kəşf edir, tapılanlardan ssenari yazır,
 təsdiqləyir və run edir, və ya eyni hissələr bir-bir; "Avtomatik bölgü"nü söndürməsəniz, rolları və giriş yollarını
 kəşfiyyatçı tapır), **Kəşfiyyat** (kəşfiyyatçı canlı: fazalar, sayt

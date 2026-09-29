@@ -270,7 +270,13 @@ The page opens on **Quraşdırma** until the owner marks it done once. `PanelRea
 app) shows the site, the configuration file and the configured AI without contacting anything, and checks each part
 when the page asks: the site answering (`TargetReachability`), its ownership (`SiteOwnership.check`, or `verify` for a
 fresh look that remembers a proof it finds) and the AI answering `petek doctor`'s tiny request through its own client.
-The tester count set there is the instruction screen's (`P.testers`).
+The tester count set there is the instruction screen's (`P.testers`). The AI is chosen there too (`aiOptions`,
+`chooseAi`; `/api/readiness/ai-options`, `/api/readiness/ai-choice`): the choice (provider, and the model, endpoint or
+key only where that provider needs one; a blank key keeps the file's) is written to the configuration file, the
+configuration is read again, and `AppContainer.refresh` takes its AI settings and target profiles, nothing else; the
+container's `SwitchableLlmClient` sends the next calls to the new client, so the panel is not restarted. A choice the
+environment would override is refused and the file put back; the AI is not switched while an exploration, a test or a
+run is going.
 
 **Test et** (Faza 25.3) is the main path, the same on three faces: the instruction screen's button (`POST /api/test`,
 `GET /api/test`, `POST /api/test/cancel`), `petek test` (`TestCommand` over `PanelCore`, exit code by the run's

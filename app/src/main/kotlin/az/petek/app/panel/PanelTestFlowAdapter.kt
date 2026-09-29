@@ -79,6 +79,9 @@ internal class PanelTestFlowAdapter(
             }
         }
 
+    /** Whether a test ("Test et") is going. */
+    fun busy(): Boolean = synchronized(lock) { job?.isActive == true }
+
     override suspend fun cancelTest(): Boolean {
         val running = synchronized(lock) { job?.takeIf { it.isActive } } ?: return false
         running.cancel()

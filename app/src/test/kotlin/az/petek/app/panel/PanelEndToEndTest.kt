@@ -12,6 +12,7 @@
 package az.petek.app.panel
 
 import az.petek.app.config.ConfigLoader
+import az.petek.app.config.EnvFile
 import az.petek.app.config.IdentitySecretSource
 import az.petek.app.di.AppContainer
 import az.petek.app.testing.PanelLlm
@@ -38,6 +39,7 @@ import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -274,15 +276,16 @@ class PanelEndToEndTest {
         runBlocking<Unit> {
             val llm = PanelLlm(failingSteps = emptySet())
             val file = dir.resolve("demo.env").also { Files.writeString(it, environment(target.baseUrl, target.mailpitUrl)) }
-            val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the demo configuration names its secret") }).load(file)
+            val loader = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the demo configuration names its secret") })
             panel =
                 WebPanel.start(
-                    config = config,
+                    config = loader.load(file),
                     containers = { cfg, overrides -> AppContainer(cfg, overrides.copy(llm = llm.client)) },
                     workingDirectory = dir,
                     capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
                     port = 0,
                     configurationFile = file,
+                    reloadConfig = { loader.load(file) },
                 )
             val page = open(hash = "", ready = "() => location.hash === '#/qurasdirma'")
 
@@ -292,6 +295,19 @@ class PanelEndToEndTest {
             page.locator("section.screen[aria-label='Quraşdırma'] .tester-row input.num").fill("7")
             page.button("Sına").click()
             page.waitFor("() => document.body.innerText.includes('AI cavab verdi')")
+
+            // Another AI is chosen here: kept in the configuration file, its key only there, shown without a restart.
+            val setup = page.locator("section.screen[aria-label='Quraşdırma']")
+            page.button("Dəyiş").click()
+            setup.locator("select[aria-label='AI']").selectOption("openai-compat")
+            setup.locator("input[aria-label='Model']").fill("e2e-model")
+            setup.locator("input[aria-label='Endpoint']").fill("http://127.0.0.1:9/v1")
+            setup.locator("input[aria-label='API açarı']").fill("sk-e2e-key-0123456789")
+            page.shoot("e2e-0-ai-secimi")
+            page.button("Yadda saxla").click()
+            page.waitFor("() => document.body.innerText.includes('openai-compat · e2e-model')")
+            page.content() shouldNotContain "sk-e2e-key"
+            EnvFile.load(file)["PETEK_LLM_API_KEY"] shouldBe "sk-e2e-key-0123456789"
             page.shoot("e2e-0-qurasdirma")
 
             // Done: the instructions take over, with the tester count chosen here.

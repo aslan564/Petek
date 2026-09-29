@@ -120,7 +120,8 @@ internal class AppPanelBackend(
          * [workingDirectory] holds `scenarios/`, [board] receives harness messages, [watch] must be the watch whose
          * decorators wrap [container]'s repositories, and [derive] builds the container of a run against another site
          * (see [RunTargets]). [roleSessions] replaces the explorer's test-company sessions (tests). [configurationFile]
-         * is the file the configuration came from (default: `.env` of [workingDirectory]), shown on the setup screen.
+         * is the file the configuration came from (default: `.env` of [workingDirectory]), shown on the setup screen;
+         * [reloadConfig] reads it again, so what the owner changes in the panel (the AI) is taken without a restart.
          */
         fun create(
             container: AppContainer,
@@ -131,6 +132,7 @@ internal class AppPanelBackend(
             derive: (PetekConfig) -> AppContainer,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
             configurationFile: Path? = null,
+            reloadConfig: (() -> PetekConfig)? = null,
         ): AppPanelBackend {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val answers =
@@ -144,7 +146,7 @@ internal class AppPanelBackend(
             val envFile = configurationFile ?: workingDirectory.resolve(ENV_FILE)
             val accounts =
                 OwnerAccounts(
-                    container.config,
+                    { container.config },
                     envFile,
                     container.config.targetsDir ?: workingDirectory.resolve(TARGETS_DIRECTORY),
                 )
@@ -157,8 +159,9 @@ internal class AppPanelBackend(
             val scenarios = PanelScenariosAdapter(container, explorer, workingDirectory.resolve(SCENARIO_DIRECTORY), scope)
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
             val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
-            val readiness = PanelReadinessAdapter(container, envFile)
             val testFlow = PanelTestFlowAdapter(explorer, scenarios, runs, scope, container.clock)
+            val readiness =
+                PanelReadinessAdapter(container, envFile, reloadConfig) { testFlow.busy() || explorer.busy() || runs.busy() }
             return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts, readiness, testFlow)
         }
 
