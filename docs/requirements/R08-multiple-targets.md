@@ -29,7 +29,9 @@ tool (R11) and a sellable product (R15).
   anything of the panel's own site (no test API, token or oracle); there a visitor run (only reads) may start, like the
   explorer, while a run that writes still needs `PETEK_TARGET` or a profile.
 - Secrets in profiles are `${ENV}` references resolved from `.env`; the panel writes secrets to `.env`, never to the
-  database (rule 10). Accounts carry non-secret login `fields` (R07).
+  database (rule 10). Accounts carry non-secret login `fields` (R07). `PETEK_TEST_TOKEN` belongs to the panel's own
+  site: only a profile of that site inherits it; a profile of another site that names no token of its own has none
+  (its oracle is "N/A"), so the token never reaches another site's test API (found 2026-09-29).
 - Capability probe per target records what it supports; evidence tiers say what each verdict rests on.
 
 ## Modules touched
@@ -41,7 +43,8 @@ tool (R11) and a sellable product (R15).
 
 - `campaign`: `YamlTargetSpecSourceTest` (parsing, validation with lines, secret references, accounts and fields,
   the example target profile).
-- `app`: `ConfigLoaderTest` (`PETEK_TARGET` naming a profile, a broken profile reported with its file and line),
+- `app`: `ConfigLoaderTest` (`PETEK_TARGET` naming a profile, a broken profile reported with its file and line, a
+  profile of another site never getting the panel's token),
   `PanelRunsTest` (a site with a profile runs with its settings; a scenario runs on its own site; a scenario that
   writes is refused on another site without a profile), `OwnerAccountsTest`.
 - Open: an e2e run against a second fake site in the same panel (Faza 13).

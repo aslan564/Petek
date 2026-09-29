@@ -399,6 +399,22 @@ class ConfigLoaderTest {
     }
 
     @Test
+    fun `a profile of another site that names no token of its own never gets the panel's`() {
+        Files.createDirectories(dir.resolve("targets"))
+        Files.writeString(dir.resolve("targets/notes.yaml"), "target: {name: notes, url: 'https://notes.example'}")
+        Files.writeString(dir.resolve("targets/own.yaml"), "target: {name: own, url: 'https://own.example'}")
+
+        val config = load("PETEK_TARGET" to "https://own.example", "PETEK_TEST_TOKEN" to "own-token-123")
+
+        val notes = TargetProfileConfig.forTarget(config, URI("https://notes.example"))
+        notes.testToken shouldBe null
+        notes.mailSource shouldBe MailSource.MAILPIT
+        // The profile of the panel's own site keeps the site's token.
+        TargetProfileConfig.forTarget(config, URI("https://own.example")).testToken shouldBe Secret("own-token-123")
+        load("PETEK_TARGET" to "own", "PETEK_TEST_TOKEN" to "own-token-123").testToken shouldBe Secret("own-token-123")
+    }
+
+    @Test
     fun `a broken target profile is a configuration problem with its file and line`() {
         Files.createDirectories(dir.resolve("targets"))
         Files.writeString(dir.resolve("targets/x.yaml"), "target:\n  name: x\n  url: nowhere\n")
