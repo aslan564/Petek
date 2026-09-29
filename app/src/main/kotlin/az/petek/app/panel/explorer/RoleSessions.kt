@@ -307,6 +307,16 @@ internal class TestCompanyRoleSessions(
             ?.spec
             ?.tenant ?: Tenant.NONE
 
+    /**
+     * [profile] as a setup of the explorer's own takes it: the site's scenario lends its flows and selectors, but the ids
+     * its main steps' events carry are not the setup's, which would refer to events nobody sends; only those of [steps]
+     * stay.
+     */
+    private fun forSetup(
+        profile: TargetProfile,
+        steps: List<ScenarioStep>,
+    ): TargetProfile = profile.copy(idSources = profile.idSources.filterKeys { event -> steps.any { it.emits?.event == event } })
+
     /** A site without companies: the explorer alone signs up through the profile's `sign_up` flow, as role `explorer`. */
     private fun selfSignUp(profile: TargetProfile): Campaign {
         val explorer = checkNotNull(Role.fromKey(EXPLORER))
@@ -326,7 +336,7 @@ internal class TestCompanyRoleSessions(
                         name = NAME,
                         tenant = Tenant.NONE,
                     ),
-                target = profile,
+                target = forSetup(profile, emptyList()),
                 setup =
                     listOf(
                         ScenarioStep(
@@ -432,7 +442,7 @@ internal class TestCompanyRoleSessions(
                         onFail = OnFail.ABORT,
                         name = NAME,
                     ),
-                target = profile,
+                target = forSetup(profile, steps),
                 setup = steps,
                 steps = emptyList(),
                 sourceHash = SOURCE_HASH,

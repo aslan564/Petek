@@ -284,6 +284,38 @@ class TestCompanyRoleSessionsTest {
         }
 
     @Test
+    fun `the site's own scenario lends its flows, not the ids its main steps' events carry`() =
+        runBlocking<Unit> {
+            // The explorer's second look at a site whose drafted scenario was approved (Faza 18: it goes on during a run).
+            val ownFile =
+                PanelHarness.tinyCampaign(name = "real-site").replace(
+                    "    do: \"Look at the home page\"\n",
+                    "    do: \"Look at the home page\"\n    emits: note_created\n",
+                ) +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#giris-email'
+                      id_sources:
+                        note_created:
+                          oracle: {path: "/test/notes/latest?by={self.email}", field: id}
+                    """.trimIndent() + "\n"
+            val panel = PanelHarness(dir, scenarios = mapOf("real-site.yaml" to ownFile)).also { open += it }
+            panel.backend.scenarios().map { it.name } shouldContainExactly listOf("real-site")
+            val source = sessions(panel) { SetupRun(RunId("run_profile"), RunOutcome.ABORTED) }
+
+            source.open(request(panel), factory) { progress += it }
+
+            val campaign = campaigns.single()
+            campaign.target.selector("login.email") shouldBe "#giris-email"
+            campaign.target.idSources shouldBe emptyMap()
+            // The explorer's own sign-up takes the same profile the same way.
+            source.registerOnly(request(panel), factory) { progress += it }
+            campaigns.last().target.idSources shouldBe emptyMap()
+            campaigns.last().settings.name shouldBe campaign.settings.name
+        }
+
+    @Test
     fun `another site's scenario never gives the explorer its flows`() =
         runBlocking<Unit> {
             val otherSite =
