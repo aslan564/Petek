@@ -109,6 +109,25 @@ internal class RunTrace(
         record(description, evidence.now(), status, detail)
     }
 
+    /**
+     * Publishes [value] as the run's shared [key] for the other testers. Shared values are write-once: when another
+     * tester published a different one first, that one is kept, the conflict is recorded as a sub-action, and the kept
+     * value is returned, so nothing is changed silently under the others.
+     */
+    suspend fun publish(
+        key: String,
+        value: String,
+    ): String {
+        if (runtime.shared.put(key, value)) return value
+        val kept = runtime.shared.get(key) ?: value
+        if (kept !=
+            value
+        ) {
+            note("publish shared.$key", StepStatus.PASSED, "already published as '$kept'; kept (write-once), this step said '$value'")
+        }
+        return kept
+    }
+
     /** Opens a page by path key (`login`) or path (`/login`). */
     suspend fun open(pathRef: String) {
         val path = target.resolvePath(pathRef)

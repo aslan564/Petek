@@ -99,16 +99,6 @@ internal class SeedCompanyRunFunction(
     }
 
     /** Publishes [value] under [key] and returns what the key holds afterwards: [value], or an earlier publication (noted). */
-    private suspend fun RunTrace.publish(
-        key: String,
-        value: String,
-    ): String {
-        if (runtime.shared.put(key, value)) return value
-        val kept = runtime.shared.get(key) ?: value
-        note("publish shared.$key", StepStatus.PASSED, "already published as '$kept'; kept (write-once), this step said '$value'")
-        return kept
-    }
-
     private suspend fun RunTrace.publishCodeFromUi(): ActionOutcome {
         val code = codeFromUi()?.let { publish(SharedRunState.COMPANY_CODE, it) }
         val invitees = runtime.roster.count { it.registration == RegistrationMode.INVITE }
