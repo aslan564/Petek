@@ -115,7 +115,7 @@ class ExploreSiteUseCase(
                 id = id,
                 request = request,
                 settings = settings,
-                accumulator = SiteModelAccumulator(request.target),
+                accumulator = SiteModelAccumulator(request.target).apply { request.seed?.let(::seed) },
                 emitter = emitter,
                 analyst = PageAnalyst(llm, settings, id),
                 capture = PageCapture(artifacts, repository, clock, ids, id, settings.pageSettleTimeout, settings.pageSettlePoll),

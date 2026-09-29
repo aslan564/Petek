@@ -28,6 +28,7 @@ import az.petek.dashboard.domain.RunSummaryView
 import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TestStage
 import az.petek.evidence.domain.RunResult
+import az.petek.explorer.domain.ExplorationId
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +51,11 @@ private val logger = KotlinLogging.logger {}
  * The test stops, with the reason in its note, where the step-by-step way would stop: an exploration that failed, was
  * stopped or saved no model, a draft that does not pass the validator, a run that is refused (another run going, a
  * site without proven ownership) or stopped. One test at a time; [cancelTest] stops the part that is running.
+ *
+ * While the run goes, the explorer goes on from the model the run's scenario came from (Faza 18, the owner's decision
+ * in LINK_ONLY_SWARM.md section 0.8): it asks only about pages new to that model and submits nothing. When the run
+ * ends it stops too, and what it found new becomes the next run's scenario, a draft version waiting for the owner's
+ * approval ([TestFlowView.nextScenarioId]); this run is never changed by it.
  */
 internal class PanelTestFlowAdapter(
     private val explorer: PanelExplorerAdapter,
@@ -93,6 +99,7 @@ internal class PanelTestFlowAdapter(
         exploration: StartedExploration,
     ) {
         var run: LaunchedRun? = null
+        var continuing: StartedExploration? = null
         try {
             exploration.job.join()
             val explored = exploration.view()
@@ -115,11 +122,16 @@ internal class PanelTestFlowAdapter(
                 }
             run = launched
             update { it.copy(runId = launched.view.runId) }
+            // The explorer goes on while the run goes (the owner's decision, LINK_ONLY_SWARM.md section 0.8): what it
+            // finds goes to the next run's scenario, never to this run.
+            continuing = goOn(instructions, ExplorationId(explorationId))
             launched.join()
-            ended(runs.summary(launched.view.runId), scouted)
+            val extended = continuing?.let { extend(it, ExplorationId(explorationId)) }
+            ended(runs.summary(launched.view.runId), listOfNotNull(scouted, extended).joinToString(" ").ifEmpty { null })
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
                 if (exploration.job.isActive) exploration.job.cancel()
+                continuing?.job?.cancel()
                 run?.cancel()
                 stop("Test dayandırıldı.")
             }
@@ -129,6 +141,47 @@ internal class PanelTestFlowAdapter(
         } catch (e: Exception) {
             logger.error(e) { "A test started with \"Test et\" failed" }
             stop("Test gözlənilmədən dayandı: ${e.message ?: e::class.simpleName}; ətraflı məlumat loqdadır.")
+        }
+    }
+
+    /**
+     * Starts the explorer again from exploration [from]'s model while the run goes; null when it cannot start (the reason
+     * is logged: the run does not depend on it).
+     */
+    private suspend fun goOn(
+        instructions: PanelInstructions,
+        from: ExplorationId,
+    ): StartedExploration? =
+        try {
+            explorer.begin(instructions, continueFrom = from)
+        } catch (e: PanelException) {
+            logger.info { "The explorer could not go on during the run: ${e.message}" }
+            null
+        }
+
+    /**
+     * Stops the exploration that went on during the run, now that the run ended, and drafts the next run's scenario from
+     * what it found when it found anything new; the draft waits for the owner's approval. Returns the owner's note.
+     */
+    private suspend fun extend(
+        continuing: StartedExploration,
+        from: ExplorationId,
+    ): String {
+        explorer.endWithRun(continuing)
+        val id = continuing.view().id.takeUnless { it == ExplorationTracker.PREPARING_ID }
+        val after = id?.let { explorer.model(ExplorationId(it)) }
+        val before = explorer.model(from)
+        if (after == null || before == null) return "Run kəşfiyyatçı yenidən başlamamış bitdi; növbəti ssenari bu run-ınkı kimidir."
+        val pages = after.pages.count { before.pageByPattern(it.urlPattern) == null }
+        val actions = after.actions.count { before.action(it.id) == null }
+        if (pages == 0 && actions == 0) return "Kəşfiyyatçı run zamanı yeni səhifə və ya əməliyyat tapmadı."
+        return try {
+            val next = scenarios.generateFor(id)
+            update { it.copy(nextScenarioId = next.version.id) }
+            "Kəşfiyyatçı run zamanı $pages yeni səhifə və $actions yeni əməliyyat tapdı; növbəti run üçün ssenari layihəsi " +
+                "hazırdır (${next.version.id}), təsdiqinizi gözləyir."
+        } catch (e: PanelException) {
+            "Kəşfiyyatçı run zamanı $pages yeni səhifə tapdı, amma növbəti ssenari yazılmadı: ${e.message}"
         }
     }
 

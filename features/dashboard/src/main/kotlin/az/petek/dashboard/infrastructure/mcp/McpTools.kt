@@ -179,8 +179,9 @@ internal class McpTools(
                 name = "get_test",
                 description =
                     "The current (or last) test of test_site: stage (EXPLORING, DRAFTING, RUNNING, FINISHED, STOPPED), " +
-                        "its exploration, scenario version and run, the run's result, a note for the owner and the report " +
-                        "directory once written.",
+                        "its exploration, scenario version and run, the run's result, a note for the owner, the report " +
+                        "directory once written, and nextScenarioId: the next run's scenario, drafted from what the explorer " +
+                        "found going on during the run and waiting for approval (null when it found nothing new).",
             ) { testStatus() },
             Tool(
                 name = "cancel_test",

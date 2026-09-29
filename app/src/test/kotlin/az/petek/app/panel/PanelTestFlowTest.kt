@@ -30,6 +30,7 @@ import io.kotest.matchers.collections.shouldBeOneOf
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -86,19 +87,80 @@ class PanelTestFlowTest {
             ended.stage shouldBe TestStage.FINISHED
             ended.result.shouldNotBeNull() shouldBeOneOf listOf(RunResult.PASSED, RunResult.FAILED)
             ended.note.shouldNotBeNull() shouldContain "Test bitdi"
-            val explored = panel.backend.exploration().shouldNotBeNull()
-            explored.status shouldBe ExplorationStatus.FINISHED
-            ended.explorationId shouldBe explored.id
+            val explored = ended.explorationId.shouldNotBeNull()
             val version = panel.backend.scenarios().single { it.id == ended.scenarioId }
             version.source shouldBe ScenarioSource.EXPLORER
             version.status shouldBe ScenarioStatus.APPROVED
-            version.note shouldContain explored.id
+            version.note shouldContain explored
+            // The explorer went on during the run; this site has nothing it had not seen, so no next scenario.
+            ended.nextScenarioId.shouldBeNull()
+            panel.backend
+                .exploration()
+                .shouldNotBeNull()
+                .status shouldNotBe ExplorationStatus.RUNNING
             val run = panel.backend.runs().single()
             run.runId shouldBe ended.runId
             run.scenarioId shouldBe version.id
             run.result shouldBe ended.result
             run.testers shouldBe 2
             panel.backend.reportDirectory(run.runId).shouldNotBeNull()
+        }
+
+    @Test
+    fun `the explorer goes on during the run, and what it finds new becomes the next run's scenario, waiting for approval`() =
+        runBlocking<Unit> {
+            val site =
+                PanelWaits.site().apply {
+                    page("/", "Portal") {
+                        link("Daxil ol", "/login")
+                        link("Qoşul", "/join")
+                        link("Kömək", "/help")
+                    }
+                    page("/help", "Kömək") { link("Suallar", "/help/faq") }
+                    page("/help/faq", "Suallar")
+                }
+            // The testers' browsers open only when the test lets them: the explorer has time to go on meanwhile.
+            val gate = CountDownLatch(1)
+            val runs = FakeBrowserEngine { _, _ -> gate.await(GATE_SECONDS, TimeUnit.SECONDS) }
+            val panel = PanelHarness(dir, site = site, runs = runs).also { open += it }
+            val form =
+                panel.form().copy(budget = PanelHarness.instructions(site.base.toString(), maxPages = 3).budget)
+
+            panel.backend.startTest(form)
+            val first =
+                withTimeout(PanelWaits.TIMEOUT) {
+                    var view = panel.backend.testFlow()
+                    while (view?.runId == null) {
+                        delay(POLL)
+                        view = panel.backend.testFlow()
+                    }
+                    view.explorationId.shouldNotBeNull()
+                }
+            val going =
+                panel.exploration {
+                    it.id != first && it.id != "hazırlanır" &&
+                        it.visited.any { page -> page.url.endsWith("/help/faq") }
+                }
+            gate.countDown()
+            val ended = panel.ended()
+
+            ended.stage shouldBe TestStage.FINISHED
+            ended.note.shouldNotBeNull() shouldContain "yeni səhifə"
+            val next = panel.backend.scenarios().single { it.id == ended.nextScenarioId.shouldNotBeNull() }
+            next.status shouldBe ScenarioStatus.DRAFT
+            next.note shouldContain going.id
+            // The run kept the scenario it started with.
+            panel.backend
+                .runs()
+                .single()
+                .scenarioId shouldBe ended.scenarioId
+            panel.backend
+                .scenarios()
+                .single { it.id == ended.scenarioId }
+                .status shouldBe ScenarioStatus.APPROVED
+            // Only the pages it had not seen were asked about while it went on.
+            panel.llm.explorerPrompts.count { "/help/faq" in it } shouldBe 1
+            panel.llm.explorerPrompts.count { "URL: /join" in it } shouldBe 1
         }
 
     @Test

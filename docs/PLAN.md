@@ -1055,7 +1055,16 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   **Vəziyyət:** promptda heç bir başqa tester yoxdur (ölçüsü 5 və 500 testerdə eynidir); kart `{tester.<rol>.<n>.name|email}` ilə yazır, harness dəyəri son anda qoyur, kimin olduğunu demir; parol/telefon heç vaxt.
 - [x] İcazə ilə hesab dəyişdirmə, yalnız testini bitirənlər arasında; sübutda hər addımın hesabı.
   **Vəziyyət:** `petek run --swap-accounts`: əsas addımlardan sonra uğurla bitirən testerlər hesabları halqa ilə ötürür; köhnə brauzer bağlanır, hesab saxlanmış sessiyası ilə təzə brauzerdə və təzə agentlə `<addım>@swap` kimi yenidən keçir; `swap_accounts` sübutu kimin hansı hesabı tutduğunu yazır.
-- [ ] Kəşfiyyatçı run boyu davam edir; tapdıqları növbəti run-ın ssenarisini genişləndirir.
+- [x] Kəşfiyyatçı run boyu davam edir; tapdıqları növbəti run-ın ssenarisini genişləndirir.
+  **Vəziyyət:** "Test et"-də (panel, `petek test`, MCP `test_site`) run başlayan kimi kəşfiyyatçı run-ın ssenarisinin
+  yarandığı modeldən davam edir (`ExplorationRequest.seed`): bilinən səhifələri yalnız linkləri üçün açır, AI-dan
+  yenidən soruşmur, səhifə büdcəsi yalnız yeni səhifələri sayır, heç nə göndərmir (sınaq toxunuşu yox). Run bitəndə o
+  da dayanır (ekranında səbəbi yazılır) və yeni səhifə və ya əməliyyat tapıbsa, növbəti run-ın ssenarisi həmin
+  modeldən yazılır: eyni ssenarinin təsdiq gözləyən yeni versiyası (`TestFlowView.nextScenarioId`); cari run-a heç
+  vaxt toxunmur. Heç nə tapmayıbsa və ya run o başlamamış bitibsə, qeyd bunu deyir. `ExploreSiteUseCaseTest`,
+  `PanelTestFlowTest`, `PanelEndToEndTest` (real Chromium). Yol üstündə tapıldı və düzəldi: sayt üçün ssenari
+  təsdiqlənəndən sonra kəşfiyyatçının öz qeydiyyat və rol sessiyası setup-ı o ssenarinin `id_sources`-u ilə
+  etibarsız olurdu və saytın növbəti kəşfiyyatı alınmırdı.
 
 ### Faza 19 — Xırda xəta kartları
 

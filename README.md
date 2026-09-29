@@ -113,7 +113,8 @@ anywhere. The first time, the browser asks which site to test and keeps the answ
 **Quraşdırma** (setup): the site answers, its ownership (with the proof line to copy and a "check" button), the AI
 (a one-click test, and which AI to use) and how many testers; then **Test et** on the instruction screen: the explorer learns the site, the
 scenario is drafted only from what it found there, approved and run by the testers, and you write no scenario file.
-A project's own `.env` (or `--env-file`, or `PETEK_TARGET` in the environment, as CI sets it) always comes first,
+While the testers run, the explorer goes on from what it knew; what it finds new becomes the next run's scenario, a
+draft waiting for your approval. A project's own `.env` (or `--env-file`, or `PETEK_TARGET` in the environment, as CI sets it) always comes first,
 exactly as before.
 
 **In five minutes, next to your app.** With Node.js: `npx petek init --target https://staging.example.com` (writes

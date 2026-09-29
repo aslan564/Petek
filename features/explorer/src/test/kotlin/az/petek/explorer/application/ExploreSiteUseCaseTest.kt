@@ -246,6 +246,32 @@ class ExploreSiteUseCaseTest {
         }
 
     @Test
+    fun `an exploration that goes on from a model asks about new pages only, and its page budget counts only them`() =
+        runTest {
+            site.page("/", "Home") {
+                link("A", "/a")
+                link("B", "/b")
+            }
+            site.page("/a", "A")
+            site.page("/b", "B") { link("C", "/c") }
+            site.page("/c", "C") { link("D", "/d") }
+            site.page("/d", "D")
+            val first = useCase().execute(request(budget = ExplorationBudget(maxPages = 3)))
+            first.model.pages.map { it.urlPattern } shouldContainExactly listOf("/", "/a", "/b")
+            val asked = llm.requests.size
+
+            val continued =
+                useCase().execute(request(budget = ExplorationBudget(maxPages = 1)).copy(seed = first.model))
+
+            // Only /c was new and asked about; the budget of one new page left /d for later.
+            llm.requests.drop(asked).map { Regex("URL: (\\S+)").find(prompt(it))?.groupValues?.get(1) } shouldContainExactly listOf("/c")
+            continued.model.version shouldBe 2
+            continued.model.pages.map { it.urlPattern } shouldContainExactly listOf("/", "/a", "/b", "/c")
+            continued.model.pageByPattern("/a")!!.purpose shouldBe "Page /a"
+            continued.model.pageByPattern("/c")!!.purpose shouldBe "Page /c"
+        }
+
+    @Test
     fun `a page that renders after load is captured once it shows content`() =
         runTest {
             publicSite()

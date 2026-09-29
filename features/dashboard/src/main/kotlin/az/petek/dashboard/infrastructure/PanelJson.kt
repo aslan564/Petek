@@ -210,6 +210,7 @@ internal object PanelJson {
                 put("runId", it.runId?.value)
                 put("result", it.result?.name)
                 put("note", it.note)
+                put("nextScenarioId", it.nextScenarioId)
             }
         } ?: JsonNull
 

@@ -67,4 +67,9 @@ data class TestFlowView(
     val runId: RunId? = null,
     val result: RunResult? = null,
     val note: String? = null,
+    /**
+     * The next run's scenario (Faza 18): a draft version made from what the explorer found going on during the run,
+     * waiting for the owner's approval; null when it found nothing new.
+     */
+    val nextScenarioId: String? = null,
 )

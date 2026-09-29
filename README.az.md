@@ -111,7 +111,9 @@ run olunur; özünüzün yazdığı kampaniya da eyni cür işləyir (`petek run
 (`~/.petek/workspace/.env`) saxlayır, sonra istənilən qovluqda sadəcə `petek` paneli həmin sayt üçün açır. Panel
 **Quraşdırma** ekranı ilə açılır: sayt cavab verirmi, sahiblik (kopyalanan təsdiq sətri və "Yoxla" düyməsi), AI (bir
 kliklə sınaq və hansı AI-ın işlədiləcəyi) və tester sayı; sonra "Təlimat" ekranında **Test et**: kəşfiyyatçı saytı öyrənir, ssenari yalnız onun
-orada tapdıqlarından yazılır, təsdiqlənir və testerlərlə run olunur; heç bir ssenari faylı yazmırsınız. Layihənin öz
+orada tapdıqlarından yazılır, təsdiqlənir və testerlərlə run olunur; heç bir ssenari faylı yazmırsınız. Testerlər
+işləyərkən kəşfiyyatçı bildiyindən davam edir; tapdığı yeni şeylər növbəti run-ın ssenarisi olur, təsdiqinizi
+gözləyən layihə kimi. Layihənin öz
 `.env`-i (və ya `--env-file`, ya da CI-ın verdiyi kimi mühitdəki `PETEK_TARGET`) həmişə əvvəlki kimi birinci gəlir.
 
 **Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.example.com` (`.env`,

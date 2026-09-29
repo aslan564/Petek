@@ -302,6 +302,14 @@ at a time); one test at a time, and `cancelTest` stops the part that is going. T
 draft takes the roles, ways in and departments the explorer saw (Faza 25.1–25.2). Regenerating the text of a superseded
 version makes a new draft instead of returning the one that can never be approved again.
 
+While the run goes the explorer goes on (Faza 18, the owner's decision in `LINK_ONLY_SWARM.md` §0.8):
+`PanelExplorerAdapter.begin(..., continueFrom)` starts an exploration seeded with the model the run's scenario came
+from (`ExplorationRequest.seed`, `SiteModelAccumulator.seed`): its pages are opened for their links but not asked
+about again, the page budget counts only new pages, and it submits nothing (no trial touch). When the run ends it is
+stopped too (`endWithRun`), and if it found pages or actions the seed did not have, the next run's scenario is drafted
+from its model, a new version of the same scenario waiting for the owner's approval (`TestFlowView.nextScenarioId`);
+the run itself never changes. Explorations have their own browser engine, so the two never close each other's pages.
+
 ## Tester isolation
 
 Only the orchestrator sees more than one tester. Each agent owns one browser context on one confined thread, reads

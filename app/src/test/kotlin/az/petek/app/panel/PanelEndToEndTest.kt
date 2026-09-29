@@ -39,6 +39,7 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
@@ -254,10 +255,14 @@ class PanelEndToEndTest {
 
             ended.stage shouldBe TestStage.FINISHED
             ended.result.shouldNotBeNull()
-            val explored = panel.backend.exploration().shouldNotBeNull()
-            explored.status shouldBe ExplorationStatus.FINISHED
-            ended.explorationId shouldBe explored.id
+            val explored = ended.explorationId.shouldNotBeNull()
+            // The explorer went on during the run from what it knew and stopped with it (Faza 18).
+            val continued = panel.backend.exploration().shouldNotBeNull()
+            continued.id shouldNotBe explored
+            continued.status shouldNotBe ExplorationStatus.FAILED
+            continued.status shouldNotBe ExplorationStatus.RUNNING
             val version = panel.backend.scenarios().single { it.id == ended.scenarioId }
+            version.note shouldContain explored
             version.source shouldBe ScenarioSource.EXPLORER
             version.status shouldBe ScenarioStatus.APPROVED
             // Drafted only from what the explorer found on the site: its own way into a company (Faza 25.1).

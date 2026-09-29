@@ -126,11 +126,13 @@ class TestCommand : PetekSubcommand(NAME) {
                     put("runId", shown.runId?.value)
                     put("note", shown.note)
                     put("report", report?.toString())
+                    put("nextScenarioId", shown.nextScenarioId)
                 },
             )
         } else {
             shown.note?.let { echo(it, err = code == ExitCodes.CONFIG_OR_ABORTED) }
             report?.let { echo("  Report: $it") }
+            shown.nextScenarioId?.let { echo("  Next run's scenario (a draft to approve): $it") }
         }
         return code
     }

@@ -93,6 +93,8 @@ internal class PanelExplorerAdapter(
         val instructions: PanelInstructions?,
         val budget: ExplorationBudget,
         val tracker: ExplorationTracker,
+        /** The model this exploration goes on from (Faza 18), or null for a fresh one. */
+        val seed: SiteModel? = null,
     )
 
     /** What a scenario draft is generated from: the latest exploration with a stored site model. */
@@ -132,8 +134,15 @@ internal class PanelExplorerAdapter(
         fun view(): ExplorationView = read()
     }
 
-    /** [startExploration] for "Test et", which waits for the exploration it started (Faza 25.3). */
-    suspend fun begin(instructions: PanelInstructions): StartedExploration {
+    /**
+     * [startExploration] for "Test et", which waits for the exploration it started (Faza 25.3). With [continueFrom] the
+     * exploration goes on from that exploration's model (Faza 18, while a run goes): its known pages are not asked about
+     * again, the page budget counts only new ones, and nothing is submitted (no trial touch).
+     */
+    suspend fun begin(
+        instructions: PanelInstructions,
+        continueFrom: ExplorationId? = null,
+    ): StartedExploration {
         val problems = instructions.problems()
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val target = PanelTargets.allowed(instructions.target, container.config.targetPolicy, PanelInstructions.TARGET)
@@ -156,10 +165,11 @@ internal class PanelExplorerAdapter(
                 maxMinutes = instructions.budget.maxMinutes.coerceIn(1, ExplorationBudget.MAX_MINUTES),
             )
         val previous = container.explorations.latestVersion(target).takeIf { it > 0 }
+        val seed = continueFrom?.let { container.explorations.model(it) }?.takeIf { PanelTargets.sameSite(it.target, target) }
         return synchronized(lock) {
             if (job?.isActive == true) throw PanelConflictException("Artıq bir kəşfiyyat gedir. Bitməsini gözləyin və ya dayandırın.")
             val tracker = ExplorationTracker(target.toString(), grounding, instructions.budget, now(), previous)
-            val started = Current(target, instructions, budget, tracker)
+            val started = Current(target, instructions, budget, tracker, seed)
             current = started
             publish()
             val launched = scope.launch { explore(started) }
@@ -254,6 +264,21 @@ internal class PanelExplorerAdapter(
         publish()
     }
 
+    /**
+     * Ends [started], the exploration that went on during a run, now that the run ended (Faza 18): its screen says why it
+     * stopped, and it keeps what it learned.
+     */
+    suspend fun endWithRun(started: StartedExploration) {
+        synchronized(lock) { current }?.takeIf { synchronized(lock) { it.tracker.running } }?.let {
+            note(it, ExplorationTracker.NOTE, "Run bitdi; kəşfiyyatçı da dayandı. Tapdıqları növbəti run-ın ssenarisinə gedir.")
+        }
+        started.job.cancel()
+        started.job.join()
+    }
+
+    /** The site model exploration [id] saved, or null. */
+    suspend fun model(id: ExplorationId): SiteModel? = container.explorations.model(id)
+
     /** Whether drafts for [target] may use the target's test API (ids and oracle checks). */
     fun testApi(target: URI): Boolean = container.oracle.isAvailable && PanelTargets.sameSite(target, container.config.target)
 
@@ -321,8 +346,10 @@ internal class PanelExplorerAdapter(
                         run.target,
                         grounding,
                         run.budget,
-                        ExplorationPhase.entries.toSet(),
+                        // Going on during a run, the explorer submits nothing: the testers are writing to the site.
+                        if (run.seed == null) ExplorationPhase.entries.toSet() else CONTINUING_PHASES,
                         request?.allowWrites == true && writable,
+                        run.seed,
                     ),
                     walk,
                 ) { event -> onEvent(run, event) }
@@ -503,5 +530,8 @@ internal class PanelExplorerAdapter(
         const val LOOKBACK = 20
         const val DEFAULT_STEPS_PER_AGENT = 40
         const val NANOS_PER_MILLI = 1_000_000L
+
+        /** What an exploration going on during a run does: it looks, as a visitor and signed in, and submits nothing. */
+        val CONTINUING_PHASES = setOf(ExplorationPhase.ANONYMOUS, ExplorationPhase.ROLE_BASED)
     }
 }

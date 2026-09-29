@@ -178,10 +178,12 @@ internal class CrawlPass(
             if (looksLikeSignIn(finalPattern)) context.accumulator.recordDenied(role, pattern)
             if (!visitedPatterns.add(finalPattern)) return
         }
-        visited++
+        // A page the seed brought (Faza 18) is opened for its links only; the page budget counts pages new to the model.
+        val known = context.accumulator.seeded(finalPattern)
+        if (!known) visited++
         context.pagesVisitedByRole.merge(role, 1, Int::plus)
         try {
-            learn(finalUrl, finalPattern, link.depth, answer?.status, loadMs, since)
+            learn(finalUrl, finalPattern, link.depth, answer?.status, loadMs, since, known)
         } catch (e: CancellationException) {
             throw e
         } catch (e: BrowserActionException) {
@@ -243,6 +245,7 @@ internal class CrawlPass(
         status: Int?,
         loadMs: Long,
         since: HarnessTimestamp,
+        known: Boolean = false,
     ) {
         val captured = context.capture.capture(session, role)
         val snapshot = captured.snapshot
@@ -258,7 +261,8 @@ internal class CrawlPass(
             return
         }
         val facts = PageHeuristics.inspect(snapshot, captured.document, url)
-        val analysis = context.analyst.analyse(snapshot, pattern, viewer, context.request.grounding, facts.forms)
+        // A known page is not asked about again: what the AI said of it is in the seed.
+        val analysis = if (known) null else context.analyst.analyse(snapshot, pattern, viewer, context.request.grounding, facts.forms)
         val evidence = captured.evidence
         val pageId = context.accumulator.pageIdOf(pattern)
         context.accumulator.recordPage(
