@@ -18,6 +18,7 @@ import az.petek.app.panel.explorer.AnswerBook
 import az.petek.app.panel.explorer.CatalogSetupProfiles
 import az.petek.app.panel.explorer.OwnAccountRoleSessions
 import az.petek.app.panel.explorer.PanelExplorerAdapter
+import az.petek.app.panel.explorer.PointedProfiles
 import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.SelfRegisterRoleSessions
 import az.petek.app.panel.explorer.SetupRuns
@@ -149,7 +150,7 @@ internal class AppPanelBackend(
                 )
             val sessions =
                 RoleSessionSource { request, factory, progress ->
-                    val source = roleSessions?.invoke(runs) ?: signInChain(container, runs, accounts)
+                    val source = roleSessions?.invoke(runs) ?: signInChain(container, runs, accounts, workingDirectory)
                     source.open(request, factory, progress)
                 }
             val explorer = PanelExplorerAdapter(container, sessions, answers, scope)
@@ -166,9 +167,16 @@ internal class AppPanelBackend(
             container: AppContainer,
             runs: SetupRuns,
             accounts: OwnerAccounts,
+            workingDirectory: Path,
         ): RoleSessionSource {
-            val testCompany = TestCompanyRoleSessions(container, runs)
-            val profiles = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator)
+            val profiles =
+                CatalogSetupProfiles(
+                    container.scenarioCatalog,
+                    container.scenarioValidator,
+                    container.config.target,
+                    PointedProfiles(container, workingDirectory)::of,
+                )
+            val testCompany = TestCompanyRoleSessions(container, runs, profiles = profiles)
             return SignInChain(
                 container,
                 mapOf(

@@ -130,7 +130,8 @@ internal class TestCompanyRoleSessions(
     private val runs: SetupRuns,
     private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain, container.oraclePaths),
     private val teardown: TeardownUseCase = container.teardown,
-    private val profiles: SetupProfileSource = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator),
+    private val profiles: SetupProfileSource =
+        CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator, container.config.target),
 ) : RoleSessionSource {
     override suspend fun open(
         request: RoleSessionRequest,
@@ -140,7 +141,7 @@ internal class TestCompanyRoleSessions(
         refusal(request)?.let { return RoleSessions.none(it) }
         withoutCompanies(request)?.let { return RoleSessions.none(it) }
         testApi.refusal()?.let { return RoleSessions.none("Rollarla gəzinti buraxıldı: $it") }
-        val profile = profiles.profile()
+        val profile = profiles.profile(request.target)
         val campaign = campaign(request, profile.profile)
         progress("Rollarla gəzinti üçün müvəqqəti test şirkəti yaradılır (admin, menecer, işçi); qeydiyyat axınları: ${profile.origin}…")
         val setup =
@@ -171,7 +172,7 @@ internal class TestCompanyRoleSessions(
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
     ): RoleSessions {
-        val profile = profiles.profile()
+        val profile = profiles.profile(request.target)
         val companies = tenantOf(request) == Tenant.COMPANY
         val campaign = if (companies) campaign(request, profile.profile, ownerOnly = true) else selfSignUp(profile.profile)
         progress(

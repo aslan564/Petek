@@ -31,6 +31,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Nested
@@ -696,5 +697,15 @@ class YamlCampaignSourceTest {
             shouldThrow<CampaignValidationException> { YamlCampaignSource().load(file) }.issues.single().message shouldContain
                 "not valid UTF-8"
         }
+    }
+
+    @Test
+    fun `the site a stored text names itself is read as written, whatever the override would make of it`() {
+        val source = YamlCampaignSource(targetOverride = URI("https://configured.test"))
+
+        source.writtenTarget("campaign:\n  name: x\n  target: https://stage.shop.example\n") shouldBe URI("https://stage.shop.example")
+        source.writtenTarget("campaign:\n  name: x\n").shouldBeNull()
+        source.writtenTarget("campaign: [not, a, map").shouldBeNull()
+        source.writtenTarget("campaign:\n  target: 'http://exa mple.com'\n").shouldBeNull()
     }
 }

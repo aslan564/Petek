@@ -284,6 +284,58 @@ class TestCompanyRoleSessionsTest {
         }
 
     @Test
+    fun `another site's scenario never gives the explorer its flows`() =
+        runBlocking<Unit> {
+            val otherSite =
+                PanelHarness.tinyCampaign(name = "other-site").replace("campaign:\n", "campaign:\n  target: http://127.0.0.2:9\n") +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#other-email'
+                    """.trimIndent() + "\n"
+            val panel = PanelHarness(dir, scenarios = mapOf("other-site.yaml" to otherSite)).also { open += it }
+            panel.backend.scenarios().map { it.name } shouldContainExactly listOf("other-site") // waits for the start-up import
+            val source = sessions(panel) { SetupRun(RunId("run_profile"), RunOutcome.ABORTED) }
+
+            source.open(request(panel), factory) { progress += it }
+
+            campaigns.single().target.selector("login.email") shouldBe TargetProfile.DEFAULT.selector("login.email")
+            progress.first() shouldContain "qeydiyyat axınları: docs/TARGET_CONTRACT.md default"
+        }
+
+    @Test
+    fun `the campaign file the site's target profile points at gives the explorer its flows`() =
+        runBlocking<Unit> {
+            Files.writeString(
+                dir.resolve("site-flows.yaml"),
+                PanelHarness.tinyCampaign(name = "site-flows") +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#pointed-email'
+                    """.trimIndent() + "\n",
+            )
+            val profile = TargetSpec("demo", URI("http://127.0.0.1:9"), profile = "site-flows.yaml")
+            val panel =
+                PanelHarness(dir, targets = listOf(ResolvedTarget(profile, testToken = Secret("dev-token"), accounts = emptyList()))).also {
+                    open += it
+                }
+            val profiles =
+                CatalogSetupProfiles(
+                    panel.panel.container.scenarioCatalog,
+                    panel.panel.container.scenarioValidator,
+                    panel.config.target,
+                    PointedProfiles(panel.panel.container, dir)::of,
+                )
+
+            val chosen = profiles.profile(URI("http://127.0.0.1:9"))
+
+            chosen.origin shouldBe "site-flows.yaml"
+            chosen.profile.selector("login.email") shouldBe "#pointed-email"
+            profiles.profile(URI("http://127.0.0.2:9")).origin shouldBe "docs/TARGET_CONTRACT.md default"
+        }
+
+    @Test
     fun `a busy slot, a failed setup or testers without a saved login give no sessions`() =
         runBlocking<Unit> {
             val panel = harness()

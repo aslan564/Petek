@@ -553,7 +553,10 @@ Məqsəd: real saytda kəşfiyyat işləsin; sonradan dəyişməsi baha olan biz
 
 - [x] `RoleSessions.kt` boş `TargetProfile` ilə setup kampaniyası qururdu → default kontrakt axınları; indi saytın
   öz ssenarisinin profilini götürür (`CatalogSetupProfiles`: təsdiqlənmiş/dondurulmuş versiya, yoxsa sahibin faylı,
-  yoxsa kontrakt default-u) və mənbəyini kəşfiyyat qeydində göstərir.
+  yoxsa kontrakt default-u) və mənbəyini kəşfiyyat qeydində göstərir. Plan yoxlamasından sonra (2026-09-29) profil
+  sayta bağlıdır: əvvəl hədəf profilinin `profile:` göstəricisi (`PointedProfiles`), sonra kataloqda yalnız həmin sayt
+  üçün yazılmış versiyalar (`campaign.target` yazıldığı kimi, `PETEK_TARGET` override-ından asılı olmayaraq); başqa
+  saytın axınları heç vaxt götürülmür.
 - [x] `PETEK_MAIL_SOURCE=mailpit|test-api` və `PETEK_TEST_API_URL` konfiqurasiya açarları; `AppContainer`
   `TestApiMailbox`-u seçir, oracle ayrıca API ünvanına gedir; `petek doctor` seçilmiş poçt qutusunu yoxlayır.
 - [x] Faza 6–7 qutularını kodla tutuşdurub işarələmək; `docs/ARCHITECTURE.md`-də boş "Explorer" bölməsini yazmaq.
@@ -736,7 +739,7 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   ```
   `PETEK_TARGET` yalnız default hədəfin adı/URL-i olur; `RunTargets` `config.copy(target=…)` yerinə profili götürür;
   `PanelRunsAdapter.kt:119`-dakı "yalnız PETEK_TARGET" bloku qaldırılır.
-  **Vəziyyət:** `TargetSpec` (campaign domain), `YamlTargetSpecSource`, `PETEK_TARGETS_DIR`, `PETEK_TARGET=<ad>`, `${VAR}` sirləri dırnaq içində; panel profili olan istənilən saytda run və teardown edir; MCP `list_targets` profilləri göstərir; nümunə `docs/examples/target-profile.yaml`.
+  **Vəziyyət:** `TargetSpec` (campaign domain), `YamlTargetSpecSource`, `PETEK_TARGETS_DIR`, `PETEK_TARGET=<ad>`, `${VAR}` sirləri dırnaq içində; panel profili olan istənilən saytda run və teardown edir; MCP `list_targets` profilləri göstərir; nümunə `docs/examples/target-profile.yaml`. `profile:` göstəricisi kəşfiyyatçının qeydiyyat axınlarını verir (`PointedProfiles`, 2026-09-29).
 - [x] Giriş zənciri (`identity` + `mail` application): `SignInStrategy` portu, zəncir dekoratoru; hər qərar
   (`hansı strategiya, niyə keçildi`) `event` cədvəlinə və hesabata yazılır. Kəşfiyyatçı (`RoleSessions`) və
   `register_and_login` eyni zənciri istifadə edir.
