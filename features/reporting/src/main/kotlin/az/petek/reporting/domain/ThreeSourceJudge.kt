@@ -288,9 +288,9 @@ class ThreeSourceJudge(
          */
         val SITE_DEFECTS: Map<String, FindingClass> =
             mapOf(
-                "unhealthy_page" to FindingClass.SITE_CHECK,
-                "access_not_refused" to FindingClass.SITE_CHECK,
-                "forbidden_accepted" to FindingClass.SITE_CHECK,
+                FailureKeys.UNHEALTHY_PAGE to FindingClass.SITE_CHECK,
+                FailureKeys.ACCESS_NOT_REFUSED to FindingClass.SITE_CHECK,
+                FailureKeys.FORBIDDEN_ACCEPTED to FindingClass.SITE_CHECK,
             )
         const val SITE_DEFECT_NOTE = "The site failed a check that code made on what the browser saw"
 

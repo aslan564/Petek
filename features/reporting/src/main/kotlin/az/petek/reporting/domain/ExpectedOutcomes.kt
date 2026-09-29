@@ -20,7 +20,8 @@ import az.petek.evidence.domain.StepStatus
  * Judges step records in the context of the run they belong to, for the outcomes a test expects although a record on
  * its own looks like a failure:
  * - an expected refusal ([FailureKeys.isExpectedRefusal]): a forbidden action the target refused, recorded BLOCKED
- *   with `permission_denied` by the orchestrator. The agent's own records of that action (same correlation id) are
+ *   with `permission_denied` by the orchestrator (one the target accepted instead is [FailureKeys.FORBIDDEN_ACCEPTED],
+ *   a failure of the site). The agent's own records of that action (same correlation id) are
  *   expected too: in a step whose assertions test the refusal the agent may have reported it as a problem, and the
  *   orchestrator has already judged that the expected outcome;
  * - a lost race: in a `parallel` step with `only_one_succeeds`, every actor but the winner is refused or finds the

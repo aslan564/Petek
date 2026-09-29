@@ -67,29 +67,6 @@ internal object PanelTargets {
         }
     }
 
-    /**
-     * Refuses a full test on [target] unless its owner proved it is theirs (ADR-0012): a [PanelRequestException] for
-     * [field] telling the owner, in Azerbaijani, which file or DNS record to publish. Nothing is written before.
-     */
-    suspend fun owned(
-        target: URI,
-        ownership: SiteOwnership,
-        field: String,
-    ) {
-        val status = ownership.check(target)
-        if (status is OwnershipStatus.Unverified) {
-            throw PanelRequestException(
-                listOf(
-                    FieldProblem(
-                        field,
-                        "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır, ona görə ${status.host} üzərində heç nə " +
-                            "test edilmədi. ${proofHowTo(status)} Sonra yenidən başladın.",
-                    ),
-                ),
-            )
-        }
-    }
-
     /** A campaign cleared to start ([runnable]), and whether its site's owner proved it is theirs or it is local. */
     data class Cleared(
         val campaign: Campaign,

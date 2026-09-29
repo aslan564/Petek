@@ -62,6 +62,19 @@ object FailureKeys {
      */
     const val RATE_LIMITED = "rate_limited"
 
+    /** `site_health` saw a page go wrong (a script error, a failed request, a page wider than a phone): the site's defect. */
+    const val UNHEALTHY_PAGE = "unhealthy_page"
+
+    /** `direct_url` opened another tester's object and the site showed it: a page open to someone who must not see it. */
+    const val ACCESS_NOT_REFUSED = "access_not_refused"
+
+    /**
+     * In a step whose `http_status` expects the site to refuse (401/403), the tester's own page sent the forbidden
+     * request during the action and the site accepted it (status < 400), whatever the agent said (Faza 24.2): the
+     * site's defect, never an expected refusal like [PERMISSION_DENIED].
+     */
+    const val FORBIDDEN_ACCEPTED = "forbidden_accepted"
+
     /** Implied by [StepStatus.BLOCKED] when the watchdog left no key of its own. */
     const val BLOCKED = "blocked"
 
@@ -86,9 +99,9 @@ object FailureKeys {
             LOST_RACE,
             REQUEST_FAILED,
             RATE_LIMITED,
-            "unhealthy_page",
-            "access_not_refused",
-            "forbidden_accepted",
+            UNHEALTHY_PAGE,
+            ACCESS_NOT_REFUSED,
+            FORBIDDEN_ACCEPTED,
             "off_site",
         )
 
@@ -97,7 +110,7 @@ object FailureKeys {
      * target turning down a racer's own request.
      */
     private val SITE_KEYS: Set<String> =
-        setOf("unhealthy_page", "access_not_refused", "forbidden_accepted", MAIL_TIMEOUT, REQUEST_FAILED)
+        setOf(UNHEALTHY_PAGE, ACCESS_NOT_REFUSED, FORBIDDEN_ACCEPTED, MAIL_TIMEOUT, REQUEST_FAILED)
 
     /**
      * Keys of the run's surroundings rather than of the site or the tester's agent: the test inbox, a shared IP, the AI

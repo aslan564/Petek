@@ -92,16 +92,4 @@ class PanelTargetsTest {
         text shouldContain "https://203.0.113.7/.well-known/petek-verification.txt"
         text shouldNotContain "DNS"
     }
-
-    @Test
-    fun `an unproved public site is refused under the named field, a local one passes`() =
-        runBlocking<Unit> {
-            val ownership = OwnershipTestKit.unowned(FakeHarnessClock(), local = setOf("127.0.0.1"))
-
-            val refused = shouldThrow<PanelRequestException> { PanelTargets.owned(URI("https://stage.example.com"), ownership, "target") }
-            PanelTargets.owned(URI("http://127.0.0.1:8080"), ownership, "target")
-
-            refused.problems.single().field shouldBe "target"
-            refused.problems.single().message shouldContain "stage.example.com üzərində heç nə test edilmədi"
-        }
 }
