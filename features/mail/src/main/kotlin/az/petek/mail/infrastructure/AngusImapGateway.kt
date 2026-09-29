@@ -24,6 +24,7 @@ import jakarta.mail.UIDFolder
 import jakarta.mail.internet.InternetAddress
 import jakarta.mail.search.AndTerm
 import jakarta.mail.search.ComparisonTerm
+import jakarta.mail.search.HeaderTerm
 import jakarta.mail.search.OrTerm
 import jakarta.mail.search.ReceivedDateTerm
 import jakarta.mail.search.RecipientStringTerm
@@ -69,14 +70,7 @@ internal class AngusImapGateway(
     ): List<ImapCandidate> =
         withFolder(Folder.READ_ONLY) { folder ->
             val day = Date.from(since.truncatedTo(ChronoUnit.DAYS).minus(1, ChronoUnit.DAYS))
-            val term: SearchTerm =
-                AndTerm(
-                    ReceivedDateTerm(ComparisonTerm.GE, day),
-                    OrTerm(
-                        RecipientStringTerm(Message.RecipientType.TO, recipient),
-                        RecipientStringTerm(Message.RecipientType.CC, recipient),
-                    ),
-                )
+            val term: SearchTerm = AndTerm(ReceivedDateTerm(ComparisonTerm.GE, day), ImapSearch.addressedTo(recipient))
             val uids = folder as UIDFolder
             folder.search(term).takeLast(MAX_CANDIDATES).map { message ->
                 ImapCandidate(MimeMail.read(uids.getUID(message).toString(), message))
@@ -125,6 +119,26 @@ internal class AngusImapGateway(
     }
 }
 
+/** What the server is asked for a tester's mail. Pure: the terms match messages locally too, so it is tested without a server. */
+internal object ImapSearch {
+    /**
+     * Mail addressed to [recipient] as the server sees it: in To or Cc, or only in the headers a catch-all inbox or a Bcc
+     * leaves behind (`Delivered-To`, `X-Original-To`), which a To/Cc search alone never finds.
+     */
+    fun addressedTo(recipient: String): SearchTerm =
+        OrTerm(
+            arrayOf(
+                RecipientStringTerm(Message.RecipientType.TO, recipient),
+                RecipientStringTerm(Message.RecipientType.CC, recipient),
+                HeaderTerm(DELIVERED_TO, recipient),
+                HeaderTerm(ORIGINAL_TO, recipient),
+            ),
+        )
+
+    const val DELIVERED_TO = "Delivered-To"
+    const val ORIGINAL_TO = "X-Original-To"
+}
+
 /** Reads a Jakarta Mail message into a [MailMessage]: recipients, received time, `\Seen`, plain text and HTML. Pure. */
 internal object MimeMail {
     fun read(
@@ -149,7 +163,10 @@ internal object MimeMail {
         val listed: List<Address> =
             message.getRecipients(Message.RecipientType.TO).orEmpty().toList() +
                 message.getRecipients(Message.RecipientType.CC).orEmpty().toList()
-        val delivered: List<String> = message.getHeader("Delivered-To")?.map { it.trim() }.orEmpty()
+        val delivered: List<String> =
+            listOf(ImapSearch.DELIVERED_TO, ImapSearch.ORIGINAL_TO).flatMap { header ->
+                message.getHeader(header)?.map { it.trim() }.orEmpty()
+            }
         return (listed.mapNotNull(::address) + delivered).filter { it.isNotBlank() }.distinct()
     }
 

@@ -15,6 +15,7 @@ import az.petek.core.security.Secret
 import az.petek.mail.domain.MailMessage
 import az.petek.mail.domain.MailboxException
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -121,6 +122,26 @@ class ImapMailboxTest {
             error.message shouldNotContain "imap-password-123"
             settings.toString() shouldNotContain "imap-password-123"
         }
+
+    @Test
+    fun `the search finds mail that names the tester only in its delivery headers, as a catch-all inbox or a Bcc leaves it`() {
+        fun mail(configure: MimeMessage.() -> Unit) =
+            MimeMessage(Session.getInstance(Properties())).apply {
+                setRecipient(Message.RecipientType.TO, InternetAddress("someone-else@company.example"))
+                setText("Kodunuz: 654321", "UTF-8")
+                configure()
+                saveChanges()
+            }
+        val search = ImapSearch.addressedTo("test+r1-a01@company.example")
+
+        search.match(mail { setRecipient(Message.RecipientType.TO, InternetAddress("test+r1-a01@company.example")) }) shouldBe true
+        search.match(mail { setRecipient(Message.RecipientType.CC, InternetAddress("test+r1-a01@company.example")) }) shouldBe true
+        search.match(mail { addHeader("Delivered-To", "test+r1-a01@company.example") }) shouldBe true
+        search.match(mail { addHeader("X-Original-To", "test+r1-a01@company.example") }) shouldBe true
+        search.match(mail { addHeader("Delivered-To", "test+r1-a02@company.example") }) shouldBe false
+        MimeMail.read("1", mail { addHeader("X-Original-To", "test+r1-a01@company.example") }).to shouldContain
+            "test+r1-a01@company.example"
+    }
 
     @Test
     fun `a MIME message is read with its recipients, Delivered-To, text, html and seen flag`() {

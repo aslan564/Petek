@@ -974,8 +974,10 @@ Hazır sayılır: fake target-də qeydiyyat kodu IMAP qutusundan (test IMAP serv
 məktubunu görmür.
 
 Vəziyyət (2026-09-26): `ImapMailbox` (Angus 2.0.5), `PETEK_MAIL_INBOX` ilə artı ünvanlar, dəqiq ünvan uyğunluğu
-(`To`/`Cc`/`Delivered-To`), "+" imtinasının tanınması və `manual` mənbəyi (panelin "Kodu daxil et" pəncərəsi) kodda və
-vahid testlərdədir (IMAP söhbəti saxta gateway ilə, MIME oxunuşu yaddaşdakı məktubla). Real IMAP serveri ilə e2e yoxdur:
+(`To`/`Cc`/`Delivered-To`/`X-Original-To`; server axtarışı da bu başlıqları soruşur, yoxsa catch-all qutusunda və
+ya Bcc ilə gələn məktub tapılmırdı — plan yoxlaması, 2026-09-29), "+" imtinasının tanınması və `manual` mənbəyi
+(panelin "Kodu daxil et" pəncərəsi) kodda və vahid testlərdədir (IMAP söhbəti saxta gateway ilə, MIME oxunuşu və
+axtarış şərti yaddaşdakı məktubla). Real IMAP serveri ilə e2e yoxdur:
 test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qərarı** (qayda 11).
 
 ### Faza 17 — Kəşfiyyatçı: saytın növü, öz hesabı, Keçid 0 → 1
