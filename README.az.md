@@ -351,7 +351,8 @@ tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu il
 
 Eyni use-case-lərin ev sahibi AI üçün iki üzü daha var (ADR-0009, R10). `petek mcp` stdio üzərindən Model Context
 Protocol serveridir (əl ilə yazılmış JSON-RPC, əlavə kitabxana yoxdur; `initialize`, `ping`, `tools/list`,
-`tools/call`); `petek init` onu layihənin MCP faylında `petek` serveri kimi qeyd edir. Alətlər: `list_targets`,
+`tools/call`); `petek init` onu layihənin MCP faylında `petek` serveri kimi, Pətəkin özünün başladığı kimi qeyd edir
+(PATH-da `petek`, `npx petek init`-dən sonra `npx -y petek@<versiya> mcp`, yoxsa paketin öz başladıcısı). Alətlər: `list_targets`,
 `get_capacity`, `test_site` (əsas yol, `wait` ilə: kəşf et, tapılanlardan ssenari yaz, təsdiqlə və run et), `get_test`,
 `cancel_test`, `explore_site` (`wait` ilə), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,

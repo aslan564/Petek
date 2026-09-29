@@ -51,6 +51,8 @@ class ProjectInitializer(
         val target: URI? = null,
         val ais: Set<HostAi>? = null,
         val force: Boolean = false,
+        /** How the agent starts `petek mcp` on this machine ([McpLaunch.of]). */
+        val mcp: McpLaunch = McpLaunch.ON_PATH,
     )
 
     enum class Outcome { CREATED, UPDATED, KEPT, UNCHANGED }
@@ -83,7 +85,7 @@ class ProjectInitializer(
         changes += gitignore(project)
         ais.sortedBy { it.ordinal }.forEach { ai ->
             changes += fragment(project, ai)
-            ai.mcpFile?.let { changes += mcpEntry(project, it, ai.mcpServersKey) }
+            ai.mcpFile?.let { changes += mcpEntry(project, it, ai.mcpServersKey, request.mcp) }
         }
         return Result(ais, detected, changes)
     }
@@ -144,11 +146,12 @@ class ProjectInitializer(
         return Change(relative, Outcome.UPDATED, if (begin >= 0) "fragment refreshed" else "fragment appended")
     }
 
-    /** The `petek` server in the agent's project MCP file; other servers and keys are kept as they are. */
+    /** The `petek` server in the agent's project MCP file, started as [mcp] says; other servers and keys are kept. */
     private fun mcpEntry(
         project: Path,
         relative: String,
         serversKey: String,
+        mcp: McpLaunch,
     ): Change {
         val file = project.resolve(relative)
         val existed = Files.exists(file)
@@ -160,11 +163,14 @@ class ProjectInitializer(
                 JsonObject(emptyMap())
             }
         val servers = current[serversKey]?.let { runCatching { it.jsonObject }.getOrNull() } ?: JsonObject(emptyMap())
-        if (servers[MCP_SERVER] == PETEK_SERVER) return Change(relative, Outcome.UNCHANGED)
-        val next = JsonObject(current + (serversKey to JsonObject(servers + (MCP_SERVER to PETEK_SERVER))))
+        val server = mcp.entry()
+        if (servers[MCP_SERVER] == server) return Change(relative, Outcome.UNCHANGED)
+        val next = JsonObject(current + (serversKey to JsonObject(servers + (MCP_SERVER to server))))
         Files.createDirectories(file.parent)
         Files.writeString(file, json.encodeToString(JsonObject.serializer(), next) + "\n")
-        return Change(relative, if (existed) Outcome.UPDATED else Outcome.CREATED, "server \"petek\"")
+        val how = listOf(mcp.command, *mcp.args.toTypedArray()).joinToString(" ")
+        val note = listOf("server \"petek\": $how", mcp.note).filter { it.isNotEmpty() }.joinToString("; ")
+        return Change(relative, if (existed) Outcome.UPDATED else Outcome.CREATED, note)
     }
 
     private fun gitignore(project: Path): Change {
@@ -194,13 +200,6 @@ class ProjectInitializer(
         val DEFAULT_AIS: Set<HostAi> = setOf(HostAi.AGENTS)
 
         val IGNORED: List<String> = listOf(".env", "evidence/")
-
-        /** `petek mcp` over stdio: the launcher on PATH (`npx petek` or a bundle's bin/). */
-        val PETEK_SERVER: JsonObject =
-            buildJsonObject {
-                put("command", "petek")
-                putJsonArray("args") { add(JsonPrimitive("mcp")) }
-            }
 
         private val json = Json { prettyPrint = true }
     }

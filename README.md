@@ -355,7 +355,8 @@ path, so it can look for the cause in your code.
 
 The same use cases have two more faces for a host AI (ADR-0009, R10). `petek mcp` is a Model Context Protocol server
 over stdio (hand-rolled JSON-RPC, no extra dependency; `initialize`, `ping`, `tools/list`, `tools/call`), which
-`petek init` registers as the `petek` server in the project's MCP file. Tools: `list_targets`, `get_capacity`,
+`petek init` registers as the `petek` server in the project's MCP file, started the way Pətək was (`petek` on PATH,
+`npx -y petek@<version> mcp` after `npx petek init`, else the bundle's own launcher). Tools: `list_targets`, `get_capacity`,
 `test_site` (the main path, with `wait`: explore, draft from what was found, approve and run), `get_test`,
 `cancel_test`, `explore_site` (with `wait`), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,

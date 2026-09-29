@@ -29,8 +29,10 @@ that the open core deliberately leaves to paid editions, without ever carrying t
   bundle out per architecture and buildx builds linux/amd64 and linux/arm64 in one go; the project is mounted as
   `/work`; the panel keeps binding loopback, so it needs `--network host`, and the image's first use is CI with
   `--json`) and the `npx petek` launcher that only downloads, verifies and starts a bundle. Embedding Playwright, Chromium, SQLite and an AI CLI into a target's Maven/npm build would be heavy and
-  fragile; the sidecar keeps the target untouched. The launcher passes `-Dpetek.home` (the bundle's directory) for
-  the templates `petek init` will ship.
+  fragile; the sidecar keeps the target untouched. The launcher passes `-Dpetek.home` (the bundle's directory), and
+  the npm launcher sets `PETEK_LAUNCHER=npm@<version>` for the bundle it starts: `petek init` writes the MCP entry the
+  way Pətək was started (`McpLaunch`): `petek` when it is on PATH, `npx -y petek@<version> mcp` after `npx petek init`,
+  else the bundle's own launcher by its absolute path (this machine only, and `init` says so).
 - **In the project:** `petek init` writes `.petek/` and `petek.yaml` (target profile) plus the skill pack (R10);
   `petek dev` starts the panel when the app's health URL answers.
 - **CI mode:** `petek run --ci` → exit code, JUnit XML, SARIF for findings, HTML report artifact; GitHub Actions and

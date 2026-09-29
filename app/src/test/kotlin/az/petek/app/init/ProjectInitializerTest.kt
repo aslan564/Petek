@@ -78,6 +78,22 @@ class ProjectInitializerTest {
     }
 
     @Test
+    fun `the MCP entry starts Pətək the way it was started here, with npx after npx petek init`() {
+        val npx = McpLaunch("npx", listOf("-y", "petek@1.2.3", "mcp"))
+
+        val result = initializer.initialize(ProjectInitializer.Request(project, ais = setOf(HostAi.AGENTS), mcp = npx))
+
+        val server =
+            Json
+                .parseToJsonElement(read(".mcp.json"))
+                .jsonObject["mcpServers"]!!
+                .jsonObject["petek"]!!
+                .jsonObject
+        server shouldBe npx.entry()
+        result.changes.single { it.path == ".mcp.json" }.note shouldContain "npx -y petek@1.2.3 mcp"
+    }
+
+    @Test
     fun `the owner's instruction files keep their text and gain the fragment once, refreshed on a re-run`() {
         write("AGENTS.md", "# My project\n\nRun the tests with npm test.\n")
         write(".gitignore", "node_modules/\n.env\n")
