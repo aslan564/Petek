@@ -25,7 +25,8 @@ looking at the server alone or by one browser.
   in every wave, and the events of setup steps are carried to every later wave's bus (Faza 24.11); a receiver whose
   wave still has no tester of the emitting step is skipped (`emitter_absent`) rather than failed after its timeout;
   the run reports per step how many receivers could wait, and one no receiver could wait for anywhere is
-  `not_covered`, a failure (Faza 24.7).
+  `not_covered`, a failure (Faza 24.7). In setup such a tester cannot get ready: it is left out of the later steps
+  with `emitter_absent`, never counted as set up.
 - **Latency from the write (Faza 24.10).** t0 is when the change reached the target, not when the emitter's agent
   finished talking about it: the answer to the emitter's own request, as its page saw it (`emits: {event, request:
   "POST /api/announcements"}`; without `request` the action's first accepted mutating request, an upper bound when it

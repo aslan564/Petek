@@ -1189,7 +1189,9 @@ dərəcədə aiddir (Faza 25).
   - *Vəziyyət:* `RunState.absentEmitter`: emit edən addım bu bus-da testersiz qalıbsa, qəbul edən dərhal SKIPPED
     (`emitter_absent: step 'post', which emits ..., had no tester here`), əhatə sayılır; bütün iştirakçıları belə olan
     yarışın qrup hökmü verilmir. Run sonunda `coverage` qeydi ("N of M receivers could wait"); heç kim gözləyə bilməyibsə
-    `not_covered` (FAILED). `petek run` və panel əvvəlcədən deyir (`CampaignScaler.waitsWithoutEmitter`).
+    `not_covered` (FAILED). `petek run` və panel əvvəlcədən deyir (`CampaignScaler.waitsWithoutEmitter`). Setup
+    addımında isə belə tester qurulmamış sayılır: `emitter_absent` ilə sonrakı addımlardan kənarda qalır, heç vaxt
+    aktiv sayılmır; mətn dalğadakı və dalğasız halı ayırır (kod review, 2026-09-29).
 
 - [x] **24.8 Loop detector səhifənin vəziyyətinə baxır.**
   - *Problem:* ref-lər hər snapshot-da 1-dən nömrələnir, `ConsecutiveLoopDetector` isə yalnız ardıcıl eyni action-ı

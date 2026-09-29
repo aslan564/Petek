@@ -17,6 +17,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.StepAction
+import az.petek.campaign.domain.StepPhase
 import az.petek.core.ids.AgentId
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
@@ -241,6 +242,40 @@ class CompositionMatrixTest {
                 }
             }
         }
+
+        @Test
+        fun `a setup receiver whose event no tester of the run can emit is left out, never counted as set up`() =
+            runTest {
+                val f = fixture()
+                // Nobody manages, so nobody sends the invitations the employees' join waits for.
+                val inviting =
+                    campaign(
+                        managers = 0,
+                        employees = 2,
+                        setup =
+                            listOf(
+                                step("invite", managers(), phase = StepPhase.SETUP, emits = "invite_sent"),
+                                step(
+                                    "join",
+                                    employees(),
+                                    StepAction.Run("register_and_login"),
+                                    phase = StepPhase.SETUP,
+                                    waitFor = "invite_sent",
+                                ),
+                            ),
+                        steps = listOf(step("look", employees())),
+                    )
+
+                val summary = f.runner().run(inviting)
+
+                f.step("join", StepKind.WAIT, "a02").detail!! shouldStartWith
+                    "emitter_absent: step 'invite', which emits invite_sent, had no tester here (none of its testers is in the run)"
+                listOf("a02", "a03").forEach { agent ->
+                    f.identities.statusReasons[summary.runId to AgentId(agent)] shouldBe "emitter_absent"
+                }
+                // Out of the later steps: they never joined, so they never act as if they had.
+                f.evidence.stepList.none { it.scenarioStep == "look" && it.action.startsWith("do") } shouldBe true
+            }
 
         @Test
         fun `an emitter that failed setup leaves its receivers skipped and the step not covered`() =

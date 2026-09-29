@@ -350,9 +350,11 @@ internal class StepExecutor(
     }
 
     /**
-     * The step that emits [spec]'s event had no tester here, a wave without its testers (Faza 24.7): nothing can arrive,
-     * so the receiver is skipped at once, saying why, instead of failing after a pointless wait. The run's coverage
-     * counts it ([DefaultCampaignRunner]): a step no receiver could check anywhere is `not_covered`.
+     * The step that emits [spec]'s event had no tester here (Faza 24.7): a wave without its testers, or a run whose
+     * testers of that step are all out. Nothing can arrive, so the receiver is skipped at once, saying why, instead of
+     * failing after a pointless wait. The run's coverage counts it ([DefaultCampaignRunner]): a step no receiver could
+     * check anywhere is `not_covered`. In setup the tester cannot finish getting ready without the event, so it is left
+     * out of the later steps with [EMITTER_ABSENT], never counted as set up.
      */
     private suspend fun withoutEmitter(
         actor: ActorContext,
@@ -360,7 +362,8 @@ internal class StepExecutor(
         emitter: String,
     ): ActorStepResult {
         run.receiversOf(actor.step.id).withoutEmitter.incrementAndGet()
-        val detail = "$EMITTER_ABSENT: step '$emitter', which emits ${spec.event}, had no tester here (another wave holds them)"
+        val where = if (run.wave != null) "its testers are in another wave" else "none of its testers is in the run"
+        val detail = "$EMITTER_ABSENT: step '$emitter', which emits ${spec.event}, had no tester here ($where)"
         evidence.step(
             run,
             actor.agentId,
@@ -377,8 +380,9 @@ internal class StepExecutor(
         skipAction(actor, reason)
         evidence.skippedAssertions(run, actor.stepId, actor.step.id, actor.agentId, actorSpecs(actor.step), reason)
         board.update(actor.agentId, AgentState.IDLE, actor.step.id, EMITTER_ABSENT)
-        tasks.update(actor.step.id, actor.agentId, TaskState.SKIPPED, detail)
-        return ActorStepResult(actor.identity, null, failureKey = null)
+        val setup = actor.step.phase == StepPhase.SETUP
+        tasks.update(actor.step.id, actor.agentId, if (setup) TaskState.FAILED else TaskState.SKIPPED, detail)
+        return ActorStepResult(actor.identity, null, failureKey = if (setup) EMITTER_ABSENT else null)
     }
 
     /**

@@ -101,10 +101,11 @@ object FailureKeys {
 
     /**
      * Keys of the run's surroundings rather than of the site or the tester's agent: the test inbox, a shared IP, the AI
-     * provider, the browser, a wave that could not check a step.
+     * provider, the browser, a wave that could not check a step, a setup step whose event no tester of the run could
+     * emit.
      */
     private val ENVIRONMENT_KEYS: Set<String> =
-        setOf(MAIL_UNAVAILABLE, RATE_LIMITED, "llm_unavailable", "browser_error", "not_covered")
+        setOf(MAIL_UNAVAILABLE, RATE_LIMITED, "llm_unavailable", "browser_error", "not_covered", "emitter_absent")
 
     /**
      * Who a failure with [key] is on (Faza 24.13): [FailureCause.SITE] for the site's own defects, [FailureCause.ENVIRONMENT]
