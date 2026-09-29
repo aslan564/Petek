@@ -31,6 +31,8 @@ import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -127,6 +129,31 @@ class RunnerWavesTest {
             f.buses[1].latest("ready")?.eventId shouldBe ready.eventId
             f.evidence.eventList.map { it.name } shouldContainExactly listOf("ready")
             summary.outcome shouldBe RunOutcome.PASSED
+        }
+
+    @Test
+    fun `a step some waves can check and others cannot is covered in part, and the run says how far`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 2,
+                    employees = 6,
+                    steps =
+                        listOf(
+                            step("post", managers(), emits = "note_posted"),
+                            step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
+                        ),
+                )
+
+            f.runner().run(base.copy(settings = base.settings.copy(waveSize = 2)))
+
+            val coverage = f.evidence.stepList.single { it.action == "coverage" }
+            coverage.status shouldBe StepStatus.PASSED
+            val counts = Regex("^(\\d+) of (\\d+) receivers could wait for the event of 'read'").find(coverage.detail.orEmpty())
+            val (waited, all) = counts.shouldNotBeNull().destructured
+            waited.toInt() shouldBeGreaterThan 0
+            waited.toInt() shouldBeLessThan all.toInt()
         }
 
     @Test

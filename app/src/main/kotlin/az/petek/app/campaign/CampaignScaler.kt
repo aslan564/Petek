@@ -36,7 +36,7 @@ import az.petek.orchestration.domain.Waves
  *
  * Steps whose actors can no longer match anyone would be skipped silently by the runner; [uncoveredSteps] finds them
  * so the command can warn before the run starts, [racesSplitByWaves] finds the races `wave_size` leaves with a
- * single racer in a wave, where they fail, and [waitsWithoutEmitter] the receivers it puts in a wave without the tester
+ * single racer in a wave, where they never pass (inconclusive), and [waitsWithoutEmitter] the receivers it puts in a wave without the tester
  * that emits their event, where they are skipped.
  */
 object CampaignScaler {

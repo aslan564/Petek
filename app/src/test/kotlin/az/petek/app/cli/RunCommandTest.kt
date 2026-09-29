@@ -412,7 +412,7 @@ class RunCommandTest {
 
             // Three racing managers, waves of two: a02 and a03 race in wave 1, a04 is alone in wave 2.
             result.stderr shouldContain "Warning: with campaign.wave_size 2, race step 'race'"
-            result.stderr shouldContain "has a single racer in wave 2, where it fails"
+            result.stderr shouldContain "has a single racer in wave 2, where it never passes (inconclusive)"
         }
 
     @Test

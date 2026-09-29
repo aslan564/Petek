@@ -38,7 +38,7 @@ data class WavePlan(
  *
  * - A role with a single tester makes that tester a resident ([WavePlan.residents]).
  * - The racers of one race step (`only_one_succeeds`) share a wave, so the race has its racers; a race with more
- *   racers than a wave holds is split (the checks before the run say so, and such a wave's race fails).
+ *   racers than a wave holds is split (the checks before the run say so, and such a wave's race never passes: inconclusive).
  * - Every role is dealt into the waves in turn, so each wave has its share of managers and employees instead of one
  *   wave of managers only.
  */

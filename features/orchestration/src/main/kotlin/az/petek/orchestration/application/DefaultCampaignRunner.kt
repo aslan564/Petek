@@ -236,8 +236,8 @@ class DefaultCampaignRunner(
             if (skipped == 0) return@forEach
             val waited = receivers.waited.get()
             val detail =
-                "$waited of ${waited + skipped} receivers could wait for the event of '$stepId'; $skipped were in a wave " +
-                    "without a tester of the step that emits it"
+                "$waited of ${waited + skipped} receivers could wait for the event of '$stepId'; $skipped had no tester of " +
+                    "the step that emits it beside them (in their wave, or left in the run)"
             if (waited > 0) {
                 evidence.system(run, null, "coverage", StepStatus.PASSED, detail, stepId)
             } else {

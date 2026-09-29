@@ -229,7 +229,8 @@ class RunCommand : PetekSubcommand("run") {
         CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
             echo(
                 "Warning: with campaign.wave_size $size, race step '${split.step.id}' (line ${split.step.line}) has a single " +
-                    "racer in wave ${split.waves.joinToString()}, where it fails: a race needs at least 2 racers in the same wave.",
+                    "racer in wave ${split.waves.joinToString()}, where it never passes (inconclusive): a race needs at least 2 " +
+                    "racers in the same wave.",
                 err = true,
             )
         }

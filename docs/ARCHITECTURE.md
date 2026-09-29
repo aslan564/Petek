@@ -111,7 +111,17 @@ sequenceDiagram
      answer to the actor's own write request (`emits.request`, else its first accepted one), the publish time kept
      apart; without a write the page showed, the publish, and latencies become a range.
    - Assertions are evaluated per actor. `only_one_succeeds` is evaluated per group, from evidence (see "Races").
+   - In a step whose assertions test a refusal with `http_status` 401/403, the runner reads the actor's own requests
+     after the action: a matching write the site accepted (status < 400) fails the step with `forbidden_accepted`, a
+     defect of the site whatever the agent said, with a screenshot of the page (`StepExecutor.refusalBreached`,
+     Faza 24.2).
    - `on_fail: abort` stops the run; `continue` goes on.
+   - With `--swap-accounts` (Faza 18) the testers who finished the main steps pass their accounts on in a ring: each
+     account opens in a fresh browser with its saved session, on the target's home page (`swap_open` evidence, where
+     it landed), and a fresh agent runs the main steps again as `<step>@swap`. A `wait_for` takes only an event
+     published after the start of its emitting step's latest execution (`RunState.eventCursor`), so the swap never
+     hands a receiver the first pass's event (Faza 24.4). A tester that failed a main step stays out
+     (`swap_accounts` SKIPPED), and so does the whole swap in a run with waves.
 4. **Watchdog.** An agent with no progress for `inactivityTimeout` is marked `blocked`. Its current action is cancelled
    and it moves to the next step.
 5. **Teardown.** In `finally`, the test company recorded as a run resource is deleted. The oracle refuses companies

@@ -1099,7 +1099,8 @@ dərəcədə aiddir (Faza 25).
   - *Test:* `wave_size: 2`, 2 manager, 2 şöbə; setup-da düşən manager; start xəttindən əvvəl düşən aktor;
     `RaceVerdict` vahid testləri; ön baxış xəbərdarlığı.
   - *Sənəd:* ARCHITECTURE «Races», R03.
-  - *Vəziyyət:* `RaceVerdict` yarışanları (request sübutu olanları) sayır, 2-dən azdırsa FAILED: "a race needs at least 2
+  - *Vəziyyət:* `RaceVerdict` yarışanları (request sübutu olanları) sayır, 2-dən azdırsa FAILED idi, 24.12-dən
+    INCONCLUSIVE-dir (sübut qərar vermir, sayt haqqında tapıntı yoxdur, run yenə PASSED deyil): "a race needs at least 2
     racing actors; only a02 raced"; heç hərəkət etməyən aktor `did not race` görünür. `Waves` (24.11-dən `Waves.plan`) runner-in və ön baxışın
     ortaq dalğa qaydasıdır; `petek run` və panel (MCP də) dalğalara bölünən yarışı run-dan əvvəl deyir. Orkestrasiya
     testləri yarışı real hökmlə yoxlayır.
@@ -1123,9 +1124,10 @@ dərəcədə aiddir (Faza 25).
   - *Problem:* `DefaultAgentLoop.prepare` `type` mətnində yalnız yer tutucuları həll edir. Model "həmkarını dəvət et"
     kimi tapşırıqda uydurma real e-poçt və ya telefon yaza bilər, hədəf sayt da real üçüncü şəxsə məktub və ya SMS
     göndərər.
-  - *Yol:* `type` mətnindəki e-poçt və telefon formalı hər dəyər icazəli dəstdə olmalıdır: testerin özü, həmkar
-    siyahısı (`Colleague`), test poçt domeni və sahibin qutusunun artı ünvanları, reyestrin saxta telefonları. Əks
-    halda `prepare` action-ı rədd edir və modelə icazəli variantları deyir (başqa hosta `navigate` imtinası kimi).
+  - *Yol:* `type` mətnindəki e-poçt və telefon formalı hər dəyər icazəli dəstdə olmalıdır: e-poçt üçün testerin
+    özü, həmkar siyahısı (`Colleague`), test poçt domeni və ya sahibin qutusunun artı ünvanları; telefon üçün yalnız
+    testerin öz (reyestrin verdiyi saxta) nömrəsi (`Colleague`-də telefon yoxdur). Əks halda `prepare` action-ı rədd
+    edir və modelə icazəli variantları deyir (başqa hosta `navigate` imtinası kimi).
     Qayda agent domain-ində saf funksiyadır; `run` axınları sahibin profilindən gəldiyi üçün toxunulmur.
   - *Test:* `ScriptedLlmClient` ilə xarici ünvan → rədd və izah; öz, həmkar, artı ünvan → keçir; telefon halları.
   - *Sənəd:* R12 (yeni təhdid sətri: AI üçüncü şəxslə əlaqə saxlayır).
@@ -1338,7 +1340,8 @@ dərəcədə aiddir (Faza 25).
   yer tutucu (məs. `{pass}`: 1-ci keçid, swap, dalğa nömrəsi) əlavə edilsinmi? Tövsiyə: bəli, `{pass}` kimi sadə və
   deterministik; kəşfiyyatçının marker-i də onu işlətsin.
 
-Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; `wave_size: 2` ilə iki managerli yarış PASSED ola bilmir;
+Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; dalğadan böyük yarış (`wave_size: 2` ilə üç manager;
+24.11-dən iki manager bir dalğada qalır) PASSED ola bilmir, tək yarışan INCONCLUSIVE-dir (24.12);
 qadağan əməliyyatı qəbul edən sayt FAILED alır; swap + `wait_for` yalançı `DELIVERY_UI` vermir; xarici ünvan rədd
 olunur; gecikdirilmiş çatdırılmada `latency_max` yalançı keçmir; `./gradlew build` və `./gradlew e2eTest` keçir.
 

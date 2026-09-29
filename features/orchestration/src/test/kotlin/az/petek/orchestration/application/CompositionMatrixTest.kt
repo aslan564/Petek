@@ -34,6 +34,7 @@ import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
@@ -476,6 +477,51 @@ class CompositionMatrixTest {
                     .single()
                     .templates.lastId shouldBe "decided-by-a02"
                 f.rendered("review").values.toSet() shouldBe setOf("Review ticket decided-by-a02")
+            }
+
+        @Test
+        fun `a race nobody won leaves no object to the group check and none to the readers`() =
+            runTest {
+                val f = fixture()
+                f.agents.script = { call, _ ->
+                    when (call.scenarioStep) {
+                        "race" -> {
+                            // The site refused both: no winner, so no racer's object is the step's own.
+                            f.browser.session(call.agentId.value).mutated("POST", "/tickets/t1/approve", 409)
+                            ActionOutcome(ActionStatus.SUCCEEDED, "approved", objectId = "decided-by-${call.agentId.value}")
+                        }
+
+                        else -> {
+                            ok
+                        }
+                    }
+                }
+                val racing =
+                    campaign(
+                        managers = 2,
+                        employees = 2,
+                        steps =
+                            listOf(
+                                step(
+                                    "race",
+                                    managers(),
+                                    parallel = true,
+                                    emits = "ticket_decided",
+                                    assertions = listOf(AssertionSpec.OnlyOneSucceeds(approve)),
+                                ),
+                            ),
+                    )
+
+                f.runner().run(racing)
+
+                f.evidence.eventList.shouldBeEmpty()
+                f.verify.groupInputs
+                    .single()
+                    .templates.lastId
+                    .shouldBeNull()
+                f.evidence.assertionList
+                    .single { it.type == "only_one_succeeds" }
+                    .verdict shouldBe Verdict.FAILED
             }
     }
 }

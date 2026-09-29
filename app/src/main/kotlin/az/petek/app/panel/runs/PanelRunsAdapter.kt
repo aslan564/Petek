@@ -526,7 +526,7 @@ internal class PanelRunsAdapter(
 
     /**
      * Tells the board which steps nobody can run with this tester count (they will be skipped) and which races the waves
-     * leave with a single racer (they fail there); never blocks.
+     * leave with a single racer (they never pass there: the verdict is inconclusive); never blocks.
      */
     private fun warnAboutStepsThatCannotRun(
         campaign: Campaign,
