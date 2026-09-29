@@ -32,9 +32,11 @@ data class SiteKindVerdict(
 )
 
 /**
- * Decides the kind from what the explorer saw, by code: page titles, purposes, addresses, test ids, form purposes and
- * action names. Shop and news words win when they are there; a site whose pages are mostly its gate (sign-in, sign-up,
- * verification) is a sign-in system; a site with content pages and no gate is a showcase.
+ * Decides the kind from what an anonymous visitor saw ([visitorPages]), by code: page titles, purposes, addresses, test
+ * ids, form purposes and the names of the actions on those pages. What signed-in roles saw inside does not count: an
+ * internal portal whose admin pages list products and orders is still a sign-in system. Shop and news words win when
+ * they are there; a site whose pages are mostly its gate (sign-in, sign-up, verification) is a sign-in system; a site
+ * with content pages and no gate is a showcase.
  */
 object SiteKinds {
     private val SHOP_WORDS =
@@ -76,26 +78,41 @@ object SiteKinds {
         return SiteKindVerdict(SiteKind.OTHER, "nothing typical of a shop, news site, showcase or sign-in system")
     }
 
-    /** Pages an anonymous visitor reached that are not part of the gate. */
-    internal fun contentPages(model: SiteModel): List<PageModel> {
-        val anonymous =
-            model.roles
-                .filter { it.anonymous }
-                .flatMap { it.pageIds }
-                .toSet()
-        return model.pages.filter { it.id in anonymous && !GateMaps.isGatePage(it) }
+    /**
+     * The pages the anonymous crawl reached: what a visitor sees, the kind's and the gate's only source (Faza 17). A
+     * model without an anonymous crawl has only what signed-in roles saw, so all of its pages stand in for it.
+     */
+    fun visitorPages(model: SiteModel): List<PageModel> {
+        val visitor = model.roles.filter { it.anonymous }
+        if (visitor.isEmpty()) return model.pages
+        val ids = visitor.flatMapTo(HashSet()) { it.pageIds }
+        val names = visitor.mapTo(HashSet()) { it.name }
+        return model.pages.filter { page -> page.id in ids || page.reachableBy.any { it in names } }
     }
+
+    /** The actions on [visitorPages] a visitor was offered (all of them on a model without an anonymous crawl). */
+    fun visitorActions(model: SiteModel): List<ActionModel> {
+        val names = model.roles.filter { it.anonymous }.mapTo(HashSet()) { it.name }
+        val pages = visitorPages(model).mapTo(HashSet()) { it.id }
+        return model.actions.filter { action ->
+            action.pageId in pages && (names.isEmpty() || action.allowedRoles.any { it in names })
+        }
+    }
+
+    /** Pages an anonymous visitor reached that are not part of the gate; none when there was no anonymous crawl. */
+    internal fun contentPages(model: SiteModel): List<PageModel> =
+        if (model.roles.none { it.anonymous }) emptyList() else visitorPages(model).filterNot(GateMaps::isGatePage)
 
     private fun words(model: SiteModel): String =
         buildList {
-            model.pages.forEach { page ->
+            visitorPages(model).forEach { page ->
                 add(page.title)
                 add(page.purpose)
                 add(page.urlPattern)
                 addAll(page.testIds)
                 page.forms.forEach { add(it.purpose) }
             }
-            model.actions.forEach { add(it.name) }
+            visitorActions(model).forEach { add(it.name) }
         }.joinToString(" ").lowercase()
 }
 
@@ -220,8 +237,12 @@ object GateMaps {
     fun isGatePage(page: PageModel): Boolean =
         GATE_PATH.containsMatchIn(page.urlPattern) || page.forms.any { it.kind == ActionKind.LOGIN || it.kind == ActionKind.REGISTER }
 
+    /**
+     * The gate as a visitor meets it ([SiteKinds.visitorPages]): a form a signed-in role saw inside (an admin's "add
+     * user") is never taken for the site's sign-up.
+     */
     fun of(model: SiteModel): GateMap {
-        val pages = model.pages.filter { UrlPatterns.ID !in it.urlPattern }
+        val pages = SiteKinds.visitorPages(model).filter { UrlPatterns.ID !in it.urlPattern }
         val registerPage = pages.firstOrNull { page -> page.forms.any { it.kind == ActionKind.REGISTER } }
         val loginPage = pages.firstOrNull { page -> page.forms.any { it.kind == ActionKind.LOGIN } }
         val registerForm = registerPage?.forms?.first { it.kind == ActionKind.REGISTER }
@@ -233,7 +254,7 @@ object GateMaps {
             login = loginPage?.let { page -> loginForm?.let { gateForm(page, it, LOGIN) } },
             guest = SiteKinds.contentPages(model).isNotEmpty(),
             otp = otpOf(pages),
-            forgotPassword = FORGOT.containsMatchIn(text) || model.actions.any { FORGOT.containsMatchIn(it.name) },
+            forgotPassword = FORGOT.containsMatchIn(text) || SiteKinds.visitorActions(model).any { FORGOT.containsMatchIn(it.name) },
             captcha =
                 CAPTCHA.containsMatchIn(text) ||
                     allFields.any { CAPTCHA.containsMatchIn(it.name) || CAPTCHA.containsMatchIn(it.testId.orEmpty()) },

@@ -35,6 +35,8 @@ must be able to register, read the OTP, and fall back to provided credentials if
   where the site has companies: the profile's `tenant: company`, or, without the owner's word, a form to join by
   invitation or company code the visitor's walk saw (`GateMaps.joinPages`); `tenant: none` never. A test API alone
   is no such sign.
+- The site's kind and its gate are what a visitor sees (`SiteKinds.visitorPages`): the pages the logged-in walk adds
+  never make a portal a shop, and an admin's "add user" form inside is never taken for the sign-up (`SiteKindsTest`).
 - Findings are recorded by code, never judged by the AI: broken links, HTTP errors, slow pages, accessibility gaps,
   leaked error text, and what the browser itself saw go wrong on each page since it started loading (script errors
   and uncaught exceptions, failed requests to the site: `CONSOLE_ERROR`, `FAILED_REQUEST`), plus the page measured at

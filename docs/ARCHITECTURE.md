@@ -323,7 +323,9 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
   when the exploration ends, but only where the site has companies: the profile's `tenant: company`, or a form to join
   by invitation or company code that walk saw (`GateMaps.joinPages`, Faza 25.1). `TRIAL_TOUCH` (`TrialToucher`) submits harmless actions only with the
   owner's "Sınaq toxunuşu" and a target the `TestTargetCheck` confirms as test data, and never touches login, sign-up,
-  verification, password or file forms. Without sessions the last two phases are skipped and the screen says why.
+  verification, password or file forms. Without sessions the last two phases are skipped and the screen says why. The
+  site's kind (`SiteKinds`) and its gate (`GateMaps.of`) are read from the visitor's pages only, whatever the roles saw
+  inside.
 - **Reading a page.** Code first: `HtmlScanner` (links, forms, fields, buttons), `PageHeuristics`, `FormClassifier` and
   `Keywords` (English and Azerbaijani). Then one structured LLM question per page (`PageAnalyst`,
   `PageAnalysisProtocol`: purpose, actions, unknowns) over a `PromptRedaction`-cleaned snapshot; the answer is

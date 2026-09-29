@@ -993,6 +993,9 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 - [x] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-da təyin olunur, sayt modelinə yazılır.
   **Vəziyyət:** `SiteKinds` kodla, anonim səhifələrin söz və formasından, səbəbi ilə; paneldə və draft başlığında görünür.
+  Rol gəzintisi (25.1) içəridəki səhifələri modelə əlavə etdikdən sonra da növ və qapı yalnız ziyarətçinin gördüyündəndir
+  (`SiteKinds.visitorPages`): admin səhifələrində məhsul və sifariş olan portal giriş sistemi qalır, adminin "istifadəçi
+  əlavə et" forması qeydiyyat sayılmır. `SiteKindsTest` hər növü və hər `GateBlocker`-i yoxlayır.
 - [x] Qapının xəritəsi: qeydiyyat, login, qonaq girişi, OTP növü, şifrəni unutdum, CAPTCHA, dəvət; dürüst dayanma səbəbləri.
   **Vəziyyət:** `GateMaps` (sahələr profil açarlarına xəritələnir), `GateBlocker` (CAPTCHA, qapı yox, yalnız dəvət, qeydiyyat yox) paneldə sahibin dilində; ikinci fake saytda real Chromium testi.
 - [x] Kəşfiyyatçının öz hesabı: təlimatda verilibsə o, yoxdursa `self_register` (Faza 10 zənciri); testerlərlə paylaşılmır.
