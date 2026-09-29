@@ -1404,6 +1404,64 @@ Hazır sayılır: kompozisiya matrisinin hər xanası testdədir; dalğadan böy
 qadağan əməliyyatı qəbul edən sayt FAILED alır; swap + `wait_for` yalançı `DELIVERY_UI` vermir; xarici ünvan rədd
 olunur; gecikdirilmiş çatdırılmada `latency_max` yalançı keçmir; `./gradlew build` və `./gradlew e2eTest` keçir.
 
+#### Tərs oxunun yoxlanması (sahibin tapşırığı, 2026-09-29)
+
+Faza 24-ün "tərs oxunu"nun (on üç əks-iddia) hər biri kodla yoxlandı; doğru çıxanlar düzəldildi, dizayn qərarı
+olanlar aşağıdakı suallardadır.
+
+- **0. Kompozisiya.** Qismən doğru: `CompositionMatrixTest` hər xananı yoxlayır, amma yeni qaydaların birləşmələrində
+  yenə üç boşluq tapıldı (2A, 3, 4); onların testləri matrisin davamıdır (`RunnerWavesTest`, `VisibleTextAndLatencyTest`,
+  `ScreenAssertionsTest`).
+- **1. Tək yarışan.** INCONCLUSIVE və run-ın PASSED olmaması qəsdəndir (24.12); hesabatda bu "Pətək bacarmadı" rəfidir,
+  saytın xətası deyil. İkinci hissə doğrudur: iki yarışandan yalnız biri sorğu göndərib, o biri göndərmədən cavab
+  veribsə (obyekti artıq qərarlaşdırılmış görüb) yarış PASSED olur, sayt isə eyni anda iki qərarı heç sınamayıb. Bu
+  ARCHITECTURE-dakı qəsdən qoyulmuş "uduzan yarışan" qaydasıdır; dəyişmək sahibin qərarıdır (aşağıda).
+- **2A. Rezidentlərin təkrarlanan addımı.** Doğru idi, düzəldildi: yalnız rezidentlərin (sahib, tək menecer) etdiyi
+  addım hər dalğada təkrarlanırdı; setup obyekti üzərində yarış 2-ci dalğada qərarlaşdırılmış obyektə düşüb saytın
+  günahı olmadan FAILED verərdi. İndi belə addım sonrakı dalğada yalnız hadisə emit edirsə və ya ana addımın
+  hadisəsini gözləyirsə yenidən icra olunur, qalanı qeyd ilə buraxılır (`DefaultCampaignRunner.repeats`).
+- **2B. Dalğadan böyük yarış.** Doğrudur və qəsdəndir: `wave_size` canlı brauzer və IP limitidir, sığmayan yarış
+  bölünür, `petek run` və panel (MCP də) bunu run-dan əvvəl deyir. ARCHITECTURE dəqiqləşdi ("sığanda bir dalğada").
+- **2C. Proxy sayı.** Qismən: rezidentlər canlı brauzer sayını `wave_size` + rezident edir; proxy çatmayanda run səssiz
+  qısalmır, səbəbi ilə başlamır.
+- **3. Swap kursoru və `carry`.** Swap-da emitter uğursuz olanda gözləyənlərin `not_received` olması düzgündür (bu
+  keçiddə hadisə yoxdur); `{pass}` artıq var. `carry` t0-ı dəyişmir (iddianın bu hissəsi yanlışdır), amma sonrakı
+  dalğanın (və swap-ın) setup hadisəsini oxuyan receiver-i 1-ci keçidin yazısından ölçülürdü və `latency_max` saxta
+  yıxılırdı: düzəldildi (`AssertionInput.earlierDelivery`: mətnin göründüyü yoxlanır, `latency_max` N/A, səbəbi ilə).
+- **4. `{last_id}`.** Hadisəsiz addımda `{last_id}` validator xətasıdır, səssiz deyil. Son hissə doğru idi: addımın
+  hadisəsi id gətirməyəndə `{last_id}` və ya `{event.x.id}` işlədən yoxlama "template error" ilə FAILED olurdu, yalnız
+  oracle mənbəli olduğundan hakim onu saytın BACKEND xətası sayırdı; indi INCONCLUSIVE-dir (`id_unavailable`).
+- **5. Emitter yoxdur.** Dizayndır: heç bir dalğada yoxlanmayan `wait_for` `not_covered`-dir (run FAILED), qismən örtük
+  hesabatda qeyddir və run-dan əvvəl deyilir.
+- **6. `ContactPolicy`.** Yerli formatlı nömrə tanınmır və həmkarın telefonu siyahıda yoxdur (R12-də yazılıb);
+  nöqtəsiz domen (`user@intranet`) internetdəki üçüncü şəxs deyil. Mətni agent yalnız `type` ilə yazır, başqa yolu
+  yoxdur (iddianın bu hissəsi yanlışdır).
+- **7. SSO.** Dizayndır: səhifə başqa hosta gedəndə geri gətirilir, `off_site` mesajı hostu `allowed_hosts`-a
+  (`PETEK_ALLOWED_HOSTS`) əlavə etməyi deyir.
+- **8. WasThere.** `{pass}` ilə hər keçidin mətni yenidir; `{pass}`-sız təkrar mətn `stale_text` INCONCLUSIVE-dir,
+  yalançı keçid deyil. `carry` üçün 3-ə bax.
+- **9. Eyni çıxış kodu.** Doğrudur: run 1 ilə bitir həm saytın xətasında, həm yalnız qərarsız yoxlamada. Ayırmaq sahibin
+  qərarıdır (aşağıda).
+- **10. GET ilə qadağan səhifə.** `forbidden_accepted` yalnız dəyişdirən sorğulara baxır; rola bağlı səhifəni (GET)
+  `http_status` probu testerin sessiyası ilə yoxlayır. KDoc dəqiqləşdi.
+- **11. Dövrə açarı.** Açar URL (sorğu daxil, `#` xaric) və səhifənin snapshot-udur: SPA-nın fərqli görünüşü fərqli
+  açardır (iddia əsasən yanlışdır). Hər dəfə dəyişən sayğac dövrəni gizlədə bilər; onu addım limiti dayandırır.
+- **12. Faza 25.** Kəşfiyyatçının görmədiyi rol ssenaridə yoxdur; qaralama bunu buraxılan ideyalarda deyir, run
+  hesabatı demir (təklif aşağıda). "Bir run bir vaxtda" qaydası bir prosesin içindədir: panel, MCP və CLI ayrı
+  proseslərdə paralel run aça bilər (təklif aşağıda).
+
+Açıq sahib qərarları (tərs oxudan):
+
+- [ ] **Mübarizəsiz yarış:** qərar verən sorğunu yalnız bir yarışan göndəribsə (o biri obyekti qərarlaşdırılmış görüb
+  sorğusuz cavab veribsə) yarış INCONCLUSIVE olsunmu ("yarış sınanmadı")? Tövsiyə: bəli; `parallel: true` onsuz da
+  eyni anda başladır, bu halda saytın eyni anda iki qərarı sınanmayıb.
+- [ ] **Qərarsız run-ın çıxış kodu:** heç bir yoxlama FAILED deyil, amma INCONCLUSIVE var — CI ayırsın deyə çıxış kodu
+  3 olsunmu (0 keçdi, 1 saytın xətası, 2 başlamadı)? Tövsiyə: bəli; CI şablonları və README yenilənir.
+- [ ] **Proseslər arası run kilidi:** evidence qovluğunda fayl kilidi ilə panel, MCP və CLI eyni anda iki run açmasın?
+  Tövsiyə: bəli.
+- [ ] **Örtük hesabatda:** kəşfiyyatçının görmədiyi rollar və buraxılan ideyalar run hesabatının xülasəsinə yazılsın?
+  Tövsiyə: bəli.
+
 ### Faza 25 — Ssenari kəşfiyyatdan doğulur (sahibin qərarı, 2026-09-28)
 
 Sahibin qərarı: hər sistem fərqlidir, ona görə sayt əvvəlcədən yazılmış statik ssenari ilə başlamır. Testlər yalnız

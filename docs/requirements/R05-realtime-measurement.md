@@ -39,7 +39,9 @@ looking at the server alone or by one browser.
   (`stale_text`: the same text published again in a later wave or the account swap, or text the page always shows).
   A campaign keeps every publication's text new with `{pass}` in the emitter's `do` and the receivers' `visible_text`:
   it is `<run tag>-<n>`, n the pass (1, the wave's number, the swap's), and in a step that waits it is the pass of the
-  event it waited for, so a setup event of the first wave read in a later one keeps its text. A text naming the
+  event it waited for, so a setup event of the first wave read in a later one keeps its text. Such an event was
+  delivered in its own pass: a later wave's (or the swap's) receiver checks that its text is shown, and `latency_max`
+  is not applicable there, rather than timing a delivery from a write long past. A text naming the
   event's own object (`{last_id}`) cannot be watched for before the object exists; it is checked after the event, and
   a text visible at the first look gives only an upper bound.
 - **Latency.** `latency_max` asserts per receiver on the range the delay lies in: PASSED when even its longest is

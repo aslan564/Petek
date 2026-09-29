@@ -23,7 +23,8 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
 - **Judge.** `features/reporting` `ThreeSourceJudge` folds A/B/C into `FindingRecord`s classified `BACKEND`,
   `DELIVERY_UI`, `SITE_CHECK`, `INVESTIGATE`, `FLAKY`, `AGENT_FAILURE` or `INCONCLUSIVE`. A check whose evidence
   cannot decide it (`Verdict.INCONCLUSIVE`, Faza 24.12: a race nobody attempted or with one racer, unreadable racer
-  requests, `stale_text`, a latency known only as a range around its limit) is no evidence for A, B or C; a step whose
+  requests, `stale_text`, a latency known only as a range around its limit, a check whose object no event carried,
+  `id_unavailable`) is no evidence for A, B or C; a step whose
   only non-passing checks are such gets one `INCONCLUSIVE` finding on the "tool gap" shelf, never one about the site,
   and the run is not PASSED (the summaries count them as "inconclusive", JUnit as a property, SARIF as a note). A step that failed with a key becomes a
   finding of its own: a site defect a deterministic check saw (`unhealthy_page` from `site_health`,
