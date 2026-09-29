@@ -44,6 +44,7 @@ import az.petek.dashboard.domain.PanelExplorer
 import az.petek.dashboard.domain.PanelReadiness
 import az.petek.dashboard.domain.PanelRuns
 import az.petek.dashboard.domain.PanelScenarios
+import az.petek.dashboard.domain.PanelSites
 import az.petek.dashboard.domain.PanelTestFlow
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.mail.application.ManualCodeDesk
@@ -68,6 +69,7 @@ import kotlin.time.Duration.Companion.seconds
  *   ([PanelScenariosAdapter]).
  * - [PanelRuns]: runs of approved versions, history, reports, stability and triage ([PanelRunsAdapter]).
  * - [PanelTestFlow]: "Test et", the three above in one go from the instruction form ([PanelTestFlowAdapter]).
+ * - [PanelSites]: the sites the panel knows, and a new one's profile taken without a restart ([PanelSitesAdapter]).
  *
  * Artifacts the panel may serve besides the live board's are an exploration's captures and the evidence a shown triage
  * verdict cites. [close] cancels whatever still runs and waits (at most [CLOSE_GRACE]) until it has let go: a run still
@@ -85,6 +87,7 @@ internal class AppPanelBackend(
     private val ownerAccounts: OwnerAccounts? = null,
     private val readiness: PanelReadiness = object : PanelReadiness {},
     private val testFlow: PanelTestFlow = object : PanelTestFlow {},
+    private val sites: PanelSites = object : PanelSites {},
 ) : PanelBackend,
     PanelCapacity by capacity,
     PanelExplorer by explorer,
@@ -92,6 +95,7 @@ internal class AppPanelBackend(
     PanelRuns by runs,
     PanelReadiness by readiness,
     PanelTestFlow by testFlow,
+    PanelSites by sites,
     AutoCloseable {
     override suspend fun explorationArtifact(artifactId: ArtifactId): ArtifactRecord? =
         explorer.explorationArtifact(artifactId) ?: runs.evidenceArtifact(artifactId)
@@ -144,12 +148,9 @@ internal class AppPanelBackend(
             lateinit var runs: PanelRunsAdapter
             // Passwords go to the file this configuration is read from (`--env-file` included), else `.env` here as before.
             val envFile = configurationFile ?: workingDirectory.resolve(ENV_FILE)
-            val accounts =
-                OwnerAccounts(
-                    { container.config },
-                    envFile,
-                    container.config.targetsDir ?: workingDirectory.resolve(TARGETS_DIRECTORY),
-                )
+            val targetsDir = container.config.targetsDir ?: workingDirectory.resolve(TARGETS_DIRECTORY)
+            val sites = PanelSitesAdapter(container, envFile, targetsDir, reloadConfig)
+            val accounts = OwnerAccounts({ container.config }, envFile, targetsDir, onWritten = sites::takeProfiles)
             val sessions =
                 RoleSessionSource { request, factory, progress ->
                     val source = roleSessions?.invoke(runs) ?: signInChain(container, runs, accounts, workingDirectory)
@@ -162,7 +163,18 @@ internal class AppPanelBackend(
             val testFlow = PanelTestFlowAdapter(explorer, scenarios, runs, scope, container.clock)
             val readiness =
                 PanelReadinessAdapter(container, envFile, reloadConfig) { testFlow.busy() || explorer.busy() || runs.busy() }
-            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts, readiness, testFlow)
+            return AppPanelBackend(
+                CapacityAdapter(capacityAdvice),
+                explorer,
+                scenarios,
+                runs,
+                scope,
+                manual,
+                accounts,
+                readiness,
+                testFlow,
+                sites,
+            )
         }
 
         /** The explorer's way in, in the order of the site's target profile (ADR-0010). */

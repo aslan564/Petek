@@ -331,7 +331,8 @@ Arqumentsiz `petek` (və ya `petek panel`) yalnız loopback-ə bağlanan Ktor se
 **Quraşdırma** (bir dəfə tamamlanana qədər ilk ekran: sayt cavab verirmi, kopyalama və "Yoxla" düyməli sahiblik
 sübutu, bir kliklə AI sınağı və AI seçimi: konfiqurasiya faylına yazılır, panel yenidən başlamadan işə düşür, bu
 kompüterin tutum tövsiyəsi ilə tester sayı),
-**Təlimat** (hədəf, sadə dildə təlimat, tester sayı, büdcə; **Test et**: kəşf edir, tapılanlardan ssenari yazır,
+**Təlimat** (hədəf, sadə dildə təlimat, tester sayı, büdcə; **Saytlar**: test etdiyiniz bütün saytlar, hər biri öz
+ayarları ilə, panel yenidən başlamadan burada əlavə olunur və seçilir; **Test et**: kəşf edir, tapılanlardan ssenari yazır,
 təsdiqləyir və run edir, və ya eyni hissələr bir-bir; "Avtomatik bölgü"nü söndürməsəniz, rolları və giriş yollarını
 kəşfiyyatçı tapır), **Kəşfiyyat** (kəşfiyyatçı canlı: fazalar, sayt
 modeli, tapıntılar, cavablanacaq suallar), **Ssenarilər** (versiyalar, YAML, diff, təsdiq/dondurma, triaj),

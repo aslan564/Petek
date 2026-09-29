@@ -18,6 +18,8 @@ import az.petek.dashboard.demo.DemoPanelBackend
 import az.petek.dashboard.domain.ManualCodeView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelInstructions
+import az.petek.dashboard.domain.SiteRequest
+import az.petek.dashboard.domain.SiteView
 import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TestStage
 import az.petek.dashboard.testing.ServerHarness
@@ -26,6 +28,7 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import io.ktor.client.plugins.sse.sse
 import io.ktor.client.request.header
@@ -113,6 +116,9 @@ class PanelRoutesTest {
                     "/api/runs",
                     "/api/runs/cancel",
                     "/api/runs/run_demo_0921/triage",
+                    "/api/sites",
+                    "/api/accounts",
+                    "/api/readiness/ai-choice",
                 )
 
             paths.forEach {
@@ -169,6 +175,58 @@ class PanelRoutesTest {
 
             given shouldBe listOf("123456")
             json(h.get("/api/manual-codes").bodyAsText()).jsonObject["requests"]!!.jsonArray.size shouldBe 0
+        }
+
+    @Test
+    fun `the sites are listed and a new one is added with the page's token, its token never shown`() =
+        runBlocking<Unit> {
+            val root = dir.resolve("evidence")
+            val demo =
+                DemoPanelBackend(
+                    clock,
+                    SequentialIdGenerator(),
+                    az.petek.dashboard.testing
+                        .TempDirArtifactStore(root),
+                    jobs,
+                    { awaitCancellation() },
+                    root,
+                ) { _, _ -> runGate.await() }
+            val known = mutableListOf(SiteView("own", "http://127.0.0.1:9", own = true, null, testApi = true, "mailpit", 0))
+            val requests = mutableListOf<SiteRequest>()
+            val backend =
+                object : PanelBackend by demo {
+                    override suspend fun sites() = known.toList()
+
+                    override suspend fun addSite(request: SiteRequest): List<SiteView> {
+                        requests += request
+                        val name = checkNotNull(request.name)
+                        known +=
+                            SiteView(
+                                name,
+                                request.url,
+                                own = false,
+                                "targets/$name.yaml",
+                                request.token != null,
+                                request.mail ?: "mailpit",
+                                0,
+                            )
+                        return known.toList()
+                    }
+                }
+            val h = ServerHarness(LiveDashboard(clock), root, backend).also { harness = it }
+            val body = """{"name":"notes","url":"https://notes.example","mail":"manual","token":"notes-token-0123"}"""
+
+            h.post("/api/sites", body).status.value shouldBe 403
+            val added = h.post("/api/sites", body, h.token())
+
+            added.status.value shouldBe 201
+            added.bodyAsText() shouldNotContain "notes-token"
+            requests.single().token shouldBe "notes-token-0123"
+            val listed = json(h.get("/api/sites").bodyAsText()).jsonObject["sites"]!!.jsonArray
+            listed.map { it.jsonObject["name"]!!.jsonPrimitive.content } shouldBe listOf("own", "notes")
+            listed[1].jsonObject["testApi"]!!.jsonPrimitive.boolean shouldBe true
+            listed[1].jsonObject["mail"]!!.jsonPrimitive.content shouldBe "manual"
+            h.post("/api/sites", """{"name":"x"}""", h.token()).status.value shouldBe 400
         }
 
     @Test

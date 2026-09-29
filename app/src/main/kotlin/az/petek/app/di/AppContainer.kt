@@ -184,6 +184,9 @@ class AppContainer(
     var config: PetekConfig = initial
         private set
 
+    /** Held while [refresh] or [refreshTargets] replaces [config]. */
+    private val refreshing = Any()
+
     val clock: HarnessClock = overrides.clock ?: SystemHarnessClock()
     val ids: IdGenerator = UuidV7IdGenerator()
     val targetPolicy: TargetPolicy get() = config.targetPolicy
@@ -276,12 +279,19 @@ class AppContainer(
      * target profiles (a site added in the panel) and the AI (chosen on the setup screen), whose client is switched
      * for the next calls; calls in flight finish with the one they started with. Everything else stays as built.
      */
-    fun refresh(fresh: PetekConfig) {
-        val before = config
-        val next = before.copy(targets = fresh.targets).withAiOf(fresh)
-        config = next
-        if (overrides.llm == null && next.withAiOf(before) != next) llmProvider.switchTo(resources.track(LlmProviders.create(next)))
-    }
+    fun refresh(fresh: PetekConfig) =
+        synchronized(refreshing) {
+            val before = config
+            val next = before.copy(targets = fresh.targets).withAiOf(fresh)
+            config = next
+            if (overrides.llm == null && next.withAiOf(before) != next) llmProvider.switchTo(resources.track(LlmProviders.create(next)))
+        }
+
+    /** Takes only the target profiles of [fresh] (a site or an account added in the panel, Faza 23). */
+    fun refreshTargets(fresh: PetekConfig) =
+        synchronized(refreshing) {
+            config = config.copy(targets = fresh.targets)
+        }
 
     /** The client agents use: metered, retried and limited to `PETEK_LLM_CONCURRENCY` calls in flight. */
     val llm: LlmClient by lazy {

@@ -42,7 +42,8 @@ interface PanelBackend :
     PanelManualCodes,
     PanelAccounts,
     PanelReadiness,
-    PanelTestFlow
+    PanelTestFlow,
+    PanelSites
 
 /**
  * Accounts the owner gives the explorer on the instruction screen ("Hesablar", bring-your-own accounts, Faza 10): a

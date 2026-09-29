@@ -313,7 +313,8 @@
 
     const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false' } });
     target.value = form.target;
-    target.addEventListener('input', () => { form.target = target.value; save(); renderFlow(); });
+    target.addEventListener('input', () => { form.target = target.value; save(); renderFlow(); renderSites(); });
+    ui.target = target;
     const text = h('textarea', { class: 'textarea', attrs: { rows: 8, placeholder: 'Məsələn: Admin elan yaradır, bütün işçilər onu 10 saniyə ərzində real vaxtda görməlidir. Tapşırıq yaratma və menecerin təsdiqi axınını da yoxla. Ödəniş bölməsinə toxunma.' } });
     text.value = form.instructions;
     const count = h('span', 'faint');
@@ -444,6 +445,62 @@
       h('li', null, h('b', { text: '3' }), h('span', { text: 'Ssenari yalnız saytda tapılanlardan yazılır və təsdiqlənir; saytda olmayan heç nə gözlənilmir.' })),
       h('li', null, h('b', { text: '4' }), h('span', { text: 'N tester eyni anda run edir; hesabatda hər hökm sübutla.' }))));
 
+    // the sites the panel knows (Faza 23), each with its own settings: "Seç" makes one the target; a new one is kept in
+    // targets/<name>.yaml (its token in .env) and known at once, without restarting the panel
+    const sitesCard = P.card('Saytlar', { icon: 'globe', sub: 'Bir neçə sayt, hər biri öz ayarları ilə; panel yenidən başlamır' });
+    const siteList = h('div', 'stack');
+    const siteName = h('input', { class: 'input', attrs: { type: 'text', placeholder: 'Ad (boş: ünvandan)', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Saytın adı' } });
+    const siteUrl = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Saytın ünvanı' } });
+    const siteMail = h('select', { class: 'select', attrs: { 'aria-label': 'Saytın poçtu' } },
+      ...[['', 'Poçt: panelin ayarı'], ['mailpit', 'Mailpit'], ['manual', 'Kodu özüm yazıram'], ['imap', 'Öz qutum (IMAP)'], ['test-api', 'Saytın test API-si']]
+        .map(([value, text]) => h('option', { text, attrs: { value } })));
+    const siteToken = h('input', { class: 'input', attrs: { type: 'password', autocomplete: 'new-password', placeholder: 'Test tokeni (istəyə bağlı)', 'aria-label': 'Saytın test tokeni' } });
+    let sites = [];
+    const origin = (url) => { try { return new URL(url).origin; } catch (e) { return null; } };
+    function renderSites(list) {
+      if (list) sites = list;
+      const chosen = origin(form.target);
+      siteList.replaceChildren(...sites.map((s) => {
+        const facts = [s.own ? 'panelin öz saytı' : s.profile, s.testApi ? 'test API var' : 'test API yoxdur', 'poçt: ' + s.mail, s.accounts ? s.accounts + ' hesab' : null];
+        return h('div', { class: 'row wrap', data: { site: s.name } },
+          h('b', { text: s.name }),
+          h('span', { class: 'ellipsis', text: s.url }),
+          h('span', { class: 'faint', text: facts.filter(Boolean).join(' · ') }),
+          h('span', 'spacer'),
+          chosen && chosen === origin(s.url)
+            ? P.badge('green', 'Seçilib', { dot: true })
+            : P.button('Seç', { kind: 'small', icon: 'target', on: () => chooseSite(s.url) }));
+      }));
+    }
+    function chooseSite(url) {
+      form.target = url;
+      ui.target.value = url;
+      save();
+      renderFlow();
+      renderSites();
+      P.toast('Hədəf: ' + fmt.host(url), 'ok');
+    }
+    async function loadSites() { const res = await P.api.get('/api/sites'); if (res.ok) renderSites(res.data.sites || []); }
+    async function addSite(button) {
+      const body = { name: siteName.value, url: siteUrl.value, mail: siteMail.value, token: siteToken.value };
+      const res = await P.busy(button, () => P.api.post('/api/sites', body));
+      siteToken.value = '';
+      if (!res.ok) { P.toast((res.problems && res.problems[0] && res.problems[0].message) || res.error, 'error'); return; }
+      siteName.value = '';
+      siteUrl.value = '';
+      siteMail.value = '';
+      renderSites(res.data.sites || []);
+      P.toast('Sayt əlavə edildi: ayarları targets/ qovluğundadır' + (body.token ? ', tokeni .env-də.' : '.'), 'ok');
+    }
+    P.append(sitesCard.body, h('div', 'form-grid',
+      siteList,
+      h('div', 'divider'),
+      h('div', 'form-grid cols-2', siteName, siteUrl),
+      h('div', 'form-grid cols-2', siteMail, siteToken),
+      P.button('Sayt əlavə et', { icon: 'plus', on: (e) => addSite(e.currentTarget) }),
+      h('div', { class: 'help', text: 'Yalnız test mühitləri. Hər sayt öz ayarları ilə işləyir: öz test API-si və tokeni (token yalnız .env-ə yazılır), öz poçtu, öz hesabları. Tokeni olmayan saytda oracle yoxlamaları "N/A" olur.' })));
+    loadSites();
+
     // accounts the explorer may sign in with (bring your own accounts): the password goes to .env, never to the database
     const accounts = P.card('Hesablar', { icon: 'team', sub: 'Kəşfiyyatçı bu saytda sizin test hesablarınızla daxil olsun' });
     const accountList = h('div', 'stack');
@@ -458,7 +515,7 @@
     async function addAccount(button) {
       const res = await P.busy(button, () => P.api.post('/api/accounts', { target: form.target, role: role.value, email: email.value, password: password.value }));
       password.value = '';
-      if (res.ok) { renderAccounts(res.data.accounts || []); P.toast('Hesab saxlanıldı; parol yalnız .env-dədir.', 'ok'); }
+      if (res.ok) { renderAccounts(res.data.accounts || []); loadSites(); P.toast('Hesab saxlanıldı; parol yalnız .env-dədir.', 'ok'); }
       else P.toast((res.problems[0] && res.problems[0].message) || res.error, 'error');
     }
     P.append(accounts.body, h('div', 'form-grid',
@@ -469,7 +526,7 @@
     loadAccounts();
 
     P.append(el, ui.flow, h('div', 'grid-main-side',
-      h('div', 'stack', what.el, accounts.el, team.el, budget.el),
+      h('div', 'stack', what.el, sitesCard.el, accounts.el, team.el, budget.el),
       h('div', 'stack sticky-side', actions.el, how.el)));
     balance();
     syncTeam(true);

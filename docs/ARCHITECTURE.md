@@ -30,7 +30,7 @@ ordered by number everywhere.
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
 | `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
-| `features/dashboard` | Local web panel: live agent board, instructions ("Test et"), explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 29 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`, `PanelReadiness`, `PanelTestFlow`, ...); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
+| `features/dashboard` | Local web panel: live agent board, instructions ("Test et"), explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 29 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`, `PanelReadiness`, `PanelTestFlow`, `PanelSites`, ...); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
 | `features/explorer` | Explorer agent (PLAN.md Faza 6–7): learns a site model, records findings, generates campaign drafts, diffs model versions | `ExplorationRepository`, `ExplorationObserver`, `TestTargetCheck` | SQLite repository |
 | `app` | CLI (`init`, `test`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`, `verify`, `findings`, `dev`; `--json` on doctor/init/verify/test/plan/run/report/findings/teardown/capacity/probe/smoke), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
 | `launcher/` | The `petek` npm package: `npx petek` downloads the release bundle for the machine once (SHA-256 checked) and runs it; no dependencies, tested with `node --test` against a local stand-in release | — | Node 18+ |
@@ -277,6 +277,16 @@ configuration is read again, and `AppContainer.refresh` takes its AI settings an
 container's `SwitchableLlmClient` sends the next calls to the new client, so the panel is not restarted. A choice the
 environment would override is refused and the file put back; the AI is not switched while an exploration, a test or a
 run is going.
+
+The sites the panel knows are on the instruction screen's **Saytlar** card (`PanelSites`, `PanelSitesAdapter`;
+`/api/sites`): the panel's own site and every target profile, each with the settings a run there takes
+(`TargetProfileConfig.forTarget`: test API, mail, accounts); "Seç" makes one the form's target. A new site is written
+as a small profile `targets/<name>.yaml` (address, and only what the owner gave: mail source, test API address, the
+token as a `${PETEK_SITE_<NAME>_TOKEN}` reference) with the token itself in the configuration file; the configuration
+is read again and `AppContainer.refreshTargets` takes its profiles, nothing else, so a run or an exploration there uses
+them at once. The panel's own site, a site or name already known and a production host are refused; a profile or a
+configuration that does not load puts both files back. `PETEK_TEST_TOKEN` stays with the panel's own site: a profile
+of another site that names no token of its own has none.
 
 **Test et** (Faza 25.3) is the main path, the same on three faces: the instruction screen's button (`POST /api/test`,
 `GET /api/test`, `POST /api/test/cancel`), `petek test` (`TestCommand` over `PanelCore`, exit code by the run's

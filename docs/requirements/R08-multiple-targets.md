@@ -22,7 +22,9 @@ tool (R11) and a sellable product (R15).
 - `PETEK_TARGET` names the default profile (a name or a URL); `PETEK_TARGETS_DIR` the folder. `RunTargets` leases a
   container per profile (`TargetProfileConfig.forTarget`: the profile's URL, test API, token, production hosts and
   mail over the panel's configuration, sharing the panel's database); the oracle, mailbox and policy follow the
-  profile. The panel runs any site that has a profile; MCP `list_targets` lists them.
+  profile. The panel runs any site that has a profile; MCP `list_targets` lists them. The panel's **Saytlar** card
+  (Faza 23, `PanelSitesAdapter`) lists them with their settings and adds a site as a new profile, its token in `.env`,
+  taken without a restart (`AppContainer.refreshTargets`).
 - A scenario runs on its own site (its `campaign.target`), or on the "Hədəf sayt" when the owner gives one; never on
   the site the panel happened to be opened for (first seen 2026-09-27: a draft for one site ran against another). An
   explorer draft only runs on the site it was written for. A site without a profile gets the panel's settings without
@@ -46,7 +48,8 @@ tool (R11) and a sellable product (R15).
 - `app`: `ConfigLoaderTest` (`PETEK_TARGET` naming a profile, a broken profile reported with its file and line, a
   profile of another site never getting the panel's token),
   `PanelRunsTest` (a site with a profile runs with its settings; a scenario runs on its own site; a scenario that
-  writes is refused on another site without a profile), `OwnerAccountsTest`.
+  writes is refused on another site without a profile), `OwnerAccountsTest`, `PanelSitesTest` (the list, a site added
+  and taken at once, refusals, both files put back); `PanelEndToEndTest` adds and chooses a site in Chromium.
 - Open: an e2e run against a second fake site in the same panel (Faza 13).
 
 ## Open items

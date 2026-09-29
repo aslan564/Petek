@@ -334,7 +334,8 @@ what its proof rests on (evidence tier: oracle-confirmed, screen/network, or a m
 **Quraşdırma** (setup, the first screen until it is done once: the site answering, its ownership proof with a copy and a
 check button, the AI with a one-click test and a choice of provider, kept in the configuration file and used
 without a restart, the tester count with this machine's capacity advice),
-**Təlimat** (target, plain-language instructions, tester count, budget; **Test et**, which explores, drafts from what
+**Təlimat** (target, plain-language instructions, tester count, budget; **Saytlar**: every site you test, each with its
+own settings, added and chosen here without a restart; **Test et**, which explores, drafts from what
 was found, approves and runs in one go, or the same parts one by one; the roles and ways in are the explorer's to find
 unless you switch the automatic split off), **Kəşfiyyat** (the explorer live: phases,
 site model, findings, questions to answer), **Ssenarilər** (versions, YAML, diff, approve/freeze, triage),

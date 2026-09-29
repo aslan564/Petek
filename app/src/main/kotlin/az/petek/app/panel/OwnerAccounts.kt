@@ -36,6 +36,8 @@ internal class OwnerAccounts(
     private val settings: () -> PetekConfig,
     private val envFile: Path,
     private val targetsDir: Path,
+    /** Called after an account was written (the panel then reads the profiles again, so a new site shows at once). */
+    private val onWritten: () -> Unit = {},
 ) {
     private val added = CopyOnWriteArrayList<Pair<String, ResolvedAccount>>()
 
@@ -48,10 +50,18 @@ internal class OwnerAccounts(
         return (fromProfiles + fromPanel).distinctBy { it.site to it.role }
     }
 
-    /** Accounts for [site]: the panel's own first (the latest the owner gave), then the profile's. */
+    /**
+     * Accounts for [site]: the panel's own first (the latest the owner gave), then the profile's, without the ones the
+     * panel added, which the profile holds too once the configuration is read again.
+     */
     fun accountsFor(site: URI): List<ResolvedAccount> {
         val name = siteName(site)
-        return added.filter { it.first == name }.map { it.second }.reversed() + settings().profileFor(site)?.accounts.orEmpty()
+        val mine = added.filter { it.first == name }.map { it.second }.reversed()
+        val profile =
+            settings().profileFor(site)?.accounts.orEmpty().filterNot { account ->
+                account.email != null && mine.any { it.role == account.role && it.email == account.email }
+            }
+        return mine + profile
     }
 
     fun add(request: AccountRequest): List<AccountView> {
@@ -71,19 +81,12 @@ internal class OwnerAccounts(
         EnvFileWriter.set(envFile, variable, request.password)
         added.removeIf { it.first == site && it.second.role == role }
         added += site to ResolvedAccount(role, email, Secret(request.password), null, fields = fields)
+        onWritten()
         return views()
     }
 
-    /** The profile's name for [site], else a name made from its host (`staging.shop.example` → `staging-shop-az`). */
-    private fun siteName(site: URI): String =
-        settings().profileFor(site)?.spec?.name
-            ?: site.host
-                .orEmpty()
-                .lowercase()
-                .replace(Regex("[^a-z0-9]+"), "-")
-                .trim('-')
-                .take(MAX_NAME)
-                .ifEmpty { "site" }
+    /** The profile's name for [site], else a name made from its host ([TargetProfileFiles.nameFor]). */
+    private fun siteName(site: URI): String = settings().profileFor(site)?.spec?.name ?: TargetProfileFiles.nameFor(site)
 
     private fun variable(
         site: String,
@@ -102,7 +105,7 @@ internal class OwnerAccounts(
         variable: String,
     ): Map<String, String> {
         Files.createDirectories(targetsDir)
-        val file = profileFile(site) ?: targetsDir.resolve("$site.yaml")
+        val file = TargetProfileFiles.named(targetsDir, site) ?: targetsDir.resolve("$site.yaml")
         val before = if (Files.exists(file)) Files.readString(file) else null
         patchProfile(file, target, site, role, email, variable)
         // The profile is patched as text to keep the owner's comments; it must still load, with the account in it,
@@ -151,25 +154,12 @@ internal class OwnerAccounts(
         Files.writeString(file, lines.joinToString("\n", postfix = "\n"))
     }
 
-    /** The profile file whose `name:` is [site], whatever the file is called. */
-    private fun profileFile(site: String): Path? {
-        val named = Regex("(?m)^\\s*name:\\s*['\"]?${Regex.escape(site)}['\"]?\\s*$")
-        return Files.list(targetsDir).use { files ->
-            files
-                .filter { it.fileName.toString().endsWith(".yaml") || it.fileName.toString().endsWith(".yml") }
-                .toList()
-                .sorted()
-                .firstOrNull { named.containsMatchIn(Files.readString(it)) }
-        }
-    }
-
     companion object {
         const val TARGET = "target"
         const val ROLE_FIELD = "role"
         const val EMAIL_FIELD = "email"
         const val PASSWORD_FIELD = "password"
         private const val MAX_PASSWORD = 256
-        private const val MAX_NAME = 60
         private val ROLE = Regex("[a-z0-9_-]{1,32}")
         private val EMAIL = Regex("[^\\s@'\"{}]+@[^\\s@'\"{}]+\\.[^\\s@'\"{}]+")
 

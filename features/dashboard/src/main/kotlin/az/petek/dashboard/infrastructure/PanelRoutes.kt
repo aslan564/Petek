@@ -85,6 +85,8 @@ private fun Route.accountRoutes(backend: PanelBackend) {
     post("/api/accounts") {
         call.answer(HttpStatusCode.Created) { PanelJson.accounts(backend.addAccount(PanelJson.accountRequest(call.jsonBody()))) }
     }
+    get("/api/sites") { call.answer { PanelJson.sites(backend.sites()) } }
+    post("/api/sites") { call.answer(HttpStatusCode.Created) { PanelJson.sites(backend.addSite(PanelJson.siteRequest(call.jsonBody()))) } }
 }
 
 private fun Route.manualCodeRoutes(backend: PanelBackend) {

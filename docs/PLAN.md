@@ -402,7 +402,7 @@ Faza 0–5 MVP-dir, 6–25 sonrasıdır; hər faza yalnız "hazır sayılır" ş
 | 20 | İki qatlı, üç rəfli hesabat | Müştəri üçün sadə qat, detal qatı, JUnit XML və SARIF | 1 həftə |
 | 21 | Tutum, dalğalar və ayrı IP | Böyük sürü dalğalarla; hər testerə ayrı IP seçimi | 1 həftə |
 | 22 | Demo hədəfləri | açıq mənbəli xəbər və mağaza platformaları sahibin serverində, real tapıntılar | sonra |
-| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı + "Test et" + paneldən AI seçimi; sonra saytlar siyahısı | gedir |
+| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı + "Test et" + paneldən AI seçimi + saytlar siyahısı; qalan: brew/scoop/npm dərci (sahib) | gedir |
 | 24 | Orkestratorun kompozisiya auditi | Rol, tester sayı, dalğa, swap, yarış və hadisənin hər birləşməsində yalançı nəticə yoxdur | 1 həftə |
 | 25 | Ssenari kəşfiyyatdan doğulur | "Test et" yalnız saytda görünəni yoxlayır; universal uğur meyarları | 1 həftə |
 
@@ -1120,7 +1120,14 @@ layihənin `.env`-i, `--env-file` və CI-ın mühit dəyişənləri əvvəlki ki
   `.env`-ə yazılır, konfiqurasiya yenidən oxunur və növbəti AI çağırışları yenisi ilə gedir, panel yenidən başlamır
   (`AppContainer.refresh`, `SwitchableLlmClient`). Mühit dəyişəni fayldakını üstələyirsə seçim rədd olunur və fayl
   geri qaytarılır; kəşfiyyat, test və ya run gedəndə AI dəyişmir (`/api/readiness/ai-options`, `/api/readiness/ai-choice`).
-- [ ] Paneldə saytlar siyahısı: bir neçə sayt, hər biri öz ayarları ilə, panel yenidən başlamadan.
+- [x] Paneldə saytlar siyahısı: bir neçə sayt, hər biri öz ayarları ilə, panel yenidən başlamadan. **Vəziyyət:**
+  "Təlimat"da "Saytlar" kartı: panelin öz saytı və hər hədəf profili, run-ın orada götürəcəyi ayarlarla (test API,
+  poçt, hesablar); "Seç" onu hədəf edir. Yeni sayt (ad, ünvan, poçt, test tokeni) `targets/<ad>.yaml` olur, tokeni
+  yalnız `.env`-ə yazılır (`PETEK_SITE_<AD>_TOKEN`), konfiqurasiya yenidən oxunur və panel onu dərhal tanıyır
+  (`PanelSitesAdapter`, `AppContainer.refreshTargets`, `/api/sites`); "Hesablar"ın yaratdığı sayt da siyahıya dərhal
+  düşür. Panelin öz saytı, tanınan sayt və ya ad, istehsal hostu rədd olunur; profil və ya konfiqurasiya yüklənmirsə
+  hər iki fayl geri qaytarılır. Yol üstündə tapıldı və düzəldi: token yazmayan başqa saytın profili panelin öz
+  `PETEK_TEST_TOKEN`-ini miras alırdı (o saytın test API-sinə gedirdi); indi yalnız öz saytın profili alır.
 - [ ] Quraşdırma kanalları: `brew` (macOS), `scoop` (Windows); npm paketinin dərci (`NPM_TOKEN`).
 
 ### Faza 24 — Orkestratorun kompozisiya auditi (2026-09-28)

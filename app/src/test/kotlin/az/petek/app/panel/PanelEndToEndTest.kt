@@ -29,6 +29,7 @@ import az.petek.faketarget.FakeTargetConfig
 import az.petek.faketarget.FakeTargetServer
 import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserContext
+import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.options.AriaRole
@@ -314,6 +315,20 @@ class PanelEndToEndTest {
             page.button("Hazırdır: saytı test et").click()
             page.waitForURL("**#/telimat")
             page.locator("section.screen[aria-label='Təlimat'] .tester-row input.num").inputValue() shouldBe "7"
+
+            // Another site with its own settings: added here, known at once without a restart, chosen as the target.
+            val instructions = page.locator("section.screen[aria-label='Təlimat']")
+            instructions.locator("input[aria-label='Saytın adı']").fill("notes")
+            instructions.locator("input[aria-label='Saytın ünvanı']").fill("https://notes.test")
+            instructions.locator("select[aria-label='Saytın poçtu']").selectOption("manual")
+            page.button("Sayt əlavə et").click()
+            val row = instructions.locator("[data-site='notes']")
+            row.waitFor()
+            row.innerText() shouldContain "poçt: manual"
+            row.getByRole(AriaRole.BUTTON, Locator.GetByRoleOptions().setName("Seç").setExact(true)).click()
+            instructions.locator("input[type=url]").first().inputValue() shouldStartWith "https://notes.test"
+            Files.readString(dir.resolve("targets/notes.yaml")) shouldContain "source: manual"
+            page.shoot("e2e-0-saytlar")
             errors.shouldBeEmpty()
         }
 

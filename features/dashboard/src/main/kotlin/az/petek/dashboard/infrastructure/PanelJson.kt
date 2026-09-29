@@ -40,6 +40,8 @@ import az.petek.dashboard.domain.ScenarioVersionView
 import az.petek.dashboard.domain.ScenarioView
 import az.petek.dashboard.domain.SiteCheckView
 import az.petek.dashboard.domain.SiteModelDiffView
+import az.petek.dashboard.domain.SiteRequest
+import az.petek.dashboard.domain.SiteView
 import az.petek.dashboard.domain.StabilityView
 import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TriageView
@@ -504,6 +506,35 @@ internal object PanelJson {
             throw PanelRequestException(listOf(FieldProblem("answer", "Cavab 1–$MAX_ANSWER_CHARS simvol olmalıdır.")))
         }
         return answer
+    }
+
+    /** The sites the panel knows, never a token. */
+    fun sites(sites: List<SiteView>): JsonElement =
+        buildJsonObject {
+            putJsonArray("sites") {
+                sites.forEach { site ->
+                    addJsonObject {
+                        put("name", site.name)
+                        put("url", site.url)
+                        put("own", site.own)
+                        put("profile", site.profile)
+                        put("testApi", site.testApi)
+                        put("mail", site.mail)
+                        put("accounts", site.accounts)
+                    }
+                }
+            }
+        }
+
+    fun siteRequest(body: String): SiteRequest {
+        val root = parse(body)
+        return SiteRequest(
+            root.optionalString("name"),
+            root.string("url"),
+            root.optionalString("mail"),
+            root.optionalString("apiUrl"),
+            root.optionalString("token"),
+        )
     }
 
     /** `{"target", "role", "email", "password"}` from the "Hesablar" form. */
