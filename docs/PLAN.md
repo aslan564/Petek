@@ -206,6 +206,12 @@ steps:
     assert:
       - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
 
+  - id: ticket_notified
+    actor: employee[dept=IT, n=1]
+    # The ticket's author is told when someone else changes its status: the notification the site stored for them.
+    assert:
+      - oracle: {path: "/test/notifications?user={self.email}", contains: "/tickets/{event.ticket_created.id}"}
+
   - id: race
     actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
     parallel: true

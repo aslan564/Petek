@@ -74,7 +74,7 @@ class LoadCampaignUseCaseTest {
     fun `the contract demo campaign loads and validates`() {
         val campaign = useCase().execute(contractDemoScenario(), KNOWN_RUN_FUNCTIONS)
         campaign.settings.name shouldBe "contract-demo"
-        campaign.allSteps.size shouldBe 9
+        campaign.allSteps.size shouldBe 10
     }
 
     @Test

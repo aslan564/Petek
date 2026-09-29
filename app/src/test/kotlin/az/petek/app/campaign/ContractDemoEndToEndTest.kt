@@ -106,6 +106,7 @@ class ContractDemoEndToEndTest {
                     setOf(
                         "announce" to "oracle",
                         "ticket_flow" to "oracle",
+                        "ticket_notified" to "oracle",
                         "race" to "only_one_succeeds",
                         "forbidden" to "http_status",
                         "forbidden" to "not_visible",

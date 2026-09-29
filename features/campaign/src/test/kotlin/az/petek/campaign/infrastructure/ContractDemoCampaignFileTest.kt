@@ -99,7 +99,8 @@ class ContractDemoCampaignFileTest {
     @Test
     fun `setup and steps keep their order, ids and phases`() {
         campaign.setup.map { it.id } shouldContainExactly listOf("owner_signup", "seed", "join")
-        campaign.steps.map { it.id } shouldContainExactly listOf("announce", "read_announce", "ticket", "ticket_flow", "race", "forbidden")
+        campaign.steps.map { it.id } shouldContainExactly
+            listOf("announce", "read_announce", "ticket", "ticket_flow", "ticket_notified", "race", "forbidden")
         campaign.setup.map { it.phase }.distinct() shouldContainExactly listOf(StepPhase.SETUP)
         campaign.steps.map { it.phase }.distinct() shouldContainExactly listOf(StepPhase.MAIN)
     }
