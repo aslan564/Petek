@@ -14,6 +14,7 @@ package az.petek.app.panel
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelWaits
+import az.petek.app.testing.PanelWaits.ended
 import az.petek.app.testing.PanelWaits.exploration
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.PanelConflictException
@@ -38,6 +39,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 /** "Test et" (Faza 25.3): explore, draft from that exploration, approve and run in one go, over the production wiring. */
@@ -134,7 +138,41 @@ class PanelTestFlowTest {
             panel.backend.runs().shouldBeEmpty()
         }
 
+    @Test
+    fun `a test stopped while its run goes stops that run, which still ends with a report`() =
+        runBlocking<Unit> {
+            // The first tester's browser opens only when the test lets it: the run has started, its steps have not.
+            val gate = CountDownLatch(1)
+            val first = AtomicBoolean(true)
+            val runs = FakeBrowserEngine { _, _ -> if (first.getAndSet(false)) gate.await(GATE_SECONDS, TimeUnit.SECONDS) }
+            val panel = PanelHarness(dir, site = PanelWaits.site(), runs = runs).also { open += it }
+            panel.backend.startTest(panel.form())
+            val running =
+                withTimeout(PanelWaits.TIMEOUT) {
+                    var view = panel.backend.testFlow()
+                    while (view?.runId == null) {
+                        delay(POLL)
+                        view = panel.backend.testFlow()
+                    }
+                    view
+                }
+
+            panel.backend.cancelTest() shouldBe true
+            val ended = panel.ended()
+            gate.countDown()
+
+            ended.stage shouldBe TestStage.STOPPED
+            ended.note shouldBe "Test dayandırıldı."
+            val runId = running.runId.shouldNotBeNull()
+            panel.ended(runId)
+            val run = panel.backend.runs().single()
+            run.runId shouldBe runId
+            run.result shouldBe RunResult.ABORTED
+            run.reportAvailable shouldBe true
+        }
+
     private companion object {
         val POLL = 50.milliseconds
+        const val GATE_SECONDS = 20L
     }
 }

@@ -104,8 +104,12 @@ internal class PanelTestFlowAdapter(
             update { it.copy(scenarioId = draft.version.id) }
             val approved = scenarios.approve(draft.version.id)
             update { it.copy(scenarioId = approved.id, stage = TestStage.RUNNING) }
+            // Started without a cancellation point: a run whose caller is cancelled while it starts goes on unseen,
+            // so a test stopped at that moment stops the run once it is known (at the join below).
             val launched =
-                runs.launch(RunRequest(scenarioId = approved.id, testers = instructions.testers, target = instructions.target.trim()))
+                withContext(NonCancellable) {
+                    runs.launch(RunRequest(scenarioId = approved.id, testers = instructions.testers, target = instructions.target.trim()))
+                }
             run = launched
             update { it.copy(runId = launched.view.runId) }
             launched.join()
