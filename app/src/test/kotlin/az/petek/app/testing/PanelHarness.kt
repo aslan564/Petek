@@ -11,6 +11,7 @@
 
 package az.petek.app.testing
 
+import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.config.ResolvedTarget
 import az.petek.app.di.AppContainer
@@ -68,6 +69,8 @@ internal class PanelHarness(
     decorate: (AppOverrides) -> AppOverrides = { it },
     /** The file the configuration came from (`--env-file`); null: `.env` of [dir], as the panel assumes by default. */
     configurationFile: Path? = null,
+    /** Where verification codes come from (`PETEK_MAIL_SOURCE`). */
+    mailSource: MailSource = MailSource.MAILPIT,
 ) : AutoCloseable {
     val config =
         PetekConfig(
@@ -80,6 +83,7 @@ internal class PanelHarness(
             llmConcurrency = 4,
             evidenceDir = dir.resolve("evidence"),
             targets = targets,
+            mailSource = mailSource,
         )
 
     init {

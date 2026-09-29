@@ -11,6 +11,7 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.MailSource
 import az.petek.app.config.ResolvedTarget
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.panel.explorer.RoleSessionSource
@@ -136,6 +137,27 @@ class PanelRunsTest {
             withContext(Dispatchers.IO) {
                 Files.list(panel.config.evidenceDir.resolve("panel-runs")).use { it.count() }
             } shouldBe 0L
+        }
+
+    @Test
+    fun `what the run's make-up leaves undone comes back with its start and goes to the board`() =
+        runBlocking<Unit> {
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    scenarios = mapOf("tiny.yaml" to tinyCampaign()),
+                    mailSource = MailSource.MANUAL,
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario, testers = 4))
+
+            // Told before the run, to the page and to a host AI over MCP alike; never blocking.
+            started.warnings.single() shouldContain "PETEK_MAIL_SOURCE=manual: 4 testerin"
+            val board = panel.ended(started.runId)
+            board.run.outcome shouldBe RunOutcome.PASSED
+            board.timeline.map { it.text }.filter { "Diqqət" in it } shouldContainExactly listOf("Diqqət: ${started.warnings.single()}")
         }
 
     @Test

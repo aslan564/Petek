@@ -432,6 +432,7 @@ internal object PanelJson {
             put("runId", view.runId.value)
             put("scenarioId", view.scenarioId)
             put("testers", view.testers)
+            putJsonArray("warnings") { view.warnings.forEach { add(JsonPrimitive(it)) } }
         }
 
     // --- requests -------------------------------------------------------------------------------------------------

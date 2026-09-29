@@ -117,6 +117,12 @@ data class RunStartView(
     val runId: RunId,
     val scenarioId: String?,
     val testers: Int,
+    /**
+     * What the run's composition leaves undone, told before it starts (Faza 24.1, 24.7): steps nobody can run with this
+     * tester count, receivers a wave leaves without an emitter, races a wave leaves a single racer, manual codes for many
+     * testers. Never blocks; the board shows the same lines.
+     */
+    val warnings: List<String> = emptyList(),
 )
 
 /** What a teardown removed from the target and what it could not; both empty when nothing was left. */

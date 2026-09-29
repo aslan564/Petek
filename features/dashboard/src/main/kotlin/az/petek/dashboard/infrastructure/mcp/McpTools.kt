@@ -326,7 +326,9 @@ internal class McpTools(
                 name = "run_campaign",
                 description =
                     "Run an approved scenario with its tester agents against the configured target (one run at a time). " +
-                        "Runs in the background; poll get_run_status, or set wait=true to return the run's summary when it ends.",
+                        "Runs in the background; poll get_run_status, or set wait=true to return the run's summary when it ends. " +
+                        "The answer's warnings name what the run's make-up leaves undone (steps nobody can run, receivers or " +
+                        "racers a wave leaves alone); tell the owner.",
                 writes = true,
                 schema = {
                     string("scenarioId", "an APPROVED or FROZEN scenario version id", required = true)
