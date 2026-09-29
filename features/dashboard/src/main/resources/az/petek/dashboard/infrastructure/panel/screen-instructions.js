@@ -311,7 +311,7 @@
     ui = { fields: {} };
     ui.flow = h('div', 'flow');
 
-    const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false' } });
+    const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Hədəf sayt' } });
     target.value = form.target;
     target.addEventListener('input', () => { form.target = target.value; save(); renderFlow(); renderSites(); });
     ui.target = target;

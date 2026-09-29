@@ -99,7 +99,7 @@ class PanelEndToEndTest {
             val page = open()
 
             // Təlimat: the target is filled in from the configuration; allow the trial touch and explore.
-            page.locator("input[type=url]").inputValue() shouldBe target.baseUrl.toString()
+            page.locator("input[aria-label='Hədəf sayt']").inputValue() shouldBe target.baseUrl.toString()
             page.locator("label.check input[type=checkbox]").check()
             page.locator(".tester-row input.num").fill("6")
             page.shoot("e2e-1-telimat")
@@ -326,7 +326,7 @@ class PanelEndToEndTest {
             row.waitFor()
             row.innerText() shouldContain "poçt: manual"
             row.getByRole(AriaRole.BUTTON, Locator.GetByRoleOptions().setName("Seç").setExact(true)).click()
-            instructions.locator("input[type=url]").first().inputValue() shouldStartWith "https://notes.test"
+            instructions.locator("input[aria-label='Hədəf sayt']").inputValue() shouldStartWith "https://notes.test"
             Files.readString(dir.resolve("targets/notes.yaml")) shouldContain "source: manual"
             page.shoot("e2e-0-saytlar")
             errors.shouldBeEmpty()
@@ -334,7 +334,7 @@ class PanelEndToEndTest {
 
     private fun open(
         hash: String = "#/telimat",
-        ready: String = "() => document.querySelector('input[type=url]') !== null",
+        ready: String = "() => document.querySelector(\"input[aria-label='Hədəf sayt']\") !== null",
     ): Page {
         playwright = Playwright.create()
         val browser = playwright.chromium().launch()
