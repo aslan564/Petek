@@ -49,6 +49,11 @@ functions), `orchestration` (teardown), `explorer` (`TestPatterns`, `ScenarioCom
   API) signs testers up, keeps a visitor anonymous, reports oracle checks as "N/A (no oracle)", passes `site_health`
   and `direct_url` on a correct site and finds the deliberate `FOREIGN_NOTE_VISIBLE` hole. Explorer drafts for such a
   site are covered by `GenerateScenarioUseCaseTest`; the company portal example and the panel e2e are unchanged.
+- The universal success criterion (PLAN.md "Uğur meyarları", Faza 25.4) is checked in code: on a site unlike the
+  contract (a recipe site with a test API but no companies) every main step of the draft belongs to an idea of an
+  action the explorer saw or to the checks of pages it visited, every tester signs up through the form it found, and no
+  company, invitation, code, announcement or ticket is assumed (`GenerateScenarioUseCaseTest`). The announcement,
+  ticket and test-company criteria of the MVP are the contract site's e2e criteria.
 - `ArchitectureTest` fails when a declaration of `az.petek.core` is named after an HR concept.
 - The examples (`docs/examples/company-portal.yaml`, `company-portal-anonymous.yaml`, `target-profile.yaml`) are loaded
   by `CompanyPortalCampaignFileTest`, `LoadCampaignUseCaseTest`, `YamlTargetSpecSourceTest` and `PanelScenariosTest`,

@@ -426,7 +426,7 @@ Faza 0–7 (MVP, kəşfiyyatçı, triaj, veb panel) icra olunub. [docs/PLAN.md](
 
 | Sənəd | Nə var |
 |---|---|
-| [docs/PLAN.md](docs/PLAN.md) | Plan: məqsəd, əhatə, dizayn qərarları, ssenari formatı, Faza 0–14, uğur meyarları |
+| [docs/PLAN.md](docs/PLAN.md) | Plan: məqsəd, əhatə, dizayn qərarları, ssenari formatı, fazalar, uğur meyarları (universal və müqavilə saytının e2e meyarları) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modullar, asılılıq qaydaları, run həyat dövrü, agent dövrəsi, hədəf axınları, kəşfiyyatçı, panel, təhlükəsizlik |
 | [docs/requirements](docs/requirements) | Hər tələb üçün bir arxitektura sənədi: modullara, testlərə və ADR-lərə izlənə bilirlik |
 | [docs/adr](docs/adr) | Arxitektura qərar qeydləri 0001–0011 |

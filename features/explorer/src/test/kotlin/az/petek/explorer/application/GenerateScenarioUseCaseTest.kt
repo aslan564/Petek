@@ -32,6 +32,7 @@ import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.ExplorationRecord
 import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
+import az.petek.explorer.domain.GateMaps
 import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.TestPattern
 import az.petek.explorer.support.Models
@@ -45,6 +46,7 @@ import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -433,6 +435,104 @@ class GenerateScenarioUseCaseTest {
             "/test/notes/{last_id}"
         // The test API did not answer with the draft the trial made: no oracle check is written for it.
         campaign.step("draft-submit-happy").assertions.none { it is AssertionSpec.Oracle } shouldBe true
+    }
+
+    /**
+     * The universal success criterion (Faza 25.4): on a site unlike the contract the draft checks only what the explorer
+     * saw there. Every main step belongs to an idea of an observed action or to the checks of observed pages, every
+     * tester passes a way in the explorer found, and nothing of the contract (companies, invitations, codes, its
+     * announcements and tickets) is assumed, not even with a test API there.
+     */
+    @Test
+    fun `on a site unlike the contract every step of the draft traces back to what the explorer saw`() {
+        val member = setOf("member")
+        val recipes =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page(
+                        "/register",
+                        Models.form(
+                            ActionKind.REGISTER,
+                            "register-submit",
+                            "/register",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/recipes",
+                        Models.form(ActionKind.CREATE, "recipe-submit", "/recipes", Models.field("title", required = true)),
+                        reachableBy = member,
+                    ),
+                ),
+                listOf(
+                    Models.action(
+                        "register-submit",
+                        ActionKind.REGISTER,
+                        "/register",
+                        allowed = setOf("anonymous"),
+                        httpPath = "/register",
+                    ),
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action(
+                        "recipe-submit",
+                        ActionKind.CREATE,
+                        "/recipes",
+                        name = "Resept əlavə et",
+                        allowed = member,
+                        httpPath = "/recipes",
+                        trial = Models.trial(emptySet(), role = "member", testApi = true),
+                    ),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(recipes, owner = null, testApi = true)
+
+        val composed = useCase().compose(recipes, request(maxIdeas = 50, testApi = true).copy(tenant = tenant, testers = 5))
+
+        val campaign = composed.campaign
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+        campaign.settings.tenant shouldBe Tenant.NONE
+        // Everyone signs up through the form the explorer found; nobody is invited or given a code.
+        campaign.settings.registration.self shouldBe campaign.settings.testers
+        campaign.settings.registration.invite shouldBe 0
+        campaign.settings.registration.companyCode shouldBe 0
+        composed.covered.map { it.idea.actionId } shouldContain "recipe-submit"
+        val functions = campaign.allSteps.mapNotNull { (it.action as? StepAction.Run)?.function }
+        functions shouldNotContain "register_owner"
+        functions shouldNotContain "seed_company"
+        // Each main step is an idea's, and each idea of an action is one of an action the explorer saw.
+        val traced = composed.covered.flatMap { it.stepIds }.toSet()
+        campaign.steps.forEach { step -> traced shouldContain step.id }
+        val seen = recipes.actions.map { it.id }.toSet()
+        composed.covered.filterNot { it.idea.pattern.siteWide }.forEach { seen shouldContain it.idea.actionId }
+        // Setup is the visitor checks and the ways in the explorer found; the checks open only pages it visited.
+        campaign.setup.map { (it.action as StepAction.Run).function }.toSet().forEach {
+            setOf("site_health", "page_checks", "register_and_login", "login") shouldContain it
+        }
+        val pages = recipes.pages.map { it.urlPattern }.toSet()
+        campaign.allSteps
+            .mapNotNull { (it.action as? StepAction.Run)?.args?.get("pages") }
+            .flatMap { it.split(',') }
+            .forEach { pages shouldContain it }
+        // Only what the trial saw the test API serve is checked there.
+        campaign.allSteps
+            .flatMap { it.assertions }
+            .filterIsInstance<AssertionSpec.Oracle>()
+            .forEach { it.path shouldStartWith "/test/recipes/" }
+        composed.yaml shouldNotContain "announcement"
+        composed.yaml shouldNotContain "ticket"
     }
 
     @Test

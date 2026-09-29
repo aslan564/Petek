@@ -428,7 +428,7 @@ Phases 0–7 (MVP, explorer, triage, web panel) are implemented. The "Pətək 2"
 
 | Document | What it holds |
 |---|---|
-| [docs/PLAN.md](docs/PLAN.md) | The plan: goals, scope, design decisions, scenario format, phases 0–14, success criteria (Azerbaijani) |
+| [docs/PLAN.md](docs/PLAN.md) | The plan: goals, scope, design decisions, scenario format, phases, success criteria (universal, and the contract site's e2e criteria; Azerbaijani) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, dependency rules, run lifecycle, agent loop, target flows, explorer, panel, security notes |
 | [docs/requirements](docs/requirements) | One architecture document per requirement with traceability to modules, tests and ADRs |
 | [docs/adr](docs/adr) | Architecture decision records 0001–0011 |

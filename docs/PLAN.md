@@ -1394,10 +1394,16 @@ mərhələsindən sonra.
     "Test et"/`petek test` kimi göstərir; öz kampaniya faylı sahibin öz təlimatı kimi qalır. Testlər: axın (app,
     saxta sayt), REST, MCP, CLI və real Chromium ilə paneldə düymədən hesabata qədər e2e.
 
-- [ ] **25.4 Uğur meyarları universal olur.** "MVP-nin uğur meyarları" (elan 29 receiver-ə, ticket axını, test
+- [x] **25.4 Uğur meyarları universal olur.** "MVP-nin uğur meyarları" (elan 29 receiver-ə, ticket axını, test
   şirkəti) müqavilə saytının e2e meyarlarıdır və belə adlandırılır. Universal meyar: tanımadığı saytda draft yalnız
   mövcud əməliyyatları yoxlayır; heç bir addım saytda olmayan şeyi gözləmir; hər tester öz qapısından keçir və ya
   səbəbi hesabatdadır.
+  - *Vəziyyət:* "Uğur meyarları" bölməsi iki hissədir: universal meyarlar (istənilən sayt) və müqavilə saytının e2e
+    meyarları (MVP, fake target). Universal meyar kodla yoxlanır: müqavilədən fərqli saytda (resept saytı, test API
+    var, şirkət yoxdur) qaralamanın hər əsas addımı kəşfiyyatçının gördüyü əməliyyatın ideyasına və ya gəzdiyi
+    səhifələrin yoxlamasına bağlıdır, hamı kəşfiyyatçının tapdığı qeydiyyat formu ilə girir, dəvət, kod, şirkət,
+    elan və ticket yoxdur, oracle yalnız sınaqda sübut olunan resursdadır (`GenerateScenarioUseCaseTest`). Açıq qalan
+    tək bənd sahibin demo hədəfləridir (Faza 22).
 
 Hazır sayılır: test API-si olan, amma şirkət modeli olmayan saytda kəşfiyyatdan run-a qədər heç bir dəvət, şirkət kodu
 və ya müqavilə resursu fərz edilmir; draftdakı hər addım kəşfiyyatçının gördüyü bir əməliyyata və ya qapıya bağlıdır.
@@ -1476,9 +1482,37 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
 - Brauzer dialoqları (`alert`/`confirm`/`prompt`/`beforeunload`) qəbul edilir və sübut kimi yazılır (növ, mətn, vaxt); agent onları növbəti addımda görür.
 - Müştərisi olmayan, buraxılışdan əvvəlki sayt production host kimi test oluna bilər: TargetPolicy qalır, sahib `PETEK_ALLOW_PRODUCTION=true`-nu açıq verir (sayt canlıya çıxanda `false` edilməlidir).
 
-## MVP-nin uğur meyarları
+## Uğur meyarları
 
-Aşağıdakıların hamısı işarələnəndə MVP bitmiş sayılır və Faza 6-ya keçilir.
+### Universal meyarlar (istənilən sayt, Faza 25.4)
+
+Pətək heç bir sayt üçün yazılmayıb, ona görə uğur saytın özündən yox, alətin necə davrandığından ölçülür. Tanımadığı
+saytda:
+
+- [x] "Test et" (və ya `petek test`, MCP `test_site`) bir addımla, insan müdaxiləsi olmadan run-ın sonuna çatır, ya da
+  harada və niyə dayandığını deyir (Faza 25.3).
+- [x] Qaralama yalnız mövcud əməliyyatları yoxlayır: hər əsas addım kəşfiyyatçının gördüyü bir əməliyyatın ideyasına və
+  ya onun gəzdiyi səhifələrin yoxlamasına bağlıdır; setup yalnız ziyarətçi yoxlamaları və kəşfiyyatçının tapdığı
+  giriş yollarıdır.
+- [x] Heç bir addım saytda olmayan şeyi gözləmir: şirkət, dəvət, şirkət kodu, müqavilənin elanı və ticket-i fərz
+  edilmir; `wait_for` yalnız eyni kampaniyada emit olunan hadisəni gözləyir (validator), real-time yalnız sınaq
+  toxunuşunun canlı gördüyü rollara, oracle yalnız test API-nin sınaqda verdiyi resurslara yazılır (Faza 25.1–25.2).
+- [x] Hər tester öz qapısından keçir (qeydiyyat, giriş, dəvət, kod və ya qonaq) və ya səbəbi hesabatdadır
+  ("Uğursuz agentlər": hansı addımda, hansı səbəblə).
+- [x] Hər keçdi/keçmədi hökmü sübuta bağlıdır; qərar verilə bilməyən yoxlama "keçdi" sayılmır (`INCONCLUSIVE`, Faza
+  24.12).
+- [ ] Sahibin öz demo hədəflərində (Faza 22: açıq mənbəli xəbər və mağaza platformaları) "Test et" sona çatır və
+  hesabat yalnız həmin saytda olanları yoxlayır.
+
+*Yoxlama:* `GenerateScenarioUseCaseTest` ("on a site unlike the contract every step of the draft traces back to what
+the explorer saw": müqavilədən fərqli, test API-si olan, amma şirkəti olmayan resept saytında), `PanelTestFlowTest`,
+`TestCommandTest` və paneldə real Chromium ilə "Test et" e2e testi.
+
+### Müqavilə saytının e2e meyarları (MVP)
+
+Bu meyarlar müqavilə saytınındır (`testing/fake-target`, docs/TARGET_CONTRACT.md): elan, ticket axını və test şirkəti
+onun modelidir, istənilən saytın deyil. Pətəkin öz e2e testləri bunları yoxlayır; başqa saytın uğuru yuxarıdakı
+universal meyarlarla ölçülür. Aşağıdakıların hamısı işarələnəndə MVP bitmiş sayılır və Faza 6-ya keçilir.
 
 - [ ] Test rejimli real saytda `petek run scenarios/<sayt>.yaml` tək əmrlə, insan müdaxiləsi olmadan sona çatır
 - [ ] 30 agentin ən azı 28-i qeydiyyat + OTP + login mərhələsini keçir; qalanların səbəbi hesabatdadır
