@@ -18,6 +18,8 @@ import az.petek.app.testing.CliHarness.Companion.done
 import az.petek.app.testing.CliHarness.Companion.tinyCampaign
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.app.testing.scriptedLlm
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.domain.HostResources
 import az.petek.core.ids.AgentId
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.domain.RunResult
@@ -290,6 +292,30 @@ class RunCommandTest {
             Files.isRegularFile(cli.evidenceDir.resolve("${run.runId}/report/${RunCommand.HTML_REPORT}")) shouldBe true
             cli.browser.sessions.all { it.closed } shouldBe true
             cli.browser.stopCount shouldBe 1
+        }
+
+    @Test
+    fun `more testers live at once than this machine is advised to carry is said before the run, which goes on`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir).apply { hostResources = HostResourceProbe { HostResources(2L shl 30, 256L shl 20, 1) } }
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            val result = cli.run("run", "tiny.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "4 testers live at once is more than this machine is advised to carry"
+        }
+
+    @Test
+    fun `a swarm with codes typed by hand is warned about, since that suits the explorer's few sessions`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, mapOf("PETEK_MAIL_SOURCE" to "manual"))
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            val result = cli.run("run", "tiny.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "PETEK_MAIL_SOURCE=manual: you type every tester's e-mail code in the panel, 4 of them"
         }
 
     @Test

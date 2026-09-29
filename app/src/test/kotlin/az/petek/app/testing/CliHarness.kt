@@ -19,6 +19,8 @@ import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
 import az.petek.browser.domain.BrowserEngine
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.domain.HostResources
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
@@ -58,6 +60,8 @@ class CliHarness(
     var ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
     /** The explorer's browser of the panel-backed commands (`petek test`); null: [browser] plays it too. */
     var explorerBrowser: BrowserEngine? = null,
+    /** A roomy machine unless a test says otherwise: capacity advice never warns by accident. */
+    var hostResources: HostResourceProbe = HostResourceProbe { HostResources(64L shl 30, 32L shl 30, 32) },
 ) {
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
@@ -116,6 +120,7 @@ class CliHarness(
                 standardInput = standardInput,
                 standardOutput = standardOutput,
                 home = home,
+                hostResources = hostResources,
             )
 
     suspend fun run(vararg args: String): CliktCommandTestResult = PetekCommand(runtime).test(args.toList(), width = WIDE)

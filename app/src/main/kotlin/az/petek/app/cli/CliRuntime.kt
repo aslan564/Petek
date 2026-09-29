@@ -19,6 +19,8 @@ import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
 import az.petek.app.logging.LoggingSetup
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.infrastructure.SystemHostResourceProbe
 import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -55,6 +57,8 @@ class CliRuntime(
     val standardInput: InputStream = System.`in`,
     val standardOutput: OutputStream = FileOutputStream(FileDescriptor.out),
     val home: Path = defaultHome(environment()),
+    /** This machine's memory and cores, for capacity advice (`petek capacity`, the warning of `petek run`). */
+    val hostResources: HostResourceProbe = SystemHostResourceProbe(),
 ) {
     /**
      * The owner's own workspace (`<home>/workspace`): its `.env`, evidence, scenarios and target profiles, used from

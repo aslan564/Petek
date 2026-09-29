@@ -14,6 +14,7 @@ package az.petek.app.panel.runs
 import az.petek.app.campaign.CampaignScaler
 import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.campaign.ScalingException
+import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.Contacts
 import az.petek.app.panel.PanelTargets
@@ -539,6 +540,12 @@ internal class PanelRunsAdapter(
                         RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
                     ).identities
             DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { board.message("Diqqət: $it") }
+            if (container.config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
+                board.message(
+                    "Diqqət: PETEK_MAIL_SOURCE=manual: ${campaign.settings.testers} testerin hər birinin e-poçt kodunu siz " +
+                        "yazırsınız; sürü üçün test poçt qutusu (mailpit, test-api, imap) uyğundur.",
+                )
+            }
             val uncovered = CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver())
             if (uncovered.isNotEmpty()) {
                 board.message(
@@ -738,6 +745,9 @@ internal class PanelRunsAdapter(
     private fun withoutContacts(text: String): String = Contacts.masked(text)
 
     private companion object {
+        /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
+        const val MANUAL_MAIL_TESTERS = 3
+
         /** The newest runs the history shows; each summary reads its run's evidence, so the list stays bounded. */
         const val HISTORY_LIMIT = 100
 

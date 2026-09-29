@@ -13,18 +13,21 @@ package az.petek.app.cli
 
 import az.petek.app.campaign.CampaignScaler
 import az.petek.app.campaign.IdentitySpecs
+import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.domain.VisitorRun
+import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.core.ids.RunTags
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import az.petek.orchestration.domain.Waves
 import az.petek.ownership.domain.OwnershipRequiredException
 import az.petek.ownership.domain.OwnershipStatus
 import com.github.ajalt.clikt.core.Context
@@ -109,6 +112,15 @@ class RunCommand : PetekSubcommand("run") {
                 echo("Warning: --swap-accounts is not done in a campaign with campaign.wave_size; the run says so too.", err = true)
             }
             warnAboutWaves(container, campaign)
+            warnAboutCapacity(container, campaign)
+            // Every tester's code typed by hand is for the explorer's few sessions, not for a swarm (R07).
+            if (config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
+                echo(
+                    "Warning: PETEK_MAIL_SOURCE=manual: you type every tester's e-mail code in the panel, " +
+                        "${campaign.settings.testers} of them; a test inbox (mailpit, test-api or imap) suits a swarm.",
+                    err = true,
+                )
+            }
             // Valid, but likely not what was meant (Faza 24.15); never blocks the run.
             DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { echo("Warning: $it", err = true) }
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
@@ -171,6 +183,29 @@ class RunCommand : PetekSubcommand("run") {
                 IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
                 RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
             ).identities
+
+    /**
+     * More testers live at once than this machine is advised to carry (`petek capacity`), said before the run starts:
+     * advice only, never a limit (the owner's decision, 2026-09-25).
+     */
+    private suspend fun warnAboutCapacity(
+        container: AppContainer,
+        campaign: Campaign,
+    ) {
+        val live =
+            Waves.plan(campaign, previewIdentities(container, campaign), DefaultActorResolver())?.maxLive ?: campaign.settings.testers
+        val advice =
+            RecommendCapacityUseCase(
+                session.runtime.hostResources,
+            ).execute(contextsPerBrowser = container.browserConfig().contextsPerBrowser)
+        if (live > advice.maxTesters) {
+            echo(
+                "Warning: $live testers live at once is more than this machine is advised to carry (${advice.maxTesters}, " +
+                    "limited by ${advice.limitingFactor.name.lowercase()}); the run goes on, but may slow down (petek capacity).",
+                err = true,
+            )
+        }
+    }
 
     /**
      * What `campaign.wave_size` does to the steps, said before the run starts: a race left with one racer in a wave fails
@@ -274,6 +309,9 @@ class RunCommand : PetekSubcommand("run") {
         private const val GITHUB_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
         private const val LOG_FILE = "petek.log"
         private const val MILLIS_PER_SECOND = 1000.0
+
+        /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
+        private const val MANUAL_MAIL_TESTERS = 3
 
         /** The worst outcome decides: any ABORTED run is 2, any FAILED run is 1, else 0. */
         fun exitCodeOf(summaries: List<RunSummary>): Int =
