@@ -147,11 +147,26 @@ class ProjectInitializerTest {
         val result = initializer.initialize(ProjectInitializer.Request(project))
 
         result.ais shouldContainExactlyInAnyOrder setOf(HostAi.CURSOR, HostAi.GEMINI)
-        read(".cursor/rules/petek.mdc") shouldStartWith "${ProjectInitializer.BEGIN}\n---\ndescription: Pətək"
+        // Cursor reads a rule's front matter only at the top of the file, above Pətək's markers.
+        read(".cursor/rules/petek.mdc") shouldStartWith "---\ndescription: Pətək"
+        read(".cursor/rules/petek.mdc") shouldContain "alwaysApply: false\n---\n${ProjectInitializer.BEGIN}\n"
         read("GEMINI.md") shouldStartWith "# Gemini notes\n\n${ProjectInitializer.BEGIN}"
         Files.exists(project.resolve(".cursor/mcp.json")) shouldBe true
         Files.exists(project.resolve(".gemini/settings.json")) shouldBe true
         Files.exists(project.resolve("AGENTS.md")) shouldBe false
+    }
+
+    @Test
+    fun `a Cursor rule written with its front matter inside the markers gets it back on top`() {
+        val front = "---\ndescription: Pətək, the multi-agent AI test platform running next to this project\nalwaysApply: false\n---"
+        write(".cursor/rules/petek.mdc", "${ProjectInitializer.BEGIN}\n$front\nold text\n${ProjectInitializer.END}\n")
+
+        initializer.initialize(ProjectInitializer.Request(project, ais = setOf(HostAi.CURSOR)))
+
+        val rule = read(".cursor/rules/petek.mdc")
+        rule shouldStartWith "$front\n${ProjectInitializer.BEGIN}\n"
+        rule.split("description: Pətək").size shouldBe 2
+        rule shouldNotContain "old text"
     }
 
     @Test

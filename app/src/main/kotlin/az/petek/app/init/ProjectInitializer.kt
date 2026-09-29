@@ -126,21 +126,24 @@ class ProjectInitializer(
     ): Change {
         val relative = ai.instructionFile
         val file = project.resolve(relative)
-        val block = "$BEGIN\n${templates.fragment(ai)}\n$END\n"
+        val block = "$BEGIN\n${templates.fragment()}\n$END\n"
+        val front = templates.frontMatter(ai)
         if (!Files.exists(file)) {
             Files.createDirectories(file.parent)
-            Files.writeString(file, block)
+            Files.writeString(file, front?.let { "$it\n$block" } ?: block)
             return Change(relative, Outcome.CREATED)
         }
         val current = Files.readString(file)
         val begin = current.indexOf(BEGIN)
         val end = current.indexOf(END, startIndex = maxOf(begin, 0))
-        val next =
+        val replaced =
             if (begin >= 0 && end >= 0) {
                 current.substring(0, begin) + block + current.substring(end + END.length).trimStart('\n')
             } else {
                 current.trimEnd('\n') + "\n\n" + block
             }
+        // A file written before the front matter moved above the markers had it inside them: the block replaced it.
+        val next = if (front == null || replaced.startsWith(front)) replaced else "$front\n$replaced"
         if (next == current) return Change(relative, Outcome.UNCHANGED)
         Files.writeString(file, next)
         return Change(relative, Outcome.UPDATED, if (begin >= 0) "fragment refreshed" else "fragment appended")
