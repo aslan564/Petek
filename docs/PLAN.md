@@ -851,7 +851,11 @@ ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
   qısa test konteksti alır; teardown artıq run-ın qeyd etdiyi resurslar üzrədir (şirkətsiz run heç nə qeyd etmir).
 - [x] Oracle adapteri konfiqurasiya ilə: `/test/...` yolları və resurslar profildə (`ScenarioSettings.oracleResources`
   başlanğıcdır); `none` rejimi birinci dərəcəli.
-  **Vəziyyət:** `PETEK_ORACLE=none`, profildə `test_api: {mode: none}` və `test_api.paths` (`OraclePaths`); nəticə "N/A (no oracle)".
+  **Vəziyyət:** `PETEK_ORACLE=none`, profildə `test_api: {mode: none}` və `test_api.paths` (`OraclePaths`: OTP və
+  şirkət yolları); nəticə "N/A (no oracle)". Profilin yollarını oracle-dan başqa `doctor`, `petek probe` və
+  kəşfiyyatçının test API yoxlaması da işlədir; o yolda JSON yox, səhifə cavab verirsə "test API yoxdur" deyilir (plan
+  yoxlaması, 2026-09-29). Resurs yoxlamaları (`/test/<resurs>/...`) kontraktın adlandırmasındadır və yalnız sınaq
+  toxunuşunun sübut etdiyi resurslara yazılır (Faza 25.2); resurs yolları profildə yoxdur.
 - [x] Kor test naxışları (`TestPatterns` genişlənir; site model boş olsa da işləyir): forma validasiyası (boş/uzun/yanlış
   giriş), ikiqat submit (idempotentlik), birbaşa URL ilə icazə (rol A-nın səhifəsi rol B ilə), yarış (iki agent eyni
   obyekt), sessiya bitməsi, geri düyməsi, qırıq linklər, konsol/şəbəkə xətaları, yavaş endpoint-lər, mobil viewport.

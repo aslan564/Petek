@@ -216,13 +216,16 @@ class AppContainer(
 
     // --- target, mail, LLM, browser -----------------------------------------------------------------------------
 
+    /** Where the target's test API answers the oracle's own questions: the contract's, or the profile's `test_api.paths`. */
+    val oraclePaths: OraclePaths by lazy { OraclePaths.of(config.oraclePaths) }
+
     /** The `/test/...` API client; on `PETEK_TEST_API_URL` when the API is not on the target's origin. */
     val oracle: TargetOracle by lazy {
         resources.track(
             HttpTargetOracle(
                 config.testApiBase,
                 config.testToken.takeIf { config.oracle },
-                paths = OraclePaths.of(config.oraclePaths),
+                paths = oraclePaths,
             ),
         )
     }

@@ -17,6 +17,7 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.RealtimeTransport
 import az.petek.browser.domain.SessionOptions
 import az.petek.campaign.domain.TargetProfile
+import az.petek.oracle.domain.OraclePaths
 import az.petek.oracle.domain.TargetOracle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -121,9 +122,14 @@ class TargetProbe(
     private val tokenNotSentReason: String,
     /** How long the home page is watched for live-update traffic (polling needs a few seconds to show). */
     private val observationWindow: Duration,
+    /** The test API's paths: the contract's, or the configured site profile's `test_api.paths`. */
+    private val paths: OraclePaths = OraclePaths.CONTRACT,
 ) {
+    /** The site's OTP path for a number nobody has: asking it writes nothing. */
+    private val probePath: String get() = paths.otp.replace("{phone}", Doctor.PROBE_PHONE)
+
     suspend fun probe(target: URI): ProbeReport {
-        val testApi = TestApiProbe(http.get(resolve(target, Doctor.PROBE_PATH)), tokenCheck())
+        val testApi = TestApiProbe(http.get(resolve(target, probePath)), tokenCheck())
         val factory = browser.start(browserConfig)
         try {
             val session = factory.open(SessionOptions(label = "probe", baseUrl = target))
@@ -176,7 +182,7 @@ class TargetProbe(
             return TestApiProbe.TokenCheck.NotSent("PETEK_TEST_TOKEN is empty", acceptable = false)
         }
         return try {
-            TestApiProbe.TokenCheck.Answered(oracle.get(Doctor.PROBE_PATH).status)
+            TestApiProbe.TokenCheck.Answered(oracle.get(probePath).status)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

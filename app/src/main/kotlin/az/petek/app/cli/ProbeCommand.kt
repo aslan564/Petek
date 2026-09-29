@@ -18,6 +18,7 @@ import az.petek.app.diagnostics.ProbeReportWriter
 import az.petek.app.diagnostics.TargetCapabilities
 import az.petek.app.diagnostics.TargetProbe
 import az.petek.app.diagnostics.TestApiProbe
+import az.petek.oracle.domain.OraclePaths
 import com.github.ajalt.clikt.core.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -52,6 +53,7 @@ class ProbeCommand : PetekSubcommand("probe") {
                         oracle = if (isConfiguredTarget) container.oracle else null,
                         tokenNotSentReason = "--url is not PETEK_TARGET, and the test token is only ever sent to PETEK_TARGET",
                         observationWindow = session.runtime.observationWindow,
+                        paths = if (isConfiguredTarget) container.oraclePaths else OraclePaths.CONTRACT,
                     )
                 val report = probe.probe(target)
                 val directory = config.evidenceDir.resolve(PROBE_DIRECTORY)

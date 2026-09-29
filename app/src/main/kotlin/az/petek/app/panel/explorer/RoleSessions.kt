@@ -128,7 +128,7 @@ internal fun interface SetupRuns {
 internal class TestCompanyRoleSessions(
     private val container: AppContainer,
     private val runs: SetupRuns,
-    private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain),
+    private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain, container.oraclePaths),
     private val teardown: TeardownUseCase = container.teardown,
     private val profiles: SetupProfileSource = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator),
 ) : RoleSessionSource {

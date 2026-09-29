@@ -12,6 +12,7 @@
 package az.petek.app.panel.explorer
 
 import az.petek.oracle.domain.OracleException
+import az.petek.oracle.domain.OraclePaths
 import az.petek.oracle.domain.OracleResponse
 import az.petek.oracle.domain.TargetOracle
 import az.petek.oracle.testing.FakeTargetOracle
@@ -46,5 +47,17 @@ class OracleTestApiProbeTest {
                     override suspend fun get(path: String): OracleResponse = throw OracleException("connection refused")
                 }
             probe(down).refusal().shouldNotBeNull() shouldContain "cavab vermədi"
+        }
+
+    @Test
+    fun `the site profile's own company path is what the probe asks`() =
+        runTest {
+            val paths = OraclePaths.of(mapOf("company_by_owner" to "/qa/company?owner={owner}"))
+            val oracle =
+                FakeTargetOracle().apply {
+                    respond("/qa/company?owner=petek-probe%40test.portal.example", """{"error":"not_found"}""", status = 404)
+                }
+
+            OracleTestApiProbe(oracle, "test.portal.example", paths).refusal().shouldBeNull()
         }
 }
