@@ -171,7 +171,7 @@ internal class ScenarioComposer(
      * The site-wide checks (Faza 13, 19) of [ideas], done by code: `site_health` for what a visitor meets while a page
      * loads (console and failed requests, slow requests, the back button, the phone layout, an expired session, the
      * site's own links) and `page_checks` for what is on it (in-page links, images, alt texts, titles and headings,
-     * links to other sites). Every tester of a group works at once on a job of its own (`share: work`): each page on a
+     * links to other sites, language versions). Every tester of a group works at once on a job of its own (`share: work`): each page on a
      * phone, a tablet and a desktop, dealt out among them, and dealt round again as a second look when there are more
      * testers than jobs; the links of a page are asked about once.
      *
@@ -722,10 +722,12 @@ internal class ScenarioComposer(
                 TestPattern.IMAGE_ALT to "alt",
                 TestPattern.PAGE_META to "meta",
                 TestPattern.OUTBOUND_LINKS to "outbound",
+                TestPattern.LANGUAGE_MIRRORS to "mirrors",
             )
 
         /** The order checks are written in, so a draft reads the same whatever the ideas' order. */
-        val CHECK_ORDER = listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound")
+        val CHECK_ORDER =
+            listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound", "mirrors")
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
     }

@@ -22,9 +22,12 @@ object Drafts {
         listOf("draft", "qaralama", "taslak", "черновик", "chernovik", "entwurf", "brouillon", "borrador", "rascunho", "bozza", "szkic")
 
     /** Whether [action] saves a draft rather than publishing. */
-    fun saves(action: ActionModel): Boolean {
-        val text = "${action.name} ${action.id}".lowercase()
-        return WORDS.any { it in text }
+    fun saves(action: ActionModel): Boolean = named("${action.name} ${action.id}")
+
+    /** Whether [text] (an action's name or id) says "draft". */
+    fun named(text: String): Boolean {
+        val lower = text.lowercase()
+        return WORDS.any { it in lower }
     }
 
     /** Whether the anonymous visitor saw pages of [pattern]: the site shows those objects to everyone. */

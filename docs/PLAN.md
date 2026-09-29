@@ -1076,6 +1076,12 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   buraxılır: sayt onları hamıya göstərir, başqasının açması xəta deyil (əvvəl bu, yalançı `access_not_refused`
   verərdi). Qaralama saxlayan əməliyyat (`Drafts`: adında "draft", "qaralama", "taslak", "черновик" və s.) isə açıq
   səhifələrdə də yoxlanır: qaralama heç kimə açılmamalıdır. `GenerateScenarioUseCaseTest`.
+- [x] Vitrin kartı "dil güzgüləri arasında fərq" (və əlavə kart "dərin link bir dildə 404") kodla: `page_checks`-in
+  `mirrors` yoxlaması, naxış `LANGUAGE_MIRRORS` (sayt boyu, `UI_NETWORK`). Səhifənin `<link rel="alternate" hreflang>`
+  ilə adını çəkdiyi hər dil versiyası cavab verməlidir (404/410/5xx və ya cavabsızlıq tapıntıdır); eyni saytdakı versiya
+  `html lang`-ı ilə adlandırıldığı dildə olduğunu deməli və səhifəni öz versiyaları arasında geri göstərməlidir.
+  Başqa saytdakı versiyadan yalnız cavab verib-vermədiyi soruşulur (tester saytdan çıxmır); hər versiya bir dəfə
+  soruşulur (`/en/about` və `/en/about/` eynidir). `PageChecksRunFunctionTest`, `PlaywrightBrowserSessionTest`.
 - [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
 - [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
   vitrin (ölü link, dil güzgüsü, boş siyahı).

@@ -664,6 +664,9 @@ class PlaywrightBrowserSessionTest {
                 it.alt shouldBe null
             }
             facts.links.map { it.url } shouldContain "https://example.org/x"
+            // Only the language versions: a stylesheet link is none.
+            facts.alternates.map { it.language to it.url.substringAfter("//").substringAfter('/') } shouldBe
+                listOf("az" to "facts", "en" to "en/facts")
             val own = checkNotNull(session.resizeViewport(375, 812))
             session.resizeViewport(own.width, own.height) shouldBe Viewport(375, 812)
         }

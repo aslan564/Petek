@@ -232,6 +232,14 @@ data class PageFacts(
     val images: List<ImageFact>,
     val links: List<LinkFact>,
     val missingAnchors: List<String>,
+    /** The page's language versions (`<link rel="alternate" hreflang>`), as the page names them. */
+    val alternates: List<AlternateFact> = emptyList(),
+)
+
+/** A language version of a page: its `hreflang` (`az`, `en-GB`, `x-default`) and its absolute address. */
+data class AlternateFact(
+    val language: String,
+    val url: String,
 )
 
 /** An image of the page: [alt] null when the attribute is missing; [loaded] false only for one that finished and failed. */

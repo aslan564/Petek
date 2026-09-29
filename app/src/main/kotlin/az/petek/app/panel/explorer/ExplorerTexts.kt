@@ -12,6 +12,7 @@
 package az.petek.app.panel.explorer
 
 import az.petek.explorer.domain.ActionKind
+import az.petek.explorer.domain.Drafts
 import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.FindingKind
 import az.petek.explorer.domain.GateBlocker
@@ -193,7 +194,11 @@ internal object ExplorerTexts {
                 }
 
                 TestPattern.DIRECT_URL -> {
-                    "yaradılan obyekt ünvanı yazan başqa testerə açılmamalıdır."
+                    if (Drafts.named(actionName)) {
+                        "qaralama ünvanını yazan heç kimə açılmamalıdır, dərc olunanlar açıq olsa belə."
+                    } else {
+                        "yaradılan obyekt ünvanı yazan başqa testerə açılmamalıdır."
+                    }
                 }
 
                 TestPattern.BROKEN_LINKS -> {
@@ -238,6 +243,10 @@ internal object ExplorerTexts {
 
                 TestPattern.OUTBOUND_LINKS -> {
                     "başqa saytlara keçidlər cavab verməlidir."
+                }
+
+                TestPattern.LANGUAGE_MIRRORS -> {
+                    "səhifənin hər dil versiyası (hreflang) cavab verməli, öz dilini bildirməli və səhifəyə geri istinad etməlidir."
                 }
             }
         val matched = if (idea.rationale.endsWith(MATCHES_INSTRUCTIONS)) " Təlimatınıza uyğundur." else ""

@@ -186,10 +186,15 @@ internal class TestSite : AutoCloseable {
             </body></html>
             """
 
-        /** What a visitor checks by reading (page_checks): two main headings, a missing anchor, a broken image, one without alt. */
+        /**
+         * What a visitor checks by reading (page_checks): two main headings, a missing anchor, a broken image, one without
+         * alt, and its language versions.
+         */
         const val FACTS_PAGE =
             """
-            <!doctype html><html lang="az"><head><title>Fakt səhifəsi</title><meta name="description" content="Pətək sınağı"></head>
+            <!doctype html><html lang="az"><head><title>Fakt səhifəsi</title><meta name="description" content="Pətək sınağı">
+            <link rel="alternate" hreflang="az" href="/facts"><link rel="alternate" hreflang="en" href="/en/facts">
+            <link rel="stylesheet" href="data:text/css,"></head>
             <body><h1>Başlıq</h1><h1>İkinci başlıq</h1>
             <a href="#var">Var</a> <a href="#yoxdur">Yoxdur</a> <a href="https://example.org/x">Kənar</a>
             <section id="var">Bölmə</section>

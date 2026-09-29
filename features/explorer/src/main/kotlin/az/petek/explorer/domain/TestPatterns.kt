@@ -76,6 +76,9 @@ enum class TestPattern(
 
     /** The links to other sites answer. */
     OUTBOUND_LINKS(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** Every language version of a page (`hreflang`) answers, says its language and names the page back. */
+    LANGUAGE_MIRRORS(EvidenceTier.UI_NETWORK, siteWide = true),
 }
 
 /**
@@ -256,6 +259,7 @@ class TestPatternLibrary {
                 TestPattern.OUTBOUND_LINKS to 25,
                 TestPattern.PAGE_META to 20,
                 TestPattern.IMAGE_ALT to 15,
+                TestPattern.LANGUAGE_MIRRORS to 20,
             )
 
         private val SITE_RATIONALE: Map<TestPattern, String> =
@@ -271,6 +275,7 @@ class TestPatternLibrary {
                 TestPattern.IMAGE_ALT to "every image needs an alt text for screen readers",
                 TestPattern.PAGE_META to "every page needs a title, one main heading, a description and a language",
                 TestPattern.OUTBOUND_LINKS to "links to other sites must answer",
+                TestPattern.LANGUAGE_MIRRORS to "every language version must answer, say its language and name the page back",
             )
 
         private val NO_IDEAS = setOf(ActionKind.NAVIGATE, ActionKind.OTHER)

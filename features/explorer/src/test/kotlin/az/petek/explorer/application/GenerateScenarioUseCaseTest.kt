@@ -137,7 +137,7 @@ class GenerateScenarioUseCaseTest {
             args["devices"] shouldBe "phone,tablet,desktop"
         }
         (campaign.step("site-pages").action as StepAction.Run).args["checks"] shouldBe "console,slow,links,back,mobile"
-        (campaign.step("site-content").action as StepAction.Run).args["checks"] shouldBe "anchors,images,alt,meta,outbound"
+        (campaign.step("site-content").action as StepAction.Run).args["checks"] shouldBe "anchors,images,alt,meta,outbound,mirrors"
         composed.skipped.shouldBeEmpty()
     }
 
