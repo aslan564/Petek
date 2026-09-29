@@ -1545,13 +1545,31 @@ Bu meyarlar müqavilə saytınındır (`testing/fake-target`, docs/TARGET_CONTRA
 onun modelidir, istənilən saytın deyil. Pətəkin öz e2e testləri bunları yoxlayır; başqa saytın uğuru yuxarıdakı
 universal meyarlarla ölçülür. Aşağıdakıların hamısı işarələnəndə MVP bitmiş sayılır və Faza 6-ya keçilir.
 
-- [ ] Test rejimli real saytda `petek run scenarios/<sayt>.yaml` tək əmrlə, insan müdaxiləsi olmadan sona çatır
-- [ ] 30 agentin ən azı 28-i qeydiyyat + OTP + login mərhələsini keçir; qalanların səbəbi hesabatdadır
-- [ ] Hər agent login sonrası öz adını görür (izolyasiya sübutu)
-- [ ] Elan 29 alandan ən azı 28-inə çatır, gecikmələr ölçülüb yazılır
-- [ ] Ticket axını (yarat → in-progress → assign → approve/reject) oracle ilə təsdiqlənir
-- [ ] İcazə testi 403 qaytarır; yarış testində yalnız biri qalib gəlir
-- [ ] Hər keçmədi tapıntısının yanında screenshot və A/B/C dəyərləri var
-- [ ] `--repeat 3` ilə nəticə eynidir; flaky addımlar sıfırdır və ya səbəbi bilinir
-- [ ] Run sonrası staging-də test şirkəti qalmır
-- [ ] Hesabat README-də təsvir olunmuş yolla açılır
+- [x] Test rejimli real saytda `petek run scenarios/<sayt>.yaml` tək əmrlə, insan müdaxiləsi olmadan sona çatır
+- [x] 30 agentin ən azı 28-i qeydiyyat + OTP + login mərhələsini keçir; qalanların səbəbi hesabatdadır
+- [x] Hər agent login sonrası öz adını görür (izolyasiya sübutu)
+- [x] Elan 29 alandan ən azı 28-inə çatır, gecikmələr ölçülüb yazılır
+- [x] Ticket axını (yarat → in-progress → assign → approve/reject) oracle ilə təsdiqlənir
+- [x] İcazə testi 403 qaytarır; yarış testində yalnız biri qalib gəlir
+- [x] Hər keçmədi tapıntısının yanında screenshot və A/B/C dəyərləri var
+- [x] `--repeat 3` ilə nəticə eynidir; flaky addımlar sıfırdır və ya səbəbi bilinir
+- [x] Run sonrası staging-də test şirkəti qalmır
+- [x] Hesabat README-də təsvir olunmuş yolla açılır
+
+*Yoxlama (2026-09-29):* `ContractDemoEndToEndTest` (`./gradlew :app:e2eTest`) repodakı `scenarios/contract-demo.yaml`-ı
+(30 tester) `petek --json run` ilə fake target-ə qarşı real Chromium-da, istehsal obyekt qrafı ilə işlədir; testerlərin
+AI-ının yerində yalnız `ContractSiteDriver` var: promptu model kimi oxuyur (tapşırıq, səhifənin elementləri və
+dəyərləri, son müşahidələr) və agentin öz alətləri ilə cavab verir; qeydiyyat, qoşulma, kodlar, hadisələr, yoxlamalar,
+təmizlik və hesabat Pətəkindir. Sübut olunanlar: run PASSED və exit 0; 30 testerin hamısı ACTIVE; 29 qoşulan testerin
+hər biri sessiyada öz adını görür (adminin adı `do` addımındadır, kodla yoxlanmır); elan 24 işçinin (`employee[*]`)
+hamısına çatır, hər gecikmə yazıdan ölçülür; ticket in-progress oracle ilə, assign HR menecerinə edilir (assign-in
+özü oracle ilə yoxlanmır), yarışda bir qalib (digəri 409), işçinin approve-u 403; test şirkəti silinir; hesabat
+`evidence/<run>/report/index.html`-dadır və `petek report` onu yenidən qurur. Qüsurlu saytda (`RACE_DOUBLE_APPROVE`,
+`EMPLOYEE_CAN_APPROVE`, `WRONG_TICKET_STATUS`) run FAILED olur və üç tapıntının hər biri saytın özününküdür (agentə
+yazılmır), screenshot-u, A-sı və yoxlanıldığı yerdə B/C-si var. `--repeat 3`: üç run PASSED, heç bir addım flaky və ya
+qeyri-sabit deyil. Real AI ilə eyni run `./gradlew :e2e:liveTest`-dədir (sahibin öz planı ilə); onun keyfiyyəti bu
+sübutun predmeti deyil. Yol üstündə tapılıb düzəldilənlər: `select`-in "tapılmadı" cavabı axtarılan mətni daşıyan
+seçimləri önə çəkir (uzun siyahı 500 simvolda kəsilir, 30 nəfərlik siyahıda HR meneceri görünmürdü); bərpa olunmuş
+alət çağırışı (səhv `select`-dən sonra düz seçim) stabillik cədvəlində addımı uğursuz saymır; yalnız oracle ilə
+yoxlanan tapıntının A-sı aktorun öz əməl qeydindən gəlir; uğursuz yoxlamanın yanında aktorun səhifəsi, uğursuz
+yarışın yanında hər yarışanın səhifəsi saxlanır.

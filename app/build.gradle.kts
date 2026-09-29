@@ -281,10 +281,10 @@ tasks.named<JavaExec>("run") {
     standardInput = System.`in`
 }
 
-// The panel end to end in real Chromium against the in-process fake target, with screenshots of every screen in
-// build/panel-screenshots/ (tag "e2e", kept out of the fast build): ./gradlew :app:e2eTest
+// The panel and the contract demo end to end in real Chromium against the in-process fake target, with screenshots of
+// every panel screen in build/panel-screenshots/ (tag "e2e", kept out of the fast build): ./gradlew :app:e2eTest
 tasks.register<Test>("e2eTest") {
-    description = "The web panel end to end against the fake target in real Chromium, with screenshots."
+    description = "The web panel and the contract demo end to end against the fake target in real Chromium."
     group = "verification"
     testClassesDirs =
         sourceSets.test
@@ -294,6 +294,8 @@ tasks.register<Test>("e2eTest") {
     useJUnitPlatform { includeTags("e2e") }
     maxHeapSize = "3g"
     shouldRunAfter(tasks.test)
+    // The contract demo end to end runs the repository's own campaign file.
+    inputs.file(rootDir.resolve("scenarios/contract-demo.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Kover instruments every Test task and its verification (part of `check`) runs them all; without this `build` would

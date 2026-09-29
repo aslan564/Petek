@@ -439,7 +439,7 @@ Faza 0–7 (MVP, kəşfiyyatçı, triaj, veb panel) icra olunub. [docs/PLAN.md](
 ```bash
 ./gradlew build                 # kompilyasiya, unit testlər, ktlint, lisenziya başlıqları, arxitektura testləri, örtük
 ./gradlew spotlessApply         # formatlama və yeni fayllara lisenziya başlığı
-./gradlew e2eTest               # fake target + real Chromium: panel, e2e modulu, 30 sessiyalı izolyasiya sübutu
+./gradlew e2eTest               # fake target + real Chromium: panel, 30 testerli contract demo, e2e modulu, 30 sessiyalı izolyasiya sübutu
 ./gradlew :e2e:liveTest         # real AI provayderi (planınızı və ya açarınızı işlədir)
 ```
 
