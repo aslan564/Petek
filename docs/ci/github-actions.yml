@@ -1,7 +1,9 @@
 # Pətək in a project's own CI (R15): runs an approved campaign against the staging deployment with the published
 # image and keeps the evidence and report as an artifact. Copy into .github/workflows/ of the project under test and
 # fill the secrets: PETEK_TARGET (the staging URL), PETEK_TEST_TOKEN (the /test/... API token), PETEK_IDENTITY_SECRET
-# (any random string, >= 16 characters) and, for the tester agents' AI, ANTHROPIC_API_KEY.
+# (any random string, >= 16 characters) and, for the tester agents' AI, whatever your project uses (R09, .env.example):
+# the variables PETEK_LLM_PROVIDER (e.g. openai-compat, or auto), PETEK_LLM_MODEL and PETEK_LLM_BASE_URL, and the
+# secret PETEK_LLM_API_KEY. Pətək picks no AI vendor for you.
 #
 # Exit codes: 0 every run PASSED, 1 a run FAILED (findings in the report), 2 nothing could start (configuration,
 # refused target, invalid campaign). The JSON on stdout names the runs and their report, JUnit XML and SARIF paths.
@@ -27,21 +29,23 @@ jobs:
       PETEK_TEST_TOKEN: ${{ secrets.PETEK_TEST_TOKEN }}
       PETEK_IDENTITY_SECRET: ${{ secrets.PETEK_IDENTITY_SECRET }}
       PETEK_MAILPIT_URL: http://localhost:8025
-      PETEK_LLM_PROVIDER: anthropic-api
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PETEK_LLM_PROVIDER: ${{ vars.PETEK_LLM_PROVIDER }}
+      PETEK_LLM_MODEL: ${{ vars.PETEK_LLM_MODEL }}
+      PETEK_LLM_BASE_URL: ${{ vars.PETEK_LLM_BASE_URL }}
+      PETEK_LLM_API_KEY: ${{ secrets.PETEK_LLM_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Readiness (target, Chromium, inbox, test API, AI)
         run: >
           docker run --rm --network host -v "$PWD:/work"
-          -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
+          -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e PETEK_LLM_MODEL -e PETEK_LLM_BASE_URL -e PETEK_LLM_API_KEY
           ghcr.io/aslan564/petek:0.3.1 --json doctor
 
       - name: Run the campaign
         run: >
           docker run --rm --network host -v "$PWD:/work"
-          -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e ANTHROPIC_API_KEY
+          -e PETEK_TARGET -e PETEK_TEST_TOKEN -e PETEK_IDENTITY_SECRET -e PETEK_MAILPIT_URL -e PETEK_LLM_PROVIDER -e PETEK_LLM_MODEL -e PETEK_LLM_BASE_URL -e PETEK_LLM_API_KEY
           -e GITHUB_STEP_SUMMARY -v "$GITHUB_STEP_SUMMARY:$GITHUB_STEP_SUMMARY"
           ghcr.io/aslan564/petek:0.3.1 --json run scenarios/my-site.yaml --testers 10 --ci
 
