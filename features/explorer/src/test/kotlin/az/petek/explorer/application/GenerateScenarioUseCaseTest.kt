@@ -25,6 +25,7 @@ import az.petek.core.model.Role
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.explorer.domain.ActionKind
+import az.petek.explorer.domain.CardState
 import az.petek.explorer.domain.ExplorationBudget
 import az.petek.explorer.domain.ExplorationEvent
 import az.petek.explorer.domain.ExplorationId
@@ -33,7 +34,10 @@ import az.petek.explorer.domain.ExplorationRecord
 import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
 import az.petek.explorer.domain.GateMaps
+import az.petek.explorer.domain.SiteKind
 import az.petek.explorer.domain.SiteModel
+import az.petek.explorer.domain.SmallBugCard
+import az.petek.explorer.domain.SmallBugCatalog
 import az.petek.explorer.domain.TestPattern
 import az.petek.explorer.support.Models
 import az.petek.explorer.testing.InMemoryExplorationRepository
@@ -556,6 +560,109 @@ class GenerateScenarioUseCaseTest {
         args["lists"] shouldBe "/>/posts/*>12"
         composed.covered.single { it.idea.pattern == TestPattern.EMPTY_LISTS }.stepIds shouldBe listOf("site-content")
         reload(composed.yaml).steps.single { it.id == "site-content" }.action shouldBe composed.campaign.step("site-content").action
+    }
+
+    @Test
+    fun `a showcase draft names every card of its kind, checked with its steps and tier, not called for, or not yet and why`() {
+        val blog =
+            Models.model(
+                listOf(Models.page("/").copy(lists = mapOf("/posts/{id}" to 12)), Models.page("/about")),
+                emptyList(),
+                roles = listOf("anonymous"),
+            )
+        val tenant = GateMaps.tenantFor(blog, owner = null, testApi = false)
+
+        val composed = useCase().compose(blog, request(maxIdeas = 50).copy(tenant = tenant, testers = 3))
+
+        val cards = composed.cards.associateBy { it.card }
+        cards.keys shouldBe SmallBugCatalog.cardsFor(SiteKind.SHOWCASE).toSet()
+        listOf(SmallBugCard.DEAD_LINKS, SmallBugCard.LANGUAGE_MIRRORS, SmallBugCard.EMPTY_LIST).forEach {
+            cards.getValue(it).state shouldBe CardState.CHECKED
+        }
+        cards.getValue(SmallBugCard.EMPTY_LIST).detail shouldBe "steps site-content"
+        cards.getValue(SmallBugCard.DEAD_LINKS).detail shouldContain "partly: links are checked"
+        cards.getValue(SmallBugCard.DOUBLE_SUBMIT).state shouldBe CardState.NOT_CALLED_FOR
+        cards.getValue(SmallBugCard.CONFIRMATION_LINK).state shouldBe CardState.NOT_CALLED_FOR
+        cards.getValue(SmallBugCard.AUTOFILL).state shouldBe CardState.NOT_YET
+        cards.values.count { it.state == CardState.NOT_YET } shouldBe SmallBugCard.entries.count { it.kinds.isEmpty() && it.notYet != null }
+        composed.yaml shouldContain "small-bug cards (docs/LINK_ONLY_SWARM.md section 6): 3 of ${cards.size} checked here"
+        composed.yaml shouldContain "# card empty_list (ui_network), a list shows nothing: checked, steps site-content"
+        composed.yaml shouldContain "# card autofill, a field the password manager fills does not enable the button: not yet,"
+        composed.yaml shouldNotContain "stock_race"
+    }
+
+    @Test
+    fun `a news draft checks its draft's address and a comment posted twice as the news cards`() {
+        val member = setOf("member")
+        val trial = Models.trial(emptySet(), urlPatternAfter = "/posts/{id}", role = "member")
+        val news =
+            Models.model(
+                listOf(
+                    Models.page("/", title = "Xəbərlər"),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/admin/posts",
+                        Models.form(ActionKind.CREATE, "post-publish", "/admin/posts", Models.field("title", required = true)),
+                        reachableBy = member,
+                    ),
+                    Models.page(
+                        "/posts/{id}",
+                        Models.form(ActionKind.CREATE, "comment-submit", "/posts/{id}/comments", Models.field("body", required = true)),
+                        reachableBy = setOf("anonymous", "member"),
+                        title = "Məqalə və şərhlər",
+                        testIds = listOf("comment-item"),
+                    ),
+                ),
+                listOf(
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action("post-publish", ActionKind.CREATE, "/admin/posts", name = "Dərc et", allowed = member, trial = trial),
+                    Models.action(
+                        "post-draft",
+                        ActionKind.CREATE,
+                        "/admin/posts",
+                        name = "Qaralama kimi saxla",
+                        allowed = member,
+                        trial = trial,
+                    ),
+                    Models.action(
+                        "comment-submit",
+                        ActionKind.CREATE,
+                        "/posts/{id}",
+                        name = "Şərh yaz",
+                        allowed = member,
+                        httpPath = "/posts/{id}/comments",
+                    ),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(news, owner = null, testApi = false)
+
+        val composed = useCase().compose(news, request(maxIdeas = 50).copy(tenant = tenant, testers = 4))
+
+        val cards = composed.cards.associateBy { it.card }
+        cards.keys shouldBe SmallBugCatalog.cardsFor(SiteKind.NEWS).toSet()
+        cards.getValue(SmallBugCard.DRAFT_LEAK).detail shouldBe "steps post-draft-happy, post-draft-direct-url"
+        // The comment form on a post's page makes comments: their list items are counted, not the post's.
+        cards.getValue(SmallBugCard.COMMENT_TWICE).state shouldBe CardState.CHECKED
+        cards.getValue(SmallBugCard.DOUBLE_SUBMIT).state shouldBe CardState.CHECKED
+        composed.campaign.allSteps
+            .single { it.id == "comment-submit-idempotency" }
+            .assertions
+            .single()
+            .shouldBeInstanceOf<AssertionSpec.Count>()
+            .selector shouldStartWith "[data-testid=\"comment-item\"]"
+        // Nothing reached the others live in the trial, and the site sends no confirmation link.
+        cards.getValue(SmallBugCard.PUBLISHED_REACHES_ALL).state shouldBe CardState.NOT_CALLED_FOR
+        cards.getValue(SmallBugCard.CONFIRMATION_LINK).detail shouldBe "the explorer saw no confirmation link (not_seen)"
     }
 
     @Test

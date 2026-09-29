@@ -1091,9 +1091,28 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   (`core` `PathSegments`). Vitrinin üç naxışı beləcə tamdır: ölü link (`BROKEN_LINKS`, `OUTBOUND_LINKS`), dil
   güzgüləri (`LANGUAGE_MIRRORS`), boş siyahı (`EMPTY_LISTS`); "ölü düymə" isə hələ yox: klik etmədən düymənin heç nə
   etmədiyini kod bilə bilmir.
-- [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
+- [x] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
+  **Vəziyyət:** kataloq kodda bir cədvəldir (`SmallBugCard`, `SmallBugCatalog`): hər kart ya onu yoxlayan naxışlara
+  bağlıdır və onların sübut səviyyəsini alır, ya da "hələ kodla yox" deyir və nə lazım olduğunu yazır; heç bir kartı
+  AI qərarlaşdırmır. Hər draftın YAML başlığı saytın növünə düşən bütün kartları sayır və hər biri üçün yazır: bu
+  draftda yoxlanır (hansı addımlarla, hansı səviyyədə, "qismən" varsa nəyi buraxır), bu saytda çağıran bir şey yoxdur
+  (səbəbi ilə, məs. "sayt təsdiq linki göndərmir"), və ya hələ kodla yox. Ümumi 14 kartdan: iki klik
+  (`IDEMPOTENCY`), təsdiq linkinin ilk istifadəsi (setup-dakı hər qeydiyyat, sayt link göndərirsə), bildiriş sayı
+  (qismən: `REALTIME` məzmunun çatmasını ölçür), iki tab (qismən: `SESSION_EXPIRY`) yoxlanır; qalan 10-u hələ yox:
+  geri düyməsi ilə təkrar göndərmə, yenilənəndə itən xəta, mobil klaviatura (brauzer göstərə bilmir), OTP boşluq/defis,
+  girişdən sonra dərin link (giriş axınları giriş səhifəsini özü açır), `https`/`www` sessiyası, silinmiş obyektin
+  boş 200-ü (draftlar heç vaxt silmir), "yadda saxla" sahəni itirir, e-poçtun hərf böyüklüyü ilə ikinci hesab,
+  şifrə menecerinin doldurduğu sahə — hər birinin səbəbi kartın öz sətrindədir. `GenerateScenarioUseCaseTest`.
+  Yol üstündə: `IDEMPOTENCY` siyahı elementini formanın yaratdığı obyektlə axtarır (məqalə səhifəsindəki forma şərh
+  yaradır, "şərh" elementləri sayılır, məqalələr yox).
 - [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
   vitrin (ölü link, dil güzgüsü, boş siyahı).
+  **Vəziyyət:** vitrin tamdır (ölü link, dil güzgüsü, boş siyahı yuxarıda; "ölü düymə" hələ yox). Xəbər: qaralama
+  (`DIRECT_URL` qaralamada) və şərhin ikiləşməsi (`IDEMPOTENCY` şərh formunda) kodla; "dərc olunan hamıya çatsın"
+  yalnız sınaq toxunuşu yeni obyektin başqalarına canlı çatdığını görəndə (`REALTIME`). Mağaza: üç kart hələ yox —
+  stok yarışı məhsulun stokunu (test API və ya sahibin adını verdiyi məhsul), səbətin girişlə birləşməsi səbətin say
+  elementini və addım ortasında girişi, kupon sahibin test kuponunu tələb edir; bunlar sahibin demo mağazasında
+  (Faza 22) qurulub sınanmalıdır, fake target-də mağaza yoxdur.
 
 ### Faza 20 — İki qatlı, üç rəfli hesabat
 

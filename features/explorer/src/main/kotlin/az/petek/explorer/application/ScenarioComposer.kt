@@ -448,7 +448,8 @@ internal class ScenarioComposer(
             return Outcome.Skipped("deleting steps are never generated from an exploration; add them to the draft by hand if wanted")
         }
         val role = actorRole(action) ?: return noRole(action)
-        val resource = UrlPatterns.resource(page.urlPattern).orEmpty()
+        // What the form creates, not what the page shows: a comment form on a post's page makes comments.
+        val resource = Resources.created(action, page)
         val item =
             page.testIds.firstOrNull { testId ->
                 testId.endsWith(ITEM_SUFFIX) &&
