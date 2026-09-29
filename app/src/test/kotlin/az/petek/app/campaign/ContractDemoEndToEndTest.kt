@@ -142,12 +142,14 @@ class ContractDemoEndToEndTest {
             evidence { store, _ ->
                 val findings = store.findings(runId)
                 val screenshots = store.artifacts(runId).filter { it.type == ArtifactType.SCREENSHOT }.mapTo(HashSet()) { it.artifactId }
-                // Each defect is found where it is, as the site's: the unchanged status, the second winner, the employee's approval.
-                findings.map { it.scenarioStep }.toSet() shouldBe setOf("ticket_flow", "race", "forbidden")
+                // Each defect is found where it is, as the site's: the unchanged status (and so no notification to the
+                // ticket's author), the second winner, the employee's approval.
+                findings.map { it.scenarioStep }.toSet() shouldBe setOf("ticket_flow", "ticket_notified", "race", "forbidden")
                 findings.map { it.findingClass }.toSet() shouldBe setOf(FindingClass.BACKEND, FindingClass.INVESTIGATE)
+                val acted = setOf("ticket_flow", "race", "forbidden")
                 findings.forEach { finding ->
-                    // What the sender did (A) always; the receiver (B) or the oracle (C) where the step checks them.
-                    finding.a shouldNotBe null
+                    // What the sender did (A) wherever the tester acted; the receiver (B) or the oracle (C) where checked.
+                    if (finding.scenarioStep in acted) finding.a shouldNotBe null
                     if (finding.agentId != null) (finding.b ?: finding.c) shouldNotBe null
                     finding.artifactIds.any { it in screenshots } shouldBe true
                 }
