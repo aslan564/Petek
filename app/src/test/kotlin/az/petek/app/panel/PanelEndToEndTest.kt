@@ -23,6 +23,7 @@ import az.petek.dashboard.domain.PhaseState
 import az.petek.dashboard.domain.RunPhase
 import az.petek.dashboard.domain.ScenarioSource
 import az.petek.dashboard.domain.ScenarioStatus
+import az.petek.dashboard.domain.TestStage
 import az.petek.faketarget.FakeTargetConfig
 import az.petek.faketarget.FakeTargetServer
 import com.microsoft.playwright.Browser
@@ -38,6 +39,7 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -214,6 +216,60 @@ class PanelEndToEndTest {
         }
 
     @Test
+    fun `the owner tests the demo site with one button, which explores, drafts from what was found, approves and runs it`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm(failingSteps = emptySet())
+            val file = dir.resolve("demo.env").also { Files.writeString(it, environment(target.baseUrl, target.mailpitUrl)) }
+            val config = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the demo configuration names its secret") }).load(file)
+            panel =
+                WebPanel.start(
+                    config = config,
+                    containers = { cfg, overrides -> AppContainer(cfg, overrides.copy(llm = llm.client)) },
+                    workingDirectory = dir,
+                    capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
+                    port = 0,
+                )
+            val page = open()
+
+            // "Test et" with the trial touch and 6 testers; the team is left to what the explorer sees (automatic split).
+            page.locator("label.check input[type=checkbox]").check()
+            page.locator(".tester-row input.num").fill("6")
+            page.button("Test et").click()
+            page.waitForURL("**#/kesfiyyat")
+            // The run's start opens the live board by itself.
+            page.waitForURL("**#/agentler", Page.WaitForURLOptions().setTimeout(TEST_MILLIS))
+            val ended =
+                withTimeout(12.minutes) {
+                    var view = panel.backend.testFlow()
+                    while (view == null || !view.stage.isFinal) {
+                        delay(POLL_MILLIS)
+                        view = panel.backend.testFlow()
+                    }
+                    view
+                }
+            page.shoot("e2e-11-test-et")
+
+            ended.stage shouldBe TestStage.FINISHED
+            ended.result.shouldNotBeNull()
+            val explored = panel.backend.exploration().shouldNotBeNull()
+            explored.status shouldBe ExplorationStatus.FINISHED
+            ended.explorationId shouldBe explored.id
+            val version = panel.backend.scenarios().single { it.id == ended.scenarioId }
+            version.source shouldBe ScenarioSource.EXPLORER
+            version.status shouldBe ScenarioStatus.APPROVED
+            // Drafted only from what the explorer found on the site: its own way into a company (Faza 25.1).
+            panel.backend
+                .scenario(version.id)
+                .shouldNotBeNull()
+                .yaml shouldContain "register_owner"
+            val run = panel.backend.runs().single { it.runId == ended.runId }
+            run.scenarioId shouldBe version.id
+            run.testers shouldBe 6
+            run.reportAvailable shouldBe true
+            errors.shouldBeEmpty()
+        }
+
+    @Test
     fun `a fresh browser opens on the setup screen, which checks the site in the page and sets the instructions' tester count`() =
         runBlocking<Unit> {
             val llm = PanelLlm(failingSteps = emptySet())
@@ -239,7 +295,7 @@ class PanelEndToEndTest {
             page.shoot("e2e-0-qurasdirma")
 
             // Done: the instructions take over, with the tester count chosen here.
-            page.button("Hazırdır: saytı kəşf et").click()
+            page.button("Hazırdır: saytı test et").click()
             page.waitForURL("**#/telimat")
             page.locator("section.screen[aria-label='Təlimat'] .tester-row input.num").inputValue() shouldBe "7"
             errors.shouldBeEmpty()
@@ -301,6 +357,8 @@ class PanelEndToEndTest {
         const val HEIGHT = 1500
         const val WAIT_MILLIS = 60_000.0
         const val TRIAGE_MILLIS = 120_000.0
+        const val TEST_MILLIS = 360_000.0
+        const val POLL_MILLIS = 500L
         const val SETTLE_MILLIS = 600.0
         val SHOTS: Path = Path.of("build", "panel-screenshots")
 

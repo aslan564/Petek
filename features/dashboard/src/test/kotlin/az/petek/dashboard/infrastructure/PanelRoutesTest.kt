@@ -17,6 +17,9 @@ import az.petek.dashboard.application.LiveDashboard
 import az.petek.dashboard.demo.DemoPanelBackend
 import az.petek.dashboard.domain.ManualCodeView
 import az.petek.dashboard.domain.PanelBackend
+import az.petek.dashboard.domain.PanelInstructions
+import az.petek.dashboard.domain.TestFlowView
+import az.petek.dashboard.domain.TestStage
 import az.petek.dashboard.testing.ServerHarness
 import az.petek.orchestration.domain.RunOutcome
 import io.kotest.matchers.collections.shouldContain
@@ -99,6 +102,8 @@ class PanelRoutesTest {
             val h = serve()
             val paths =
                 listOf(
+                    "/api/test",
+                    "/api/test/cancel",
                     "/api/exploration",
                     "/api/exploration/cancel",
                     "/api/exploration/unknowns/u_1",
@@ -164,6 +169,68 @@ class PanelRoutesTest {
 
             given shouldBe listOf("123456")
             json(h.get("/api/manual-codes").bodyAsText()).jsonObject["requests"]!!.jsonArray.size shouldBe 0
+        }
+
+    @Test
+    fun `Test et starts from the instruction form without a team, is shown while it goes and can be stopped`() =
+        runBlocking<Unit> {
+            val root = dir.resolve("evidence")
+            val demo =
+                DemoPanelBackend(
+                    clock,
+                    SequentialIdGenerator(),
+                    az.petek.dashboard.testing
+                        .TempDirArtifactStore(root),
+                    jobs,
+                    { awaitCancellation() },
+                    root,
+                ) { _, _ -> runGate.await() }
+            val asked = mutableListOf<PanelInstructions>()
+            var shown: TestFlowView? = null
+            val backend =
+                object : PanelBackend by demo {
+                    override suspend fun startTest(instructions: PanelInstructions): TestFlowView {
+                        asked += instructions
+                        return TestFlowView(instructions.target, TestStage.EXPLORING, clock.now().wall).also { shown = it }
+                    }
+
+                    override fun testFlow(): TestFlowView? = shown
+
+                    override suspend fun cancelTest(): Boolean {
+                        val running = shown?.takeUnless { it.stage.isFinal } ?: return false
+                        shown = running.copy(stage = TestStage.STOPPED, note = "Test dayandırıldı.")
+                        return true
+                    }
+                }
+            val h = ServerHarness(LiveDashboard(clock), root, backend).also { harness = it }
+            val token = h.token()
+            // The owner left the team to the explorer: no roles, no ways in, no departments (Faza 25).
+            val open =
+                """
+                {"target":"https://staging.portal.example","instructions":"","testers":7,
+                 "budget":{"maxMinutes":10,"maxStepsPerAgent":40,"maxPages":40},"allowWrites":true}
+                """.trimIndent()
+
+            json(h.get("/api/test").bodyAsText()) shouldBe JsonNull
+            h.post("/api/test", open).status.value shouldBe 403
+            h.post("/api/test", open.replace("https://staging", "ftp://staging"), token).status.value shouldBe 400
+            val started = h.post("/api/test", open, token)
+
+            started.status.value shouldBe 202
+            json(started.bodyAsText()).jsonObject["stage"]!!.jsonPrimitive.content shouldBe "EXPLORING"
+            val form = asked.single()
+            form.testers shouldBe 7
+            form.roles shouldBe null
+            form.registration shouldBe null
+            form.departments shouldBe emptyList()
+            form.allowWrites shouldBe true
+            h.post("/api/test/cancel").status.value shouldBe 403
+            json(h.post("/api/test/cancel", token = token).bodyAsText()).jsonObject["cancelled"]!!.jsonPrimitive.boolean shouldBe true
+            val stopped = json(h.get("/api/test").bodyAsText()).jsonObject
+            stopped["stage"]!!.jsonPrimitive.content shouldBe "STOPPED"
+            stopped["final"]!!.jsonPrimitive.boolean shouldBe true
+            stopped["note"]!!.jsonPrimitive.content shouldBe "Test dayandırıldı."
+            json(h.post("/api/test/cancel", token = token).bodyAsText()).jsonObject["cancelled"]!!.jsonPrimitive.boolean shouldBe false
         }
 
     @Test

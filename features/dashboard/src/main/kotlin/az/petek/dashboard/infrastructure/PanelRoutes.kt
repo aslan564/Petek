@@ -45,12 +45,26 @@ private val logger = KotlinLogging.logger {}
  * `{"error": "...", "problems": [{"field", "message"}]}` with 400 (invalid), 404, 409 (not now) or 503 (not wired).
  */
 internal fun Route.panelRoutes(backend: PanelBackend) {
+    testRoutes(backend)
     explorationRoutes(backend)
     scenarioRoutes(backend)
     runRoutes(backend)
     manualCodeRoutes(backend)
     accountRoutes(backend)
     readinessRoutes(backend)
+}
+
+/** "Test et" (Faza 25.3): explore, draft, approve and run in one go, from the instruction form. */
+private fun Route.testRoutes(backend: PanelBackend) {
+    get("/api/test") { call.answer { PanelJson.testFlow(backend.testFlow()) } }
+    post("/api/test") {
+        call.answer(HttpStatusCode.Accepted) {
+            val instructions = PanelJson.instructions(call.jsonBody())
+            instructions.problems().takeIf { it.isNotEmpty() }?.let { throw PanelRequestException(it) }
+            PanelJson.testFlow(backend.startTest(instructions))
+        }
+    }
+    post("/api/test/cancel") { call.answer { cancelled(backend.cancelTest()) } }
 }
 
 /** The setup screen: what is configured, and the checks the page runs one by one (each contacts something). */

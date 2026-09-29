@@ -70,7 +70,10 @@ biləcəyi sübuta çevirir.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Bir run (`petek run scenarios/<kampaniya>.yaml`):
+Test (paneldə **Test et**, `petek test` və ya MCP ilə `test_site`) kəşfiyyatçı ilə başlayır: o, saytın səhifələrini,
+formalarını, əməliyyatlarını və giriş yollarını (qeydiyyat, giriş, dəvət, şirkət kodu və ya qonaq) öyrənir, kampaniya
+isə yalnız onun tapdıqlarından yazılır, ona görə heç bir tester saytda olmayan şeyi gözləmir. Qaralama təsdiqlənir və
+run olunur; özünüzün yazdığı kampaniya da eyni cür işləyir (`petek run scenarios/<kampaniya>.yaml`). Bir run:
 
 1. **Kimliklər.** Orkestrator N deterministik tester yaradır (adlar, test domenində e-poçtlar, sirrin HMAC-ı ilə
    parollar, telefonlar, rollar, departamentlər, qeydiyyat rejimi). Agent öz kimliyini yalnız oxuyur.
@@ -107,8 +110,9 @@ Bir run (`petek run scenarios/<kampaniya>.yaml`):
 `petek` yazın. İlk dəfə brauzer hansı saytın test ediləcəyini soruşur və cavabı sizin şəxsi iş qovluğunuzda
 (`~/.petek/workspace/.env`) saxlayır, sonra istənilən qovluqda sadəcə `petek` paneli həmin sayt üçün açır. Panel
 **Quraşdırma** ekranı ilə açılır: sayt cavab verirmi, sahiblik (kopyalanan təsdiq sətri və "Yoxla" düyməsi), AI (bir
-kliklə sınaq) və tester sayı; sonra "Kəşf et". Layihənin öz `.env`-i (və ya `--env-file`, ya da CI-ın verdiyi kimi
-mühitdəki `PETEK_TARGET`) həmişə əvvəlki kimi birinci gəlir.
+kliklə sınaq) və tester sayı; sonra "Təlimat" ekranında **Test et**: kəşfiyyatçı saytı öyrənir, ssenari yalnız onun
+orada tapdıqlarından yazılır, təsdiqlənir və testerlərlə run olunur; heç bir ssenari faylı yazmırsınız. Layihənin öz
+`.env`-i (və ya `--env-file`, ya da CI-ın verdiyi kimi mühitdəki `PETEK_TARGET`) həmişə əvvəlki kimi birinci gəlir.
 
 **Beş dəqiqəyə, tətbiqinizin yanında.** Node.js ilə: `npx petek init --target https://staging.example.com` (`.env`,
 `.petek/`, skill paketi və AI-nızın MCP qeydi), `npx petek verify` (staging saytın sizin olduğunu təsdiqləyir), sonra
@@ -184,11 +188,15 @@ Komanda sətri ilə, başdan sona:
 
 ```bash
 ./gradlew :app:run --args="capacity"                   # bu maşın neçə tester götürər (tövsiyə, limit deyil)
-./gradlew :app:run --args="plan docs/examples/company-portal.yaml" # yaradılacaq kimliklər, heç nə icra olunmur
-./gradlew :app:run --args="run docs/examples/company-portal.yaml --repeat 3"
+./gradlew :app:run --args="test --testers 6"           # əsas yol: kəşf et, tapılanlardan ssenari yaz, təsdiqlə, run et
 ./gradlew :app:run --args="report latest"
 ./gradlew :app:run --args="teardown --run <run_id>"    # test şirkətini sil (hər run-ın sonunda da edilir)
 ```
+
+`petek test` panelin "Test et"-idir, paneli açmadan (`--target`, `--instructions`, kəşfiyyatçının sınaq toxunuşu üçün
+`--allow-writes`, `--max-pages`, `--max-minutes`; `--json` sonunu bir sənəd kimi çap edir). Hər addımı özünüz
+müəyyən etmək istəyəndə yazdığınız kampaniya `plan scenarios/my-site.yaml` ilə planlanır və
+`run scenarios/my-site.yaml --repeat 3` ilə run olunur.
 
 Çıxış kodları: `0` uğur, `1` tapıntı var, `2` konfiqurasiya xətası və ya dayandırılmış run, `130` kəsildi.
 
@@ -226,9 +234,10 @@ oxunur: kəşfiyyatçı və yalnız oxuyan **ziyarətçi run** — seçdiyiniz q
 kodu ilə çıxır və nəyin onu ziyarətçi run etmədiyini deyir. Pətəki öz pre-production
 və ya staging nüsxənizə yönəldin, yalnız test hesabları işlədin, real istifadəçinin hesabını heç vaxt verməyin (ADR-0012).
 
-Sonra dövrə hər sayt üçün eynidir: `doctor` → `panel` → kəşf et → kəşfiyyatçının suallarına cavab ver → qaralamanı
-ssenarilərə göndər → təsdiqlə → run → hesabat → tapıntıların sübutlarını (`FindingBundle`, Faza 11) öz AI-nizə oxut
-və səbəbi kodunuzda düzəlt.
+Sonra dövrə hər sayt üçün eynidir: `doctor` → `panel` → **Test et** (və ya `petek test`) → hesabat → tapıntıların
+sübutlarını (`FindingBundle`, Faza 11) öz AI-nizə oxut və səbəbi kodunuzda düzəlt. Qaralamanı run-dan əvvəl oxumaq
+istəyənlər eyni hissələri bir-bir keçir: kəşf et → kəşfiyyatçının suallarına cavab ver → qaralamanı ssenarilərə
+göndər → təsdiqlə → run.
 
 ## Konfiqurasiya
 
@@ -320,7 +329,9 @@ ilə birinci dərəcəli rejim edir).
 Arqumentsiz `petek` (və ya `petek panel`) yalnız loopback-ə bağlanan Ktor serveri qaldırır və brauzeri açır. Ekranlar:
 **Quraşdırma** (bir dəfə tamamlanana qədər ilk ekran: sayt cavab verirmi, kopyalama və "Yoxla" düyməli sahiblik
 sübutu, bir kliklə AI sınağı, bu kompüterin tutum tövsiyəsi ilə tester sayı),
-**Təlimat** (hədəf, sadə dildə təlimat, komanda, büdcə, "Kəşf et"), **Kəşfiyyat** (kəşfiyyatçı canlı: fazalar, sayt
+**Təlimat** (hədəf, sadə dildə təlimat, tester sayı, büdcə; **Test et**: kəşf edir, tapılanlardan ssenari yazır,
+təsdiqləyir və run edir, və ya eyni hissələr bir-bir; "Avtomatik bölgü"nü söndürməsəniz, rolları və giriş yollarını
+kəşfiyyatçı tapır), **Kəşfiyyat** (kəşfiyyatçı canlı: fazalar, sayt
 modeli, tapıntılar, cavablanacaq suallar), **Ssenarilər** (versiyalar, YAML, diff, təsdiq/dondurma, triaj),
 **Orkestrator** (addım zolaqları × agentlər matrisi, zaman xətti), **Agentlər** (screenshot-lu canlı lövhə),
 **Hesabatlar** (tarixçə, xərc, stabillik). GET olmayan sorğular hər başlanğıcda yaranan `X-Petek-Token` tələb edir;
@@ -341,16 +352,18 @@ tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu il
 Eyni use-case-lərin ev sahibi AI üçün iki üzü daha var (ADR-0009, R10). `petek mcp` stdio üzərindən Model Context
 Protocol serveridir (əl ilə yazılmış JSON-RPC, əlavə kitabxana yoxdur; `initialize`, `ping`, `tools/list`,
 `tools/call`); `petek init` onu layihənin MCP faylında `petek` serveri kimi qeyd edir. Alətlər: `list_targets`,
-`get_capacity`, `explore_site` (`wait` ilə), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
+`get_capacity`, `test_site` (əsas yol, `wait` ilə: kəşf et, tapılanlardan ssenari yaz, təsdiqlə və run et), `get_test`,
+`cancel_test`, `explore_site` (`wait` ilə), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
 `approve_scenario`, `freeze_scenario`, `run_campaign` (`wait` ilə), `cancel_run`, `list_runs`, `get_run_status`,
 `get_findings` (A/B/C mənbələri və sübut id-ləri), `get_evidence` (screenshot və ya capture-un tam yolu), `get_triage`,
-`run_triage`, `get_stability`, `teardown`. Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: run,
+`run_triage`, `get_stability`, `teardown`. Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: test, run,
 təsdiq, teardown və yazma ilə kəşfiyyat rədd edilir; hədəf siyasəti hər yerdəki kimi tətbiq olunur. Hər nəticə panelin
-JSON-unu mətn və strukturlu məzmun kimi daşıyır; uğursuzluq panelin mesajı ilə `isError` nəticəsidir. `.env` yoxdursa
-server panel kimi lokal fake target-dan istifadə edir.
+JSON-unu mətn və strukturlu məzmun kimi daşıyır; uğursuzluq panelin mesajı ilə `isError` nəticəsidir. Konfiqurasiya
+yoxdursa server yenə əl sıxışmasına cavab verir, hər alət isə ev sahibi AI-yə hansı saytın test ediləcəyini sizdən
+soruşmağı deyir.
 
-`petek --json <əmr>` `doctor`, `init`, `plan`, `run`, `report` və `teardown` üçün stdout-a bir JSON sənəd çap edir
+`petek --json <əmr>` `doctor`, `init`, `test`, `plan`, `run`, `report` və `teardown` üçün stdout-a bir JSON sənəd çap edir
 (loglar stderr-də qalır; uğursuzluq adi çıxış kodu ilə `{"error": ...}`), skriptlər və CI üçün.
 
 ## Arxitektura

@@ -174,9 +174,9 @@
       h('div', 'tester-row', ui.count, ui.range),
       ui.capacity,
       h('div', { class: 'help', text: 'Bu say "Təlimat" ekranında və run-larda istifadə olunur. Limit yoxdur: tövsiyə yalnız kompüterin rahat işlədə biləcəyi saydır.' }));
-    const ready = P.button('Hazırdır: saytı kəşf et', { kind: 'primary', icon: 'arrowRight', on: () => { markDone(); P.go('telimat'); } });
+    const ready = P.button('Hazırdır: saytı test et', { kind: 'primary', icon: 'arrowRight', on: () => { markDone(); P.go('telimat'); } });
     P.append(el, h('div', 'stack',
-      h('div', { class: 'help', text: 'Bir dəfə baxın: sayt cavab verirsə, AI və tester sayı seçilibsə, "Kəşf et" ilə başlayın. Hər şeyi sonra da buradan dəyişə bilərsiniz.' }),
+      h('div', { class: 'help', text: 'Bir dəfə baxın: sayt cavab verirsə, AI və tester sayı seçilibsə, "Təlimat" ekranında "Test et" ilə başlayın. Hər şeyi sonra da buradan dəyişə bilərsiniz.' }),
       ui.site.el, ui.owner.el, ui.ai.el, ui.testers.el,
       h('div', 'row', h('span', 'spacer'), ready)));
     const n = P.testers.get();

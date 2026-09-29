@@ -117,7 +117,21 @@ internal class PanelExplorerAdapter(
 
     override fun exploration(): ExplorationView? = synchronized(lock) { current?.tracker?.view(now()) }
 
-    override suspend fun startExploration(instructions: PanelInstructions): ExplorationView {
+    override suspend fun startExploration(instructions: PanelInstructions): ExplorationView = begin(instructions).view()
+
+    /**
+     * An exploration [begin] started: its [job], which completes once the exploration let go of its sessions and
+     * browser and its draft preview is on the screen, and its own [view] at any time (also after another one started).
+     */
+    class StartedExploration internal constructor(
+        val job: Job,
+        private val read: () -> ExplorationView,
+    ) {
+        fun view(): ExplorationView = read()
+    }
+
+    /** [startExploration] for "Test et", which waits for the exploration it started (Faza 25.3). */
+    suspend fun begin(instructions: PanelInstructions): StartedExploration {
         val problems = instructions.problems()
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val target = PanelTargets.allowed(instructions.target, container.config.targetPolicy, PanelInstructions.TARGET)
@@ -146,8 +160,9 @@ internal class PanelExplorerAdapter(
             val started = Current(target, instructions, budget, tracker)
             current = started
             publish()
-            job = scope.launch { explore(started) }
-            tracker.view(now())
+            val launched = scope.launch { explore(started) }
+            job = launched
+            StartedExploration(launched) { synchronized(lock) { tracker.view(now()) } }
         }
     }
 

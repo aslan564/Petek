@@ -2,7 +2,9 @@
 
 **Status:** Implemented 2026-09-26 (`petek init`; `petek mcp` stdio server with 25 tools over `PanelBackend`,
 read-only unless `--allow-writes`; `--json` on `doctor`, `init`, `plan`, `run`, `report`, `teardown`, `findings`;
-`FindingBundle` through `petek findings`; `petek dev`); `capacity`, `probe` and `smoke` still print text · **ADRs:** 0009
+`FindingBundle` through `petek findings`; `petek dev`); `capacity`, `probe` and `smoke` still print text. Since Faza
+25.3 (2026-09-29) the main path is on every face: `test_site`/`get_test`/`cancel_test` (29 tools), `petek test`
+(with `--json`) and the panel's "Test et" · **ADRs:** 0009
 
 ## Requirement
 
@@ -26,7 +28,7 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     stdio profile is four methods; no new dependency, rule 11): `initialize` (protocol 2024-11-05, 2025-03-26,
     2025-06-18; the client's version when supported), `notifications/*` ignored, `ping`, `tools/list`, `tools/call`.
     Requests run concurrently, responses are written one line at a time; stdout carries protocol only, logs go to
-    stderr and the file. `McpTools` holds the 25 tools with JSON-Schema arguments; results are the panel's own JSON
+    stderr and the file. `McpTools` holds the tools (29 since Faza 25.3) with JSON-Schema arguments; results are the panel's own JSON
     (`PanelJson`) as text plus `structuredContent`; a panel failure is an `isError` result with the Azerbaijani
     message, a protocol mistake a JSON-RPC error (-32700, -32600, -32601, -32602). `McpSettings.allowWrites`
     (`--allow-writes`) gates `cancel_exploration`, `approve_scenario`, `freeze_scenario`, `run_campaign`, `cancel_run`,
@@ -36,6 +38,11 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     asks the owner which site to test and waits (rule 12, R06). `PanelRuns` gained
     `findings(runId)` (the judged findings with A/B/C and artifact ids, whose artifacts `get_evidence` then resolves
     to absolute paths) and `teardown(runId)` (finished runs of the configured site only).
+  - **The main path (Faza 25.3).** `test_site` (a write tool, with `wait`) is the panel's "Test et": explore, draft
+    from that exploration only, approve and run, in one go (`PanelTestFlow`); `get_test` follows it (stage, ids, the
+    run's result, a note for the owner, the report directory) and `cancel_test` stops it. Its form carries no team of
+    its own, and neither does `explore_site` any more: the roles, ways in and departments are what the explorer saw.
+    `petek test` is the same on the command line (exit code 0/1/2 by the run's result; `--json`).
   - `petek --json <command>` (`CliSession.json`, `PetekSubcommand.emitJson`): one document on stdout for `doctor`
     (`ok`, `checks`), `init` (`changes`), `plan` (`identities`), `run` (`runs`, `exitCode`), `report` (`html`,
     `markdown`), `teardown` (`removed`, `failures`); a failure prints `{"error": ...}` and keeps the exit code.

@@ -62,8 +62,9 @@ class PanelInstructionsTest {
     }
 
     @Test
-    fun `departments are needed for managers and employees and must be distinct`() {
-        fields(valid.copy(departments = emptyList())) shouldContainExactly listOf(PanelInstructions.DEPARTMENTS)
+    fun `departments may be left to the explorer, but the owner's must be distinct names`() {
+        // Without them the draft takes the departments the explorer saw, else its own one (Faza 25.2).
+        fields(valid.copy(departments = emptyList())).shouldBeEmpty()
         fields(valid.copy(departments = listOf("IT", "it"))) shouldContainExactly listOf(PanelInstructions.DEPARTMENTS)
         fields(valid.copy(departments = listOf("IT", " "))) shouldContainExactly listOf(PanelInstructions.DEPARTMENTS)
         val adminOnly =
@@ -74,6 +75,15 @@ class PanelInstructionsTest {
                 registration = RegistrationSplit(0, 0),
             )
         adminOnly.problems().shouldBeEmpty()
+    }
+
+    @Test
+    fun `without a team of the owner's the roles and ways in are the explorer's, for any tester count`() {
+        val open = valid.copy(testers = 7, roles = null, departments = emptyList(), registration = null)
+
+        open.problems().shouldBeEmpty()
+        // A way in without the team it splits says nothing.
+        fields(open.copy(registration = RegistrationSplit(3, 3))) shouldContainExactly listOf(PanelInstructions.REGISTRATION)
     }
 
     @Test

@@ -129,7 +129,22 @@ internal class PanelRunsAdapter(
     private val triaged: MutableSet<RunId> = ConcurrentHashMap.newKeySet()
     private val evidenceShown = ConcurrentHashMap<ArtifactId, ArtifactRecord>()
 
-    override suspend fun startRun(request: RunRequest): RunStartView {
+    override suspend fun startRun(request: RunRequest): RunStartView = launch(request).view
+
+    /** A run [launch] started: what "Run et" answers, and a way to wait for the run's end. */
+    class LaunchedRun internal constructor(
+        val view: RunStartView,
+        private val job: Deferred<RunSummary?>,
+    ) {
+        /** Returns once the run ended (torn down and reported), also when it was stopped. */
+        suspend fun join() = job.join()
+
+        /** Stops the run as "Dayandır" does: its teardown and report still happen. */
+        fun cancel() = job.cancel()
+    }
+
+    /** [startRun] for "Test et", which follows the run it started to its end (Faza 25.3). */
+    suspend fun launch(request: RunRequest): LaunchedRun {
         val problems = request.problems()
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val version = scenarios.runnable(request)
@@ -169,8 +184,11 @@ internal class PanelRunsAdapter(
         // A closed browser tab cancels this request, never the run: it goes on and the board shows it.
         val runId = awaitStart(started, job)
         warnAboutStepsThatCannotRun(campaign, lease.container)
-        return RunStartView(runId, version.id.value, campaign.settings.testers)
+        return LaunchedRun(RunStartView(runId, version.id.value, campaign.settings.testers), job)
     }
+
+    /** The history row of [runId]; null for an unknown run. */
+    suspend fun summary(runId: RunId): RunSummaryView? = container.runs.find(runId)?.let { summary(it, scenarios.versionsByHash()) }
 
     override suspend fun cancelRun(): Boolean {
         val running = synchronized(lock) { current?.takeIf { it.isActive } } ?: return false

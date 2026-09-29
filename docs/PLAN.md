@@ -1048,7 +1048,8 @@ layihənin `.env`-i, `--env-file` və CI-ın mühit dəyişənləri əvvəlki ki
 - [x] "Quraşdırma" ekranı (bir dəfə tamamlanana qədər ilk ekran): sayt cavab verirmi, sahiblik (təsdiq sətri,
   "Kopyala", "Yoxla"), AI (bir kliklə sınaq, `doctor`-un sorğusu), tester sayı (tutum tövsiyəsi ilə, "Təlimat"-la
   ortaq). `PanelReadiness` portu, `/api/readiness*`.
-- [ ] Bir düymə "Test et": kəşf et → ssenari → run, ssenarini baxıb düzəltmək istəyənlər üçün köhnə yol qalır.
+- [x] Bir düymə "Test et": kəşf et → ssenari → run, ssenarini baxıb düzəltmək istəyənlər üçün köhnə yol qalır.
+  **Vəziyyət:** Faza 25.3-də (panel, `petek test`, MCP `test_site`).
 - [ ] AI-ı paneldən seçmək (yalnız göstərmək və sınamaq deyil).
 - [ ] Paneldə saytlar siyahısı: bir neçə sayt, hər biri öz ayarları ilə, panel yenidən başlamadan.
 - [ ] Quraşdırma kanalları: `brew` (macOS), `scoop` (Windows); npm paketinin dərci (`NPM_TOKEN`).
@@ -1375,9 +1376,23 @@ mərhələsindən sonra.
     və draft oracle yoxlamasını yalnız belə sübut olunan resurslara yazır. Resurs adı sınaqla draft arasında ortaqdır
     (`Resources`). Fake target-də draft yenə `announcements` oracle-ını yazır (e2e yoxlayır).
 
-- [ ] **25.3 "Test et" əsas yoldur.** Faza 23-ün açıq bəndi (kəşf et → ssenari → run) bu fazanın məqsədidir: sahib
+- [x] **25.3 "Test et" əsas yoldur.** Faza 23-ün açıq bəndi (kəşf et → ssenari → run) bu fazanın məqsədidir: sahib
   heç bir ssenari faylı yazmadan başlayır; CLI və MCP də eyni axını verir, nümunə kampaniya faylı əsas yol kimi
   təqdim olunmur.
+  - *Vəziyyət:* `PanelTestFlow` (appdə `PanelTestFlowAdapter`) panelin adi əməliyyatlarını zəncirləyir: kəşfiyyatı
+    başladır, onun sessiyaları və brauzeri buraxmasını gözləyir, ssenarini yalnız həmin kəşfiyyatdan yazır (heç vaxt
+    əvvəlkindən), təsdiqləyir və formun tester sayı ilə eyni saytda run edir; test run ilə bitir (`FINISHED` run-ın
+    nəticəsi ilə, və ya `STOPPED` səbəbi ilə: kəşfiyyat alınmayıb, dayandırılıb və ya model saxlamayıb, qaralama
+    yoxlamadan keçməyib, run rədd edilib və ya yarımçıq qalıb). Qaydalar hissələrin öz qaydalarıdır (hədəf siyasəti,
+    saytın cavab verməsi, yazmadan əvvəl sahiblik sübutu, bir anda bir kəşfiyyat və bir run); bir anda bir test,
+    "Dayandır" gedən hissəni dayandırır. Üç üzü: "Təlimat" ekranında əsas düymə **Test et** (`/api/test`; run başlayanda
+    lövhə özü açılır), `petek test` (çıxış kodu run-ın nəticəsinə görə 0/1/2, `--json`) və MCP `test_site`/`get_test`/
+    `cancel_test`. Formun komandası istəyə bağlıdır (`PanelInstructions.roles`, `registration`, `departments`):
+    "Avtomatik bölgü" açıq olanda heç nə göndərilmir və draft kəşfiyyatçının gördüyü rolları, giriş yollarını və
+    şöbələri götürür; şöbə tələbi və MCP-nin müqavilə komandası (IT, HR, menecer payı) çıxdı. Köhnəlmiş (superseded)
+    versiyanın mətni yenidən yazılanda həmin ölü versiya yox, yeni qaralama qaytarılır. README (EN/AZ) əsas yolu
+    "Test et"/`petek test` kimi göstərir; öz kampaniya faylı sahibin öz təlimatı kimi qalır. Testlər: axın (app,
+    saxta sayt), REST, MCP, CLI və real Chromium ilə paneldə düymədən hesabata qədər e2e.
 
 - [ ] **25.4 Uğur meyarları universal olur.** "MVP-nin uğur meyarları" (elan 29 receiver-ə, ticket axını, test
   şirkəti) müqavilə saytının e2e meyarlarıdır və belə adlandırılır. Universal meyar: tanımadığı saytda draft yalnız

@@ -43,6 +43,7 @@ import az.petek.dashboard.domain.PanelExplorer
 import az.petek.dashboard.domain.PanelReadiness
 import az.petek.dashboard.domain.PanelRuns
 import az.petek.dashboard.domain.PanelScenarios
+import az.petek.dashboard.domain.PanelTestFlow
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.mail.application.ManualCodeDesk
 import az.petek.orchestration.domain.MonitorView
@@ -65,6 +66,7 @@ import kotlin.time.Duration.Companion.seconds
  * - [PanelScenarios]: the versioned scenario catalog, the owner's `scenarios/` files and the explorer's drafts
  *   ([PanelScenariosAdapter]).
  * - [PanelRuns]: runs of approved versions, history, reports, stability and triage ([PanelRunsAdapter]).
+ * - [PanelTestFlow]: "Test et", the three above in one go from the instruction form ([PanelTestFlowAdapter]).
  *
  * Artifacts the panel may serve besides the live board's are an exploration's captures and the evidence a shown triage
  * verdict cites. [close] cancels whatever still runs and waits (at most [CLOSE_GRACE]) until it has let go: a run still
@@ -81,12 +83,14 @@ internal class AppPanelBackend(
     private val manualCodes: ManualCodeDesk? = null,
     private val ownerAccounts: OwnerAccounts? = null,
     private val readiness: PanelReadiness = object : PanelReadiness {},
+    private val testFlow: PanelTestFlow = object : PanelTestFlow {},
 ) : PanelBackend,
     PanelCapacity by capacity,
     PanelExplorer by explorer,
     PanelScenarios by scenarios,
     PanelRuns by runs,
     PanelReadiness by readiness,
+    PanelTestFlow by testFlow,
     AutoCloseable {
     override suspend fun explorationArtifact(artifactId: ArtifactId): ArtifactRecord? =
         explorer.explorationArtifact(artifactId) ?: runs.evidenceArtifact(artifactId)
@@ -153,7 +157,8 @@ internal class AppPanelBackend(
             runs = PanelRunsAdapter(container, scenarios, RunTargets(container, derive), watch, board, scope)
             val manual = container.manualCodes.takeIf { container.config.mailSource == MailSource.MANUAL }
             val readiness = PanelReadinessAdapter(container, envFile)
-            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts, readiness)
+            val testFlow = PanelTestFlowAdapter(explorer, scenarios, runs, scope, container.clock)
+            return AppPanelBackend(CapacityAdapter(capacityAdvice), explorer, scenarios, runs, scope, manual, accounts, readiness, testFlow)
         }
 
         /** The explorer's way in, in the order of the site's target profile (ADR-0010). */

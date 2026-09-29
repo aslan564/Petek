@@ -31,6 +31,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.runBlocking
@@ -185,6 +186,31 @@ class PanelScenariosTest {
                 .scenarios()
                 .single()
                 .status shouldBe ScenarioStatus.APPROVED
+        }
+
+    @Test
+    fun `a draft whose text was superseded comes back as a new version that can be approved again`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            panel.explored()
+            val first = panel.backend.generateScenario()
+            panel.backend.approve(first.version.id)
+            val edited =
+                panel.panel.container.scenarioCatalog.createDraft(
+                    first.yaml + "# the owner's edit\n",
+                    az.petek.scenarios.domain.ScenarioSource.USER,
+                    az.petek.scenarios.domain
+                        .ScenarioVersionId(first.version.id),
+                )
+            panel.backend.approve(edited.id.value)
+
+            val again = panel.backend.generateScenario()
+
+            again.yaml shouldBe first.yaml
+            again.version.id shouldNotBe first.version.id
+            again.version.status shouldBe ScenarioStatus.DRAFT
+            // The superseded copy could never be approved again; the new one can ("Test et" approves it at once).
+            panel.backend.approve(again.version.id).status shouldBe ScenarioStatus.APPROVED
         }
 
     @Test

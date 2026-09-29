@@ -30,9 +30,9 @@ ordered by number everywhere.
 | `features/reporting` | Three-source judge, stability analysis, Markdown + HTML report | `Judge`, `ReportWriter` | kotlinx.html |
 | `features/capacity` | Recommends (never enforces) the maximum number of testers for this machine | `HostResourceProbe`, `SessionCostProbe`, `CapacityAdvisor` | `/proc` + cgroup v2 memory, measured browser sessions |
 | `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
-| `features/dashboard` | Local web panel: live agent board, instructions, explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 25 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`, `PanelReadiness`, ...); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
+| `features/dashboard` | Local web panel: live agent board, instructions ("Test et"), explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 29 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`, `PanelReadiness`, `PanelTestFlow`, ...); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
 | `features/explorer` | Explorer agent (PLAN.md Faza 6–7): learns a site model, records findings, generates campaign drafts, diffs model versions | `ExplorationRepository`, `ExplorationObserver`, `TestTargetCheck` | SQLite repository |
-| `app` | CLI (`init`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`; `--json` on doctor/init/plan/run/report/teardown), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
+| `app` | CLI (`init`, `test`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`; `--json` on doctor/init/test/plan/run/report/teardown), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
 | `launcher/` | The `petek` npm package: `npx petek` downloads the release bundle for the machine once (SHA-256 checked) and runs it; no dependencies, tested with `node --test` against a local stand-in release | — | Node 18+ |
 | `docker/` | The image `ghcr.io/aslan564/petek`: the Linux bundle on Playwright's official image (Chromium inside), one build for amd64 and arm64; `prepare-context.sh` lays a bundle out for it | — | Docker buildx |
 | `testing/fake-target` | A small portal-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
@@ -260,6 +260,20 @@ app) shows the site, the configuration file and the configured AI without contac
 when the page asks: the site answering (`TargetReachability`), its ownership (`SiteOwnership.check`, or `verify` for a
 fresh look that remembers a proof it finds) and the AI answering `petek doctor`'s tiny request through its own client.
 The tester count set there is the instruction screen's (`P.testers`).
+
+**Test et** (Faza 25.3) is the main path, the same on three faces: the instruction screen's button (`POST /api/test`,
+`GET /api/test`, `POST /api/test/cancel`), `petek test` (`TestCommand` over `PanelCore`, exit code by the run's
+result) and MCP `test_site`/`get_test`/`cancel_test`. `PanelTestFlow` (`PanelTestFlowAdapter` in the app) chains the
+ordinary panel operations: it starts the exploration (`PanelExplorerAdapter.begin`), waits until that exploration has
+let go of its sessions and browser, drafts from that exploration only (`PanelScenariosAdapter.generateFor`, never an
+earlier one), approves the draft and starts the run on the same site with the form's tester count
+(`PanelRunsAdapter.launch`), and ends with the run (`FINISHED` with its result, or `STOPPED` with the reason: an
+exploration that failed, was stopped or saved no model, an invalid draft, a refused or aborted run). Its rules are the
+parts' own (target policy, reachability, the ownership proof before anything is written, one exploration and one run
+at a time); one test at a time, and `cancelTest` stops the part that is going. The form's team is optional
+(`PanelInstructions.roles`, `registration` and `departments`): with the page's automatic split nothing is sent, and the
+draft takes the roles, ways in and departments the explorer saw (Faza 25.1–25.2). Regenerating the text of a superseded
+version makes a new draft instead of returning the one that can never be approved again.
 
 ## Tester isolation
 

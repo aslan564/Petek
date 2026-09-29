@@ -39,6 +39,7 @@ import az.petek.dashboard.domain.ScenarioView
 import az.petek.dashboard.domain.SiteCheckView
 import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.dashboard.domain.StabilityView
+import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TriageView
 import az.petek.dashboard.domain.VisitedPageView
 import kotlinx.serialization.SerializationException
@@ -189,6 +190,22 @@ internal object PanelJson {
                 put("pagesVisited", it.phases.sumOf { phase -> phase.pagesVisited })
                 put("maxPages", it.budget.maxPages)
                 put("elapsedMs", it.elapsedMs)
+            }
+        } ?: JsonNull
+
+    /** "Test et": where the test is and what it made so far (null when there has been none). */
+    fun testFlow(view: TestFlowView?): JsonElement =
+        view?.let {
+            buildJsonObject {
+                put("target", it.target)
+                put("stage", it.stage.name)
+                put("final", it.stage.isFinal)
+                time("startedAtMs", it.startedAt)
+                put("explorationId", it.explorationId)
+                put("scenarioId", it.scenarioId)
+                put("runId", it.runId?.value)
+                put("result", it.result?.name)
+                put("note", it.note)
             }
         } ?: JsonNull
 
@@ -419,18 +436,22 @@ internal object PanelJson {
 
     // --- requests -------------------------------------------------------------------------------------------------
 
+    /**
+     * The instruction form. `roles`, `registration` and `departments` are the owner's only when sent: left out (or
+     * null), the draft takes what the explorer saw on the site (Faza 25).
+     */
     fun instructions(body: String): PanelInstructions {
         val root = parse(body)
-        val roles = root.obj("roles")
-        val registration = root.obj("registration")
+        val roles = root.optionalObj("roles")
+        val registration = root.optionalObj("registration")
         val budget = root.obj("budget")
         return PanelInstructions(
             target = root.string("target"),
             instructions = root.string("instructions", required = false),
             testers = root.int("testers"),
-            roles = RoleSplit(roles.int("admins"), roles.int("managers"), roles.int("employees")),
-            departments = root.strings("departments"),
-            registration = RegistrationSplit(registration.int("invite"), registration.int("companyCode")),
+            roles = roles?.let { RoleSplit(it.int("admins"), it.int("managers"), it.int("employees")) },
+            departments = if (root["departments"].isAbsent()) emptyList() else root.strings("departments"),
+            registration = registration?.let { RegistrationSplit(it.int("invite"), it.int("companyCode")) },
             budget = PanelBudget(budget.int("maxMinutes"), budget.int("maxStepsPerAgent"), budget.int("maxPages")),
             allowWrites = root.boolean("allowWrites"),
         )
@@ -638,6 +659,11 @@ internal object PanelJson {
     }
 
     private fun JsonObject.obj(key: String): JsonObject = this[key] as? JsonObject ?: throw invalid(key, "\"$key\" obyekti yoxdur.")
+
+    /** An object that may be left out or null; anything else under [key] is refused. */
+    private fun JsonObject.optionalObj(key: String): JsonObject? = if (this[key].isAbsent()) null else obj(key)
+
+    private fun JsonElement?.isAbsent(): Boolean = this == null || this is JsonNull
 
     private fun JsonObject.string(
         key: String,

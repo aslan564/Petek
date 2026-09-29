@@ -18,6 +18,7 @@ import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
+import az.petek.browser.domain.BrowserEngine
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
@@ -55,6 +56,8 @@ class CliHarness(
     var reachability: TargetReachability = TargetReachability.ALWAYS,
     /** Every site counts as proved to be the tester's own unless a test says otherwise (ADR-0012). */
     var ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
+    /** The explorer's browser of the panel-backed commands (`petek test`); null: [browser] plays it too. */
+    var explorerBrowser: BrowserEngine? = null,
 ) {
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
@@ -96,7 +99,13 @@ class CliHarness(
                 panelContainers = { config, overrides ->
                     AppContainer(
                         config,
-                        overrides.copy(llm = llm, browser = browser, reachability = reachability, ownership = ownership),
+                        overrides.copy(
+                            llm = llm,
+                            browser = browser,
+                            explorerBrowser = explorerBrowser,
+                            reachability = reachability,
+                            ownership = ownership,
+                        ),
                     )
                 },
                 openInBrowser = {

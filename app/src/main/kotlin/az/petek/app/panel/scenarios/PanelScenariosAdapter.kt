@@ -33,6 +33,7 @@ import az.petek.scenarios.domain.ScenarioFileException
 import az.petek.scenarios.domain.ScenarioInvalidException
 import az.petek.scenarios.domain.ScenarioNotFoundException
 import az.petek.scenarios.domain.ScenarioSource
+import az.petek.scenarios.domain.ScenarioStatus
 import az.petek.scenarios.domain.ScenarioTransitionException
 import az.petek.scenarios.domain.ScenarioVersion
 import az.petek.scenarios.domain.ScenarioVersionId
@@ -85,8 +86,17 @@ internal class PanelScenariosAdapter(
 
     override suspend fun generateScenario(): ScenarioView = generating.withLock { generate() }
 
-    private suspend fun generate(): ScenarioView {
+    /**
+     * The draft of exploration [explorationId] only ("Test et", Faza 25.3): never an earlier exploration's, which
+     * [generateScenario] falls back to when the one on screen saved no model.
+     */
+    suspend fun generateFor(explorationId: String): ScenarioView = generating.withLock { generate(explorationId) }
+
+    private suspend fun generate(expected: String? = null): ScenarioView {
         val source = explorer.draftSource()
+        if (expected != null && source.explorationId.value != expected) {
+            throw PanelConflictException("Kəşfiyyat sayt modeli saxlamadı; ssenari yazılmadı və heç nə run olunmadı.")
+        }
         val settings = DraftSettings.of(source.departments, source.team)
         val model =
             container.explorations.model(source.explorationId)
@@ -116,7 +126,8 @@ internal class PanelScenariosAdapter(
         explorer.drafted(source.explorationId, draft.yaml)
         imported.await()
         val history = catalog.history(draft.name)
-        history.lastOrNull { it.yaml == draft.yaml }?.let { return ScenarioViews.scenario(it) }
+        // The same text again is the stored version, unless that one was superseded: it could never be approved again.
+        history.lastOrNull { it.yaml == draft.yaml && it.status != ScenarioStatus.SUPERSEDED }?.let { return ScenarioViews.scenario(it) }
         val note =
             "Kəşfiyyatçı: ${draft.target} saytının modeli v${draft.modelVersion} (${draft.explorationId}); " +
                 "${draft.covered.size} test ideyası əhatə olunub, ${draft.skipped.size} buraxılıb."

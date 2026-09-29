@@ -24,7 +24,8 @@ they use with you.
 - `.petek/petek.yaml` is the project profile (target, health URL, mail source, scenario directory).
 - `petek doctor` checks the target policy, the target, Chromium, the test inbox, the test API and the AI provider.
   Run it first; every row must be green for a full campaign, only the first three for read-only exploration.
-- `petek panel` opens the web panel at http://127.0.0.1:7070: instructions → explore → scenarios → run → report.
+- `petek panel` opens the web panel at http://127.0.0.1:7070: instructions → **Test et** (explore, draft from what
+  was found, approve, run) → report; the same parts can be taken one by one.
 
 ## Commands and MCP tools
 
@@ -34,6 +35,7 @@ the same use cases:
 | Goal | CLI | MCP tool |
 |---|---|---|
 | Check readiness | `petek doctor [--json]`, `petek probe --url <url>` | `list_targets`, `get_capacity` |
+| Test the site in one go, the main path: explore, draft only from what was found, approve, run | `petek test [--testers N] [--instructions <text>] [--json]`, `petek panel` → Test et | `test_site` (`wait: true` to block until it ends), `get_test`, `cancel_test` |
 | Explore the site (read-only unless writes are allowed) | `petek panel` → Kəşf et | `explore_site` (`wait: true` to block until it ends), `get_exploration`, `cancel_exploration`, `compare_explorations` |
 | See what the explorer could not decide, answer it | panel → Naməlumlar | `list_unknowns`, `answer_unknown` |
 | Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan` |
@@ -42,9 +44,10 @@ the same use cases:
 | Read the findings with their evidence | `petek report <run_id> [--json]`, `petek findings <run_id> --json` (or `latest`) | `get_findings`, `get_finding_bundle`, `get_evidence`, `get_triage`, `run_triage` |
 | Remove the test data a run created | `petek teardown --run <run_id> [--json]` | `teardown` |
 
-Writes (exploration with writes, runs, approvals, teardown) need an MCP session started with `petek mcp --allow-writes`
-(the owner's permission); production hosts are refused unless `PETEK_ALLOW_PRODUCTION=true` in `.env`. `--json` makes
-a CLI command print one JSON document on stdout.
+Writes (tests, exploration with writes, runs, approvals, teardown) need an MCP session started with
+`petek mcp --allow-writes` (the owner's permission); production hosts are refused unless `PETEK_ALLOW_PRODUCTION=true`
+in `.env`. `--json` makes a CLI command print one JSON document on stdout. Ask the owner before `test_site`: it approves
+the draft for them and runs it; use the step-by-step tools when they want to read the draft first.
 
 ## Roles
 
