@@ -758,6 +758,26 @@ class ExploreSiteUseCaseTest {
         }
 
     @Test
+    fun `an object the trial touch left without a page of its own is named in the notes, not forgotten`() =
+        runTest {
+            loggedInSite()
+            // The announcement lands on the list: there is no page of its own to delete it from.
+            site.creates["[data-testid=\"announcement-submit\"]"] = "/announcements" to false
+            val confirmed = TestTargetCheck { TestTargetVerdict.Confirmed("company c1 is_test=true") }
+
+            val result =
+                useCase(check = confirmed).execute(
+                    request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
+                    mapOf("admin" to site.session("admin")),
+                    observer = observer,
+                )
+
+            result.record.summary!!.notes.any {
+                it.startsWith("Trial touch left 'Pətək sınaq") && "opened no page of its own" in it
+            } shouldBe true
+        }
+
+    @Test
     fun `what the trial touch created is deleted again through the site's delete action, only while it shows the marker`() =
         runTest {
             loggedInSite()
@@ -780,17 +800,10 @@ class ExploreSiteUseCaseTest {
                 )
 
             // The object page was never walked, so its one delete button is found on the page itself and clicked by ref.
-            println("ACTIONS=" + admin.actions.joinToString("\n"))
-            println(
-                "NOTES=" +
-                    result.record.summary!!
-                        .notes
-                        .joinToString("\n"),
-            )
             val opened = admin.actions.lastIndexOf("navigate https://portal.test/announcements/a1")
             admin.actions.drop(opened + 1).first { !it.startsWith("request") } shouldStartWith "click "
             admin.actions shouldNotContain "clickSelector [data-testid=\"announcement-delete\"]"
-            val notes = result.record.summary.notes
+            val notes = result.record.summary!!.notes
             notes.single { it.startsWith("Trial touch deleted its object") } shouldContain "/announcements/{id}"
             // The ticket page shows no delete button: the ticket is not deleted, and the notes say what stays.
             notes.none { "deleted its object 'Pətək sınaq exp_1-2'" in it } shouldBe true

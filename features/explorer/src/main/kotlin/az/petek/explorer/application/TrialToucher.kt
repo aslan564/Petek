@@ -254,6 +254,10 @@ internal class TrialToucher(
         val urlAfter = landedAfter?.let { UrlPatterns.of(it) }
         if (accepted && landedAfter != null && urlAfter != null && UrlPatterns.ID in urlAfter) {
             created += Created(role, landedAfter, marker, action.name)
+        } else if (accepted) {
+            // No page of its own to delete it from: said, not forgotten. The test company's teardown removes it with
+            // the company where the site has one.
+            context.notes += "Trial touch left '$marker' (${action.name}) on the site: it opened no page of its own to delete it from"
         }
         val served = if (accepted) servedByTestApi(action, page, role, marker) else null
         context.accumulator.recordTrial(action.id, TrialTouch(role, outcome, marker, messages, urlAfter, seenLiveBy, evidence, served))

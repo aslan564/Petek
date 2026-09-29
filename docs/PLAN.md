@@ -993,7 +993,9 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 - [x] Kəşfiyyatçının öz hesabı: təlimatda verilibsə o, yoxdursa `self_register` (Faza 10 zənciri); testerlərlə paylaşılmır.
   **Vəziyyət:** profildə `role: explorer` hesabı varsa kəşfiyyatçı yalnız onu işlədir; testerlərə heç vaxt verilmir.
 - [x] Keçid 1 default-dur; admin hesabında yalnız adında Pətək işarəsi olan obyektlər, sonda silinir.
-  **Vəziyyət:** rollu keçid default fazalardadır; sınaq toxunuşunun yaratdığı hər obyekt sonda obyektin öz səhifəsində, Pətək işarəsi hələ görünürsə, saytın öz silmə əməliyyatı ilə silinir; silinə bilməyən qeyd olunur (siyahı səhifəsindəki "Sil" heç vaxt basılmır).
+  **Vəziyyət:** rollu keçid default fazalardadır; sınaq toxunuşunun yaratdığı hər obyekt sonda obyektin öz səhifəsində, Pətək işarəsi hələ görünürsə, saytın öz silmə əməliyyatı ilə silinir; silinə bilməyən qeyd olunur (siyahı səhifəsindəki "Sil" heç vaxt basılmır). Öz səhifəsi açılmayan obyekt də artıq
+  unudulmur: qeydlərdə "saytda qaldı" kimi adı ilə yazılır, şirkət olan saytda test şirkəti ilə birlikdə silinir (plan
+  yoxlaması, 2026-09-29).
 
 ### Faza 18 — Qapı dalğası, hesablar və izolyasiya
 
