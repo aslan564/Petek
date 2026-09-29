@@ -60,7 +60,8 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
   fragment between `<!-- petek:begin -->`/`<!-- petek:end -->` in the instruction file (appended, replaced in place on
   a re-run, the owner's text untouched), the `petek` server (`petek mcp`) merged into the project MCP file
   (`.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json` with its `servers` key; other servers
-  kept; a file that is not JSON is left alone and reported). No vendor-named file is written.
+  kept; a file that is not JSON is left alone and reported). A vendor's files are written only for an agent that is
+  detected or asked for (`--ai`); Cursor's rule keeps its front matter at the top of the file, above the markers.
   Files Pətək owns are rewritten only with `--force`; `.gitignore` gains `.env` and `evidence/`. Every file is reported
   as created / updated / kept / unchanged. Rule 6 of `SKILL.md` binds the host AI to the configured site: no invented
   screens or results, no stand-in; a site that does not answer is reported; without a site it asks the owner and waits.

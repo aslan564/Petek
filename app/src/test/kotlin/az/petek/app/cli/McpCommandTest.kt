@@ -13,6 +13,7 @@ package az.petek.app.cli
 
 import az.petek.app.PetekVersion
 import az.petek.app.testing.CliHarness
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -90,6 +91,52 @@ class McpCommandTest {
                     .jsonObject["text"]!!
                     .jsonPrimitive.content
             targets shouldContain "\"allowWrites\":false"
+        }
+
+    @Test
+    fun `every tool the server lists is named in the skill pack and in both READMEs`() =
+        runBlocking<Unit> {
+            Files.writeString(dir.resolve(".env"), "PETEK_TARGET=${CliHarness.UNUSED_TARGET}\n")
+            val output = ByteArrayOutputStream()
+            val cli =
+                CliHarness(dir).apply {
+                    standardInput =
+                        ByteArrayInputStream(
+                            (
+                                listOf(
+                                    """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""",
+                                    """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""",
+                                ).joinToString("\n") + "\n"
+                            ).toByteArray(),
+                        )
+                    standardOutput = output
+                }
+
+            cli.run("mcp").statusCode shouldBe 0
+
+            val tools =
+                output
+                    .toString(Charsets.UTF_8)
+                    .lines()
+                    .filter { it.isNotBlank() }
+                    .map { Json.parseToJsonElement(it).jsonObject }
+                    .single { it["id"]?.jsonPrimitive?.content == "2" }["result"]!!
+                    .jsonObject["tools"]!!
+                    .jsonArray
+                    .map { it.jsonObject["name"]!!.jsonPrimitive.content }
+            tools.size shouldBe TOOLS
+            val skill = checkNotNull(javaClass.getResource("/az/petek/app/init/SKILL.md")).readText()
+            val root =
+                generateSequence(
+                    Path.of("").toAbsolutePath(),
+                ) { it.parent }.first { Files.isRegularFile(it.resolve("settings.gradle.kts")) }
+            mapOf(
+                "SKILL.md" to skill,
+                "README.md" to Files.readString(root.resolve("README.md")),
+                "README.az.md" to Files.readString(root.resolve("README.az.md")),
+            ).forEach { (document, text) ->
+                tools.filterNot { "`$it`" in text }.map { "$document: $it" }.shouldBeEmpty()
+            }
         }
 
     @Test
@@ -172,4 +219,9 @@ class McpCommandTest {
             text shouldContain "Sahibdən soruşun"
             Files.exists(dir.resolve("evidence")) shouldBe false
         }
+
+    private companion object {
+        /** The MCP server's tools (ARCHITECTURE: 29); a new one must be described in the skill pack and the READMEs. */
+        const val TOOLS = 29
+    }
 }

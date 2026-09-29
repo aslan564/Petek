@@ -61,6 +61,5 @@ that the open core deliberately leaves to paid editions, without ever carrying t
 
 ## Open items
 
-- Owner: register names (GitHub org, domain, npm, Maven); decide whether paid modules live in a separate repository
-  (recommended) or a `premium/` module.
+- Owner: register names (GitHub org, domain, npm, Maven). Paid modules live in a separate repository (ADR-0011).
 - Do not build the hosted service before three to five paying customers use the local tool.

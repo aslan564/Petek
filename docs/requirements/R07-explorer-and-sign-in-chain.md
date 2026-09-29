@@ -26,9 +26,11 @@ must be able to register, read the OTP, and fall back to provided credentials if
 - `SiteModel` with `Provenance` (observed/inferred), versioned per target, event-logged; `CompareExplorationsUseCase`
   diffs versions. `TestPatterns` derive ideas; `GenerateScenarioUseCase` drafts a campaign the validator accepts,
   named once per site (`explorer-<host>`: every exploration's draft is the next version, so versions compare) and with
-  the owner's tester count. Its site-wide checks (`site_health`, `page_checks`) are done by every tester on every page,
-  each in its own browser, the links shared out (`share: links`); where people sign in, the pages a visitor sees are
-  checked before anyone signs in and each role's own pages after the scenario (owner's decision, 2026-09-27).
+  the owner's tester count. Its site-wide checks (`site_health`, `page_checks`) are done by every tester at once, each
+  in its own browser with a job of its own (`share: work`, `devices: phone,tablet,desktop`: every page on each device
+  is a job, dealt out, and dealt round again as a second look when there are more testers than jobs; a page's links
+  are asked about once); where people sign in, the pages a visitor sees are checked before anyone signs in and each
+  role's own pages after the scenario (owner's decision, 2026-09-27).
 - Logged-in sessions are opened once the visitor's walk is done (`RoleWalkSource`, Faza 25.1), with the site as that
   walk saw it, and only when a phase needs them. `TestCompanyRoleSessions` (app) then creates a test company through the
   test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8), but only

@@ -32,7 +32,7 @@ ordered by number everywhere.
 | `features/scenarios` | Versioned scenarios reviewed by the owner (draft, approve, freeze), YAML diff, triage of a run's surprises into system bug / model gap / scenario bug with v2 proposals (Faza 7) | `ScenarioRepository`, `TriageRepository`, `ScenarioValidator`, `ScenarioFiles`, `TextRedactor` | SQLite repositories (immutability enforced by triggers), campaign-loader validator, file system |
 | `features/dashboard` | Local web panel: live agent board, instructions ("Test et"), explorer, scenarios, orchestrator task matrix, reports; the MCP face of the same use cases (`infrastructure/mcp`: stdio JSON-RPC server, 29 tools, write gating) | `PanelBackend` (`PanelCapacity`, `PanelExplorer`, `PanelScenarios`, `PanelRuns`, `PanelReadiness`, `PanelTestFlow`, ...); `LiveDashboard` is a `MonitorView` | Ktor CIO server + SSE, one self-contained page (vanilla JS); MCP over stdio |
 | `features/explorer` | Explorer agent (PLAN.md Faza 6–7): learns a site model, records findings, generates campaign drafts, diffs model versions | `ExplorationRepository`, `ExplorationObserver`, `TestTargetCheck` | SQLite repository |
-| `app` | CLI (`init`, `test`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`; `--json` on doctor/init/test/plan/run/report/teardown), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
+| `app` | CLI (`init`, `test`, `plan`, `run`, `report`, `teardown`, `smoke`, `doctor`, `capacity`, `probe`, `panel`, `mcp`, `verify`, `findings`, `dev`; `--json` on doctor/init/verify/test/plan/run/report/findings/teardown/capacity/probe/smoke), `.env` config, composition root, logging, the web panel's backend (`PanelCore` = the object graph, `WebPanel` = served over HTTP, `McpCommand` = served over MCP); `init` (`app/init`) writes a project's `.env`, `.petek/` profile and skill pack, per-agent instruction fragments and MCP entries; the platform bundles (`bundle` task: jlink runtime + one Playwright driver) | — | Clikt, logback |
 | `launcher/` | The `petek` npm package: `npx petek` downloads the release bundle for the machine once (SHA-256 checked) and runs it; no dependencies, tested with `node --test` against a local stand-in release | — | Node 18+ |
 | `docker/` | The image `ghcr.io/aslan564/petek`: the Linux bundle on Playwright's official image (Chromium inside), one build for amd64 and arm64; `prepare-context.sh` lays a bundle out for it | — | Docker buildx |
 | `testing/fake-target` | A small portal-like site + Mailpit-compatible API + test API, implementing `docs/TARGET_CONTRACT.md` | — | Ktor server + SSE |
@@ -337,8 +337,10 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
   campaign validator and is stored as a `DRAFT` in the scenario catalog for the owner's review.
 - **Findings.** `ExplorationFinding` (`FindingKind`, `Severity`) records what the walk itself noticed, e.g. leaked error
   text, and is shown with the model.
-- **Not yet** (PLAN.md Faza 10): the explorer has no credentials of its own, never signs up by itself and cannot fall
-  back to accounts the owner provides; logged-in exploration needs the target's test API.
+- **Sign-in chain** (PLAN.md Faza 10, 17; R07): the explorer signs in along the profile's `sign_in` order (a test
+  company where the site has companies, the owner's accounts, its own sign-up with the gate the visitor's walk
+  mapped), falling back to the next; each attempt is an activity line of the exploration (`SignInChain`,
+  `ExplorationTracker`), not an evidence event. Testers pass the gate by code (Faza 18), not through this chain.
 
 ## Decisions taken for the MVP (answers to the plan's open questions)
 

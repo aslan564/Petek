@@ -36,8 +36,10 @@ import java.nio.file.Path
  * (so CI can inject secrets without a file), then every value is parsed and validated. All problems are collected
  * and thrown together as one [ConfigException]; no message contains a value, only variable names.
  *
- * Defaults (when a key is missing or blank) follow `.env.example`, except `PETEK_TARGET`, which is required: running
- * tests against an unintended system is the one mistake a default must not make. Relative paths are resolved
+ * Defaults (when a key is missing or blank) are the code's own, and `PETEK_TARGET` has none: running tests against an
+ * unintended system is the one mistake a default must not make. `.env.example`, which `petek init` and the setup
+ * screen write, differs where a fresh project knows less: `PETEK_MAIL_SOURCE=manual` and `PETEK_ORACLE=none` (the code
+ * defaults are `mailpit` and `test-api`). Relative paths are resolved
  * against [workingDirectory]; URLs are stored in their canonical spelling ([WebUrls.canonical]), so the production
  * guard sees the host it compares. A blank `PETEK_IDENTITY_SECRET` falls back to [identitySecrets] (by default the file
  * `~/.petek/identity.secret`), which is only consulted when no explicit secret is configured.

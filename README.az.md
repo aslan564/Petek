@@ -258,7 +258,8 @@ məcburidir.
 | `PETEK_TEST_API_URL` | hədəf | `/test/...` API hədəfin origin-ində deyilsə onun baza ünvanı |
 | `PETEK_MAIL_INBOX` | — | Sizin qutunuz (`test@sirket.example`): hər tester `test+<run>-<agent>@sirket.example` ilə qeydiyyatdan keçir; `PETEK_MAIL_DOMAIN`-i əvəz edir; `+`-u qəbul etməyən sayt hesabatda deyilir |
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / qutu / — / `true` / `INBOX` | `imap` mənbəyi o qutunu necə oxuyur (Jakarta Mail/Angus); parol `Secret`-dir |
-| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün) |
+| `PETEK_MAIL_SOURCE` | `mailpit` (`petek init`-in və ya quraşdırma ekranının yazdığı təzə `.env`-də `manual`) | `mailpit`, `test-api` (`GET /test/emails`, token lazımdır), `imap` (öz qutunuz) və ya `manual` (hər kodu paneldəki "Kodu daxil et" pəncərəsinə özünüz yazırsınız; kəşfiyyatçının 1–3 sessiyası üçün; daha çox testerli run əvvəlcədən xəbərdarlıq alır) |
+| `PETEK_ORACLE` | `test-api` (təzə `.env`-də `none`) | `none` test API-si olmayan saytda hər oracle yoxlamasını "N/A (no oracle)" edir |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `petek.test` | Test kimliklərinin e-poçt domeni |
 | `PETEK_IDENTITY_SECRET` | `$PETEK_HOME/identity.secret` (`~/.petek`) | Test parollarının derivasiyası **və** `petek verify`-ın verdiyi sahiblik kodunun açarı (≥ 16 simvol). Eyni saytı test edən hər maşında eyni olsun: başqa açar başqa kod verir və dərc olunmuş sübut artıq uyğun gəlmir |
@@ -268,7 +269,7 @@ məcburidir.
 | `PETEK_LLM_ARGS` | — | Yalnız `cli`: onun arqumentləri, `{model}`, `{effort}`, `{system}`, `{schema}`, `{schema_file}` ilə; söhbət STDIN-ə gedir |
 | `PETEK_LLM_ENV_UNSET` | — | AI alətinin mühitindən çıxarılan dəyişənlər, `NAME` və ya `PREFIX*` |
 | `PETEK_LLM_BASE_URL` | — | OpenAI-uyğun endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
-| `PETEK_LLM_API_KEY` | — | `anthropic-api` / `openai-compat` açarı; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` alias-dır |
+| `PETEK_LLM_API_KEY` | — | `anthropic-api` / `openai-compat` açarı; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` alias-dır |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; rədd edilən rejim özü bir pillə aşağı düşür |
 | `PETEK_LLM_EFFORT` | dəstəkləyəndə `low` | Düşünmə səviyyəsi (Codex CLI, `cli`-nin `{effort}`-u; `openai-compat`-da `reasoning_effort`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | Bütün agentlər üzrə eyni anda AI çağırışı (1–64) |
@@ -357,15 +358,16 @@ Protocol serveridir (əl ilə yazılmış JSON-RPC, əlavə kitabxana yoxdur; `i
 `cancel_test`, `explore_site` (`wait` ilə), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
 `approve_scenario`, `freeze_scenario`, `run_campaign` (`wait` ilə), `cancel_run`, `list_runs`, `get_run_status`,
-`get_findings` (A/B/C mənbələri və sübut id-ləri), `get_evidence` (screenshot və ya capture-un tam yolu), `get_triage`,
+`get_findings` (A/B/C mənbələri və sübut id-ləri), `get_finding_bundle` (kök səbəb üçün tapıntı addımı, sorğusu, cavabı və screenshot-u ilə), `get_evidence` (screenshot və ya capture-un tam yolu), `get_triage`,
 `run_triage`, `get_stability`, `teardown`. Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: test, run,
 təsdiq, teardown və yazma ilə kəşfiyyat rədd edilir; hədəf siyasəti hər yerdəki kimi tətbiq olunur. Hər nəticə panelin
 JSON-unu mətn və strukturlu məzmun kimi daşıyır; uğursuzluq panelin mesajı ilə `isError` nəticəsidir. Konfiqurasiya
 yoxdursa server yenə əl sıxışmasına cavab verir, hər alət isə ev sahibi AI-yə hansı saytın test ediləcəyini sizdən
 soruşmağı deyir.
 
-`petek --json <əmr>` `doctor`, `init`, `test`, `plan`, `run`, `report` və `teardown` üçün stdout-a bir JSON sənəd çap edir
-(loglar stderr-də qalır; uğursuzluq adi çıxış kodu ilə `{"error": ...}`), skriptlər və CI üçün.
+`petek --json <əmr>` `doctor`, `init`, `verify`, `test`, `plan`, `run`, `report`, `findings`, `teardown`, `capacity`,
+`probe` və `smoke` üçün stdout-a bir JSON sənəd çap edir (loglar stderr-də qalır; uğursuzluq adi çıxış kodu ilə
+`{"error": ...}`), skriptlər və CI üçün.
 
 ## Arxitektura
 

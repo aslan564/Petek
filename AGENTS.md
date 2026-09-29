@@ -4,7 +4,7 @@
 Pətək çoxistifadəçili AI test platformasıdır: N AI tester agenti istənilən hədəf saytda eyni anda ayrı
 brauzer sessiyalarında işləyir, orkestrator onları koordinasiya edir, nəticə sübut əsaslı hesabatdır.
 Tam plan: `docs/PLAN.md`. Arxitektura və modul xəritəsi: `docs/ARCHITECTURE.md`. Hər tələbin arxitektura sənədi:
-`docs/requirements/` (R01–R15, dəyişiklik toxunduğu tələbi yeniləyir). Hədəf saytın test kontraktı
+`docs/requirements/` (R01–R16, dəyişiklik toxunduğu tələbi yeniləyir). Hədəf saytın test kontraktı
 (`data-testid`, `/test/...` endpointləri): `docs/TARGET_CONTRACT.md`. Qərarlar: `docs/adr/`. İstifadəçi sənədi:
 `README.md` (EN) və `README.az.md` (AZ). Töhfə və təhlükəsizlik qaydaları: `CONTRIBUTING.md`, `SECURITY.md`.
 Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.

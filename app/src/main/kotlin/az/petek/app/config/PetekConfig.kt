@@ -49,7 +49,7 @@ import java.nio.file.Path
  * @property llmEnvUnset variables removed from an AI tool's environment, `NAME` or `PREFIX*` (`PETEK_LLM_ENV_UNSET`).
  * @property llmBaseUrl an OpenAI-compatible endpoint (`PETEK_LLM_BASE_URL`, e.g. `http://localhost:11434/v1`).
  * @property llmApiKey the provider's API key (`PETEK_LLM_API_KEY`, aliases `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
- *   `GEMINI_API_KEY`).
+ *   `XAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`).
  * @property llmStructured how an OpenAI-compatible endpoint is asked for JSON (`PETEK_LLM_STRUCTURED`).
  * @property llmEffort reasoning effort (`PETEK_LLM_EFFORT`), passed only to providers that support it; null means the
  *   provider's default ([effectiveLlmEffort]).

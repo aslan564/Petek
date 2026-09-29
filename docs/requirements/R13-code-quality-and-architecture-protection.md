@@ -31,15 +31,14 @@ for a reviewer to notice.
   local `./gradlew spotlessApply build`; the owner starts Build from the Actions tab when a clean-runner proof is
   wanted, and Release on `main` when a version is done.
 - **Rules for agents.** `AGENTS.md` is the single page every AI coding agent reads first; it points to the plan, the
-  architecture, the contract and the eleven never-break rules.
+  architecture, the contract and the thirteen never-break rules.
 
 ## Verification
 
-- The architecture test itself (7 rules) — green on `develop` as of 2026-09-25.
-- `./gradlew build` is the gate for every commit; CI repeats it.
+- The architecture test itself (9 rules: the layer rules, the composition root, the open core without a paid edition
+  module, a core without HR concepts, three layers per feature) — green on every build.
+- `./gradlew build` is the gate for every commit; CI repeats it only when the owner starts Build by hand.
 
 ## Open items
 
-- A Konsist rule that keeps HR concepts out of `core/domain` (R11, Faza 13) and one that keeps paid-edition modules
-  out of the open core (R14, ADR-0011).
 - Kover thresholds are per module and modest; raise them with Faza 9–10 test additions.

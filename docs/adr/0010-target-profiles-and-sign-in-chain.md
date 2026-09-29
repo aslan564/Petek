@@ -16,9 +16,10 @@ explorer to get in by the best available means, and to test sites that offer no 
   test-API token reference, the sign-in chain, owner accounts (secret references only), and a pointer to the
   existing `target_profile` (selectors, flows). `PETEK_TARGET` names the default profile. Run and explore pick a
   profile; the "only PETEK_TARGET" block in the panel is lifted.
-- **Sign-in chain** (`SignInStrategy` port, ordered): `test_company` → `own_accounts` → `self_register` → `anonymous`.
-  Each attempt and each fallback is an event in the evidence and a line in the report. The explorer's role sessions
-  and the testers' `register_and_login` share the chain. Sessions (`storage_state`) are kept per (target, identity)
+- **Sign-in chain** (ordered): `test_company` → `own_accounts` → `self_register` → `anonymous`. As built it lives in
+  the app (`SignInChain`), not behind a `SignInStrategy` port in identity/mail as first proposed; each attempt and
+  each fallback is an activity line of the exploration, not an evidence event or a report line, and only the
+  explorer's role sessions use it (testers pass the gate by code, Faza 18). Sessions (`storage_state`) are kept per (target, identity)
   and reused; a stale session falls back to the `login` flow. Since Faza 25.1 the explorer opens the chain once the
   visitor's walk is done, and `test_company` only where the site has companies: the profile's `tenant: company`, or
   a form to join by invitation or company code that walk saw.

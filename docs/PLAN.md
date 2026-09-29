@@ -31,7 +31,7 @@ MVP tək maşında, web-də, ssenarili rejimdə 30 agentlə tam dövrəni (qeydi
 |---|---|---|
 | Adapter | Web, Playwright | API adapteri, mobil (Maestro/Appium) |
 | Rejim | Ssenarili (YAML) | Sərbəst kəşf (exploratory) |
-| Agent sayı | Limitsiz (ilk kampaniya 30), tək proses, yükə görə bölünmüş Chromium-lar; `petek capacity` maşın üçün maksimumu tövsiyə edir | Redis/NATS ilə çoxmaşınlı |
+| Agent sayı | Limitsiz (ilk kampaniya 30; yalnız kəşfiyyatçının qaralaması ən çox 999 tester yazır), tək proses, yükə görə bölünmüş Chromium-lar; `petek capacity` maşın üçün maksimumu tövsiyə edir | Redis/NATS ilə çoxmaşınlı |
 | Kimlik | Reyestr, catch-all email, email OTP, telefon test kodu | Real SMS provayderi ilə OTP |
 | Doğrulama | Typed assert + oracle API + üç mənbəli müqayisə | LLM hakim (screenshot əsaslı yumşaq yoxlama) |
 | Hesabat | Markdown/HTML fayl, konsol lövhəsi | Web paneli, tarixçə, trend |
@@ -62,19 +62,22 @@ flowchart TD
 
 Oxunuşu: orkestrator kimlikləri yaradır və addımları paylayır; agentlər hədəflə brauzer vasitəsilə danışır, OTP-ni Mailpit-dən oxuyur; hakim sübut bazası ilə oracle cavablarını tutuşdurub hesabat çıxarır.
 
-| Komponent | Vəzifəsi | Fayl (MVP, `src/main/kotlin/az/petek/`) |
+| Komponent | Vəzifəsi | Harada (modul xəritəsi: `docs/ARCHITECTURE.md`) |
 |---|---|---|
-| CLI | `plan`, `run`, `report`, `teardown`, `smoke` əmrləri; campaign.yaml oxuyur | `Main.kt`, `config/Config.kt` |
-| Orkestrator | Agentləri yaradır, ssenari addımlarını aktora görə paylayır, ilişməni aşkar edir, run-ı bitirir | `orchestrator/Scheduler.kt` |
-| Kimlik reyestri | Ad, email, parol, telefon, rol, departament — başlamazdan əvvəl, deterministik | `identity/Identity.kt` |
-| Hadisə şini | `emits` → hadisə + t0; `wait_for` → `CompletableDeferred`; gecikmə ölçmə | `orchestrator/Bus.kt` |
-| Monitor | Hər agentin addımı, son əməliyyatı, son screenshotu; hərəkətsizlik taymeri | `orchestrator/Monitor.kt` |
-| Tester agent | Gör → LLM qərar verir → Playwright icra edir → qeyd et; yalnız whitelist əməliyyatlar | `agent/AgentLoop.kt`, `Tools.kt`, `Llm.kt` |
-| Adapter (web) | Agent başına Playwright instansı, browser server-ə `connect()`, context, snapshot, screenshot | `adapter/WebAdapter.kt`, `BrowserServer.kt` |
-| Poçt oxuyucu | Mailpit REST API-dən OTP və təsdiq linki | `mail/MailReader.kt` |
-| Oracle müştərisi | Hədəfin `/test/...` endpointlərindən həqiqət mənbəyi | `oracle/Oracle.kt` |
-| Sübut bazası | run, identity, step, event, artifact, finding cədvəlləri | `evidence/Store.kt` |
-| Hakim + hesabat | Typed assertlər, üç mənbəli müqayisə, Markdown/HTML hesabat | `evidence/Judge.kt`, `Report.kt` |
+| CLI | `plan`, `run`, `report`, `teardown`, `smoke` və digər əmrlər; `.env` və campaign.yaml oxuyur | `app` (`cli/PetekCommand`, `config/ConfigLoader`) |
+| Orkestrator | Agentləri yaradır, ssenari addımlarını aktora görə paylayır, ilişməni aşkar edir, run-ı bitirir | `features/orchestration` (`DefaultCampaignRunner`, `StepExecutor`) |
+| Kimlik reyestri | Ad, email, parol, telefon, rol, departament — başlamazdan əvvəl, deterministik | `features/identity` (`DefaultIdentityRegistryGenerator`) |
+| Hadisə şini | `emits` → hadisə + t0; `wait_for`; gecikmə ölçmə | `features/orchestration` (`InProcessEventBus`) |
+| Monitor | Hər agentin addımı, son əməliyyatı, son screenshotu; hərəkətsizlik taymeri | `features/orchestration` (`MordantMonitorView`, `InactivityWatchdog`), panel: `features/dashboard` |
+| Tester agent | Gör → LLM qərar verir → Playwright icra edir → qeyd et; yalnız whitelist əməliyyatlar | `features/agent` (`DefaultAgentLoop`, `JsonDecisionProtocol`, `runs/`), `features/llm` |
+| Adapter (web) | Agent başına Playwright instansı, browser server-ə `connect()`, context, snapshot, screenshot | `features/browser` (`PlaywrightBrowserSession`, `BrowserServerPool`) |
+| Poçt oxuyucu | OTP və təsdiq linki: Mailpit, sahibin IMAP qutusu, hədəfin test API-si | `features/mail` (`MailpitMailbox`, `ImapMailbox`, `TestApiMailbox`) |
+| Oracle müştərisi | Hədəfin `/test/...` endpointlərindən həqiqət mənbəyi | `features/oracle` |
+| Sübut bazası | run, identity, step, event, artifact, finding və digər cədvəllər | `features/evidence` (`SqliteEvidenceStore`, `EvidenceTables`) |
+| Hakim + hesabat | Typed assertlər, üç mənbəli müqayisə, Markdown/HTML hesabat | `features/verification`, `features/reporting` (`ThreeSourceJudge`, `BuildReportUseCase`) |
+
+MVP əvvəlcə tək modul (`src/main/kotlin/az/petek/`) kimi planlanmışdı; kod feature-based clean architecture ilə
+modullara bölünüb (AGENTS.md "Arxitektura qaydaları").
 
 ## Əsas dizayn qərarları
 
@@ -82,11 +85,11 @@ Beş qərar bütün kodun sərhədlərini çəkir; hər biri pozulanda sistemin 
 
 **1. Unikallıq agentin yox, orkestratorun işidir.** Agentlər ad, email və ya parol uydurmur. Orkestrator run başlamazdan əvvəl kimlik reyestrini yaradır: hər tester üçün ad, unikal email, parol, telefon, rol, departament. Reyestr `seed` ilə deterministikdir (eyni seed = eyni 30 adam), DB-də `UNIQUE(email)` və `UNIQUE(run_id, display_name)` məhdudiyyəti var, toqquşma olduqda run heç başlamır. Agent öz kimliyini yalnız oxuyur.
 
-**2. Hər agent öz brauzer kontekstində ****və öz thread-ində ****yaşayır.** Bir Chromium prosesi (browser server kimi qaldırılır), N browser context: cookie, localStorage, sessionStorage tam ayrıdır, sessiyalar qarışmır. Playwright-ın browser context mexanizmi məhz bunun üçündür — hər test üçün ayrıca brauzer açmadan izolyasiya olunmuş mühitlər verir və çoxistifadəçili ssenariləri birbaşa dəstəkləyir ([mənbə](https://thegtmdirectory.com/tools/playwright/md)). Playwright Java thread-safe deyil — metodları Playwright obyektinin yaradıldığı thread-də çağırılmalıdır, hər thread-də ayrıca instans yaratmaq olar ([mənbə](https://playwright.dev/java/docs/multithreading)); ona görə hər agent öz Playwright instansı ilə serverə `BrowserType.connect(ws)` edir və bütün brauzer çağırışları onun `newSingleThreadContext` dispetçerində (`withContext(agent.dispatcher)`) icra olunur. Login sonrası `storage_state` faylı saxlanılır; kontekst çökərsə eyni kimliklə yenidən qaldırılır. Sübut: hər agent login sonrası ekranda öz adını oxuyur və reyestrlə tutuşdurur.
+**2. Hər agent öz brauzer kontekstində ****və öz thread-ində ****yaşayır.** Chromium browser server kimi qaldırılır və hər biri N browser context daşıyır (default 20, `PETEK_CONTEXTS_PER_BROWSER`; 30 tester iki Chromium-da): cookie, localStorage, sessionStorage tam ayrıdır, sessiyalar qarışmır. Playwright-ın browser context mexanizmi məhz bunun üçündür — hər test üçün ayrıca brauzer açmadan izolyasiya olunmuş mühitlər verir və çoxistifadəçili ssenariləri birbaşa dəstəkləyir ([mənbə](https://thegtmdirectory.com/tools/playwright/md)). Playwright Java thread-safe deyil — metodları Playwright obyektinin yaradıldığı thread-də çağırılmalıdır, hər thread-də ayrıca instans yaratmaq olar ([mənbə](https://playwright.dev/java/docs/multithreading)); ona görə hər agent öz Playwright instansı ilə serverə `BrowserType.connect(ws)` edir və bütün brauzer çağırışları sessiyanın öz `ConfinedThread`-ində (tək thread-li executor) icra olunur. Login sonrası `storage_state` faylı saxlanılır; kontekst çökərsə eyni kimliklə yenidən qaldırılır. Sübut: hər agent login sonrası ekranda öz adını oxuyur və reyestrlə tutuşdurur.
 
-**3. Real-time koordinasiya ssenaridə asılı addım kimi yazılır.** "Admin elan verir, işçilər oxuyur" iki müstəqil agent deyil, `emits` / `wait_for` cütüdür. Admin agenti `announcement_created(id, t0)` yayır; 29 işçi agenti həmin hadisəni gözləyir, ekranda görəndə `seen(id, t1)` qaytarır; t1 − t0 real gecikmədir. MVP-də şin tək prosesdə `kotlinx.coroutines CompletableDeferred` + payload-dur; Faza 8-də eyni interfeys Redis pub/sub və ya NATS ilə əvəz olunur. Vaxtı həmişə harness saatı ölçür: t0 = dəyişikliyin sayta yazıldığı an (emitter-in öz səhifəsinin gördüyü yazı sorğusunun cavabı, `emits.request`; publish anı ayrıca saxlanır), t1 = mətnin receiver-in səhifəsində göründüyü an: receiver-lər emitter addımı başlayanda öz səhifələrində mətni izləməyə başlayır, anı səhifənin özü qeyd edir (Faza 24.10); timeout = `not_received`.
+**3. Real-time koordinasiya ssenaridə asılı addım kimi yazılır.** "Admin elan verir, işçilər oxuyur" iki müstəqil agent deyil, `emits` / `wait_for` cütüdür. Admin agenti `announcement_created(id, t0)` yayır; 29 işçi agenti həmin hadisəni gözləyir, ekranda görəndə `seen(id, t1)` qaytarır; t1 − t0 real gecikmədir. Şin tək prosesdədir (`InProcessEventBus`: `Mutex` və hər adın ən yeni hadisəsini verən `MutableStateFlow`, run-ın bütün hadisələri saxlanır ki, gec gələn də görsün); çoxmaşınlı sürüdə eyni `EventBus` portu Redis pub/sub və ya NATS ilə əvəz olunur. Vaxtı həmişə harness saatı ölçür: t0 = dəyişikliyin sayta yazıldığı an (emitter-in öz səhifəsinin gördüyü yazı sorğusunun cavabı, `emits.request`; publish anı ayrıca saxlanır), t1 = mətnin receiver-in səhifəsində göründüyü an: receiver-lər emitter addımı başlayanda öz səhifələrində mətni izləməyə başlayır, anı səhifənin özü qeyd edir (Faza 24.10); timeout = `not_received`.
 
-**4. Doğruluğu üç mənbənin uyğunluğu təsdiqləyir, AI-nin fikri yox.** A = göndərənin etdiyi (agentin addım logu), B = alanların gördüyü (DOM-da tapılan mətn, screenshot), C = hədəfin özü (oracle API). Qayda: A = B = C → keçdi; A ≠ C → backend xətası; C ≠ B → çatdırılma və ya UI xətası; A ≠ B, C yoxdursa → araşdırılmalı tapıntı. MVP-də yalnız typed assertlər var; LLM hakim (screenshot əsaslı "mətn düzgün görünür?") Faza 8-də əlavə olunur və hər hökmün yanında screenshot saxlanır ki, insan yoxlaya bilsin.
+**4. Doğruluğu üç mənbənin uyğunluğu təsdiqləyir, AI-nin fikri yox.** A = göndərənin etdiyi (agentin addım logu), B = alanların gördüyü (DOM-da tapılan mətn, screenshot), C = hədəfin özü (oracle API). Qayda: A = B = C → keçdi; A ≠ C → backend xətası; C ≠ B → çatdırılma və ya UI xətası; A ≠ B, C yoxdursa → araşdırılmalı tapıntı. Hökmü yalnız typed assertlər verir; LLM hakim (screenshot əsaslı "mətn düzgün görünür?") hələ yoxdur (Faza 14, köhnə Faza 8 qalıqları); gəlsə, hər hökmün yanında screenshot saxlanır ki, insan yoxlaya bilsin.
 
 **5. Deterministik olan ****`run`****, düşüncə tələb edən ****`do`****.** `run` addımı sabit Playwright funksiyasıdır (login, OTP oxuma, menyuya keçid) — LLM yox, ucuz, stabil. `do` addımı təbii dildir, LLM icra edir. Qeydiyyat kimi axınlar bir dəfə `do` ilə (UI-ı test edir), qalan 29 üçün `run` ilə keçir. Nəticə: LLM xərci və qeyri-sabitlik yalnız həqiqətən test olunan addımlarda qalır.
 
@@ -115,11 +118,11 @@ Rol bölgüsü deterministikdir: admin = 1 (agent `a01`), hər departamentə 1 m
 1. Mailpit Docker ilə qaldırılır: SMTP `:1025`, REST API və UI `:8025`.
 2. Hədəf staging-in çıxış SMTP-si test rejimində Mailpit-ə yönəlir. Beləliklə hədəf real poçt göndərmir, hər məktub Mailpit-də qalır.
 3. `test.portal.example` domeni real olmalı deyil — məktub heç vaxt internetə çıxmır.
-4. Agentin `run: read_email_code` addımı Mailpit API-də `to:<email>` ilə axtarır, hər 1 saniyədə bir, maksimum 60 saniyə.
+4. `run: read_email_code` (və qeydiyyat axınları, `do`-da `get_email_code` aləti) Mailpit API-də `to:<email>` ilə axtarır, hər 1 saniyədə bir, maksimum 60 saniyə.
 5. Kod regex ilə çıxarılır (4–8 rəqəm); təsdiq linki varsa `href` götürülüb eyni browser context-də açılır.
 6. Oxunan məktub "read" işarələnir ki, köhnə kod təkrar istifadə olunmasın; məktubun id-si sübut bazasına yazılır.
 
-Alternativ (Faza 8, poçtu Mailpit-ə yönəldə bilməyən hədəflər üçün): real catch-all domen + IMAP oxuyucu. Eyni `MailReader` interfeysi, fərqli implementasiya.
+Poçtu Mailpit-ə yönəldə bilməyən hədəflər üçün eyni `Mailbox` portunun başqa mənbələri var (Faza 10, 16): sahibin IMAP qutusu (`ImapMailbox`, artı ünvanlar), hədəfin test API-si (`TestApiMailbox`) və kodu paneldə sahibin yazdığı əl rejimi.
 
 **Telefon və SMS OTP**
 
@@ -132,7 +135,7 @@ Alternativ (Faza 8, poçtu Mailpit-ə yönəldə bilməyən hədəflər üçün)
 
 - 60 saniyədə məktub gəlmirsə addım `failed(mail_timeout)`, agent dayanır, orkestrator bunu tapıntı kimi qeyd edir (poçt göndərilmir = xəta).
 - Test poçt qutusunun özü (Mailpit) bütün gözləmə müddətində oxunmursa addım `error(mail_unavailable)` olur: bu mühit problemidir, hədəfin xətası sayılmır və hesabatda "test inbox unreachable" kimi görünür.
-- Kod səhv qəbul edilirsə bir dəfə təzə kod istənir, ikinci dəfə `failed(otp_rejected)`.
+- E-poçt kodu rədd edilirsə harness saytdan yeni kod istəmir, bir dəfə daha təzə kodun gəlməsini gözləyir; o da rədd edilir və ya gəlmirsə `failed(otp_rejected)`. Telefon kodu təkrarlanmır: rədd edilirsə dərhal `failed(otp_rejected)`.
 - Qeydiyyat 3 cəhddən sonra alınmırsa agent `failed`, qalan 29 davam edir; hesabatda ayrıca görünür.
 
 ## Ssenari formatı və assert növləri
@@ -232,7 +235,7 @@ steps:
 
 | Açar | Mənası |
 |---|---|
-| `actor` | Kim edir: `admin`, `manager[IT]`, `employee[*]` (hamısı), `employee[dept=IT, n=1]` (departamentdən n-ci), siyahı = bir neçə aktor |
+| `actor` | Kim edir: `admin`, `manager[IT]`, `employee[*]` (hamısı), `employee[dept=IT, n=1]` (departamentdən n-ci), `employee[reg=invite]` (qoşulma yoluna görə: `invite`, `company_code`, `self`, `login`, `guest`); `a \| b` və ya siyahı = bir neçə aktor |
 | `do` | Təbii dil tapşırığı; LLM whitelist əməliyyatlarla icra edir |
 | `run` | Sabit Playwright və ya API funksiyası; LLM iştirak etmir |
 | `emits` | Addım bitəndə hadisə yayır; payload = `{id, actor, t0, published_at, write}`; uzun forma `{event, id_from, request}`: `request` (`"POST /api/announcements"`) dəyişikliyi yazan sorğudur, gecikmə onun cavabından ölçülür |
@@ -250,7 +253,7 @@ steps:
 | `oracle` | `path`, `field`, `equals` / `contains` | oracle API cavabı ilə müqayisə |
 | `http_status` | `path`, `method` (default `GET`), `equals` | agentin sessiyası ilə birbaşa HTTP çağırışı |
 | `count` | `selector`, `equals` | elementlərin sayı |
-| `latency_max` | `ms` | `wait_for` sonrası ölçülən gecikmə həddi |
+| `latency_max` | `ms` | `wait_for` sonrası ölçülən gecikmə həddi; eyni addımda bir `visible_text`-dən sonra gəlməlidir (onun ölçdüyü gecikmədir) |
 | `only_one_succeeds` | `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}` (`request` məcburidir, Faza 24.5) | paralel aktorlardan yalnız birinin sorğusunu hədəf qəbul edib: brauzerin gördüyü uyğun sorğulardan biri `< 400`, heç biri 403/409/422 deyil (agentin `done(success)` sözü nəzərə alınmır); `oracle` verilibsə, test API-nin son vəziyyəti də yoxlanır. Yarışı uduzan aktor (409/422 və ya obyekt artıq qərarlaşdırılıb) gözlənilən nəticədir: addımı `lost_race` ilə keçir |
 
 `{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = addımın öz hadisəsinin obyekt id-si — gözlədiyi hadisə, yoxlamalarında isə emit etdiyi (Faza 24.6); başqa addımın obyekti `{event.<ad>.id}` ilə adlanır.
@@ -264,7 +267,7 @@ Pətək istənilən sayta uyğunlaşmalıdır: real saytların axınları çox v
 | Run funksiyası | Axın(lar) |
 |---|---|
 | `register_owner` | `register_owner`; test API varsa şirkət id/kodu paylaşılır; sessiya açılmayıbsa `login`, sonra `verify_identity` |
-| `register_and_login` | kimliyin rejiminə görə `join_by_invite` və ya `join_by_code`; sessiya açılmayıbsa `login`; `verify_identity`; 3 cəhd (hesab yarandıqdan sonra təkrar cəhd `login` ilə) |
+| `register_and_login` | kimliyin rejiminə görə `join_by_invite`, `join_by_code` və ya (şirkətsiz saytda, `self`) `sign_up`; `login` testeri yalnız `login`; sessiya açılmayıbsa `login`; `verify_identity`; 3 cəhd (hesab yarandıqdan sonra təkrar cəhd `login` ilə) |
 | `login` | `login` |
 | `verify_identity` | `verify_identity` (`assert_identity` addımı məcburidir) |
 
@@ -300,15 +303,15 @@ addımları və yalnız yoxlama edən (`do`/`run`-suz) addımlar bundan asılı 
 
 ## Texnologiya seçimi və repo strukturu
 
-MVP Kotlin/JVM 21 + Gradle (Kotlin DSL) + kotlinx.coroutines + Playwright Java + SQLite üzərində, tək JVM prosesində, IntelliJ IDEA-da yazılır. Python-un üstünlüyü (hazır browser-agent kitabxanaları) bu planda onsuz da istifadə olunmur, çünki agent döngəsi whitelist alətlərlə özümüz yazırıq; Kotlin isə developerin sürətini və Faza 8-in web paneli üçün Spring Boot yolunu verir.
+Pətək Kotlin 2.4 / JDK 25 toolchain + Gradle (Kotlin DSL) + kotlinx.coroutines + Playwright Java + SQLite üzərində, tək JVM prosesində, IntelliJ IDEA-da yazılır (versiyalar `gradle/libs.versions.toml`-da). Python-un üstünlüyü (hazır browser-agent kitabxanaları) bu planda onsuz da istifadə olunmur, çünki agent döngəsi whitelist alətlərlə özümüz yazırıq; web paneli Ktor serveridir (Spring yoxdur).
 
 | Ehtiyac | Seçim | Niyə |
 |---|---|---|
 | Brauzer | Playwright Java (`com.microsoft.playwright`) | browser context izolyasiyası, auto-wait, trace; Node ayrıca lazım deyil, driver paketlə gəlir |
-| Paralellik | kotlinx.coroutines; agent başına `newSingleThreadContext`, LLM/HTTP çağırışları suspend | Playwright-ın "eyni thread" qaydası ödənir, paralellik itmir |
-| Brauzer prosesi | Bir Chromium browser server + agent başına `BrowserType.connect(ws)` | 30 Chromium əvəzinə bir Chromium, 30 context |
+| Paralellik | kotlinx.coroutines; sessiya başına `ConfinedThread` (tək thread-li executor), LLM/HTTP çağırışları suspend | Playwright-ın "eyni thread" qaydası ödənir, paralellik itmir |
+| Brauzer prosesi | Chromium browser server-ləri (hər biri default 20 kontekst) + agent başına `BrowserType.connect(ws)` | 30 Chromium əvəzinə iki Chromium, 30 context |
 | Agentin səhifəni oxuması | ARIA snapshot + nömrələnmiş elementlər; screenshot yalnız lazım olanda | tam HTML LLM üçün baha və səhvə meyllidir |
-| LLM | Tool calling dəstəkləyən API, Ktor client ilə birbaşa HTTP + JSON; agentlərə ucuz model | xərc nəzarəti, SDK asılılığı yox |
+| LLM | Vendora bağlı olmayan `LlmClient`: sxemlə yoxlanan strukturlu JSON qərar (`JsonDecisionProtocol`, ADR-0003); AI CLI adapterləri, Anthropic Java SDK, OpenAI-uyğun HTTP (ADR-0008) | sahibdə hansı AI varsa o işləyir; qərarı kod yoxlayır |
 | Konfiqurasiya | kotlinx.serialization + kaml (YAML) | tipli sxem, aydın xəta mesajları |
 | CLI | Clikt + Mordant | əmrlər və canlı konsol lövhəsi |
 | Sübut bazası | sqlite-jdbc + Exposed | tək fayl, run başına ayrı DB mümkündür |
@@ -320,36 +323,20 @@ MVP Kotlin/JVM 21 + Gradle (Kotlin DSL) + kotlinx.coroutines + Playwright Java +
 
 ```
 petek/
-  build.gradle.kts, settings.gradle.kts
-  docker-compose.yml               # Mailpit
-  AGENTS.md, docs/PLAN.md
-  docs/examples/company-portal.yaml
-  src/main/kotlin/az/petek/
-    Main.kt                        # Clikt: plan / run / report / teardown / smoke
-    config/Config.kt               # campaign.yaml → data class-lar
-    identity/Identity.kt           # reyestr, seed, unikallıq
-    mail/MailReader.kt             # interfeys + MailpitReader
-    oracle/Oracle.kt               # hədəfin test endpointləri
-    agent/
-      AgentLoop.kt                 # gör → qərar → et → qeyd; limit, dövrə aşkarı
-      Tools.kt                     # whitelist əməliyyatlar
-      Llm.kt                       # tool calling, token sayğacı
-      runs/                        # Login, RegisterAndLogin, SeedCompany, ReadEmailCode
-    adapter/
-      WebAdapter.kt                # Playwright instansı, connect, context, snapshot, screenshot
-      BrowserServer.kt             # Chromium server-i qaldırır, ws endpoint verir
-    orchestrator/
-      Scheduler.kt                 # addımları aktorlara paylayır, parallel, on_fail
-      Bus.kt                       # emits / wait_for, t0/t1
-      Monitor.kt                   # vəziyyət lövhəsi, hərəkətsizlik taymeri
-    scenario/
-      Schema.kt                    # YAML modeli, aktor seçici, şablonlar
-      Asserts.kt                   # typed assertlər
-    evidence/
-      Store.kt                     # SQLite cədvəlləri
-      Judge.kt                     # üç mənbəli müqayisə
-      Report.kt                    # Markdown/HTML
-  src/test/kotlin/az/petek/         # faza smoke testləri
+  settings.gradle.kts, build.gradle.kts, build-logic/    # convention plugin-ləri, lisenziya başlığı
+  gradle/libs.versions.toml                              # bütün versiyalar
+  docker-compose.yml                                     # Mailpit
+  AGENTS.md, README.md, README.az.md, docs/              # PLAN, ARCHITECTURE, requirements, adr, examples, ci
+  core/domain, core/sqlite                               # id-lər, saat, Secret; SQLite bağlantısı
+  features/<ad>/                                         # hər biri domain -> application -> infrastructure
+    campaign, identity, browser, agent, llm, mail, oracle, verification, orchestration,
+    evidence, reporting, capacity, scenarios, explorer, dashboard, ownership
+  app/                                                   # CLI, konfiqurasiya, kompozisiya kökü, panel backend, bundle
+  launcher/                                              # npx petek
+  docker/                                                # image
+  testing/fake-target/                                   # kontrakt saytı, yalnız Pətəkin öz e2e testləri üçün
+  e2e/                                                   # Konsist arxitektura qaydaları
+  scenarios/contract-demo.yaml                           # kontrakt saytının kampaniyası
 ```
 
 ## Hədəf sayt tərəfində hazırlıq
@@ -373,7 +360,10 @@ Sayt sənindir: hədəfdə `TEST_MODE` açmaq platformanın yarısını asanlaş
 | GET | `/test/announcements/{id}/receipts` | kim oxuyub, nə vaxt (email + timestamp siyahısı) |
 | GET | `/test/tickets/{id}` | cari status, assignee, status tarixçəsi (kim, nə vaxt, nədən nəyə) |
 | GET | `/test/notifications?user={email}` | istifadəçiyə göndərilən bildirişlər və oxunma vaxtı |
-| POST | `/test/companies/seed` | şirkət + departamentlər + dəvətlər bir çağırışla (setup-ı sürətləndirir) |
+| GET | `/test/companies?owner={email}` | sahibin şirkəti (id, kod, `is_test`) |
+| POST | `/test/companies/seed` | mövcud şirkətə (`company_id`) departamentlər və dəvətlər bir çağırışla (setup-ı sürətləndirir; şirkəti özü yaratmır) |
+| GET | `/test/announcements/latest?by={email}`, `/test/tickets/latest?by={email}` | istifadəçinin son yaratdığı obyekt (hadisənin id mənbəyi) |
+| GET, POST | `/test/emails?to={email}`, `/test/emails/{id}/read` | Mailpit əvəzinə hədəfin saxladığı poçt (`PETEK_MAIL_SOURCE=test-api`) |
 | DELETE | `/test/companies/{id}` | test şirkətini bütün verilənləri ilə silir |
 
 **UI tərəfində**
@@ -381,11 +371,11 @@ Sayt sənindir: hədəfdə `TEST_MODE` açmaq platformanın yarısını asanlaş
 - Bildiriş zəngi, elan siyahısı, ticket statusu, approve/reject/assign düymələri `data-testid` alır. Agentin etibarlılığı ən çox buna bağlıdır.
 - Real-time mexanizmi sənədləşdirilir: web-də WebSocket, SSE, yoxsa polling; bildiriş DOM-a hansı elementlə düşür. Bu bilinməsə `visible_text` gecikməsi düzgün ölçülmür.
 
-Açıq sual: qeydiyyat dəvətlə (admin əlavə edir, işçi linklə gəlir) yoxsa sərbəstdir (işçi özü qeydiyyatdan keçib şirkət kodu yazır)? Cavab `register_and_login` `run` funksiyasının axınını müəyyən edir.
+Cavablanmış sual: qeydiyyat dəvətlə (admin əlavə edir, işçi linklə gəlir) yoxsa sərbəstdir (işçi özü qeydiyyatdan keçib şirkət kodu yazır)? Hər ikisi, testerə görə (`campaign.registration: {invite, company_code}`); `register_and_login` kimliyin rejiminə görə `join_by_invite` və ya `join_by_code` axınını seçir. Tam siyahı: `docs/TARGET_CONTRACT.md` §4.
 
 ## Fazalar
 
-Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" şərti ödənəndə bağlanır, yarımçıq faza üstündən növbətiyə keçilmir.
+Faza 0–5 MVP-dir, 6–25 sonrasıdır; hər faza yalnız "hazır sayılır" şərti ödənəndə bağlanır, yarımçıq faza üstündən növbətiyə keçilmir. Son sütun təxmini müddətdir, vəziyyət deyil; vəziyyət hər fazanın bəndlərindədir.
 
 | Faza | Ad | Nəticə | Təxmini müddət |
 |---|---|---|---|
@@ -395,8 +385,8 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 3 | N agent və orkestrator | 30 agent eyni anda, izolyasiya sübutu, ilişmə aşkarı | 3–5 gün |
 | 4 | Ssenari və real-time | emits/wait_for, assertlər, kontrakt saytının ssenariləri keçir | 1 həftə |
 | 5 | Hesabat, stabillik, təmizlik | Tək əmr → hesabat; 3 run eyni nəticə; teardown | 3–5 gün |
-| 6 | Kəşfiyyatçı | Sayt modeli, avtomatik ssenari | sonra |
-| 7 | Sürpriz və əks-əlaqə | Triaj, ssenari v2, fərq kəşfiyyatı | sonra |
+| 6 | Kəşfiyyatçı | Sayt modeli, avtomatik ssenari | hazırdır |
+| 7 | Sürpriz və əks-əlaqə | Triaj, ssenari v2, fərq kəşfiyyatı | hazırdır |
 | 8 | Bünövrə düzəlişləri və biznes hazırlığı | Real saytda kəşfiyyat işləyir; lisenziya, `workspace_id`, edition portları | 3–5 gün |
 | 9 | Provayder-agnostik AI qatı | Layihə hansı AI-ı işlədirsə Pətək onunla işləyir (`auto`) | 1 həftə |
 | 10 | Hədəf profili və giriş zənciri | Bir neçə sayt, öz hesablarınla giriş, IMAP/manual OTP, sübut səviyyələri | 1–2 həftə |
@@ -412,10 +402,13 @@ Faza 0–5 MVP-dir, 6–8 sonrasıdır; hər faza yalnız "hazır sayılır" ş�
 | 20 | İki qatlı, üç rəfli hesabat | Müştəri üçün sadə qat, detal qatı, JUnit XML və SARIF | 1 həftə |
 | 21 | Tutum, dalğalar və ayrı IP | Böyük sürü dalğalarla; hər testerə ayrı IP seçimi | 1 həftə |
 | 22 | Demo hədəfləri | açıq mənbəli xəbər və mağaza platformaları sahibin serverində, real tapıntılar | sonra |
-| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı; sonra "Test et", AI seçimi, saytlar siyahısı | gedir |
+| 23 | Bir əmrlə başlanğıc | `petek` + şəxsi iş qovluğu + "Quraşdırma" ekranı + "Test et"; sonra AI seçimi, saytlar siyahısı | gedir |
+| 24 | Orkestratorun kompozisiya auditi | Rol, tester sayı, dalğa, swap, yarış və hadisənin hər birləşməsində yalançı nəticə yoxdur | 1 həftə |
+| 25 | Ssenari kəşfiyyatdan doğulur | "Test et" yalnız saytda görünəni yoxlayır; universal uğur meyarları | 1 həftə |
 
 Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablanıb. Faza 8–14 "Pətək 2: universal alət" planıdır
-(aşağıda, Faza 7-dən sonra); köhnə Faza 8 ("Universal platforma") onun içində əridilib.
+(aşağıda, Faza 7-dən sonra); köhnə Faza 8 ("Universal platforma") onun içində əridilib. Faza 15–23 "Pətək 3: yalnız
+link ilə sürü" planıdır; Faza 24 və 25 onların üstündə orkestratorun auditi və kəşfiyyatdan doğan ssenaridir.
 
 **Faza 0 — Hədəf və mühit**
 
@@ -424,61 +417,68 @@ Müddətlər təxminidir və bir nəfərin axşam-həftəsonu işi kimi hesablan
 - [ ] `is_test` tenant bayrağı; oracle və teardown endpointləri (yuxarıdakı cədvəl) — **sahib:** hədəf saytın sahibi (`docs/TARGET_CONTRACT.md`; fake target bunu kontrakt üzrə edir)
 - [ ] Əsas UI elementlərinə `data-testid` — **sahib:** hədəf saytın sahibi (`docs/TARGET_CONTRACT.md`; fake target bunu kontrakt üzrə edir)
 - [x] Real-time mexanizmi və bildirişin DOM görünüşü sənədləşdirilir
-- [x] Repo: IntelliJ IDEA, Kotlin/JVM (indi JDK 25 toolchain), Gradle (Kotlin DSL); `Chromium ilk Playwright.create()-də avtomatik yüklənir`, `.env` (LLM açarı, test token, Mailpit URL)
+- [x] Repo: IntelliJ IDEA, Kotlin/JVM (indi JDK 25 toolchain), Gradle (Kotlin DSL); Chromium-u brauzer mühərriki başlayanda `PlaywrightDriver.installChromium()` yalnız lazım olanda yükləyir (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` bunu keçir), `.env` (LLM açarı, test token, Mailpit URL)
 - [x] `docker-compose.yml` ilə Mailpit
 
 Hazır sayılır: bir Playwright skripti test email ilə qeydiyyatdan keçir, kodu Mailpit-dən oxuyur, login olur, `DELETE /test/companies/{id}` ilə silir.
 
 **Faza 1 — Konfiqurasiya və kimlik reyestri**
 
-- [x] `config``/Config.kt`: campaign.yaml → kaml + kotlinx.serialization data class-ları; xətalar sətir nömrəsi ilə
-- [x] `identity``/Identity.kt`: ad siyahısı, email/parol/telefon generasiyası, seed, rol və departament bölgüsü
-- [x] SQLite sxemi: `run`, `identity`, `step`, `event`, `artifact`, `finding`; unikallıq məhdudiyyətləri
+- [x] Konfiqurasiya: campaign.yaml → kaml node ağacı → `CampaignYamlMapper` → domain data class-ları; xətalar sətir nömrəsi ilə (`.env`: `app/config/ConfigLoader`, `PetekConfig`)
+- [x] Kimlik (`features/identity`, `DefaultIdentityRegistryGenerator`): ad siyahısı, email/parol/telefon generasiyası, seed, rol və departament bölgüsü
+- [x] SQLite sxemi (`EvidenceTables`, `IdentityTable`): `run`, `identity`, `step`, `event`, `artifact`, `finding` (sonradan daha çox, "Sübut bazası" bölməsində); unikallıq məhdudiyyətləri
 - [x] `petek plan campaign.yaml`: kimlikləri cədvəl kimi çap edir, DB-yə yazır, heç nə icra etmir
 
 Hazır sayılır: `plan` iki dəfə çağırılanda eyni 30 kimliyi verir; eyni adı iki dəfə verəndə run başlamır və səbəbi yazır.
 
 **Faza 2 — Tək agent (ən vacib faza)**
 
-- [x] `adapter/``WebAdapter.kt + BrowserServer.kt`: context yaratma, accessibility snapshot (nömrələnmiş elementlər), screenshot, `storage_state`
-- [x] `agent/``Tools.kt`: whitelist — `navigate`, `click(id)`, `type(id, text)`, `select(id, option)`, `read_text(selector)`, `wait_text(text, timeout)`, `get_email_code()`, `get_phone_code()`, `done(summary)`, `report_problem(kind, note)`
-- [x] `agent/``Llm.kt`: tool calling, sistem promptu (rol, məqsəd, qaydalar), token sayğacı
-- [x] `agent/``AgentLoop.kt`: gör → qərar → et → qeyd; addım limiti; eyni əməliyyatın 3 dəfə təkrarı = dövrə, dayandır
-- [x] Hər addımda: screenshot + accessibility snapshot + vaxt + LLM gerekçəsi → `step` və `artifact`
-- [x] `runs/`: `login`, `read_email_code`, `register_and_login`, `seed_company`
+- [x] Brauzer (`features/browser`: `PlaywrightBrowserSession`, `BrowserServerProcess`, `BrowserServerPool`): context yaratma, accessibility snapshot (nömrələnmiş elementlər), screenshot, `storage_state`
+- [x] Alətlər (`agent/domain/Tools.kt`): whitelist — `navigate`, `click(id)`, `type(id, text, submit)`, `select(id, option)`, `read_text(selector)`, `wait_text(text, timeout)`, `get_email_code()`, `get_phone_code()`, `done(summary, success, object_id)`, `report_problem(kind, note)`
+- [x] Qərar: sxemlə yoxlanan strukturlu JSON (`JsonDecisionProtocol`, ADR-0003; tool calling yox), sistem promptu (`PromptBuilder`: rol, məqsəd, qaydalar), token sayğacı (`MeteredLlmClient`)
+- [x] Döngə (`DefaultAgentLoop`): gör → qərar → et → qeyd; addım limiti; dövrə = eyni səhifədə eyni əməliyyat son 6 qərarda 3 dəfə (`RepeatedStateLoopDetector`), dayandır
+- [x] Hər addımda səbəb və vaxt → `step`; screenshot icra olunan hər əməliyyatdan sonra və son addımda, accessibility ağacı ilk, son və keçməyən addımlarda → `artifact` (`StepEvidence`)
+- [x] `runs/`: `login`, `read_email_code`, `register_and_login`, `seed_company` (sonradan `register_owner`, `verify_identity`, `logout`, `site_health`, `direct_url`, `page_checks`)
 
 Hazır sayılır: bir agent "qeydiyyatdan keç, kodu təsdiqlə, şirkət yarat" tapşırığını `do` ilə tamamlayır; hər addımın sübutu DB-dədir; eyni iş `run` ilə 10 saniyədən az çəkir.
+  **Vəziyyət:** `do` ilə qeydiyyat (e-poçt və telefon kodu, şirkət) `ContractDemoEndToEndTest`-də real Chromium-da keçir, qərarları
+  qaydalı sürücü (`ContractSiteDriver`) verir; real AI ilə eyni run `./gradlew :e2e:liveTest`-dir. `run` ilə qeydiyyatın
+  müddəti ayrıca ölçülmür (30 testerlik contract demo bütövlükdə təxminən 15 saniyədir).
 
 **Faza 3 — N agent və orkestrator**
 
-- [x] `orchestrator/Scheduler.kt`: aktor seçici parseri, addımları agent korutinlərinə paylama, `parallel`
-- [x] Hər agent öz single-thread dispetçeri və öz Playwright instansı ilə ortaq browser server-ə connect() edir; bir Chromium-da default 20 context (`BrowserEngineConfig.DEFAULT_CONTEXTS_PER_BROWSER`, 30-a qədər sınanıb); yaddaş və CPU ölçülür
-- [x] `orchestrator/Monitor.kt`: vəziyyət lövhəsi (Mordant), N saniyə hərəkətsizlik → `blocked`, agent növbəti addıma keçir
+- [x] Orkestrator (`DefaultActorExpressionParser`, `DefaultCampaignRunner`, `StepExecutor`): aktor seçici parseri, addımları agent korutinlərinə paylama, `parallel`
+- [x] Hər agent öz `ConfinedThread`-i və öz Playwright instansı ilə ortaq browser server-ə connect() edir; bir Chromium-da default 20 context (`BrowserEngineConfig.DEFAULT_CONTEXTS_PER_BROWSER`, 30-a qədər sınanıb); brauzerlərin yaddaşı ölçülür (yalnız Linux `/proc`-dan), CPU ölçülmür: tutum tövsiyəsi nüvə sayından hesablanır (`SystemHostResourceProbe`, `CapacityAdvisor`)
+- [x] Monitor (`AgentBoard`, `MordantMonitorView`, `InactivityWatchdog`): vəziyyət lövhəsi (Mordant), N saniyə hərəkətsizlik → `blocked`, agent növbəti addıma keçir
 - [x] Çökən context eyni kimlik və `storage_state` ilə bərpa olunur
   **Vəziyyət:** `BrowserContextLostException` → `RestoringBrowserSession` yeni kontekst açır (saxlanmış `storage_state` ilə), səhifəni yenidən açır, çağırışı bir dəfə təkrarlayır; sübutda `restore_session` addımı (ən çox 2 dəfə).
 - [x] `on_fail: continue | abort`
 
 Hazır sayılır: 30 agent eyni anda login olur, hər biri ekranda öz adını oxuyub reyestrlə tutuşdurur (sessiya qarışmasının sübutu); biri süni ilişdiriləndə digərləri dayanmır; 30 agent eyni anda gözləyərkən gecikmə ölçüsü serialaşmır.
+  **Vəziyyət:** 30 testerin girişi və adı `ContractDemoEndToEndTest`-də (real Chromium, kontrakt saytı); ilişmə və
+  serialaşmayan gözləmə `RunnerConcurrencyTest`-də; 30 və 60 sessiyanın izolyasiyası `BrowserIsolationAtScaleTest`-də.
 
 **Faza 4 — Ssenari mühərriki və real-time**
 
-- [x] `scenario/``Schema.kt`: addım açarları, şablonlar (`{last_id}`, `{self.email}`)
-- [x] `orchestrator/Bus.kt`: `emits` → hadisə + t0; `wait_for` → gözləmə + timeout; alan tərəfdə t1
-- [x] `scenario/Asserts.kt`: `visible_text`, `not_visible`, `oracle`, `http_status`, `count`, `latency_max`, `only_one_succeeds`
-- [x] `oracle``/Oracle.kt`: test endpointləri müştərisi
+- [x] Ssenari modeli (`campaign/domain/Campaign.kt`, `Placeholder`): addım açarları, şablonlar (`{last_id}`, `{pass}`, `{self.email}`, ...)
+- [x] Hadisə şini (`InProcessEventBus`, `StepExecutor`): `emits` → hadisə + t0; `wait_for` → gözləmə + timeout; alan tərəfdə t1
+- [x] Assertlər (`DefaultAssertionEvaluator`): `visible_text`, `not_visible`, `oracle`, `http_status`, `count`, `latency_max`, `only_one_succeeds`
+- [x] Oracle (`features/oracle`, `HttpTargetOracle`): test endpointləri müştərisi
 - [x] `docs/examples/company-portal.yaml`: setup, elan, ticket axını, icazə, yarış
 
 Hazır sayılır: elan ssenarisi 29/29 çatır və gecikmələr agent başına yazılır; ticket axınları oracle ilə təsdiqlənir; icazə testi 403 qaytarır; yarış testində yalnız biri qalib gəlir.
+  **Vəziyyət:** kontrakt saytında `ContractDemoEndToEndTest` sübut edir (elanı `employee[*]` oxuyur: 24/24).
 
 **Faza 5 — Hesabat, stabillik, təmizlik**
 
-- [x] `evidence/Judge.kt`: A/B/C müqayisəsi, tapıntı növləri (backend, çatdırılma/UI, araşdırılmalı)
-- [x] `evidence/Report.kt`: addım cədvəli, gecikmə paylanması, tapıntılar screenshot və oracle cavabı ilə, agent başına token və xərc
+- [x] Hakim (`reporting/domain/ThreeSourceJudge`): A/B/C müqayisəsi, tapıntı növləri (backend, çatdırılma/UI, araşdırılmalı, sonradan sayt yoxlaması, agent xətası, sübut yetərsiz)
+- [x] Hesabat (`BuildReportUseCase`, `MarkdownReportWriter`, `HtmlReportWriter`): addım cədvəli, gecikmə paylanması, tapıntılar screenshot və oracle cavabı ilə, agent başına token və xərc
 - [x] `petek run --repeat 3`: stabillik faizi, flaky addımların işarələnməsi
 - [x] `petek teardown`: run bitəndə və yarımçıq qalanda test şirkəti silinir
 - [x] README: quraşdırma, ilk run, ssenari yazma
 
 Hazır sayılır: tək əmr → tam run → hesabat; 3 ardıcıl run eyni nəticə; staging-də artıq heç nə qalmır.
+  **Vəziyyət:** kontrakt saytında `ContractDemoEndToEndTest` sübut edir (`--repeat 3`, test şirkəti silinir).
 
 **Faza 6 — Kəşfiyyatçı (MVP-dən sonra)** — kodda: `features/explorer`, panelin "Kəşfiyyat" ekranı (`docs/ARCHITECTURE.md`)
 
@@ -494,7 +494,7 @@ Hazır sayılır: tək əmr → tam run → hesabat; 3 ardıcıl run eyni nətic
 - [x] Təsdiqlənmiş ssenarilər dondurulur; fərq kəşfiyyatı (release-dən release-ə nə dəyişib) (`freeze`, `SiteModelDiff`)
 
 Faza 6–7-nin bu siyahısı 2026-09-25-də kodla tutuşdurulub; qalan boşluqlar (kəşfiyyatçının öz girişi, öz hesablar,
-IMAP) aşağıda Faza 10-dadır.
+IMAP) Faza 10, 16 və 17-də bağlanıb.
 
 ## Pətək 2: universal alət planı (2026-09-25)
 
@@ -568,11 +568,12 @@ Məqsəd: real saytda kəşfiyyat işləsin; sonradan dəyişməsi baha olan biz
 - [x] Faza 6–7 qutularını kodla tutuşdurub işarələmək; `docs/ARCHITECTURE.md`-də boş "Explorer" bölməsini yazmaq.
 - [x] `LICENSE` (BSL 1.1: Kodcraft / Aslan Aslanov, Change Date 2030-09-25 → Apache 2.0; 2026-09-26-dan Apache 2.0, ADR-0013), `NOTICE`; hər mənbə faylında
   Spotless-in məcbur etdiyi copyright başlığı (`PetekLicense.kt`); `README.md` + `README.az.md`, `SECURITY.md`,
-  `CONTRIBUTING.md`, `docs/requirements/` (R01–R15), GitHub Actions CI, PR şablonu, `CODEOWNERS`.
+  `CONTRIBUTING.md`, `docs/requirements/` (R01–R15, sonradan R16), GitHub Actions CI, PR şablonu, `CODEOWNERS`.
 - [ ] Ad/marka: `petek` latın yazılışı ilə GitHub org, domen, npm/Maven adlarının tutulması (sahib).
 - [x] Buraxılış xətti (R15-in ilk addımı): `main` buraxılış branch-ı, `gradle.properties`-də `version`, `:app:distZip`
   (`petek-<versiya>-any-jdk25.zip`: `bin/petek`, jar-lar, LICENSE, `.env.example`, `scenarios/`, hədəf kontraktı) və
-  `main`-ə push-da (və ya `vX.Y.Z` teqində) GitHub Release yaradan `release.yml`. README-də "Öz saytınızda istifadə"
+  GitHub Release yaradan `release.yml` (indi yalnız əl ilə: Actions → Release → Run workflow, branch `main`, versiya;
+  push və teq onu başlatmır). README-də "Öz saytınızda istifadə"
   bölməsi: sidecar, kitabxana deyil; müştərinin öz AI login-i.
 - [x] Platform bundle-ları (Faza 12a, R15): `:app:bundle` → `petek-<versiya>-<platform>.tar.gz` (Windows-da `.zip`),
   içində `bin/petek` (sh) / `bin/petek.cmd`, `lib/` (Playwright driver-bundle jar-ı yalnız o platformun Node-u ilə
@@ -582,7 +583,8 @@ Məqsəd: real saytda kəşfiyyat işləsin; sonradan dəyişməsi baha olan biz
   macos, windows) hər bundle-ı öz platformunda qurur, `bin/petek --help`-i JDK-sız işlədir, `SHA256SUMS` ilə birlikdə
   Release-ə qoyur; `build.yml` (əl ilə) linux bundle-ını qurub başladır. Lokal sübut: linux-x64 bundle-ı
   (165 MB) `/tmp`-də JDK-sız `doctor` — Chromium slim driver-dən qalxdı, real hədəf HTTP 200.
-- [x] Konsist arxitektura testləri `e2e/`-də (AGENTS.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də.
+- [x] Konsist arxitektura testləri `e2e/`-də (AGENTS.md-də yazılmışdı, amma yox idi) — 7 qayda, hər build-də (indi 9:
+  ödənişli modul və HR anlayışı qaydaları sonradan əlavə olunub).
 - [x] Tester izolyasiyası auditi və sərtləşdirmə (`docs/requirements/R01` "Isolation guarantees"): roster parolsuz
   (`Colleague`), paylaşılan dəyərlər write-once, `{last_id}` eyni addımdakı başqa agentin ID-sinə düşmür, yalnız
   admin `register_owner`/`seed_company`, hər hadisənin bir emit addımı, sessiya faylları `rw-------`. Sübut:
@@ -682,11 +684,12 @@ tool-use yoxdur). 2026-09-26: vendor adı koddan və sənədlərdən çıxarıld
 - [x] `LlmProviderId` enum → açıq `value class LlmProviderKey`; `LlmProviders` reyestr (`Map<key, factory>`), exhaustive
   `when` yoxdur (OCP).
 - [x] `CliAgentLlmClient` (generic): proses hissəsi (scratch dir, timeout, kill-tree, output faylları, `ProcessRunner`);
-  hər agent üçün kiçik `CliAgentProfile` strategiyası: `command(config, request)`, `environment`,
-  `transcript(messages)`, `parse(ProcessOutput)`. Profillər: `codex exec`, `gemini -p`, `opencode run` və `.env`-də
+  hər agent üçün kiçik `CliAgentProfile` strategiyası: `call(request, scratch)` (əmr və stdin, `CliTranscripts`),
+  `environment`, `parse(ProcessOutput, scratch)`. Profillər: `codex exec`, `gemini -p`, `opencode run` və `.env`-də
   təsvir olunan istənilən alət üçün `GenericCliProfile` (`PETEK_LLM_BIN`, `PETEK_LLM_ARGS`, 2026-09-26).
 - [x] Sxem dəstəyi olmayan CLI-lər üçün "sxem promptda" rejimi: sistem mətninə sxem əlavə olunur, `StructuredJson`
-  parse edir, kod validasiyası (`DecisionProtocol` və s.) qalan işi görür. Bir dəfə "düzəlt" təkrarı (`Retrying`).
+  parse edir, kod validasiyası (`DecisionProtocol` və s.) qalan işi görür. Yararsız cavab bir dəfə dərhal təkrar
+  soruşulur (`RetryingLlmClient`; eyni sorğudur, düzəliş mesajı deyil).
 - [x] `OpenAiCompatibleLlmClient` (`infrastructure/http/`): Ktor client (kataloqda var, yeni kitabxana yoxdur);
   `POST {base}/v1/chat/completions`, `response_format: json_schema` (strict) → fallback `json_object` → prompt;
   `PETEK_LLM_STRUCTURED=schema|json_object|prompt`. Xəta xəritəsi `AnthropicErrors` kimi (429 retry-after, 401/403,
@@ -694,8 +697,9 @@ tool-use yoxdur). 2026-09-26: vendor adı koddan və sənədlərdən çıxarıld
 - [x] Strict-sxem adapteri: bütün sahələr `required`, isteğe bağlılar `nullable` (OpenAI strict rejimi mövcud üç sxemi
   rədd edir). Parserlər `null`-u "yoxdur" kimi oxuyur.
 - [x] Konfiqurasiya: `PETEK_LLM_PROVIDER=auto` (default), `PETEK_LLM_BIN`, `PETEK_LLM_ARGS`, `PETEK_LLM_ENV_UNSET`,
-  `PETEK_LLM_BASE_URL`, `PETEK_LLM_API_KEY` (`Secret`; `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`XAI_API_KEY`/
-  `OPENROUTER_API_KEY`/`GEMINI_API_KEY` alias), `PETEK_LLM_EFFORT`. Pətək heç bir provayderə model seçmir.
+  `PETEK_LLM_BASE_URL`, `PETEK_LLM_MODEL` (`openai-compat` və `anthropic-api` üçün məcburi), `PETEK_LLM_API_KEY`
+  (`Secret`; `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`XAI_API_KEY`/`OPENROUTER_API_KEY`/`GEMINI_API_KEY` alias),
+  `PETEK_LLM_EFFORT`. Pətək heç bir provayderə model seçmir.
 - [x] `auto` aşkarlama sırası (app/config `LlmProviderResolver`): (1) açıq `.env` dəyəri; (2) mühit açarları; (3) hədəf
   repodakı işarələr — `AGENTS.md`/`.codex/` → codex-cli, `GEMINI.md`/`.gemini/` → gemini-cli,
   `.github/copilot-instructions.md` → OpenAI-uyğun endpoint tələb olunur; (4) PATH-dakı binarlar (`codex`, `gemini`,
@@ -706,7 +710,7 @@ tool-use yoxdur). 2026-09-26: vendor adı koddan və sənədlərdən çıxarıld
 - [x] `doctor`: aşkarlanan provayder + səbəb, ehtiyatlar və hansının cavab verdiyi; binar `--version`; PING. Neytral
   mətnlər (`CapacityAdvisor` "AI provayderinin limitləri"; login ipucları provayderə görə).
 - [x] `TextRedactor` və triaj `SecretRedactor`: bütün provayder açar formatları (`sk-`, `sk-ant-`, `AIza`, `gsk_`...).
-- [x] Testlər: `CliAgentLlmClientTest` (fake process, hər profil üçün arqument siyahısı və parse), `OpenAiCompatibleLlmClientTest`
+- [x] Testlər: `CliAgentProfilesTest` və `GenericCliProfileTest` (fake process, hər profil üçün arqument siyahısı və parse), `OpenAiCompatibleLlmClientTest`
   (Ktor fake server), `LlmProviderResolverTest` (fixture qovluqları ilə aşkarlama), `ConfigLoaderTest` yeniləmə.
   `ScriptedLlmClient.provider` neytral olur.
 - [x] ADR-0008 (ADR-0003-ü genişləndirir), `.env.example`, `docs/ARCHITECTURE.md`, AGENTS.md stack sətri.
@@ -748,10 +752,13 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   `PETEK_TARGET` yalnız default hədəfin adı/URL-i olur; `RunTargets` `config.copy(target=…)` yerinə profili götürür;
   `PanelRunsAdapter.kt:119`-dakı "yalnız PETEK_TARGET" bloku qaldırılır.
   **Vəziyyət:** `TargetSpec` (campaign domain), `YamlTargetSpecSource`, `PETEK_TARGETS_DIR`, `PETEK_TARGET=<ad>`, `${VAR}` sirləri dırnaq içində; panel profili olan istənilən saytda run və teardown edir; MCP `list_targets` profilləri göstərir; nümunə `docs/examples/target-profile.yaml`. `profile:` göstəricisi kəşfiyyatçının qeydiyyat axınlarını verir (`PointedProfiles`, 2026-09-29).
-- [x] Giriş zənciri (`identity` + `mail` application): `SignInStrategy` portu, zəncir dekoratoru; hər qərar
-  (`hansı strategiya, niyə keçildi`) `event` cədvəlinə və hesabata yazılır. Kəşfiyyatçı (`RoleSessions`) və
-  `register_and_login` eyni zənciri istifadə edir.
-  **Vəziyyət:** kəşfiyyatçı üçün `SignInChain` (profilin `sign_in` sırası; hər cəhd və keçid kəşfiyyat fəaliyyətində). Testerlərin `register_and_login`-i hələ kampaniyanın öz qapısı ilə gedir — Faza 18 (testerə görə qapı) bunu tamamlayır.
+- [x] Giriş zənciri: kəşfiyyatçı profilin `sign_in` sırası ilə daxil olur (test şirkəti, sahibin hesabları, öz
+  qeydiyyatı), alınmayanda növbətiyə keçir. İlk plan (`identity` + `mail` application-da `SignInStrategy` portu,
+  qərarların `event` cədvəlinə və hesabata yazılması, testerlərin də eyni zənciri işlətməsi) belə qurulmayıb.
+  **Vəziyyət:** zəncir app-dadır (`app/panel/explorer/SignInChain`); hər cəhd və keçid kəşfiyyatın fəaliyyət
+  sətirlərində görünür (`ExplorationTracker`), `event` cədvəlinə və run hesabatına düşmür (R07). Testerlərin
+  `register_and_login`-i kampaniyanın öz qapısı ilə gedir: Faza 18-də qapı bir dəfə öyrənilir, testerlər onu kodla
+  keçir; zəncir testerlər üçün deyil.
 - [x] Öz hesabların (bring-your-own accounts): panelin "Təlimat" ekranında hədəf üzrə rol → e-poçt/parol (və ya hazır
   `storage_state` faylı); `Secret` ilə gəzir, LLM `{self.password}` görür (qayda 10); panel sirləri `.env`-ə yazır,
   bazaya yox.
@@ -760,16 +767,20 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   yenidən qeydiyyat etmir, sessiya köhnəlibsə `login` axınına düşür.
   **Vəziyyət:** sahibin hesabları üçün `<evidence>/sessions/<sayt>/<rol>.json` (`rw-------`), köhnəlibsə login formu. Saxlanan vəziyyət sessionStorage-i də daşıyır (`origins[].sessionStorage`; Playwright bu açarı nəzərə almır) və tab həmin origin-in ilk səhifəsini açanda bir dəfə geri qoyulur — girişi sessionStorage-də saxlayan SPA-lar da daxil olmuş qalır, çıxışdan sonra isə yenidən qoyulmur (2026-09-26, tester hesabatı). Yalnız yaddaşda saxlanan token heç bir brauzer vəziyyətində saxlanıla bilməz.
 - [x] Poçt mənbələri: `TestApiMailbox` bağlanır (Faza 8); `ImapMailbox` (catch-all domen və ya `+` adresləmə;
-  kitabxana seçimi — qayda 11, aşağıdakı suallar); `ManualCodeMailbox`: panel "kodu daxil et" pəncərəsi açır, SSE ilə
-  agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün; sürüdə yalnız xəbərdarlıqla).
-- [x] İmkan yoxlaması (`capability probe`, `diagnostics`): kəşfiyyatdan əvvəl hədəfin nəyi dəstəklədiyi — test API,
-  poçt mənbəyi, real-time nəqliyyat, CAPTCHA/rate limit əlamətləri — `TargetCapabilities` kimi bazaya və hesabata.
+  kitabxana seçimi — qayda 11, aşağıdakı suallar); `ManualCodeMailbox`: panel "kodu daxil et" pəncərəsi açır (panel
+  gözləyən kodları 3 saniyədən bir soruşur, SSE yox), agent gözləyir, sahib yazır (kəşfiyyatçının 1–3 sessiyası üçün;
+  çox testerli run-da `petek run` və panel əvvəlcədən xəbərdarlıq edir, `doctor` da deyir).
+- [x] İmkan yoxlaması (`capability probe`, `diagnostics`): hədəfin nəyi dəstəklədiyi — test API, poçt mənbəyi,
+  real-time nəqliyyat, CAPTCHA/rate limit əlamətləri — `TargetCapabilities` kimi `petek probe` hesabatına (kəşfiyyatın
+  özü onu çağırmır, bazaya yazılmır).
   **Vəziyyət:** `TargetCapabilities` (`petek probe`): test API, poçt mənbəyi, real-time nəqliyyat, CAPTCHA (reCAPTCHA/hCaptcha/Turnstile) və 429 əlamətləri; hesabatda "Capabilities" bölməsi. Kəşfiyyat öncəsi bazaya ayrıca yazılmır — `petek probe` hesabatı sübutdur.
 - [x] Sübut səviyyəsi hər tapıntıda: `ORACLE_CONFIRMED` / `UI_NETWORK` / `LLM_JUDGED` (`FindingRecord.evidenceTier`);
   hesabat və panel göstərir; oracle olmayan hədəfdə `oracle` assert-ləri "SKIPPED" yox, "N/A (no oracle)" olur.
 - [x] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
-  **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake saytla e2e — Faza 13 bəndi.
+  **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake sayt
+  (`FakeNotesServer`: şirkətsiz, test API-siz) `TenantlessEndToEndTest` və `ExplorerNotesSiteIntegrationTest`-dədir. Hələ
+  yoxdur: iki profilin eyni paneldən seçilib ikincidə sahibin hesabı ilə kəşfiyyat edilməsinin e2e-si.
 
 Hazır sayılır: iki fərqli hədəf profili (fake target + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
 paneldən seçilir; ikincidə kəşfiyyatçı sahibin hesabı ilə daxil olur, hesabat sübut səviyyələrini göstərir.
@@ -783,14 +794,16 @@ Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-c
   `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`, `compare_explorations`,
   `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`, `approve_scenario`,
   `freeze_scenario`, `run_campaign` (`wait`), `cancel_run`, `list_runs`, `get_run_status`, `get_findings`,
-  `get_evidence`, `get_triage`, `run_triage`, `get_stability`, `teardown`. Giriş JSON Schema, çıxış `PanelJson`
+  `get_evidence`, `get_triage`, `run_triage`, `get_stability`, `teardown` (sonradan `get_finding_bundle` və Faza 25.3-də
+  `test_site`, `get_test`, `cancel_test`: indi 29 alət). Giriş JSON Schema, çıxış `PanelJson`
   (mətn + `structuredContent`). `PanelRuns`-a `findings(runId)` və `teardown(runId)` əlavə olundu.
 - [x] `petek mcp [--allow-writes]` (stdio): nazik JSON-RPC implementasiyası, SDK-sız (qərar verildi;
   R10-da qeyd). Yazan alətlər `--allow-writes` tələb edir; hədəf siyasəti eynidir; `.env` yoxdursa hər alət
   sahibdən saytı soruşur və heç nə test edilmir (qayda 12).
   `PanelCore` = panelin HTTP serversiz obyekt qrafı (WebPanel ondan istifadə edir).
 - [x] `--json`: `doctor`, `init`, `plan`, `run`, `report`, `teardown` (stdout bir JSON sənəd, loglar stderr,
-  uğursuzluq `{"error":...}` + adi çıxış kodu). Qalır: `capacity`, `probe`, `smoke` (CI rejimi ilə birlikdə).
+  uğursuzluq `{"error":...}` + adi çıxış kodu); sonradan `capacity`, `probe`, `smoke` (CI rejimi ilə), `verify`,
+  `test`, `findings` də.
 - [x] Tapıntı paketi (`FindingBundle`): tapıntı + addım + request/response + screenshot yolu + A/B/C + sübut səviyyəsi —
   kök səbəb araşdırması üçün ev sahibi AI-ın oxuyacağı tək obyekt (`reporting` domain).
   **Vəziyyət:** `BuildFindingBundlesUseCase` (reporting), `petek findings <run|latest> --json`, MCP `get_finding_bundle`, panel `findingBundles`.
@@ -800,7 +813,7 @@ Məqsəd: ev sahibi AI Pətəki alət kimi çağırsın; panel və AI eyni use-c
   `explore_site` → `get_findings` zənciri fake target-də.
 
 Hazır sayılır: `.mcp.json` oxuyan iki fərqli MCP müştərisində `explore_site` → `get_findings` zənciri
-fake target-də işləyir; eyni iş `petek explore --json | petek findings --json` ilə də alınır.
+fake target-də işləyir; eyni iş `petek --json test` və sonra `petek --json findings latest` ilə də alınır.
 
 ### Faza 12 — Skill paketi və paylanma
 
@@ -810,7 +823,9 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   `.petek/SKILL.md` (Agent Skills formatı), AI-a görə (`HostAi`, repodakı işarələrlə aşkarlanır; `--ai` ilə seçilir)
   təlimat faylında işarəli parça (`AGENTS.md`, `.cursor/rules/petek.mdc`, `GEMINI.md`,
   `.github/copilot-instructions.md`), layihə MCP faylında `petek` serveri (`.mcp.json`, `.cursor/mcp.json`,
-  `.gemini/settings.json`, `.vscode/mcp.json`); vendor adlı fayl yazılmır; `.gitignore`-a
+  `.gemini/settings.json`, `.vscode/mcp.json`); yalnız aşkarlanan və ya `--ai` ilə seçilən agentin faylları yazılır
+  (heç biri tapılmasa `AGENTS.md` və `.mcp.json`); Cursor qaydasının front matter-i faylın başında, işarələrdən
+  yuxarıdadır; `.gitignore`-a
   `.env`, `evidence/`. Mövcud faylların üstünə yazmır: parça əlavə edir/yeniləyir, JSON-a bir qeyd qatır, öz
   fayllarını yalnız `--force` ilə yenidən yazır. Testlər: `ProjectInitializerTest`, `InitCommandTest`.
 - [x] Rol təlimatları (`.petek/SKILL.md`, ingiliscə): *explorer* (naməlumları sahibdən soruş, `answer_unknown`),
@@ -833,15 +848,18 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
   `--json doctor` + `--json run`, sübut artefaktı). Qalır: mac-x64 bundle-ı (runner yoxdur; `any-jdk25` ilə) — **sahib**; Mailpit companion compose faylı hazırdır
   (`docker/compose.yml`). `:app`-ın `fake-target` runtime asılılığı 2026-09-26-da qayda 12 ilə
   silindi (demo yoxdur; fake target yalnız test asılılığıdır).
-- [x] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); `petek.yaml`-dan hədəfi götürür.
-  **Vəziyyət:** `--health` / `.petek/petek.yaml` `health_url` / hədəf; `--wait` (180 s), 2xx gələndə panel; hədəf `.env`-dən.
+- [x] `petek dev`: hədəf tətbiq qalxandan sonra paneli yanında açır (health URL gözləyir); hədəf `.env`-dəndir,
+  `.petek/petek.yaml`-dan yalnız `health_url` oxunur.
+  **Vəziyyət:** `--health` / `.petek/petek.yaml` `health_url` (şablonda boşdur) / hədəfin öz ünvanı; `--wait` (180 s), 2xx gələndə panel.
 - [x] CI rejimi: `petek run --ci` → exit code, JUnit XML, SARIF (tapıntılar), HTML hesabat artefakt; ~~GitHub
-  Action şablonu~~ (`docs/ci/github-actions.yml`, image + `--json run` ilə, çıxış kodları sənədlənib) hazırdır,
-  GitLab CI şablonu qalır; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.
+  Action şablonu~~ (`docs/ci/github-actions.yml`, image + `--json run` ilə, çıxış kodları sənədlənib) və GitLab CI
+  şablonu (`docs/ci/gitlab-ci.yml`) hazırdır; LLM-siz dondurulmuş ssenarilər üçün nəzərdə tutulur.
   **Vəziyyət:** `report/junit.xml`, `report/findings.sarif` hər run-da; `--ci` yolları çap edir və `GITHUB_STEP_SUMMARY`-yə Markdown yazır; `docs/ci/gitlab-ci.yml`; `--json` indi `capacity`, `probe`, `smoke`-da da var.
-- [x] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar), PDF ixracı; hesabat başlığında hədəf, provayder,
-  model, sübut səviyyələri.
-  **Vəziyyət:** `report/share.html` (screenshot-lar `data:` ilə içində, AI provayderi/model, sübut səviyyələri). PDF ixracı yeni kitabxana (məs. OpenPDF) tələb edir — **sahib qərarı** (qayda 11); brauzerdən "Print → PDF" işləyir.
+- [x] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar); hesabat başlığında hədəf, provayder, model,
+  sübut səviyyələri.
+  **Vəziyyət:** `report/share.html` (screenshot-lar `data:` ilə içində, AI provayderi/model, sübut səviyyələri).
+- [ ] PDF ixracı: yeni kitabxana (məs. OpenPDF) tələb edir — **sahib qərarı** (qayda 11, "Qərar gözləyən suallar");
+  o vaxta qədər brauzerdən "Print → PDF" işləyir.
 - [x] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
 
 Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; iki fərqli kod agenti
@@ -854,7 +872,9 @@ ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
 
 - [x] `Roles.kt` enum-ları sərbəst sətirə: rollar və qeydiyyat rejimləri kampaniya/hədəf profili tərəfindən müəyyən
   olunur; `admin/manager/employee` yalnız kontrakt profilinin dəyərləridir.
-  **Vəziyyət:** `Role`/`RegistrationMode` açıq value class-lardır (sabitlər kontraktın dəyərləridir); yeni qapılar `self`, `login`, `guest`.
+  **Vəziyyət:** `Role` açıq value class-dır (istənilən kiçik hərfli açar; `admin/manager/employee` kontraktın
+  dəyərləridir). `RegistrationMode` qəsdən qapalı dəstdir (`invite`, `company_code`, `owner`, `self`, `login`, `guest`):
+  hər qapını kod keçir, yeni qapı kod dəyişikliyidir.
 - [x] Şirkət/departament/`seed_company`/dəvət-şirkət kodu məntiqi "tenant" plugin-inə (`features/tenant` və ya
   `campaign` daxilində isteğe bağlı bölmə): profil `tenant: none | company` deyir; `PromptBuilder` "Company context"
   blokunu yalnız tenant varsa qoşur; teardown resurs üzrə ümumiləşir.
@@ -876,13 +896,16 @@ ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
   birbaşa URL `direct_url`-dur; forma validasiyası `BOUNDARY`, ikiqat submit `IDEMPOTENCY`, yarış `RACE`. Hamısı kodla
   qərar verilir, ikinci fake saytda real Chromium ilə sübut olunub (qəsdən qoyulmuş icazə xətası tapılır).
 - [x] Kəşfiyyatçı draftları şirkətsiz setup ilə (yalnız login və ya anonim); seed yolları və açar sözlər profildə.
-  **Vəziyyət:** `ScenarioSettings.forSiteWithoutCompanies`: görülən rollar, hər birinə 2 tester, qapı `self` (yalnız anonim görülübsə `guest`).
-- [x] Konkret bir saytın default-ları nüvədən çıxır: `PetekConfig.kt:64,66`, `.env.example`, panel placeholder → hədəf profili (`docs/examples/target-profile.yaml`).
+  **Vəziyyət:** `ScenarioSettings.forSiteWithoutCompanies`: görülən rollar, hər birinə 2 tester; qapı qeydiyyat
+  görülübsə `self`, yoxsa sahibin hesabları ilə `login` (qalan testerlər `guest`), yalnız anonim görülübsə `guest`.
+  Seed yolları və açar sözlər profildə deyil: seed yolları `ExplorerSettings`-də sabitdir, açar sözlər sahibin
+  təlimatından gəlir.
+- [x] Konkret bir saytın default-ları nüvədən çıxır: `PetekConfig`-in iki default-u, `.env.example`, panel placeholder → hədəf profili (`docs/examples/target-profile.yaml`).
 - [x] Testlər: tenant-sız kampaniya e2e ikinci fake saytda; Konsist "core/domain HR anlayışı bilmir" qaydası.
   **Vəziyyət:** `FakeNotesServer` (şirkətsiz qeydlər tətbiqi, test API-siz), `TenantlessEndToEndTest` (real Chromium).
 
-Hazır sayılır: ikinci fake sayt (şirkət anlayışı olmayan, adi login-li tətbiq) `petek explore` → draft → `run` →
-hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniyası dəyişməz nəticə verir.
+Hazır sayılır: ikinci fake sayt (şirkət anlayışı olmayan, adi login-li tətbiq) kəşfiyyat (panel və ya `petek test`) →
+draft → `run` → hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniyası dəyişməz nəticə verir.
 
 ### Faza 14 — Ekosistem və ödənişli modullar
 
@@ -935,9 +958,19 @@ hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniyası dəyişməz nə
   **Qərar (sahib, 2026-09-26):** Jakarta Mail (Angus).
 - [ ] **Sürü beyni üçün minimum:** OpenAI-uyğun + generic CLI kifayətdirmi, yoxsa Gemini/OpenAI native SDK-ları da?
   Tövsiyə: hələlik kifayətdir.
-- [ ] **Rol adları:** skill fayllarında ingiliscə, UI-da Azərbaycanca? Tövsiyə: bəli.
-- [ ] **Ödənişli modulların yeri:** eyni repoda ayrı Gradle modulu (`premium/`) və ya ayrı repo? Tövsiyə: ayrı repo,
-  nüvədə yalnız portlar.
+- [x] **Rol adları:** skill fayllarında ingiliscə, UI-da Azərbaycanca? Tövsiyə: bəli. **Belə qurulub:** `SKILL.md`
+  rolları ingiliscədir (explorer, scenario author, judge, root-cause), panel rolları sahibin dilində göstərir
+  (`P.roleLabel`).
+- [x] **Ödənişli modulların yeri:** eyni repoda ayrı Gradle modulu (`premium/`) və ya ayrı repo? Tövsiyə: ayrı repo,
+  nüvədə yalnız portlar. **Qərar:** ayrı repo (ADR-0011); Konsist qaydası nüvənin onları import etməsini qadağan edir.
+- [ ] **Poçt serverinin e2e testi (Faza 16):** IMAP yolunu real serverlə yoxlamaq üçün GreenMail (test asılılığı, yeni
+  kitabxana, qayda 11)? İndi IMAP saxta gateway ilə test olunur. Tövsiyə: bəli, yalnız test asılılığı kimi.
+- [ ] **PDF ixracı (Faza 12):** paylaşılan hesabatın PDF-i üçün OpenPDF (yeni kitabxana, qayda 11)? İndi brauzerin
+  "Print → PDF"-i işləyir. Tövsiyə: hələlik lazım deyil.
+- [ ] **İki qalibli yarışın sinfi (Faza 24):** `only_one_succeeds` iki qalib gördükdə (saytın öz cavabları: iki 2xx)
+  tapıntı `INVESTIGATE` ("bir insan baxmalıdır") olur, ARCHITECTURE isə bunu "sayt səhv qərar verdi" adlandırır.
+  `SITE_CHECK` (saytın qüsuru) edilsinmi? Hamısının rədd edildiyi hal ssenari səhvi də ola bildiyi üçün
+  `INVESTIGATE` qalır. Tövsiyə: bəli (hakimin qayda müqaviləsi dəyişir, ona görə sahibin qərarıdır).
 
 ## Pətək 3: yalnız link ilə sürü (2026-09-26)
 
@@ -997,7 +1030,8 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 17 — Kəşfiyyatçı: saytın növü, öz hesabı, Keçid 0 → 1
 
-- [x] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-da təyin olunur, sayt modelinə yazılır.
+- [x] Saytın növü (mağaza, xəbər, vitrin, giriş sistemi, digər) Keçid 0-ın gördüyündən təyin olunur (modeldə
+  saxlanmır, göstəriləndə sayt modelindən hesablanır).
   **Vəziyyət:** `SiteKinds` kodla, anonim səhifələrin söz və formasından, səbəbi ilə; paneldə və draft başlığında görünür.
   Rol gəzintisi (25.1) içəridəki səhifələri modelə əlavə etdikdən sonra da növ və qapı yalnız ziyarətçinin gördüyündəndir
   (`SiteKinds.visitorPages`): admin səhifələrində məhsul və sifariş olan portal giriş sistemi qalır, adminin "istifadəçi
@@ -1031,9 +1065,11 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   avtomatik ziyarətçini rədd edən sayt kimi qeyd olunur, xəta sayılmır). Naxışlar: `PAGE_ANCHORS`, `BROKEN_IMAGES`,
   `IMAGE_ALT`, `PAGE_META`, `OUTBOUND_LINKS`.
 - [x] Bütün testerlər işləyir (sahibin qərarı, 2026-09-27): kəşfiyyatçının layihəsində sayt yoxlamalarını bütün
-  testerlər hərəsi öz brauzerində bütün səhifələrdə edir, linklər isə bölünür (`share: links`, hər linki bir tester
-  soruşur; `share: pages` səhifələri böləndə). Giriş varsa ziyarətçinin gördüyü səhifələr girişdən əvvəl (setup),
-  hər rolun öz səhifələri ssenaridən sonra yoxlanır; giriş yoxdursa hamı ziyarətçidir. Layihə sahibin tester sayı ilə
+  testerlər eyni anda, hərəsi öz brauzerində öz işi ilə edir (`share: work`, `devices: phone,tablet,desktop`: hər
+  səhifə telefon, planşet və masaüstündə bir iş kimi testerlərə paylanır, tester işdən çox olanda ikinci baxış kimi
+  yenidən paylanır; bir səhifənin linkləri bir dəfə soruşulur; `share: links` və `share: pages` əl ilə yazılan
+  kampaniyalar üçündür). Giriş varsa ziyarətçinin gördüyü səhifələr girişdən əvvəl (setup), hər rolun öz səhifələri
+  ssenaridən sonra yoxlanır; giriş yoxdursa hamı ziyarətçidir. Layihə sahibin tester sayı ilə
   yazılır və sayt başına bir adı var (`explorer-<host>`), hər yeni kəşfiyyat onun növbəti versiyasıdır.
 - [ ] Ümumi kataloq (`LINK_ONLY_SWARM.md` bölmə 6) Faza 13 kor naxışlarının üstünə, hər kart sübut səviyyəsi ilə.
 - [ ] Sayt növünə görə ilk üç naxış: mağaza (stok yarışı, səbət və login, kupon), xəbər (dərc, qaralama, şərh),
@@ -1041,15 +1077,21 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
 
 ### Faza 20 — İki qatlı, üç rəfli hesabat
 
-- [x] Müştəri qatı: bir səhifə, saytın dilində qısa cümlələr; detal qatı: addımlar, sübut, hesab və qapı.
-  **Vəziyyət:** `report/summary.html` (AZ, `PETEK_LANGUAGE` English olanda EN), detal qatı `index.html`.
+- [x] Müştəri qatı: bir səhifə, qısa cümlələr; detal qatı: addımlar, sübut, hesab və qapı.
+  **Vəziyyət:** `report/summary.html` sahibin dilindədir (AZ; `PETEK_LANGUAGE` English olanda EN), saytın dilində deyil;
+  detal qatı `index.html` agentin adını və id-sini göstərir, hesabın rolu, e-poçtu və qapısı orada yoxdur.
 - [x] Rəflər: sayt xətası, alət boşluğu, ssenari səhvi (triaj artıq var). JUnit XML və SARIF çıxışı.
-  **Vəziyyət:** `Shelf` (tapıntı sinfinə görə; dəqiq bölgü panelin triajındadır); JUnit XML və SARIF yuxarıda.
+  **Vəziyyət:** `Shelf` tapıntı sinfinə görə üç rəfdir: saytın xətası, Pətəkin bacarmadığı (alət boşluğu) və "Bir
+  insan baxmalıdır" (`INVESTIGATE`); "ssenari səhvi" yalnız panelin triajındadır (`TriageCategory.SCENARIO_BUG`),
+  hesabatın rəfində yox. JUnit XML və SARIF yuxarıda.
 
 ### Faza 21 — Tutum, dalğalar və ayrı IP
 
 - [x] Dalğalar; realtime kartları yalnız eyni dalğadakılara.
-  **Vəziyyət:** `campaign.wave_size`: hər dalğa öz brauzerlərini açır, bütün addımları yalnız öz testerləri ilə işlədir, öz hadisə şini var; paylaşılan dəyərlər (şirkət kodu, dəvətlər) run boyu qalır.
+  **Vəziyyət:** `campaign.wave_size`: hər dalğa öz brauzerlərini açır, addımları öz testerləri ilə işlədir, öz hadisə
+  şini var; paylaşılan dəyərlər (şirkət kodu, dəvətlər) run boyu qalır. 24.11-dən tək nəfərlik rol (şirkətin sahibi)
+  hər dalğada canlıdır, setup hadisələri sonrakı dalğaların şininə daşınır, yarışanlar bir dalğada qalır; emitteri
+  dalğasında olmayan receiver `emitter_absent`, heç bir dalğanın yoxlaya bilmədiyi `wait_for` `not_covered` olur.
 - [x] "Hər testerə ayrı IP": yalnız sahibliyi təsdiqlənmiş saytda, sahibin proxy ünvanları ilə (Playwright proxy, yeni
   kitabxana yox); IP çatmırsa əvvəldən deyilir. Seçim yoxdursa IP limit cavabı tanınır, "alət boşluğu" rəfinə düşür.
   **Vəziyyət:** `PETEK_PROXIES` yalnız sahibliyi təsdiqlənmiş və ya lokal saytda işlənir (`RunOptions.ownSite`); təsdiqsiz saytdakı ziyarətçi run-ı maşının öz IP-si ilə gedir və `run`, panel və lövhə bunu deyir. Canlı testerdən az proxy varsa run başlamır və səbəbini deyir; swap-da hər hesab öz proxy-si ilə açılır; 429 cavabı `rate_limited` (mühit problemi, "alət boşluğu"), mətni testerlərin bir IP-dən və ya öz proxy-lərindən gəldiyini deyir.
@@ -1111,7 +1153,8 @@ dərəcədə aiddir (Faza 25).
   - *Vəziyyət:* `RaceVerdict` yarışanları (request sübutu olanları) sayır, 2-dən azdırsa FAILED idi, 24.12-dən
     INCONCLUSIVE-dir (sübut qərar vermir, sayt haqqında tapıntı yoxdur, run yenə PASSED deyil): "a race needs at least 2
     racing actors; only a02 raced"; heç hərəkət etməyən aktor `did not race` görünür. `Waves` (24.11-dən `Waves.plan`) runner-in və ön baxışın
-    ortaq dalğa qaydasıdır; `petek run` və panel (MCP də) dalğalara bölünən yarışı run-dan əvvəl deyir. Orkestrasiya
+    ortaq dalğa qaydasıdır; `petek run` və panel dalğalara bölünən yarışı run-dan əvvəl deyir; panelin və MCP-nin
+    `run_campaign` cavabı da bu xəbərdarlıqları daşıyır (`RunStartView.warnings`, 2026-09-29). Orkestrasiya
     testləri yarışı real hökmlə yoxlayır.
 
 - [x] **24.2 Qadağan addımda qəbul olunan yazı sorğusu xətadır.**
@@ -1451,12 +1494,19 @@ Hər keçdi/keçmədi hökmü ən azı bir screenshot və ya oracle cavabına ba
 
 | Cədvəl | Əsas sahələr | Nə üçün |
 |---|---|---|
-| `run` | `run_id`, `campaign_hash`, `seed`, `started_at`, `ended_at`, `result` | run-ları müqayisə etmək, `--repeat` |
+| `run` | `run_id`, `run_tag`, `campaign_hash`, `campaign_name`, `seed`, `target`, `started_at`, `ended_at`, `result`, `repeat_group`, `repeat_index`, `workspace_id` | run-ları müqayisə etmək, `--repeat` |
+| `run_resource` | `run_id`, `kind`, `external_id`, `created_at` | run-ın saytda yaratdığı (test şirkəti): teardown bunları silir |
 | `identity` | reyestrin sahələri + `run_id` | kim kimdir |
-| `step` | `step_id`, `run_id`, `agent_id`, `scenario_step`, `kind` (do/run), `action`, `llm_reason`, `t_start`, `t_end`, `result` | hər əməliyyatın izi |
-| `event` | `event_id`, `name`, `emitter_agent`, `payload`, `t0`; alan tərəf üçün `receiver_agent`, `t1` | real-time gecikmə |
-| `artifact` | `step_id`, `type` (screenshot/a11y/dom/http/mail), `path` | sübut faylları |
-| `finding` | `finding_id`, `step_id`, `class` (backend/delivery_ui/investigate/flaky), `a`, `b`, `c`, `note` | üç mənbəli müqayisənin nəticəsi |
+| `step` | `step_id`, `run_id`, `agent_id`, `scenario_step`, `kind`, `action`, `llm_reason`, `started_at`, `ended_at`, `duration_ms`, `status`, `detail`, `correlation_id` | hər əməliyyatın izi |
+| `event` | `event_id`, `name`, `emitter`, `object_id`, `object_id_source`, `payload_json` (t0, yazı sorğusu) | real-time hadisələri |
+| `receipt` | `event_id`, `receiver`, `received`, `t1`, `latency_ms` | alan tərəfin gecikməsi |
+| `artifact` | `artifact_id`, `step_id`, `type` (screenshot, a11y, dom, http, oracle, log, ...), `relative_path`, `sha256`, `size_bytes` | sübut faylları |
+| `assertion` | `step_id`, `agent_id`, `scenario_step`, `type`, `source` (A/B/C mənbəyi), `expected`, `observed`, `verdict`, `latency_ms`, `note`, `artifact_ids` | hər yoxlamanın hökmü və sübutu |
+| `finding` | `finding_id`, `step_id`, `scenario_step`, `agent_id`, `finding_class`, `a`, `b`, `c`, `note`, `artifact_ids`, `evidence_tier`, `workspace_id` | üç mənbəli müqayisənin nəticəsi |
+| `usage` | `agent_id`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cost_usd`, `calls` | agent başına token və xərc |
+
+Sütunların dəqiq siyahısı: `features/evidence/.../EvidenceTables.kt`; ssenari kataloqu, triaj və kəşfiyyat öz modullarının
+cədvəllərindədir.
 
 Hesabat (Markdown + HTML, run başına bir qovluq):
 
@@ -1464,12 +1514,17 @@ Hesabat (Markdown + HTML, run başına bir qovluq):
 - Addım cədvəli: ssenari addımı × aktor, nəticə, müddət, screenshot linki.
 - Real-time: hər hadisə üçün alan başına gecikmə, orta, maksimum, çatmayanlar.
 - Tapıntılar: sinif, A/B/C dəyərləri yanaşı, screenshot və oracle cavabı.
-- Stabillik (`--repeat` ilə): hər addımın keçmə faizi; 100%-dən aşağı olanlar `flaky`.
+- Stabillik (`--repeat` ilə): hər addımın keçmə faizi; keçmədiyi hər run kimin üstünə düşür (Faza 24.13): sayt (uğursuz
+  yoxlama, kodun gördüyü qüsur), mühit (poçt qutusu, IP, AI provayderi) və ya testerin agenti. `flaky` yalnız saytın
+  başqa vaxt keçdiyi addımı yıxmasıdır; yalnız agent və ya mühit səbəbindən dəyişən addım "testerə görə dəyişdi"
+  (qeyri-sabit) kimi ayrıca göstərilir. Agentin bərpa etdiyi alət çağırışı addımı yıxmır.
 - Uğursuz agentlər: hansı addımda, hansı səbəblə (`mail_timeout`, `otp_rejected`, `blocked`).
 
 ## Pozulmamalı qaydalar, risklər və xərc
 
 **Kodlaşdırarkən pozulmamalı qaydalar**
+
+Tam və bağlayıcı siyahı `AGENTS.md` "Pozulmamalı qaydalar"dadır (13 qayda); MVP-dən gələn ilk səkkizi:
 
 1. Vaxtı həmişə harness ölçür, LLM yox.
 2. Assertləri həmişə kod yoxlayır, LLM yox.
@@ -1478,15 +1533,15 @@ Hesabat (Markdown + HTML, run başına bir qovluq):
 5. Sübutsuz nəticə yoxdur.
 6. Deterministik olan `run`, yalnız düşüncə tələb edən `do`.
 7. Kimliyi yalnız orkestrator yaradır.
-8. Oracle və teardown yalnız `is_test=true` şirkətlərdə işləyir.
+8. Seed, teardown və silmə yalnız `is_test=true` şirkətlərdə işləyir (oracle yalnız oxuyur).
 
 **Risklər**
 
 | Risk | Təsiri | Tədbir |
 |---|---|---|
 | LLM addımı qeyri-sabitdir (yanlış element, dövrə) | flaky testlər | accessibility tree + `data-testid`; addım limiti; təkrar aşkarı; `run` ilə əvəzləmə |
-| 30 context yaddaşı doldurur | agentlər çökür | screenshot yalnız lazım olanda; context başına viewport kiçik; lazım olsa 2 Chromium |
-| Bildiriş DOM-a gec düşür, polling intervalı | gecikmə yanlış ölçülür | real-time mexanizmi Faza 0-da sənədləşdirilir; `visible_text` intervalı 100 ms |
+| 30 context yaddaşı doldurur | agentlər çökür | screenshot icra olunan əməliyyatdan sonra və son addımda; viewport 1280×800; hər Chromium-da ən çox 20 context, çox tester növbəti Chromium-a düşür |
+| Bildiriş DOM-a gec düşür, polling intervalı | gecikmə yanlış ölçülür | receiver-in səhifəsi mətni yazıdan əvvəl izləyir: hər DOM dəyişikliyində və ən gec 50 ms-dən bir (`text-watch.js`); nəqliyyat şəbəkə trafikindən tapılır |
 | Mailpit-də köhnə məktub oxunur | səhv OTP | oxunan məktub read işarələnir; axtarış run başlanğıcından sonrakı məktublarla məhdudlaşır |
 | Teardown yarımçıq run-da işləmir | staging zibillənir | `try/finally` + `petek teardown --run <id>` əmri |
 | Ssenari LLM tərəfindən "yaradıcı" şərh olunur | test məqsədindən sapma | `do` mətnləri qısa və birmənalı; sistem promptunda "tapşırıqdan kənara çıxma" |

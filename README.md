@@ -259,7 +259,8 @@ question writes and whose `evidence/`, `scenarios/` and `targets/` then live nex
 | `PETEK_ALLOWED_HOSTS` | — (none) | Hosts besides the target's own that testers may open (a sign-in service, the host of an e-mail link); a page that leads to any other host is brought back. A target profile adds its own `allowed_hosts` |
 | `PETEK_TEST_TOKEN` | — | `X-Test-Token` for the target's `/test/...` API; empty disables oracle checks and teardown |
 | `PETEK_TEST_API_URL` | the target | Base address of the `/test/...` API when it is not on the target's origin |
-| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, needs the token), `imap` (your own inbox) or `manual` (you type each code into the panel's "Kodu daxil et" box; for the explorer's 1–3 sessions) |
+| `PETEK_MAIL_SOURCE` | `mailpit` (a fresh `.env` from `petek init` or the setup screen says `manual`) | `mailpit`, `test-api` (`GET /test/emails`, needs the token), `imap` (your own inbox) or `manual` (you type each code into the panel's "Kodu daxil et" box; for the explorer's 1–3 sessions; a run with more testers is warned about) |
+| `PETEK_ORACLE` | `test-api` (a fresh `.env` says `none`) | `none` makes every oracle check "N/A (no oracle)" for a site without a test API |
 | `PETEK_MAIL_INBOX` | — | Your own box (`test@company.example`): each tester registers with `test+<run>-<agent>@company.example`; replaces `PETEK_MAIL_DOMAIN`; a site that refuses `+` is named in the report |
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / the box / — / `true` / `INBOX` | How `imap` reads that box (Jakarta Mail/Angus); the password is a `Secret` |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
@@ -271,7 +272,7 @@ question writes and whose `evidence/`, `scenarios/` and `targets/` then live nex
 | `PETEK_LLM_ARGS` | — | `cli` only: its arguments, with `{model}`, `{effort}`, `{system}`, `{schema}`, `{schema_file}`; the conversation goes to STDIN |
 | `PETEK_LLM_ENV_UNSET` | — | Variables removed from the AI tool's environment, `NAME` or `PREFIX*` |
 | `PETEK_LLM_BASE_URL` | — | An OpenAI-compatible endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
-| `PETEK_LLM_API_KEY` | — | Key of `anthropic-api` / `openai-compat`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` are aliases |
+| `PETEK_LLM_API_KEY` | — | Key of `anthropic-api` / `openai-compat`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` are aliases |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; a rejected mode steps down by itself |
 | `PETEK_LLM_EFFORT` | `low` where supported | Reasoning effort (Codex CLI, `{effort}` of `cli`; `reasoning_effort` on `openai-compat`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | AI calls in flight across all agents (1–64) |
@@ -361,15 +362,16 @@ over stdio (hand-rolled JSON-RPC, no extra dependency; `initialize`, `ping`, `to
 `cancel_test`, `explore_site` (with `wait`), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
 `approve_scenario`, `freeze_scenario`, `run_campaign` (with `wait`), `cancel_run`, `list_runs`, `get_run_status`,
-`get_findings` (A/B/C sources and evidence ids), `get_evidence` (absolute path of a screenshot or capture), `get_triage`,
+`get_findings` (A/B/C sources and evidence ids), `get_finding_bundle` (a finding with its step, request, answer and screenshot, for root cause), `get_evidence` (absolute path of a screenshot or capture), `get_triage`,
 `run_triage`, `get_stability`, `teardown`. A session is read-only unless started with `petek mcp --allow-writes`:
 tests, runs, approvals, teardown and exploration with writes are refused otherwise, and the target policy applies as
 everywhere. Every result carries the panel's JSON as text and structured content; a failure is an `isError` result with
 the panel's message. Without a configuration the server still answers the handshake, and every tool tells the host AI
 to ask you which site to test.
 
-`petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `test`, `plan`, `run`, `report` and
-`teardown` (logs stay on stderr; a failure is `{"error": ...}` with the usual exit code), for scripts and CI.
+`petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `verify`, `test`, `plan`, `run`,
+`report`, `findings`, `teardown`, `capacity`, `probe` and `smoke` (logs stay on stderr; a failure is `{"error": ...}`
+with the usual exit code), for scripts and CI.
 
 ## Architecture
 
