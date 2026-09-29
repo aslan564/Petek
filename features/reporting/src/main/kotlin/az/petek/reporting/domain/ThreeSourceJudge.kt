@@ -83,22 +83,45 @@ class ThreeSourceJudge(
     override fun findings(
         run: RunRecord,
         assertions: List<AssertionRecord>,
-    ): List<FindingRecord> =
-        assertions
-            .filter { it.runId == run.runId }
-            .groupBy { GroupKey(it.scenarioStep, it.agentId) }
-            .mapNotNull { (key, group) -> judgeGroup(run, key, group) }
+    ): List<FindingRecord> = judgeGroups(run, assertions, actions = emptyMap())
 
     override fun findings(
         run: RunRecord,
         assertions: List<AssertionRecord>,
         steps: List<StepRecord>,
-    ): List<FindingRecord> = findings(run, assertions) + stepFindings(run, steps)
+    ): List<FindingRecord> = judgeGroups(run, assertions, actionsOf(run, steps)) + stepFindings(run, steps)
+
+    private fun judgeGroups(
+        run: RunRecord,
+        assertions: List<AssertionRecord>,
+        actions: Map<GroupKey, String>,
+    ): List<FindingRecord> =
+        assertions
+            .filter { it.runId == run.runId }
+            .groupBy { GroupKey(it.scenarioStep, it.agentId) }
+            .mapNotNull { (key, group) -> judgeGroup(run, key, group, actions[key]) }
+
+    /**
+     * What each actor did in each step as its own record says (`do: <task> -> PASSED: <summary>`, `run <function> ->
+     * …`): A of a finding whose step has no check of the sender's own, so "what the sender did" is never blank
+     * (docs/PLAN.md decision 4: A is the sender's step log). It is shown only; the checks alone classify.
+     */
+    private fun actionsOf(
+        run: RunRecord,
+        steps: List<StepRecord>,
+    ): Map<GroupKey, String> =
+        steps
+            .filter { it.runId == run.runId && it.agentId != null && ExpectedOutcomes.isWholeAction(it) }
+            .associate { step ->
+                GroupKey(step.scenarioStep, step.agentId) to
+                    compact("${step.action} -> ${step.status}" + (step.detail?.let { ": $it" } ?: ""))
+            }
 
     private fun judgeGroup(
         run: RunRecord,
         key: GroupKey,
         group: List<AssertionRecord>,
+        action: String?,
     ): FindingRecord? {
         val evidence = group.filter { it.verdict !in NO_EVIDENCE }
         val a = observe(SOURCE_A, evidence.filter { it.source == EvidenceSource.SENDER })
@@ -115,7 +138,7 @@ class ThreeSourceJudge(
             scenarioStep = key.scenarioStep,
             agentId = key.agentId,
             findingClass = verdict.findingClass,
-            a = a?.value,
+            a = a?.value ?: action,
             b = b?.value,
             c = c?.value,
             note = noteWithDetails(verdict.note, failed.mapNotNull { it.note }),

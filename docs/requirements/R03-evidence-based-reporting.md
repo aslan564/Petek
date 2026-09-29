@@ -32,10 +32,16 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
   UI/network evidence, a finding about the site told in the check's own words, never a tool gap; a finding without
   evidence of its own links its step's last screenshot, which `site_health`
   takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
-  many saw it (2026-09-27).
+  many saw it (2026-09-27). A finding whose step has no check of the sender's own shows as A what the sender did,
+  from its own record (`do: <task> -> PASSED: <summary>`), never a blank; that record only shows, the checks alone
+  classify. A FAILED check of any source keeps the actor's page next to its own evidence (the target's answer, the
+  request), and a FAILED group check (a race) keeps every racer's page, so each failure has a screenshot
+  (`RecordingVerifyStepUseCase`, `ContractDemoEndToEndTest`).
 - **Expected outcomes.** `ExpectedOutcomes` is the one place that decides which failing-looking records the test
   expected: a lost race (`lost_race`) and an expected refusal (`permission_denied`), each together with the agent's
-  own records of that action (same correlation id). Which step is a permission test is decided by code in the
+  own records of that action (same correlation id); and a recovered turn, one tool call of an action whose own record
+  (`do: …`, `run …`) PASSED, such as a `select` whose error listed the options the agent then chose from, or a retried
+  attempt of a run function, so findings, the summary and stability never count a step the action completed as failed. Which step is a permission test is decided by code in the
   orchestrator from the step's assertions (`not_visible`, `http_status` 401/403, ADR-0007), never from the wording
   of the agent's report; the report shows such rows as "icazə verilmədi" and counts them as passed. The requests the
   tester's page sent during such an action are read too: one the site accepted on the method and path of such an

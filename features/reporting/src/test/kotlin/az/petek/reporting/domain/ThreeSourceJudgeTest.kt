@@ -665,6 +665,28 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a step checked only by the oracle shows what the sender did from its own record`() {
+            val assertions = listOf(assertion("ticket_flow", "a02", ORACLE, FAILED, "status = in_progress", "status = open"))
+            val steps =
+                listOf(
+                    step("ticket_flow", "a02", detail = "the ticket is in progress", action = "do: Ticketi in-progress et"),
+                    step("ticket_flow", "a02", action = "click [7] \"İcraya götür\""),
+                )
+
+            val finding = judge.findings(run, assertions, steps).single()
+
+            finding.findingClass shouldBe FindingClass.BACKEND
+            finding.a shouldBe "do: Ticketi in-progress et -> PASSED: the ticket is in progress"
+            finding.c shouldBe "status = in_progress -> status = open"
+            // Without the steps there is no record to show, and nothing is made up.
+            judge
+                .findings(run, assertions)
+                .single()
+                .a
+                .shouldBeNull()
+        }
+
+        @Test
         fun `steps of other runs are ignored`() {
             val steps = listOf(step("join", "a07", StepStatus.FAILED, detail = "mail_timeout", runId = RunId("run_other")))
 

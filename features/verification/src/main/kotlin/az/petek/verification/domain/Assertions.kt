@@ -98,6 +98,8 @@ data class ActorResult(
     val race: RaceEvidence? = null,
     /** The actor lost the race: refused because the object was already decided (an expected outcome, not a failure). */
     val lostRace: Boolean = false,
+    /** The actor's page, for the evidence of a group check that failed (every racer's screen as the race left it). */
+    val session: BrowserSession? = null,
 )
 
 /**

@@ -270,8 +270,24 @@ class RecordingVerifyStepUseCaseTest {
             val record = useCase().verifyActor(listOf(Oracle("/test/tickets/42", "status", "open", null)), assertionInput(session)).single()
 
             record.verdict shouldBe Verdict.FAILED
-            artifact(record.artifactIds.single()).type shouldBe ArtifactType.LOG
-            content(record.artifactIds.single()) shouldContain "observed: HTTP 404"
+            record.artifactIds.map { artifact(it).type } shouldBe listOf(ArtifactType.LOG, ArtifactType.SCREENSHOT)
+            content(record.artifactIds.first()) shouldContain "observed: HTTP 404"
+        }
+
+    @Test
+    fun `a failed oracle check shows the actor's page next to the target's answer, a passed one only the answer`() =
+        runTest {
+            oracle.respond("/test/tickets/42", """{"status": "open"}""")
+
+            val (failed, passed) =
+                useCase().verifyActor(
+                    listOf(Oracle("/test/tickets/42", "status", "in_progress", null), Oracle("/test/tickets/42", "status", "open", null)),
+                    assertionInput(session),
+                )
+
+            failed.verdict shouldBe Verdict.FAILED
+            failed.artifactIds.map { artifact(it).type } shouldBe listOf(ArtifactType.ORACLE, ArtifactType.SCREENSHOT)
+            passed.artifactIds.map { artifact(it).type } shouldBe listOf(ArtifactType.ORACLE)
         }
 
     @Test
@@ -453,6 +469,29 @@ class RecordingVerifyStepUseCaseTest {
                 .jsonObject["winners"]!!
                 .jsonPrimitive.int shouldBe 2
             evidence.assertionList shouldContainExactly records
+        }
+
+    @Test
+    fun `a race with two winners shows every racer's page next to their requests`() =
+        runTest {
+            val approve = RequestPattern("POST", ".*/approve")
+            val racers = listOf("a02", "a03").map { ScriptedSession(clock, FakeBrowserSession(it, clock)) }
+            val results =
+                racers.mapIndexed { i, racer ->
+                    val won = RaceEvidence.of(approve, listOf(racer.fake.mutated("POST", "/tickets/42/approve", 303)))
+                    ActorResult(AgentId("a0${i + 2}"), succeeded = true, summary = "approved", race = won, session = racer)
+                }
+
+            val record =
+                useCase()
+                    .verifyGroup(listOf(OnlyOneSucceeds()), assertionInput(session = null, agentId = null, scenarioStep = "race"), results)
+                    .single()
+
+            record.verdict shouldBe Verdict.FAILED
+            val stored = record.artifactIds.map(::artifact)
+            stored.map { it.type } shouldContainExactly listOf(ArtifactType.LOG, ArtifactType.SCREENSHOT, ArtifactType.SCREENSHOT)
+            stored[1].relativePath shouldContain "/a02/"
+            stored[2].relativePath shouldContain "/a03/"
         }
 
     @Test

@@ -62,6 +62,23 @@ class StabilityAnalyzerTest {
     }
 
     @Test
+    fun `a step whose agent recovered from a failed tool call passed in every run`() {
+        val runs =
+            (1..3).map {
+                evidence(
+                    it,
+                    listOf(
+                        step("ticket_flow", "a02", action = "do: Ticketi in-progress et", correlation = "cor_a02"),
+                        step("ticket_flow", "a02", StepStatus.ERROR, action = "select [8] \"HR\"", correlation = "cor_a02"),
+                    ),
+                    listOf(assertion("ticket_flow", "a02", EvidenceSource.ORACLE, Verdict.PASSED)),
+                )
+            }
+
+        analyzer.analyze(runs).single() shouldBe StabilityRow("ticket_flow", runs = 3, passed = 3)
+    }
+
+    @Test
     fun `a step that fails only because an agent got lost is unsteady, never flaky`() {
         // In run 2 a03's agent looped: its action broke, so the check of that action is moot (Faza 24.13).
         val lost = step("read_announce", "a03", StepStatus.FAILED, detail = "loop_detected: the same click 3 times")

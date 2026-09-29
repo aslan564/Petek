@@ -1098,6 +1098,7 @@ internal class StepExecutor(
                     summary = it.outcome?.summary ?: it.failureKey.orEmpty(),
                     race = it.race,
                     lostRace = it.lostRace,
+                    session = run.sessions[it.identity.agentId],
                 )
             }
         val records =
