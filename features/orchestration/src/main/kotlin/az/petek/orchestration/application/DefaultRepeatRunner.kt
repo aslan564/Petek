@@ -19,28 +19,20 @@ import az.petek.orchestration.domain.RunSummary
 /**
  * `petek run --repeat N`: runs the campaign N times one after another as one repeat group, so the report can compute
  * stability (docs/PLAN.md Faza 5). Every run gets a fresh run id, identities and test company; a failed or aborted
- * run does not stop the remaining ones, because stability needs every sample.
- *
- * @param baseOptions options applied to every run (e.g. the inactivity timeout); group, index and `keepData` are set
- *   per call.
+ * run does not stop the remaining ones, because stability needs every sample. Every option the caller gave (keeping
+ * the data, the account swap, the proven site) reaches every run; only the group and the index are set here.
  */
 class DefaultRepeatRunner(
     private val runner: CampaignRunner,
     private val ids: IdGenerator,
-    private val baseOptions: RunOptions = RunOptions(),
 ) : RepeatRunner {
     override suspend fun repeat(
         campaign: Campaign,
         times: Int,
-        keepData: Boolean,
+        options: RunOptions,
     ): List<RunSummary> {
         require(times >= 1) { "times must be at least 1, was $times" }
         val group = ids.correlationId().value
-        return (1..times).map { index ->
-            runner.run(
-                campaign,
-                baseOptions.copy(repeatGroup = group, repeatIndex = index, keepData = keepData),
-            )
-        }
+        return (1..times).map { index -> runner.run(campaign, options.copy(repeatGroup = group, repeatIndex = index)) }
     }
 }

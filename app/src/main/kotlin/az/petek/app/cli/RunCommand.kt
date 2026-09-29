@@ -100,6 +100,13 @@ class RunCommand : PetekSubcommand("run") {
                             "${campaign.settings.testers} visitor(s) that only read; nothing is sent to the site.",
                     )
                 }
+                // Separate IPs only for the owner's own site (Faza 21): nobody spreads load over many addresses elsewhere.
+                if (config.proxies.isNotEmpty()) {
+                    echo("Warning: PETEK_PROXIES is not used here: every visitor goes out from this machine's IP.", err = true)
+                }
+            }
+            if (swapAccounts && campaign.settings.waveSize != null) {
+                echo("Warning: --swap-accounts is not done in a campaign with campaign.wave_size; the run says so too.", err = true)
             }
             warnAboutWaves(container, campaign)
             // Valid, but likely not what was meant (Faza 24.15); never blocks the run.
@@ -111,12 +118,14 @@ class RunCommand : PetekSubcommand("run") {
                         (if (repeat > 1) ", $repeat times" else "") + (if (keepData) ", keeping the test data" else "") + ".",
                 )
             }
+            val options =
+                RunOptions(keepData = keepData, swapAccounts = swapAccounts, ownSite = ownership !is OwnershipStatus.Unverified)
             val summaries =
                 try {
                     if (repeat == 1) {
-                        listOf(runner.run(campaign, RunOptions(keepData = keepData, swapAccounts = swapAccounts)))
+                        listOf(runner.run(campaign, options))
                     } else {
-                        container.repeatRunner(runner).repeat(campaign, repeat, keepData)
+                        container.repeatRunner(runner).repeat(campaign, repeat, options)
                     }
                 } finally {
                     container.closeMonitor()

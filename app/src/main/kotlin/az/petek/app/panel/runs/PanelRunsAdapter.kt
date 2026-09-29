@@ -168,7 +168,7 @@ internal class PanelRunsAdapter(
         }
         val target = asked ?: own?.let { PanelTargets.allowed(it.toString(), container.config.targetPolicy, PanelInstructions.TARGET) }
         val lease = targets.lease(target)
-        val campaign =
+        val cleared =
             try {
                 load(version, lease, request.testers).let {
                     PanelTargets.allowed(it.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
@@ -180,7 +180,8 @@ internal class PanelRunsAdapter(
                 lease.close()
                 throw e
             }
-        val (started, job) = begin(campaign, lease, RunOptions(), request.headful)
+        val campaign = cleared.campaign
+        val (started, job) = begin(campaign, lease, RunOptions(ownSite = cleared.ownSite), request.headful)
         // A closed browser tab cancels this request, never the run: it goes on and the board shows it.
         val runId = awaitStart(started, job)
         warnAboutStepsThatCannotRun(campaign, lease.container)

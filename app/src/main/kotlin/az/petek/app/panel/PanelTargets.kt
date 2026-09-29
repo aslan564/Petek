@@ -90,6 +90,13 @@ internal object PanelTargets {
         }
     }
 
+    /** A campaign cleared to start ([runnable]), and whether its site's owner proved it is theirs or it is local. */
+    data class Cleared(
+        val campaign: Campaign,
+        /** Only then may its testers go out through the owner's proxies (Faza 21). */
+        val ownSite: Boolean,
+    )
+
     /**
      * The run of [campaign] as it may start: on a site whose owner proved it is theirs (ADR-0012) or a local one any
      * campaign, on any other site a visitor run ([VisitorRun]: visitors that only read, as many as the owner chose).
@@ -100,11 +107,11 @@ internal object PanelTargets {
         campaign: Campaign,
         ownership: SiteOwnership,
         field: String,
-    ): Campaign {
+    ): Cleared {
         val status = ownership.check(campaign.settings.target)
-        if (status !is OwnershipStatus.Unverified) return campaign
+        if (status !is OwnershipStatus.Unverified) return Cleared(campaign, ownSite = true)
         val problems = VisitorRun.findProblems(campaign)
-        if (problems.isEmpty()) return campaign
+        if (problems.isEmpty()) return Cleared(campaign, ownSite = false)
         throw PanelRequestException(
             listOf(
                 FieldProblem(

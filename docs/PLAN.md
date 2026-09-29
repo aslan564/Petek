@@ -1030,7 +1030,7 @@ test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qəra
   **Vəziyyət:** `campaign.wave_size`: hər dalğa öz brauzerlərini açır, bütün addımları yalnız öz testerləri ilə işlədir, öz hadisə şini var; paylaşılan dəyərlər (şirkət kodu, dəvətlər) run boyu qalır.
 - [x] "Hər testerə ayrı IP": yalnız sahibliyi təsdiqlənmiş saytda, sahibin proxy ünvanları ilə (Playwright proxy, yeni
   kitabxana yox); IP çatmırsa əvvəldən deyilir. Seçim yoxdursa IP limit cavabı tanınır, "alət boşluğu" rəfinə düşür.
-  **Vəziyyət:** `PETEK_PROXIES` (run onsuz da sahiblik tələb edir); canlı testerdən az proxy varsa run başlamır və səbəbini deyir; 429 cavabı `rate_limited` (mühit problemi, "alət boşluğu").
+  **Vəziyyət:** `PETEK_PROXIES` yalnız sahibliyi təsdiqlənmiş və ya lokal saytda işlənir (`RunOptions.ownSite`); təsdiqsiz saytdakı ziyarətçi run-ı maşının öz IP-si ilə gedir və `run`, panel və lövhə bunu deyir. Canlı testerdən az proxy varsa run başlamır və səbəbini deyir; swap-da hər hesab öz proxy-si ilə açılır; 429 cavabı `rate_limited` (mühit problemi, "alət boşluğu"), mətni testerlərin bir IP-dən və ya öz proxy-lərindən gəldiyini deyir.
 
 ### Faza 22 — Demo hədəfləri
 

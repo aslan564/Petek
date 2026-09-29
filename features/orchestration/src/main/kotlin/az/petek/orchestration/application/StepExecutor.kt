@@ -509,8 +509,9 @@ internal class StepExecutor(
     }
 
     /**
-     * A failed action during which the site answered `429 Too Many Requests` failed because all testers share one IP
-     * (Faza 21): reported as `rate_limited`, a gap of the set-up, not as whatever the agent concluded.
+     * A failed action during which the site answered `429 Too Many Requests` hit the site's rate limit (Faza 21):
+     * reported as `rate_limited`, a gap of the set-up, not as whatever the agent concluded. Its summary says whether the
+     * testers shared this machine's IP or each had its own proxy.
      */
     private suspend fun rateLimited(
         actor: ActorContext,
@@ -531,9 +532,10 @@ internal class StepExecutor(
                 false
             }
         if (!limited) return outcome
+        val addresses = if (run.proxies.isEmpty()) "every tester comes from one IP" else "although every tester has its own IP"
         return outcome.copy(
             failureReason = FailureReason.RATE_LIMITED,
-            summary = "The site answered 429 Too Many Requests: every tester comes from one IP. ${outcome.summary}",
+            summary = "The site answered 429 Too Many Requests: $addresses. ${outcome.summary}",
         )
     }
 

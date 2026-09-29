@@ -129,6 +129,42 @@ class RunCommandTest {
         }
 
     @Test
+    fun `a visitor run on a stage whose owner has not proved it sends no one through the owner's proxies`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com", "PETEK_PROXIES" to "http://10.0.0.1:3128,http://10.0.0.2:3128"),
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                )
+            cli.write("visit.yaml", VISITOR_CAMPAIGN)
+
+            val result = cli.run("run", "visit.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "PETEK_PROXIES is not used here"
+            cli.browser.options.map { it.proxy } shouldBe listOf(null, null)
+        }
+
+    @Test
+    fun `on a stage whose owner proved it every tester goes out through its own proxy`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com", "PETEK_PROXIES" to "http://10.0.0.1:3128,http://10.0.0.2:3128"),
+                    ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), ScriptedOwnershipProbe()),
+                )
+            cli.write("tiny.yaml", tinyCampaign())
+
+            cli.run("run", "tiny.yaml").statusCode shouldBe 0
+
+            cli.browser.options
+                .map { it.proxy?.server }
+                .toSet() shouldBe setOf("http://10.0.0.1:3128", "http://10.0.0.2:3128")
+        }
+
+    @Test
     fun `a stage whose owner has published the proof is tested`() =
         runBlocking<Unit> {
             val probe = ScriptedOwnershipProbe()

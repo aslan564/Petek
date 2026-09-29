@@ -189,10 +189,17 @@ class DefaultCampaignRunner(
                 planIdentities(run)
                 val waves = Waves.plan(run.campaign, run.identities, actors)
                 val live = waves?.maxLive ?: run.identities.size
-                if (settings.proxies.isNotEmpty() && settings.proxies.size < live) {
+                val proxies = proxies(run)
+                if (settings.proxies.isNotEmpty() && proxies.isEmpty()) {
+                    board.message(
+                        "PETEK_PROXIES is not used in this run: only a site whose owner proved it is theirs gets testers from " +
+                            "separate IPs (Faza 21); every tester goes out from this machine's IP",
+                    )
+                }
+                if (proxies.isNotEmpty() && proxies.size < live) {
                     run.abort(
                         "each tester should come from its own IP, but $live testers are live at once and only " +
-                            "${settings.proxies.size} proxies are given (PETEK_PROXIES); give more or set a smaller campaign.wave_size",
+                            "${proxies.size} proxies are given (PETEK_PROXIES); give more or set a smaller campaign.wave_size",
                     )
                     return@withTimeoutOrNull true
                 }
@@ -202,6 +209,12 @@ class DefaultCampaignRunner(
                     if (run.options.swapAccounts) swapAccounts(run, board, tasks)
                 } else {
                     runWaves(run, board, tasks, waves)
+                    if (run.options.swapAccounts) {
+                        // The swap hands accounts on among the testers of one run; waves close their browsers as they go.
+                        val reason = "the account swap is not done in a run with waves (campaign.wave_size)"
+                        evidence.system(run, null, "swap_accounts", StepStatus.SKIPPED, reason)
+                        board.message(reason)
+                    }
                 }
                 reportCoverage(run)
                 true
@@ -357,7 +370,8 @@ class DefaultCampaignRunner(
                 StepStatus.PASSED,
                 "tester ${tester.agentId} continues with the account of ${account.agentId} (${account.role.key}) in a new browser",
             )
-            openAgent(run, factory, account, colleagues, restoreSession = true)
+            // The account keeps the address it had (Faza 21): the site sees one user from one IP, as before the swap.
+            openAgent(run, factory, account, colleagues, run.proxies[account.agentId], restoreSession = true)
             openSite(run, account.agentId)
         }
         board.message("accounts swapped among ${finished.size} testers; the main steps run again")
@@ -392,6 +406,12 @@ class DefaultCampaignRunner(
         }
     }
 
+    /**
+     * The owner's proxies this run may use (Faza 21): all of them on a site whose ownership is proven
+     * ([RunOptions.ownSite]), none anywhere else.
+     */
+    private fun proxies(run: RunState): List<BrowserProxy> = if (run.options.ownSite) settings.proxies else emptyList()
+
     /** Opens the browsers and agents of [identities]; the n-th of them goes out through proxy [firstProxy] + n, if any. */
     private suspend fun startAgents(
         run: RunState,
@@ -405,10 +425,11 @@ class DefaultCampaignRunner(
         val factory = run.factory ?: browser.start(browserConfig).also { run.factory = it }
         // One roster for everyone: who the colleagues are, never their secrets (computed once, shared read-only).
         val colleagues = run.identities.map(Colleague::of)
+        val proxies = proxies(run)
         coroutineScope {
             identities
                 .mapIndexed { index, identity ->
-                    val proxy = settings.proxies.getOrNull(firstProxy + index)
+                    val proxy = proxies.getOrNull(firstProxy + index)?.also { run.proxies[identity.agentId] = it }
                     async(diagnostics.of(run.runId, identity.agentId)) { openAgent(run, factory, identity, colleagues, proxy) }
                 }.awaitAll()
         }

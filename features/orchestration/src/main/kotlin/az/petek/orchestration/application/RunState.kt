@@ -13,6 +13,7 @@ package az.petek.orchestration.application
 
 import az.petek.agent.application.TesterAgent
 import az.petek.agent.domain.SharedRunState
+import az.petek.browser.domain.BrowserProxy
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.TextWatch
@@ -154,6 +155,9 @@ internal class RunState(
 
     val sessions = ConcurrentHashMap<AgentId, BrowserSession>()
     val agents = ConcurrentHashMap<AgentId, TesterAgent>()
+
+    /** The proxy each account's browser went out through (Faza 21); a swapped account keeps its own. */
+    val proxies = ConcurrentHashMap<AgentId, BrowserProxy>()
     val tally = StepTally()
 
     /** Ids of the scenario steps that have been started, in order. */

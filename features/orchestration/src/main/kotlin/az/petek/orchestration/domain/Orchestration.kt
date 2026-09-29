@@ -228,6 +228,12 @@ data class RunOptions(
      * eyes. An account is only ever in one browser at a time; the evidence records which tester holds which account.
      */
     val swapAccounts: Boolean = false,
+    /**
+     * The site's owner proved it is theirs, or it is local (ADR-0012): only then do testers go out through the owner's
+     * proxies (`PETEK_PROXIES`, Faza 21). A visitor run on an unproved site runs from the machine's own IP, so no one
+     * spreads load on a site that is not theirs over many addresses. Off unless the caller checked the proof.
+     */
+    val ownSite: Boolean = false,
 )
 
 enum class RunOutcome { PASSED, FAILED, ABORTED }

@@ -230,7 +230,7 @@ class RunnerWavesTest {
             val base = campaign(managers = 0, employees = 4, steps = listOf(step("look", employees())))
             val waved = base.copy(settings = base.settings.copy(waveSize = 2))
 
-            f.runner(settings = settings(proxies)).run(waved).outcome shouldBe RunOutcome.PASSED
+            f.runner(settings = settings(proxies)).run(waved, OWN_SITE).outcome shouldBe RunOutcome.PASSED
 
             f.browser.opened
                 .map { it.label to it.proxy?.server }
@@ -251,13 +251,26 @@ class RunnerWavesTest {
             val proxies = (1..2).map { BrowserProxy("http://10.0.0.$it:3128") }
             val base = campaign(managers = 0, employees = 4, steps = listOf(step("look", employees())))
 
-            val summary = f.runner(settings = settings(proxies)).run(base.copy(settings = base.settings.copy(waveSize = 2)))
+            val summary = f.runner(settings = settings(proxies)).run(base.copy(settings = base.settings.copy(waveSize = 2)), OWN_SITE)
 
             summary.outcome shouldBe RunOutcome.ABORTED
             f.evidence.stepList
                 .single { it.action == "abort" }
                 .detail
                 .orEmpty() shouldContain "3 testers are live at once and only 2 proxies are given"
+        }
+
+    @Test
+    fun `a site whose owner did not prove it is theirs gets no proxies, and the board says why`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val proxies = (1..3).map { BrowserProxy("http://10.0.0.$it:3128") }
+
+            // One proxy for three testers would stop a run on the owner's own site; here none is used at all.
+            f.runner(settings = settings(proxies.take(1))).run(campaign(managers = 0, employees = 2)).outcome shouldBe RunOutcome.PASSED
+
+            f.browser.opened.map { it.proxy } shouldBe listOf(null, null, null)
+            f.monitor.events.any { "PETEK_PROXIES is not used in this run" in it } shouldBe true
         }
 
     @Test
@@ -269,7 +282,7 @@ class RunnerWavesTest {
                 f
                     .runner(
                         settings = settings(listOf(BrowserProxy("http://10.0.0.1:3128"))),
-                    ).run(campaign(managers = 0, employees = 2))
+                    ).run(campaign(managers = 0, employees = 2), OWN_SITE)
 
             summary.outcome shouldBe RunOutcome.ABORTED
             f.browser.opened shouldBe emptyList()
@@ -334,4 +347,9 @@ class RunnerWavesTest {
 
     private fun settings(proxies: List<BrowserProxy>) =
         RunnerSettings(mailDomain = "test.example.test", storageRoot = Path.of("build", "storage"), proxies = proxies)
+
+    private companion object {
+        /** A run on a site whose owner proved it is theirs: the only kind that uses the owner's proxies (Faza 21). */
+        val OWN_SITE = RunOptions(ownSite = true)
+    }
 }
