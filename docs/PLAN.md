@@ -780,11 +780,16 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
   **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake sayt
   (`FakeNotesServer`: şirkətsiz; test API-si yalnız `testToken` verilərsə) `TenantlessEndToEndTest`, `ExplorerNotesSiteIntegrationTest`
-  və `NotesSiteTestEndToEndTest`-dədir. Hələ
-  yoxdur: iki profilin eyni paneldən seçilib ikincidə sahibin hesabı ilə kəşfiyyat edilməsinin e2e-si.
+  və `NotesSiteTestEndToEndTest`-dədir. İki profilin eyni paneldən seçilib ikincidə sahibin hesabı ilə kəşfiyyat
+  edilməsi `TwoSitesEndToEndTest`-dədir (2026-09-30, aşağıda).
 
 Hazır sayılır: iki fərqli hədəf profili (fake target + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
 paneldən seçilir; ikincidə kəşfiyyatçı sahibin hesabı ilə daxil olur, hesabat sübut səviyyələrini göstərir.
+*Vəziyyət (2026-09-30):* `TwoSitesEndToEndTest` (real Chromium, istehsal montajı): panelin öz saytı fake target,
+ikinci sayt qeydlər saytının profili (`targets/notes.yaml`, sahibin hesabı, parolu `.env`-də). "Saytlar" hər ikisini
+öz ayarları ilə göstərir; ikinci sayt eyni paneldən "Test et" ilə test olunur, kəşfiyyatçı sahibin hesabı ilə (onun
+rolu kimi) daxil olur, run-ın hesabatı hər tapıntının sübut səviyyəsini yazır ("Ekran / şəbəkə sübutu"), panelin öz
+saytına heç nə yazılmır.
 
 ### Faza 11 — Alət üzü (MCP + `--json`)
 

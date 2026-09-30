@@ -50,7 +50,9 @@ tool (R11) and a sellable product (R15).
   `PanelRunsTest` (a site with a profile runs with its settings; a scenario runs on its own site; a scenario that
   writes is refused on another site without a profile), `OwnerAccountsTest`, `PanelSitesTest` (the list, a site added
   and taken at once, refusals, both files put back); `PanelEndToEndTest` adds and chooses a site in Chromium.
-- Open: an e2e run against a second fake site in the same panel (Faza 13).
+- `TwoSitesEndToEndTest` (real Chromium): one panel knows its own site and the notes site's profile; the second is
+  tested from the same panel, its explorer signing in with the owner's account, the report naming each finding's
+  evidence tier, the panel's own site untouched.
 
 ## Open items
 
