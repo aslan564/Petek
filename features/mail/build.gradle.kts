@@ -27,4 +27,10 @@ dependencies {
     testImplementation(testFixtures(project(":core:domain")))
     testImplementation(libs.ktor.server.core)
     testImplementation(libs.ktor.server.cio)
+    // A real IMAP server for the inbox's tests (test only). Its JUnit 4 rule and its own copy of Jakarta Mail are left
+    // out: the tests are JUnit 6, and angus-mail above already brings the mail classes.
+    testImplementation(libs.greenmail) {
+        exclude(group = "junit", module = "junit")
+        exclude(group = "org.eclipse.angus", module = "jakarta.mail")
+    }
 }

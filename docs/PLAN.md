@@ -783,7 +783,8 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
   hesabat və panel göstərir; oracle olmayan hədəfdə `oracle` assert-ləri "SKIPPED" yox, "N/A (no oracle)" olur.
 - [x] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
-  **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake sayt
+  **Vəziyyət:** profil, zəncir, IMAP (saxta gateway və real IMAP serveri: `ImapMailboxServerTest`,
+  `ImapCodesEndToEndTest`), manual kod (panel marşrutu) testləri var; ikinci fake sayt
   (`FakeNotesServer`: şirkətsiz; test API-si yalnız `testToken` verilərsə) `TenantlessEndToEndTest`, `ExplorerNotesSiteIntegrationTest`
   və `NotesSiteTestEndToEndTest`-dədir. İki profilin eyni paneldən seçilib ikincidə sahibin hesabı ilə kəşfiyyat
   edilməsi `TwoSitesEndToEndTest`-dədir (2026-09-30, aşağıda).
@@ -981,6 +982,9 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
 - [x] **Poçt serverinin e2e testi (Faza 16):** IMAP yolunu real serverlə yoxlamaq üçün GreenMail (test asılılığı, yeni
   kitabxana, qayda 11)? İndi IMAP saxta gateway ilə test olunur. Tövsiyə: bəli, yalnız test asılılığı kimi.
   **Qərar (sahib, 2026-09-30):** bəli, yalnız test asılılığı kimi.
+  *Vəziyyət:* `com.icegreen:greenmail` 2.1.14 yalnız `testImplementation` (`features/mail`, `app`; JUnit 4 qaydası və
+  ikinci Jakarta Mail nüsxəsi çıxarılıb), buraxılışa düşmür. `ImapMailboxServerTest` (real IMAP serveri) və
+  `ImapCodesEndToEndTest` (Faza 16-nın "hazır sayılır"ı, aşağıda).
 - [x] **PDF ixracı (Faza 12):** paylaşılan hesabatın PDF-i üçün OpenPDF (yeni kitabxana, qayda 11)? İndi brauzerin
   "Print → PDF"-i işləyir. Tövsiyə: hələlik lazım deyil. **Qərar (sahib, 2026-09-30):** bəli, PDF ixracı olsun.
 - [x] **İki qalibli yarışın sinfi (Faza 24):** `only_one_succeeds` iki qalib gördükdə (saytın öz cavabları: iki 2xx)
@@ -1060,8 +1064,13 @@ Vəziyyət (2026-09-26): `ImapMailbox` (Angus 2.0.5), `PETEK_MAIL_INBOX` ilə ar
 (`To`/`Cc`/`Delivered-To`/`X-Original-To`; server axtarışı da bu başlıqları soruşur, yoxsa catch-all qutusunda və
 ya Bcc ilə gələn məktub tapılmırdı — plan yoxlaması, 2026-09-29), "+" imtinasının tanınması və `manual` mənbəyi
 (panelin "Kodu daxil et" pəncərəsi) kodda və vahid testlərdədir (IMAP söhbəti saxta gateway ilə, MIME oxunuşu və
-axtarış şərti yaddaşdakı məktubla). Real IMAP serveri ilə e2e yoxdur:
-test IMAP serveri (məs. GreenMail) yeni test kitabxanasıdır — **sahib qərarı** (qayda 11).
+axtarış şərti yaddaşdakı məktubla).
+*Vəziyyət (2026-09-30):* real IMAP serveri ilə də sübut olunub (GreenMail, yalnız test, sahibin qərarı):
+`ImapCodesEndToEndTest` (real Chromium, istehsal montajı) fake target-in məktublarını SMTP ilə sahibin catch-all
+qutusuna ötürür (hər biri testerin `+` ünvanına yazılmış), Mailpit yoxdur; sahib, dəvətli menecer və şirkət kodlu işçi
+qeydiyyat kodlarını və dəvəti `PETEK_MAIL_SOURCE=imap` ilə öz ünvanlarından oxuyub qeydiyyatdan keçir, run PASSED.
+`ImapMailboxServerTest`: hər tester yalnız öz ünvanına (To, Cc, `Delivered-To`) gələni görür, oxumaq məktubu oxunmuş
+etmir, yanlış parol mesajda görünmür.
 
 ### Faza 17 — Kəşfiyyatçı: saytın növü, öz hesabı, Keçid 0 → 1
 

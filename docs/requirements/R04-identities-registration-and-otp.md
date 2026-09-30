@@ -43,10 +43,14 @@ the same identities) and independent of mailboxes a human reads.
 
 - `identity`: generator determinism, uniqueness for large N, quota tests.
 - `mail`: `MailpitMailboxTest`, `TestApiMailboxTest` (Ktor fake servers), `ImapMailboxTest`, `ManualCodesTest`,
-  extractor tests.
+  extractor tests; `ImapMailboxServerTest` against a real IMAP server (GreenMail, test only, 2026-09-30): each tester
+  finds only the mail to its own `+` address (To, Cc or `Delivered-To`), reading leaves it unread, a wrong password
+  never shows.
 - `agent`: run-function tests over the contract flows and portal-shaped flows with `FakeMailbox`.
 - `app`: `ConfigLoaderTest` (mail source, test API URL), `AppContainerTest`, `DoctorCommandTest` ("Test inbox").
-- `e2e`: full sign-up of many testers against the fake target.
+- `e2e`: full sign-up of many testers against the fake target; `ImapCodesEndToEndTest` signs an owner, an invited
+  manager and an employee up with codes and the invitation read from the owner's IMAP inbox (the site's mail relayed
+  over SMTP to GreenMail, Mailpit absent).
 
 ## Done in Faza 10 (ADR-0010)
 

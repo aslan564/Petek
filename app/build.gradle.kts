@@ -51,6 +51,11 @@ dependencies {
     testImplementation(project(":testing:fake-target"))
     // The panel end-to-end test drives the real page in Chromium and takes screenshots (tag "e2e").
     testImplementation(libs.playwright)
+    // A real IMAP inbox for the e2e test of sign-up codes read over IMAP (test only; see features/mail).
+    testImplementation(libs.greenmail) {
+        exclude(group = "junit", module = "junit")
+        exclude(group = "org.eclipse.angus", module = "jakarta.mail")
+    }
 }
 
 application {
