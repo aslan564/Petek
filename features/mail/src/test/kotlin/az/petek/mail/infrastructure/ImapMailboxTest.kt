@@ -98,6 +98,21 @@ class ImapMailboxTest {
         }
 
     @Test
+    fun `a code that arrived in the same second as the wait began counts, as the server keeps arrivals to the second`() =
+        runBlocking<Unit> {
+            val waitBegan = start.plusMillis(700)
+            val gateway =
+                FakeGateway(
+                    listOf(
+                        message("1", "test+r1-a01@company.example", start),
+                        message("2", "test+r1-a01@company.example", start.minusSeconds(1)),
+                    ),
+                )
+
+            mailbox(gateway).findRecent("test+r1-a01@company.example", waitBegan).map { it.id } shouldContainExactly listOf("1")
+        }
+
+    @Test
     fun `marking read goes to the server and closing closes the connection`() =
         runBlocking<Unit> {
             val gateway = FakeGateway()

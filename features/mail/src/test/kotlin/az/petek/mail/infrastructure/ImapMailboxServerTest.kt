@@ -99,6 +99,16 @@ class ImapMailboxServerTest {
         }
 
     @Test
+    fun `a code sent right after the wait began is found, though the server keeps its arrival only to the second`() =
+        runBlocking<Unit> {
+            val waitBegan = Instant.now()
+
+            deliver("Kod A", to = TESTER_A)
+
+            mailbox.findLatest(TESTER_A, waitBegan).shouldNotBeNull().subject shouldBe "Kod A"
+        }
+
+    @Test
     fun `reading leaves a mail unread on the server, and marking it read hides it from the next unread search`() =
         runBlocking<Unit> {
             deliver("Kod A", to = TESTER_A)

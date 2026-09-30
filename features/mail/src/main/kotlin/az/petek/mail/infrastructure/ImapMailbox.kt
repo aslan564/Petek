@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 /**
  * [Mailbox] over the owner's IMAP inbox. Every tester has its own address (a `+` address of the owner's box or an
@@ -56,9 +57,12 @@ class ImapMailbox internal constructor(
     ): List<MailMessage> {
         require(limit > 0) { "limit must be positive, was $limit" }
         val address = MailAddresses.normalize(to)
+        // The server keeps a message's arrival only to the second (IMAP INTERNALDATE): a code that came in the same
+        // second as [since] is read as that whole second and would otherwise look older than the wait for it.
+        val from = since.truncatedTo(ChronoUnit.SECONDS)
         return call("search for mail to $address") { gateway.candidates(address, since) }
             .filter { candidate -> candidate.message.to.any { MailAddresses.same(it, address) } }
-            .filter { !it.message.receivedAt.isBefore(since) && (!unreadOnly || !it.message.read) }
+            .filter { !it.message.receivedAt.isBefore(from) && (!unreadOnly || !it.message.read) }
             .sortedByDescending { it.message.receivedAt }
             .take(limit)
             .map { it.message }
