@@ -13,6 +13,7 @@ package az.petek.faketarget.notes
 
 import az.petek.faketarget.store.PasswordHash
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -23,6 +24,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respondRedirect
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -47,6 +49,8 @@ import kotlinx.html.span
 import kotlinx.html.textArea
 import kotlinx.html.title
 import kotlinx.html.ul
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.net.URI
 import java.security.SecureRandom
 import java.util.HexFormat
@@ -59,18 +63,26 @@ private val logger = KotlinLogging.logger {}
 enum class NotesBug {
     /** `/notes/{id}` shows a note to anyone signed in, not only to its author (a direct-URL permission hole). */
     FOREIGN_NOTE_VISIBLE,
+
+    /** The welcome page links to a help page that does not exist (a dead link every visitor meets). */
+    DEAD_LINK,
 }
 
 /**
- * The second fake site (docs/PLAN.md Faza 13): a plain notes application with no companies, no roles and no test API.
- * Anyone signs up with name, e-mail and password and is signed in at once; a signed-in user writes notes and reads
- * their own. It keeps the contract's sign-up, login and session `data-testid`s (`register-*`, `login-*`,
- * `current-user-name`, `logout`), so the default `sign_up` and `login` flows work, and adds `note-title`, `note-body`,
- * `note-submit`, `note-item` and `note-view`. Pətək's own e2e tests use it to prove that a campaign with
- * `tenant: none` and no oracle runs end to end. Loopback only, state in memory.
+ * The second fake site (docs/PLAN.md Faza 13): a plain notes application with no companies and no roles. Anyone signs
+ * up with name, e-mail and password and is signed in at once; a signed-in user writes notes and reads their own. It
+ * keeps the contract's sign-up, login and session `data-testid`s (`register-*`, `login-*`, `current-user-name`,
+ * `logout`), so the default `sign_up` and `login` flows work, and adds `note-title`, `note-body`, `note-submit`,
+ * `note-item` and `note-view`. Pətək's own e2e tests use it to prove that a campaign with `tenant: none` runs end to
+ * end without an oracle, and, with [testToken], that a site with a test API but no companies is tested from its
+ * exploration to its report (Faza 25): then `GET /test/notes/latest?by=<e-mail>` and `GET /test/notes/{id}` answer
+ * with the note as JSON for the `X-Test-Token` header, and nothing else of the contract's test API exists. Loopback
+ * only, state in memory.
  */
 class FakeNotesServer(
     private val bugs: Set<NotesBug> = emptySet(),
+    /** The test API's token; null: the site has no test API. */
+    private val testToken: String? = null,
 ) : AutoCloseable {
     private val random = SecureRandom()
     private val users = ConcurrentHashMap<String, User>()
@@ -203,8 +215,41 @@ class FakeNotesServer(
                 if (!visible) return@get call.respondHtml(HttpStatusCode.NotFound) { notFound(user) }
                 call.respondHtml { notePage(user, checkNotNull(note)) }
             }
+            if (testToken != null) testApi(this, testToken)
         }
     }
+
+    /** The test API of a site that has one: its notes as JSON, for the `X-Test-Token` header only. */
+    private fun testApi(
+        routing: io.ktor.server.routing.Routing,
+        token: String,
+    ) {
+        routing.get("/test/notes/latest") {
+            if (call.request.headers[TOKEN_HEADER] != token) return@get call.respondText("", status = HttpStatusCode.Unauthorized)
+            val author =
+                call.request.queryParameters["by"]
+                    .orEmpty()
+                    .trim()
+                    .lowercase()
+            val note = notes.values.filter { it.author == author }.maxByOrNull { it.id }
+            if (note == null) return@get call.respondText("", status = HttpStatusCode.NotFound)
+            call.respondText(json(note), ContentType.Application.Json)
+        }
+        routing.get("/test/notes/{id}") {
+            if (call.request.headers[TOKEN_HEADER] != token) return@get call.respondText("", status = HttpStatusCode.Unauthorized)
+            val note = call.parameters["id"]?.toLongOrNull()?.let(notes::get)
+            if (note == null) return@get call.respondText("", status = HttpStatusCode.NotFound)
+            call.respondText(json(note), ContentType.Application.Json)
+        }
+    }
+
+    private fun json(note: Note): String =
+        buildJsonObject {
+            put("id", note.id)
+            put("author", note.author)
+            put("title", note.title)
+            put("body", note.body)
+        }.toString()
 
     private fun ApplicationCall.user(): User? = request.cookies[SESSION_COOKIE]?.let(sessions::get)?.let(users::get)
 
@@ -223,6 +268,7 @@ class FakeNotesServer(
         attributes["lang"] = "az"
         head {
             meta(charset = "utf-8")
+            meta(name = "description", content = "Qeydlərinizi bir yerdə saxlayın.")
             title("$title · Qeydlər")
         }
         body {
@@ -284,6 +330,10 @@ class FakeNotesServer(
             a(href = "/register") { +"Qeydiyyat" }
             +" · "
             a(href = "/login") { +"Daxil ol" }
+            if (NotesBug.DEAD_LINK in bugs) {
+                +" · "
+                a(href = "/help") { +"Kömək" }
+            }
         }
 
     private fun HTML.registerPage(message: String?) =
@@ -370,6 +420,7 @@ class FakeNotesServer(
 
     private companion object {
         const val HOST = "127.0.0.1"
+        const val TOKEN_HEADER = "X-Test-Token"
         const val SESSION_COOKIE = "notes_session"
         const val TOKEN_BYTES = 24
         const val MIN_PASSWORD = 8

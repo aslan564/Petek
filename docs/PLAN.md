@@ -779,7 +779,8 @@ oracle olmayan sayt "zəif" deyil, dəstəklənən rejim olsun.
 - [x] Testlər: profil parse/validasiya, zəncir sırası və fallback (fake-lər ilə), `ImapMailbox` (embedded fake IMAP
   və ya Mailpit-in IMAP-ı ilə e2e), manual kod axını (`PanelHarness`).
   **Vəziyyət:** profil, zəncir, IMAP (saxta gateway), manual kod (panel marşrutu) testləri var; ikinci fake sayt
-  (`FakeNotesServer`: şirkətsiz, test API-siz) `TenantlessEndToEndTest` və `ExplorerNotesSiteIntegrationTest`-dədir. Hələ
+  (`FakeNotesServer`: şirkətsiz; test API-si yalnız `testToken` verilərsə) `TenantlessEndToEndTest`, `ExplorerNotesSiteIntegrationTest`
+  və `NotesSiteTestEndToEndTest`-dədir. Hələ
   yoxdur: iki profilin eyni paneldən seçilib ikincidə sahibin hesabı ilə kəşfiyyat edilməsinin e2e-si.
 
 Hazır sayılır: iki fərqli hədəf profili (fake target + ikinci fake sayt: test API-siz, yalnız login formalı) eyni
@@ -906,6 +907,10 @@ ona görə gec və hissə-hissə (hər addımda Konsist və e2e keçir).
 
 Hazır sayılır: ikinci fake sayt (şirkət anlayışı olmayan, adi login-li tətbiq) kəşfiyyat (panel və ya `petek test`) →
 draft → `run` → hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniyası dəyişməz nəticə verir.
+*Vəziyyət (2026-09-30):* `NotesSiteTestEndToEndTest` (real Chromium, istehsal montajı, AI yerinə sayt bilməyən
+qaydalı `DraftSiteDriver`): `petek test` ikinci fake saytı kəşf edir, draft yazır, təsdiqləyir, 3 testerlə run edir və
+hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə FAILED olur. Kontrakt kampaniyası
+(`ContractDemoEndToEndTest`) dəyişməz keçir.
 
 ### Faza 14 — Ekosistem və ödənişli modullar
 
@@ -971,6 +976,15 @@ draft → `run` → hesabat dövrəsini tam keçir; şirkətli kontrakt kampaniy
   tapıntı `INVESTIGATE` ("bir insan baxmalıdır") olur, ARCHITECTURE isə bunu "sayt səhv qərar verdi" adlandırır.
   `SITE_CHECK` (saytın qüsuru) edilsinmi? Hamısının rədd edildiyi hal ssenari səhvi də ola bildiyi üçün
   `INVESTIGATE` qalır. Tövsiyə: bəli (hakimin qayda müqaviləsi dəyişir, ona görə sahibin qərarıdır).
+- [ ] **Şirkəti olmayan saytda sınaq toxunuşu (Faza 25, 2026-09-30 tapıldı):** kəşfiyyatçının sınaq toxunuşu (hər
+  yaratma formunu bir dəfə göndərmək) yalnız test API-nin `is_test` təsdiqlədiyi test şirkətində yazır (qayda 8). Şirkəti
+  olmayan saytda (qeydlər, bloq) kəşfiyyatçı özü qeydiyyatdan keçsə də, onun hesabı "test datası" kimi təsdiqlənə
+  bilmir, ona görə toxunuş olmur: draft test API-nin nəyi xidmət etdiyini sübut edə bilmir (oracle yoxlaması yazılmır)
+  və yaradılan obyektin öz səhifəsini görmür ("birbaşa ünvan" yoxlaması yazılmır; belə dəlik yalnız sahibin öz
+  ssenarisində, məs. `TenantlessEndToEndTest`, tapılır). Təklif: şirkəti olmayan, sahibliyi təsdiqlənmiş saytda
+  kəşfiyyatın özünün bu kəşfiyyatda yaratdığı hesabı test datası sayılsın (toxunuş yalnız o hesabın adından, Pətək
+  işarəli mətnlə), test API varsa obyektin həmin hesaba aid olduğu da soruşulsun. Təhlükəsizlik qaydasıdır, ona görə
+  sahibin qərarıdır.
 
 ## Pətək 3: yalnız link ilə sürü (2026-09-26)
 
@@ -1605,6 +1619,10 @@ mərhələsindən sonra.
 
 Hazır sayılır: test API-si olan, amma şirkət modeli olmayan saytda kəşfiyyatdan run-a qədər heç bir dəvət, şirkət kodu
 və ya müqavilə resursu fərz edilmir; draftdakı hər addım kəşfiyyatçının gördüyü bir əməliyyata və ya qapıya bağlıdır.
+*Vəziyyət (2026-09-30):* e2e ilə də sübut olunub: `NotesSiteTestEndToEndTest`-də qeydlər saytının test API-si var
+(`FakeNotesServer(testToken)`), draft yenə `tenant: none`, özü qeydiyyat və kəşfiyyatçının gördüyü formadır; dəvət,
+şirkət kodu, `register_owner`, `seed_company`, elan və ticket yoxdur. Test API burada oracle yoxlamasına çevrilmir,
+çünki şirkəti olmayan saytda sınaq toxunuşu yazmır ("Qərar gözləyən suallar").
 
 ## Sübut bazası və hesabat
 

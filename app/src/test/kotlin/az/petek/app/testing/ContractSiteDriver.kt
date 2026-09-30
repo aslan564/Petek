@@ -11,15 +11,12 @@
 
 package az.petek.app.testing
 
-import az.petek.llm.domain.LlmRequest
-import az.petek.llm.domain.LlmRole
 import az.petek.llm.testing.ScriptedLlmClient
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonObjectBuilder
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
+
+private typealias Prompt = AgentPrompt
+private typealias Element = AgentPrompt.Element
 
 /**
  * A rule-based stand-in for the testers' AI on the contract site (docs/TARGET_CONTRACT.md), so the contract demo
@@ -34,7 +31,7 @@ internal class ContractSiteDriver {
     /** Titles of the tickets created in this run, so later steps find "the ticket" on the list as a colleague would. */
     private val tickets = ConcurrentHashMap.newKeySet<String>()
 
-    val client: ScriptedLlmClient = ScriptedLlmClient { request -> decide(Prompt.of(request)) }
+    val client: ScriptedLlmClient = ScriptedLlmClient { request -> decide(AgentPrompt.of(request)) }
 
     private fun decide(prompt: Prompt): JsonObject {
         val task = prompt.task.lowercase()
@@ -219,136 +216,43 @@ internal class ContractSiteDriver {
     private fun click(
         element: Element,
         reason: String,
-    ) = answer("click", reason) { put("ref", element.ref) }
+    ) = AgentAnswers.click(element, reason)
 
     private fun type(
         element: Element,
         text: String,
         submit: Boolean = false,
-    ) = answer("type", "filling ${element.testId ?: element.name}") {
-        put("ref", element.ref)
-        put("text", text)
-        put("submit", submit)
-    }
+    ) = AgentAnswers.type(element, text, submit)
 
     private fun select(
         element: Element,
         option: String,
-    ) = answer("select", "choosing ${element.testId ?: element.name}") {
-        put("ref", element.ref)
-        put("option", option)
-    }
+    ) = AgentAnswers.select(element, option)
 
     private fun navigate(
         url: String,
         reason: String,
-    ) = answer("navigate", reason) { put("url", url) }
+    ) = AgentAnswers.navigate(url, reason)
 
     private fun done(
         summary: String,
         objectId: String? = null,
-    ) = answer("done", "the task is complete") {
-        put("summary", summary)
-        put("success", true)
-        objectId?.let { put("object_id", it) }
-    }
+    ) = AgentAnswers.done(summary, objectId)
 
     private fun problem(
         kind: String,
         note: String,
-    ) = answer("report_problem", note) {
-        put("kind", kind)
-        put("note", note)
-    }
+    ) = AgentAnswers.problem(kind, note)
 
     private fun answer(
         tool: String,
         reason: String,
-        fields: JsonObjectBuilder.() -> Unit = {},
-    ): JsonObject =
-        buildJsonObject {
-            put("reason", reason)
-            put("tool", tool)
-            fields()
-        }
-
-    // --- the prompt ----------------------------------------------------------------------------------------------
-
-    /** What one decision prompt shows the model (see `PromptBuilder.user` and `PageSnapshot.render`). */
-    private class Prompt(
-        val task: String,
-        val history: List<Entry>,
-        val url: String,
-        val elements: List<Element>,
-        val text: String,
-    ) {
-        val path: String get() = URI(url).path.orEmpty().ifEmpty { "/" }
-
-        fun el(testId: String): Element? = elements.firstOrNull { it.testId == testId }
-
-        fun last(): Entry? = history.lastOrNull()
-
-        /** Whether a control named [name] was clicked and the page took the click. */
-        fun clicked(name: String): Boolean =
-            history.any {
-                it.action.startsWith("click") && "\"$name\"" in it.action &&
-                    it.observation.startsWith("OK")
-            }
-
-        companion object {
-            fun of(request: LlmRequest): Prompt {
-                val lines =
-                    request.messages
-                        .last { it.role == LlmRole.USER }
-                        .content
-                        .lines()
-                val page = lines.indexOfFirst { it == "Current page:" }
-                val elements = lines.indexOfFirst { it == "Elements:" }
-                val text = lines.indexOfFirst { it == "Visible text:" }
-                return Prompt(
-                    task = lines.first { it.startsWith("Task: ") }.removePrefix("Task: "),
-                    history =
-                        lines.take(page).mapNotNull { line ->
-                            HISTORY.matchEntire(line)?.let { Entry(it.groupValues[1], it.groupValues[2]) }
-                        },
-                    url = lines.first { it.startsWith("URL: ") }.removePrefix("URL: "),
-                    elements =
-                        lines.subList(elements + 1, text).mapNotNull { line ->
-                            ELEMENT.matchEntire(line)?.let {
-                                Element(
-                                    ref = it.groupValues[1].toInt(),
-                                    role = it.groupValues[2],
-                                    name = it.groupValues[3],
-                                    testId = it.groupValues[4].ifEmpty { null },
-                                    value = it.groups[5]?.value,
-                                )
-                            }
-                        },
-                    text = lines.drop(text + 1).joinToString("\n"),
-                )
-            }
-        }
-    }
-
-    private data class Entry(
-        val action: String,
-        val observation: String,
-    )
-
-    private data class Element(
-        val ref: Int,
-        val role: String,
-        val name: String,
-        val testId: String?,
-        val value: String?,
-    )
+    ) = AgentAnswers.answer(tool, reason)
 
     private companion object {
         const val LOGOUT = "logout"
         const val IN_PROGRESS = "in_progress"
         val MANAGER = Regex("(?i)menecer|manager")
-        val HISTORY = Regex("""\d+\. (.*?) -> (.*)""")
-        val ELEMENT = Regex("""\[(\d+)] (\S+) "(.*?)"(?: \(testid=([^)]+)\))?(?: value="(.*)")?(?: \[disabled])?""")
         val TICKET = Regex("/tickets/[^/]+(/[a-z-]+)?")
         val DEPARTMENT = Regex("""(\S+) departamentinə""")
         val QUOTED = Regex("'([^']+)'")

@@ -45,9 +45,10 @@ functions), `orchestration` (teardown), `explorer` (`TestPatterns`, `ScenarioCom
 
 ## Verification
 
-- `TenantlessEndToEndTest` (real Chromium): a `tenant: none` campaign against `FakeNotesServer` (no companies, no test
-  API) signs testers up, keeps a visitor anonymous, reports oracle checks as "N/A (no oracle)", passes `site_health`
-  and `direct_url` on a correct site and finds the deliberate `FOREIGN_NOTE_VISIBLE` hole. Explorer drafts for such a
+- `TenantlessEndToEndTest` (real Chromium): a `tenant: none` campaign against `FakeNotesServer` (no companies; a test
+  API only when started with a `testToken`, here none) signs testers up, keeps a visitor anonymous, reports oracle
+  checks as "N/A (no oracle)", passes `site_health` and `direct_url` on a correct site and finds the deliberate
+  `FOREIGN_NOTE_VISIBLE` hole. Explorer drafts for such a
   site are covered by `GenerateScenarioUseCaseTest`; the company portal example and the panel e2e are unchanged. On a
   site whose objects the visitor sees (news, a public blog) a draft checks no public object as a leak, only a draft
   (`Drafts`, Faza 19).
@@ -56,6 +57,11 @@ functions), `orchestration` (teardown), `explorer` (`TestPatterns`, `ScenarioCom
   action the explorer saw or to the checks of pages it visited, every tester signs up through the form it found, and no
   company, invitation, code, announcement or ticket is assumed (`GenerateScenarioUseCaseTest`). The announcement,
   ticket and test-company criteria of the MVP are the contract site's e2e criteria.
+- End to end (`NotesSiteTestEndToEndTest`, real Chromium, production wiring): `petek test` on the notes site with a
+  test API explores, drafts (`tenant: none`, self sign-up, the note form it saw), approves, runs three testers and
+  reports; a clean site passes, a dead link fails the run on the checks the draft wrote. The AI is replaced by
+  `DraftSiteDriver`, which knows no site: it answers the explorer from the page's buttons and reads the composer's
+  `do` texts.
 - `ArchitectureTest` fails when a declaration of `az.petek.core` is named after an HR concept.
 - The examples (`docs/examples/company-portal.yaml`, `company-portal-anonymous.yaml`, `target-profile.yaml`) are loaded
   by `CompanyPortalCampaignFileTest`, `LoadCampaignUseCaseTest`, `YamlTargetSpecSourceTest` and `PanelScenariosTest`,
