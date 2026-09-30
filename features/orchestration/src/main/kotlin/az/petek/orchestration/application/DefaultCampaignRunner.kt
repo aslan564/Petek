@@ -155,6 +155,7 @@ class DefaultCampaignRunner(
                 startedAt = startedAt.wall,
                 repeatGroup = options.repeatGroup,
                 repeatIndex = options.repeatIndex,
+                release = options.release,
             ),
         )
         val run = RunState(runId, campaign, options, startedAt, busFactory(), sharedStateFactory())

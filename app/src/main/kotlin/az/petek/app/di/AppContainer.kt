@@ -112,12 +112,15 @@ import az.petek.ownership.infrastructure.InetHostLocality
 import az.petek.ownership.infrastructure.SqliteOwnershipLedger
 import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
+import az.petek.reporting.application.CompareRunsUseCase
 import az.petek.reporting.application.ExportReportPdfUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportWriter
 import az.petek.reporting.domain.ThreeSourceJudge
 import az.petek.reporting.domain.TraceSource
+import az.petek.reporting.infrastructure.ComparisonHtmlWriter
+import az.petek.reporting.infrastructure.ComparisonMarkdownWriter
 import az.petek.reporting.infrastructure.CustomerSummaryWriter
 import az.petek.reporting.infrastructure.HtmlReportWriter
 import az.petek.reporting.infrastructure.JUnitReportWriter
@@ -420,6 +423,14 @@ class AppContainer(
     val reportPdf: ExportReportPdfUseCase by lazy {
         val printer = overrides.pdfPrinter ?: PlaywrightPdfPrinter()
         ExportReportPdfUseCase(artifacts, { html, pdf -> printer.print(html, pdf) }, SHARE_REPORT)
+    }
+
+    /**
+     * A run against an earlier run of the same scenario (the regression baseline, Faza 14; the owner put it first on
+     * 2026-09-30): `petek compare`, the panel and MCP `compare_runs`; written as `compare.html` and `compare.md`.
+     */
+    val compareRuns: CompareRunsUseCase by lazy {
+        CompareRunsUseCase(runs, evidenceQuery, artifacts, listOf(ComparisonHtmlWriter(), ComparisonMarkdownWriter()))
     }
 
     /** What the runner calls after each run: flush LLM usage, then judge and write the report. */

@@ -56,6 +56,7 @@ internal class SqliteRunRepository(
                         it[repeatGroup] = run.repeatGroup
                         it[repeatIndex] = run.repeatIndex
                         it[workspaceId] = run.workspaceId.value
+                        it[release] = run.release
                     }.insertedCount
             }
         require(inserted == 1) { "Run ${run.runId} already exists" }
@@ -100,6 +101,21 @@ internal class SqliteRunRepository(
         return db.read {
             RunTable
                 .selectAll()
+                .orderBy(RunTable.startedAt to SortOrder.DESC, RunTable.seq to SortOrder.DESC)
+                .limit(limit)
+                .map { it.toRunRecord() }
+        }
+    }
+
+    override suspend fun byCampaign(
+        campaignName: String,
+        limit: Int,
+    ): List<RunRecord> {
+        require(limit > 0) { "limit must be positive, was $limit" }
+        return db.read {
+            RunTable
+                .selectAll()
+                .where { RunTable.campaignName eq campaignName }
                 .orderBy(RunTable.startedAt to SortOrder.DESC, RunTable.seq to SortOrder.DESC)
                 .limit(limit)
                 .map { it.toRunRecord() }
@@ -167,6 +183,7 @@ private fun ResultRow.toRunRecord() =
         repeatGroup = this[RunTable.repeatGroup],
         repeatIndex = this[RunTable.repeatIndex],
         workspaceId = WorkspaceId(this[RunTable.workspaceId]),
+        release = this[RunTable.release],
     )
 
 private fun ResultRow.toRunResource() =

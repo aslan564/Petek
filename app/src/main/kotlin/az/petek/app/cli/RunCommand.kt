@@ -60,6 +60,10 @@ class RunCommand : PetekSubcommand("run") {
     private val file by argument("campaign", help = "campaign YAML file, e.g. docs/examples/company-portal.yaml").path()
     private val repeat by option("--repeat", help = "run the campaign N times and report stability").int().restrictTo(min = 1).default(1)
     private val keepData by option("--keep-data", help = "keep the test company on the target (debugging)").flag()
+    private val release by option(
+        "--release",
+        help = "the site's release this run tests, e.g. v1.4.2; petek compare --baseline <release> compares with it",
+    )
     private val headful by option("--headful", help = "show the browser windows").flag()
     private val swapAccounts by option(
         "--swap-accounts",
@@ -146,7 +150,12 @@ class RunCommand : PetekSubcommand("run") {
                 )
             }
             val options =
-                RunOptions(keepData = keepData, swapAccounts = swapAccounts, ownSite = ownership !is OwnershipStatus.Unverified)
+                RunOptions(
+                    keepData = keepData,
+                    swapAccounts = swapAccounts,
+                    ownSite = ownership !is OwnershipStatus.Unverified,
+                    release = release?.trim()?.takeIf { it.isNotEmpty() },
+                )
             // One run at a time over this evidence store: a panel of the same workspace may be running one already.
             val held = container.runLock.acquire("petek run")
             val summaries =

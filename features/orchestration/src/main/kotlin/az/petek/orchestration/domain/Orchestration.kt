@@ -240,6 +240,8 @@ data class RunOptions(
      * spreads load on a site that is not theirs over many addresses. Off unless the caller checked the proof.
      */
     val ownSite: Boolean = false,
+    /** The site's release this run tests, as the owner names it (`--release`); stored with the run for comparing releases. */
+    val release: String? = null,
 )
 
 enum class RunOutcome { PASSED, FAILED, ABORTED }

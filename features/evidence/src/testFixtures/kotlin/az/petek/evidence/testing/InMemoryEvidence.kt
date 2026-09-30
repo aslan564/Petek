@@ -121,6 +121,16 @@ class InMemoryEvidence :
 
     override suspend fun byRepeatGroup(group: String) = runList.filter { it.repeatGroup == group }.sortedBy { it.repeatIndex }
 
+    override suspend fun byCampaign(
+        campaignName: String,
+        limit: Int,
+    ) = runList
+        .withIndex()
+        .filter { it.value.campaignName == campaignName }
+        .sortedWith(compareByDescending<IndexedValue<RunRecord>> { it.value.startedAt }.thenByDescending { it.index })
+        .take(limit)
+        .map { it.value }
+
     override suspend fun addResource(resource: RunResource) {
         resourceList += resource
     }

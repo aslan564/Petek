@@ -38,6 +38,7 @@ class PetekCommand(
             PlanCommand(),
             RunCommand(),
             ReportCommand(),
+            CompareCommand(),
             FindingsCommand(),
             DevCommand(),
             TeardownCommand(),

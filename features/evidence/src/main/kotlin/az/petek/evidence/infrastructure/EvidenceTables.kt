@@ -64,12 +64,16 @@ internal object RunTable : Table("run") {
     /** Added after the first release; older databases get it with the default (`SqliteDatabase.createMissing`). */
     val workspaceId = text("workspace_id").default(WorkspaceId.LOCAL.value)
 
+    /** The site's release the run tested (2026-09-30); added later, so older databases get it empty (`createMissing`). */
+    val release = text("release").nullable()
+
     override val primaryKey = PrimaryKey(seq)
 
     init {
         uniqueIndex(runId)
         index(false, startedAt)
         index(false, repeatGroup, repeatIndex)
+        index(false, campaignName, startedAt)
     }
 }
 

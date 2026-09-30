@@ -44,6 +44,11 @@ data class RunRecord(
     val repeatIndex: Int? = null,
     /** Always [WorkspaceId.LOCAL] on the owner's machine (ADR-0011). */
     val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
+    /**
+     * The site's release the run tested, as the owner named it (`petek run --release v1.4.2`); runs of one scenario are
+     * compared by it (the regression baseline, Faza 14). Null: not named.
+     */
+    val release: String? = null,
 )
 
 /** External objects a run created on the target (e.g. the test company) so teardown can remove them. */

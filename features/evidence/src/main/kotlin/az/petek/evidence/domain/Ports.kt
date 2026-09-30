@@ -71,6 +71,15 @@ interface RunRepository {
 
     suspend fun byRepeatGroup(group: String): List<RunRecord>
 
+    /**
+     * The [limit] most recent runs of the campaign named [campaignName], newest first (as [list]): the runs a regression
+     * baseline is chosen from. [limit] must be positive.
+     */
+    suspend fun byCampaign(
+        campaignName: String,
+        limit: Int,
+    ): List<RunRecord>
+
     suspend fun addResource(resource: RunResource)
 
     suspend fun resources(runId: RunId): List<RunResource>

@@ -435,7 +435,7 @@ class HtmlReportWriter : ReportWriter {
             FindingClass.AGENT_FAILURE, FindingClass.INCONCLUSIVE -> "info"
         }
 
-    private companion object {
+    internal companion object {
         /** Constant stylesheet: the only raw markup in the page. Never interpolate data into it. */
         val CSS =
             """
