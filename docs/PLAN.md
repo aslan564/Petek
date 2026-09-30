@@ -932,6 +932,9 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
 
 ### Faza 14 — Ekosistem və ödənişli modullar
 
+**Prioritet (sahib, 2026-09-30): yüksək** — bu fazanın açıq bəndləri növbəti işlərin başındadır; sıra və hər bəndin
+nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
+
 - [ ] Kontrakt kitləri: `TARGET_CONTRACT.md`-dəki `/test/...` endpointlərini bir sətirlə verən paketlər (Spring Boot
   starter, Express router, Laravel paketi); test rejimində açılır, `X-Test-Token` yoxlayır.
 - [x] Korrelyasiya körpüsü: hər agent sorğusuna `X-Petek-Correlation-Id`; run sonrası log/OpenTelemetry mənbəyindən
@@ -1175,8 +1178,9 @@ etmir, yanlış parol mesajda görünmür.
   (`DIRECT_URL` qaralamada) və şərhin ikiləşməsi (`IDEMPOTENCY` şərh formunda) kodla; "dərc olunan hamıya çatsın"
   yalnız sınaq toxunuşu yeni obyektin başqalarına canlı çatdığını görəndə (`REALTIME`). Mağaza: üç kart hələ yox —
   stok yarışı məhsulun stokunu (test API və ya sahibin adını verdiyi məhsul), səbətin girişlə birləşməsi səbətin say
-  elementini və addım ortasında girişi, kupon sahibin test kuponunu tələb edir; bunlar sahibin demo mağazasında
-  (Faza 22) qurulub sınanmalıdır, fake target-də mağaza yoxdur.
+  elementini və addım ortasında girişi, kupon sahibin test kuponunu tələb edir. **2026-09-30 (sahibin qərarı ilə):**
+  kartlar universal yazılır və Pətəkin öz neytral saxta mağazası ilə (`testing/`, qayda 12) sınanır; sahibin demo
+  mağazası (Faza 22) yalnız sahibin öz yoxlamasıdır, Pətək onun haqqında heç nə saxlamır.
 
 ### Faza 20 — İki qatlı, üç rəfli hesabat
 
@@ -1203,6 +1207,9 @@ etmir, yanlış parol mesajda görünmür.
 
 - [ ] Açıq mənbəli bir xəbər platforması və bir mağaza platforması sahibin serverində; hər biri üçün kampaniya və qısa
   video. Fake target yalnız e2e üçündür (qayda 12).
+  **Sahibin qərarı (2026-09-30):** sahib demo saytlarını öz AI-ı ilə sınayır; Pətək onlar haqda heç nə saxlamır — kodda,
+  testlərdə, sənədlərdə və nümunələrdə onların adı, profili, ssenarisi və nəticəsi yoxdur, hamısı sahibin öz iş
+  qovluğundadır (qayda 13). Pətəkdə yalnız universal olan dəyişir.
 
 ### Faza 23 — Bir əmrlə başlanğıc (sahibin qərarı, 2026-09-28)
 
@@ -1802,7 +1809,8 @@ saytda:
 - [x] Hər keçdi/keçmədi hökmü sübuta bağlıdır; qərar verilə bilməyən yoxlama "keçdi" sayılmır (`INCONCLUSIVE`, Faza
   24.12).
 - [ ] Sahibin öz demo hədəflərində (Faza 22: açıq mənbəli xəbər və mağaza platformaları) "Test et" sona çatır və
-  hesabat yalnız həmin saytda olanları yoxlayır.
+  hesabat yalnız həmin saytda olanları yoxlayır. Sahibin öz AI-ı ilə öz yoxlamasıdır; Pətək onlar haqda heç nə
+  saxlamır (2026-09-30).
 
 *Yoxlama:* `GenerateScenarioUseCaseTest` ("on a site unlike the contract every step of the draft traces back to what
 the explorer saw": müqavilədən fərqli, test API-si olan, amma şirkəti olmayan resept saytında), `PanelTestFlowTest`,
