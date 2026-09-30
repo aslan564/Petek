@@ -355,7 +355,9 @@ screen (`PanelExplorerAdapter` in the app) drives it, one exploration at a time.
   joining, by run functions over the site's own target profile from the scenario catalog) whose company is torn down
   when the exploration ends, but only where the site has companies: the profile's `tenant: company`, or a form to join
   by invitation or company code that walk saw (`GateMaps.joinPages`, Faza 25.1). `TRIAL_TOUCH` (`TrialToucher`) submits harmless actions only with the
-  owner's "Sınaq toxunuşu" and a target the `TestTargetCheck` confirms as test data, and never touches login, sign-up,
+  owner's "Sınaq toxunuşu" and a target the `TestTargetCheck` confirms as test data (`OracleTestTargetCheck`: the test
+  company is `is_test`; on a site without companies `ExplorerAccountTestCheck`: the explorer's own account, signed up in
+  this exploration, on the configured site whose ownership is proved or local; 2026-09-30), and never touches login, sign-up,
   verification, password or file forms. Without sessions the last two phases are skipped and the screen says why. The
   site's kind (`SiteKinds`) and its gate (`GateMaps.of`) are read from the visitor's pages only, whatever the roles saw
   inside.

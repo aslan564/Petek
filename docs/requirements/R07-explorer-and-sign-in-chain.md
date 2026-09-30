@@ -19,7 +19,8 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 - `ExploreSiteUseCase` runs three phases under a page/time budget: `ANONYMOUS` (read-only session, crawl under
   `LinkPolicy`/`RobotsRules`), `ROLE_BASED` (logged-in sessions per role), `TRIAL_TOUCH` (harmless submits, only with
-  permission and a confirmed test target). Code reads the page (`HtmlScanner`, `FormClassifier`, `Keywords`); the AI
+  permission and a confirmed test target: the test company, or on a site without companies the explorer's own account
+  made in the same exploration, 2026-09-30). Code reads the page (`HtmlScanner`, `FormClassifier`, `Keywords`); the AI
   answers one structured question per page (`PageAnalyst`). After an accepted submit the trial touch asks the test
   API, as the role that created the object (the sessions' e-mails), whether it serves the object's resource
   (`TestApiProbe`, Faza 25.2); drafts write oracle checks only for resources proven so. An exploration may go on

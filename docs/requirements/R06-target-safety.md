@@ -6,7 +6,9 @@
 
 Pətək must never test a system it was not pointed at, never write to a production tenant, and never delete anything
 that is not test data. Every destructive capability (seeding, teardown, trial touch) is guarded twice: by
-configuration and by the target's own `is_test` flag.
+configuration and by the target's own `is_test` flag; on a site without companies, where no such flag exists, the
+explorer's trial touch writes only from the account it signed up with in the same exploration, on a site whose
+ownership is proved or local, and marks every text it types (the owner's decision of 2026-09-30).
 
 ## Why
 
@@ -26,7 +28,9 @@ destroying a customer's data.
   (`SessionOptions.blockedHosts`), the target itself excepted when it was allowed.
 - **Test API guard.** `HttpTargetOracle` sends `X-Test-Token` only to the configured test API base and never follows
   redirects; company lookups and teardown refuse companies without `is_test=true`; the explorer's trial touch requires
-  the owner's `allowWrites` and a `TestTargetCheck` that confirms test data through the API.
+  the owner's `allowWrites` and a `TestTargetCheck` that confirms test data: the test company through the API
+  (`OracleTestTargetCheck`) or, on a site without companies, the explorer's own new account on the configured, proved
+  or local site (`ExplorerAccountTestCheck`); the owner's own accounts never write.
 - **Teardown.** Every run ends with teardown (also when aborted or interrupted); `petek teardown --run` repeats it;
   `--keep-data` is explicit and for debugging.
 - **Panel runs.** A run goes to the configured site or to a site with its own target profile (R08), which brings its
@@ -63,7 +67,9 @@ destroying a customer's data.
   the browser asks, nothing starts before the answer, then `.env` and the panel), `PanelSetupTest`, `SetupServerTest`,
   `CdnErrorPageTest`.
 - `oracle`: `HttpTargetOracleTest` (token handling, `is_test` refusal, no redirects).
-- `explorer`: trial touch refused without a confirmed test target.
+- `explorer`: trial touch refused without a confirmed test target; `ExplorerAccountTestCheckTest` (another site, an
+  unproved site and a failed look are refused), `TestCompanyRoleSessionsTest` (only an account the explorer signed up
+  with itself is written from).
 - ownership (ADR-0012): `features/ownership` domain tests (proof line, exemptions, ledger); `RunCommandTest` (public
   stage unproved → exit 2 with the proof to publish and why the campaign is not a visitor run, a visitor run → runs,
   proved → runs, local → exempt); `VisitorRunTest`; `PanelRunsTest` (a visitor run starts on an unproved site); `PanelRunsTest` and

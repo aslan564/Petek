@@ -57,8 +57,9 @@ class ExplorationRefusedException(
  *   them in and keeps owning them). Comparing what each role reached and was offered fills `reachableBy` and infers
  *   `forbiddenRoles`.
  * - **TRIAL_TOUCH** runs only with [ExplorationRequest.allowWrites], a [TestTargetCheck] confirmation *and* logged-in
- *   role sessions (only they write into the test company that teardown removes); otherwise it is skipped with the
- *   reason. It is the only phase that submits anything (see [TrialToucher]); the anonymous session only watches.
+ *   role sessions (only they write: into the test company that teardown removes or, on a site without companies, from
+ *   the explorer's own account made in this exploration); otherwise it is skipped with the reason. It is the only
+ *   phase that submits anything (see [TrialToucher]); the anonymous session only watches.
  *
  * Every crawl looks through a [ReadOnlyBrowserSession], so outside TRIAL_TOUCH the explorer cannot click, type or
  * leave the target's origin. The target must pass [targetPolicy] first, else [ExplorationRefusedException] is thrown
@@ -249,8 +250,9 @@ class ExploreSiteUseCase(
             if (!context.request.allowWrites) return skipped(ExplorationPhase.TRIAL_TOUCH, "allowWrites is false")
             val walk = walk()
             val roleSessions = walk.sessions
-            // Only a logged-in role writes into the test company, which teardown removes as a whole; what a visitor
-            // creates (a contact or demo request) belongs to no company and would stay on the target for good.
+            // Only a logged-in role writes: into the test company, which teardown removes as a whole, or on a site
+            // without companies from the explorer's own new account (the check below says which); what a visitor
+            // creates (a contact or demo request) belongs to nobody Pətək made and would stay on the target for good.
             if (roleSessions.isEmpty()) {
                 return skipped(
                     ExplorationPhase.TRIAL_TOUCH,

@@ -21,6 +21,7 @@ import az.petek.capacity.domain.HostResourceProbe
 import az.petek.capacity.domain.HostResources
 import az.petek.core.ids.RunId
 import az.petek.core.sqlite.SqliteDatabase
+import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
 import az.petek.explorer.domain.ExplorationId
@@ -53,8 +54,11 @@ import kotlin.time.Duration
  * The universal criterion (docs/PLAN.md Faza 13 and 25) proved end to end: on a site unlike the contract, a notes
  * application with a test API but no companies, `petek test` explores the site, drafts the scenario only from what it
  * found, approves and runs it in real Chromium with the production object graph, and reports. No company, invitation,
- * code or contract resource is assumed on the way. Only the AI is replaced, by [DraftSiteDriver], which knows no
- * site. The draft and the run's steps are written to `build/notes-test/` for a human look.
+ * code or contract resource is assumed on the way. The explorer's trial touch writes one marked note from the account
+ * it signed up with itself (the owner's decision of 2026-09-30: on a site without companies that account is the test
+ * data), so the draft knows what the test API serves and where a note's own page is. Only the AI is replaced, by
+ * [DraftSiteDriver], which knows no site. The draft and the run's steps are written to `build/notes-test/` for a human
+ * look.
  */
 @Tag("e2e")
 class NotesSiteTestEndToEndTest {
@@ -88,6 +92,15 @@ class NotesSiteTestEndToEndTest {
             draft shouldContain "register_and_login"
             draft shouldContain "note-submit-happy"
             listOf("register_owner", "seed_company", "company", "invite", "announcement", "ticket").forEach { draft shouldNotContain it }
+            // The trial touch proved what the test API serves and where a note's own page is: the draft checks both.
+            draft shouldContain "oracle: {path: \"/test/notes/{last_id}\""
+            draft shouldContain "note-submit-direct-url"
+            // It wrote from one account only, the explorer's own, and marked what it wrote.
+            site.allNotes
+                .filter { "Pətək sınaq" in it.title }
+                .map { it.author }
+                .distinct()
+                .size shouldBe 1
             val runId = RunId(out.getValue("runId").jsonPrimitive.content)
             evidence { store ->
                 val assertions = store.assertions(runId)
@@ -117,6 +130,28 @@ class NotesSiteTestEndToEndTest {
                 val steps = store.steps(runId)
                 withClue(steps.joinToString("\n") { "${it.scenarioStep} ${it.action} ${it.status} ${it.detail}" }) {
                     steps.filter { "unhealthy_page" in it.detail.orEmpty() && "/help" in it.detail.orEmpty() }.shouldNotBeEmpty()
+                }
+            }
+        }
+
+    @Test
+    fun `a note that opens for anyone who types its address fails the run on the draft's own direct address check`() =
+        runBlocking<Unit> {
+            start(NotesBug.FOREIGN_NOTE_VISIBLE)
+
+            val out = test()
+
+            withClue(out.toString()) {
+                out.getValue("result").jsonPrimitive.content shouldBe "FAILED"
+                out.getValue("exitCode").jsonPrimitive.int shouldBe 1
+            }
+            val runId = RunId(out.getValue("runId").jsonPrimitive.content)
+            evidence { store ->
+                val steps = store.steps(runId)
+                withClue(steps.joinToString("\n") { "${it.scenarioStep} ${it.action} ${it.status} ${it.detail}" }) {
+                    steps
+                        .filter { it.scenarioStep == "note-submit-direct-url" && it.status == StepStatus.FAILED }
+                        .shouldNotBeEmpty()
                 }
             }
         }

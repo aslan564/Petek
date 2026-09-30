@@ -1000,6 +1000,12 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
   işarəli mətnlə), test API varsa obyektin həmin hesaba aid olduğu da soruşulsun. Təhlükəsizlik qaydasıdır, ona görə
   sahibin qərarıdır. **Qərar (sahib, 2026-09-30):** bəli, məhdud: yalnız sahibliyi təsdiqlənmiş (və ya lokal) saytda,
   yalnız kəşfiyyatçının bu kəşfiyyatda özü açdığı hesabdan, Pətək işarəli mətnlə.
+  *Vəziyyət:* `ExplorerAccountTestCheck`: şirkətsiz saytda kəşfiyyatçının öz qeydiyyatı (`self_register`, rol
+  `explorer`, qeydiyyat `self`, həmin kəşfiyyatın setup run-ı) test datası sayılır, yalnız konfiqurasiya olunmuş
+  saytda və sahibliyi təsdiqlənibsə və ya lokaldırsa (`SiteOwnership`); başqa qeydiyyatlı hesab və sahibin öz hesabları
+  heç vaxt yazmır. Toxunuş yalnız o hesabdan, `Pətək sınaq` işarəsi ilə yazır; panel bunu bir sətirlə deyir.
+  `ExplorerAccountTestCheckTest`, `TestCompanyRoleSessionsTest`, `NotesSiteTestEndToEndTest` (draftda `oracle` və
+  `direct_url`, qeydi başqasına açan sayt FAILED).
 
 ## Pətək 3: yalnız link ilə sürü (2026-09-26)
 
@@ -1650,8 +1656,10 @@ Hazır sayılır: test API-si olan, amma şirkət modeli olmayan saytda kəşfiy
 və ya müqavilə resursu fərz edilmir; draftdakı hər addım kəşfiyyatçının gördüyü bir əməliyyata və ya qapıya bağlıdır.
 *Vəziyyət (2026-09-30):* e2e ilə də sübut olunub: `NotesSiteTestEndToEndTest`-də qeydlər saytının test API-si var
 (`FakeNotesServer(testToken)`), draft yenə `tenant: none`, özü qeydiyyat və kəşfiyyatçının gördüyü formadır; dəvət,
-şirkət kodu, `register_owner`, `seed_company`, elan və ticket yoxdur. Test API burada oracle yoxlamasına çevrilmir,
-çünki şirkəti olmayan saytda sınaq toxunuşu yazmır ("Qərar gözləyən suallar").
+şirkət kodu, `register_owner`, `seed_company`, elan və ticket yoxdur. Sahibin 2026-09-30 qərarından sonra
+kəşfiyyatçının sınaq toxunuşu lokal saytda öz açdığı hesabdan bir işarəli qeyd yazır: draft test API-nin qeydləri
+verdiyini sübut edib `oracle` yoxlaması və qeydin öz səhifəsi üçün `direct_url` addımı yazır; qeydin başqasına
+açıldığı sayt (`NotesBug.FOREIGN_NOTE_VISIBLE`) bu addımda FAILED olur (`access_not_refused`).
 
 ## Sübut bazası və hesabat
 

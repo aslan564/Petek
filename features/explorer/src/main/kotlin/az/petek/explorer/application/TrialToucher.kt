@@ -51,10 +51,11 @@ private val logger = KotlinLogging.logger {}
  * - only forms that code classified CREATE (an LLM's reading of a button never makes a form writable), never login,
  *   sign-up, verification, approval or deletion forms, never a form sent to another site, never a form with a
  *   password or file field, never a form whose page, address or button looks destructive;
- * - one submission per form, from a logged-in role that was offered it (never as a visitor: only the test company's
- *   data is torn down), on a page of the target's own origin; nothing is typed when the browser does not land on the
- *   page the form was seen on (a redirect to the sign-in page, another site), because the same selectors could then
- *   address another form;
+ * - one submission per form, from a logged-in role that was offered it (never as a visitor: the writers are the test
+ *   company's accounts or, on a site without companies, the explorer's own account made in this exploration; what a
+ *   visitor creates belongs to nobody Pətək made), on a page of the target's own origin; nothing is typed when the
+ *   browser does not land on the page the form was seen on (a redirect to the sign-in page, another site), because the
+ *   same selectors could then address another form;
  * - every text carries a unique marker (`Pətək sınaq …`) so the result can be recognised; at the end each object it
  *   created is deleted again through the site's own delete action on the object's page, and only when that page still
  *   shows the marker (Faza 17: in an admin account only Pətək-marked objects are made, and they are removed). An object

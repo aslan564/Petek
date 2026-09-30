@@ -165,7 +165,8 @@ internal class TestCompanyRoleSessions(
     /**
      * The explorer's own account (`self_register`): one owner signs up through the site's registration flow, nothing
      * else is created. Its data is removed through the test API when the site has one; otherwise the account stays and
-     * the activity says so.
+     * the activity says so. On a site without companies the trial touch may write from this account alone (the owner's
+     * decision of 2026-09-30, [ExplorerAccountTestCheck]).
      */
     suspend fun registerOnly(
         request: RoleSessionRequest,
@@ -189,19 +190,24 @@ internal class TestCompanyRoleSessions(
                 return RoleSessions.none("Qeydiyyat alınmadı: ${e.message ?: e::class.simpleName}")
             } ?: return RoleSessions.none("Başqa run gedir; kəşfiyyatçı öz hesabını aça bilmədi.")
         return try {
-            sessionsOf(setup, request, sessions, progress)
+            sessionsOf(setup, request, sessions, progress, ownAccount = !companies)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { tearDown(setup.runId) }
             throw e
         }
     }
 
-    /** The logged-in sessions of [setup]'s testers; tears the company down itself unless it returns sessions. */
+    /**
+     * The logged-in sessions of [setup]'s testers; tears the company down itself unless it returns sessions. With
+     * [ownAccount] they are the explorer's own new account on a site without companies, which the trial touch may write
+     * from ([ExplorerAccountTestCheck]); otherwise the test API confirms the company as test data.
+     */
     private suspend fun sessionsOf(
         setup: SetupRun,
         request: RoleSessionRequest,
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
+        ownAccount: Boolean = false,
     ): RoleSessions {
         val identities = container.identities.findByRun(setup.runId)
         val active =
@@ -238,9 +244,22 @@ internal class TestCompanyRoleSessions(
         }
         progress("Rol sessiyaları hazırdır: ${opened.keys.joinToString { ExplorerTexts.role(it) }} (run ${setup.runId}).")
         val owner = identities.firstOrNull { it.registration == RegistrationMode.OWNER }?.email
+        // Only an account the explorer signed up with itself, in this exploration: never a company's or an owner's.
+        val own = ownAccount && active.values.all { it.registration == RegistrationMode.SELF }
+        if (own) {
+            progress(
+                "Şirkətsiz sayt: sınaq toxunuşu yalnız kəşfiyyatçının bu kəşfiyyatda açdığı öz hesabından, " +
+                    "“Pətək sınaq” işarəli mətnlə yazır.",
+            )
+        }
         return RoleSessions(
             sessions = opened,
-            testCheck = OracleTestTargetCheck(container.oracle, container.config.target, owner),
+            testCheck =
+                if (own) {
+                    ExplorerAccountTestCheck(container.ownership::check, container.config.target, setup.runId)
+                } else {
+                    OracleTestTargetCheck(container.oracle, container.config.target, owner)
+                },
             note = null,
             accounts = active.entries.filter { it.key.key in opened }.associate { (role, identity) -> role.key to identity.email },
         ) {

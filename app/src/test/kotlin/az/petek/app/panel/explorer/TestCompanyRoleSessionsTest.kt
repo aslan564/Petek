@@ -262,6 +262,49 @@ class TestCompanyRoleSessionsTest {
         }
 
     @Test
+    fun `on a site without companies the explorer's own new account may be written from, and the owner is told how`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val run = RunId("run_own")
+            val source =
+                sessions(panel) {
+                    store(panel, run, identity("a01", checkNotNull(Role.fromKey("explorer")), RegistrationMode.SELF))
+                    SetupRun(run, RunOutcome.PASSED)
+                }
+
+            val roles = source.registerOnly(request(panel), factory) { progress += it }
+
+            campaigns.single().settings.tenant shouldBe Tenant.NONE
+            roles.note.shouldBeNull()
+            roles.sessions.keys.toList() shouldContainExactly listOf("explorer")
+            progress.filter { "“Pətək sınaq” işarəli" in it }.size shouldBe 1
+            roles.testCheck
+                .check(panel.config.target)
+                .shouldBeInstanceOf<TestTargetVerdict.Confirmed>()
+                .evidence shouldContain "made in this exploration (run run_own)"
+            roles.close()
+        }
+
+    @Test
+    fun `an account the explorer did not sign up with itself is never written from on a site without companies`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val run = RunId("run_login")
+            val source =
+                sessions(panel) {
+                    store(panel, run, identity("a01", checkNotNull(Role.fromKey("explorer")), RegistrationMode.LOGIN))
+                    SetupRun(run, RunOutcome.PASSED)
+                }
+
+            val roles = source.registerOnly(request(panel), factory) { progress += it }
+
+            roles.sessions.keys.toList() shouldContainExactly listOf("explorer")
+            roles.testCheck.check(panel.config.target).shouldBeInstanceOf<TestTargetVerdict.Refused>()
+            progress.none { "“Pətək sınaq” işarəli" in it } shouldBe true
+            roles.close()
+        }
+
+    @Test
     fun `the setup campaign signs up with the target profile of the site's own scenario`() =
         runBlocking<Unit> {
             val ownFile =
@@ -458,18 +501,21 @@ class TestCompanyRoleSessionsTest {
             }
         }
 
-    /** What a finished setup run leaves: one active tester per role with a saved browser state. */
+    /** What a finished setup run leaves: one active tester per role (by default a test company's) with a saved browser state. */
     private suspend fun store(
         panel: PanelHarness,
         run: RunId,
+        vararg people: Identity,
     ) {
         val identities = panel.panel.container.identities
         val testers =
-            listOf(
-                identity("a01", Role.ADMIN, RegistrationMode.OWNER),
-                identity("a02", Role.MANAGER, RegistrationMode.INVITE),
-                identity("a03", Role.EMPLOYEE, RegistrationMode.COMPANY_CODE),
-            )
+            people.toList().ifEmpty {
+                listOf(
+                    identity("a01", Role.ADMIN, RegistrationMode.OWNER),
+                    identity("a02", Role.MANAGER, RegistrationMode.INVITE),
+                    identity("a03", Role.EMPLOYEE, RegistrationMode.COMPANY_CODE),
+                )
+            }
         identities.replaceAll(run, IdentityPlan(RunTag("k7x2"), testers))
         testers.forEach { tester ->
             val state = dir.resolve("${tester.agentId.value}.json").also { Files.writeString(it, "{}") }
