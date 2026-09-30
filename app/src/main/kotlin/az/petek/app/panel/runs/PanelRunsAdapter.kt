@@ -21,6 +21,7 @@ import az.petek.app.panel.PanelTargets
 import az.petek.app.panel.explorer.SetupRun
 import az.petek.app.panel.explorer.SetupRuns
 import az.petek.app.panel.scenarios.PanelScenariosAdapter
+import az.petek.app.runs.RunLockBusyException
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.VisitorRun
@@ -108,7 +109,8 @@ private val logger = KotlinLogging.logger {}
  *   "Hədəf sayt" when one is given, with `PETEK_TARGET` semantics ([RunTargets]); an explorer draft only on the site it
  *   was written for, since its steps open that site's pages. The plan is published to the
  *   orchestrator screen before the first step ([PanelRunWatch]); the run itself goes on in [scope].
- * - **One at a time.** The owner's runs and the explorer's session setup ([runKeepingData]) share one slot; a second
+ * - **One at a time.** The owner's runs and the explorer's session setup ([runKeepingData]) share one slot, and the
+ *   evidence store's [az.petek.app.runs.RunLock] keeps a run of another process (`petek run`) out too; a second
  *   start is a [PanelConflictException]. [cancelRun] cancels the running one; its teardown and report still happen.
  * - **History** comes from the run repository, newest first, with the scenario version each run executed.
  * - **Triage** of a finished run runs in [scope] (a closed browser tab does not stop it) and is resumable.
@@ -392,6 +394,14 @@ internal class PanelRunsAdapter(
                     lease.close()
                     throw PanelConflictException("Artıq bir run gedir. Bitməsini gözləyin və ya dayandırın.")
                 }
+                // Another process (`petek run`, another panel) may run over the same evidence store too.
+                val held =
+                    try {
+                        container.runLock.acquire("the panel")
+                    } catch (e: RunLockBusyException) {
+                        lease.close()
+                        throw PanelConflictException("Başqa run gedir (${e.holder}). Bitməsini gözləyin.")
+                    }
                 watch.expect(campaign, started)
                 val config = lease.container.config
                 val runner = lease.container.campaignRunner(headless = config.browserHeadless && !headful)
@@ -409,7 +419,10 @@ internal class PanelRunsAdapter(
                             started.completeExceptionally(e)
                             null
                         } finally {
-                            withContext(NonCancellable) { lease.close() }
+                            withContext(NonCancellable) {
+                                lease.close()
+                                held.close()
+                            }
                         }
                     }.also { job ->
                         // A job cancelled before its body ran never reaches the finally above.
@@ -417,6 +430,7 @@ internal class PanelRunsAdapter(
                             if (!entered.get()) {
                                 started.cancel()
                                 lease.close()
+                                held.close()
                             }
                         }
                         current = job

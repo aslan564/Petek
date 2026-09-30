@@ -28,6 +28,7 @@ import az.petek.app.diagnostics.HttpProbe
 import az.petek.app.diagnostics.HttpTargetReachability
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.MdcDiagnosticContext
+import az.petek.app.runs.RunLock
 import az.petek.app.telemetry.CountingCampaignRunner
 import az.petek.app.telemetry.LocalFileUsageSink
 import az.petek.browser.domain.BrowserEngine
@@ -189,6 +190,9 @@ class AppContainer(
 
     val clock: HarnessClock = overrides.clock ?: SystemHarnessClock()
     val ids: IdGenerator = UuidV7IdGenerator()
+
+    /** One run at a time over this evidence store, across the panel, the CLI and MCP, in any process ([RunLock]). */
+    val runLock: RunLock by lazy { RunLock(config.evidenceDir.resolve(RunLock.FILE_NAME)) { clock.now().wall } }
     val targetPolicy: TargetPolicy get() = config.targetPolicy
     val templateRenderer: TemplateRenderer = DefaultTemplateRenderer()
     val fieldSelector: JsonFieldSelector = DefaultJsonFieldSelector()

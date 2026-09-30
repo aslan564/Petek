@@ -1548,7 +1548,10 @@ Açıq sahib qərarları (tərs oxudan):
   (`TestFlowView.undecided`, qeydi də bunu deyir) heç bir addım və yoxlama uğursuz olmayıb, amma qərarsız yoxlama
   varsa 3 qaytarır; uğursuzluq olan run 1, dayandırılan 2 qalır. `RunCommandTest`, `TestCommandTest`, README.
 - [x] **Proseslər arası run kilidi:** evidence qovluğunda fayl kilidi ilə panel, MCP və CLI eyni anda iki run açmasın?
-  Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli.
+  Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli. *Vəziyyət:* `RunLock` (`<evidence>/run.lock`, əməliyyat
+  sisteminin fayl kilidi, proses bitəndə özü açılır): panel (`petek test`, MCP, kəşfiyyatçının setup-ı da onun
+  içindən) və `petek run` run-ı onu tutaraq aparır; ikincisi kimin tutduğunu deyərək rədd olunur (panel 409, `petek
+  run` çıxış 2). `RunLockTest`, `PanelRunsTest`, `RunCommandTest`.
 - [x] **Örtük hesabatda:** kəşfiyyatçının görmədiyi rollar və buraxılan ideyalar run hesabatının xülasəsinə yazılsın?
   Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli.
 

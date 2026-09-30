@@ -13,6 +13,7 @@ package az.petek.app.cli
 
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.diagnostics.TargetReachability
+import az.petek.app.runs.RunLock
 import az.petek.app.testing.CliHarness
 import az.petek.app.testing.CliHarness.Companion.done
 import az.petek.app.testing.CliHarness.Companion.tinyCampaign
@@ -90,6 +91,20 @@ class RunCommandTest {
             ExitCodes.CONFIG_OR_ABORTED
         RunCommand.exitCodeOf(listOf(summary(RunOutcome.PASSED))) shouldBe ExitCodes.OK
     }
+
+    @Test
+    fun `a run the panel holds over the same evidence keeps petek run from starting`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("tiny.yaml", tinyCampaign())
+            val lock = RunLock(cli.evidenceDir.resolve(RunLock.FILE_NAME))
+
+            val result = lock.acquire("the panel").use { cli.run("run", "tiny.yaml") }
+
+            result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            result.stderr shouldContain "Another run is going over this evidence store (the panel"
+            cli.evidence { it.evidence.latest() } shouldBe null
+        }
 
     @Test
     fun `a site that does not answer is reported and nothing is tested in its place`() =

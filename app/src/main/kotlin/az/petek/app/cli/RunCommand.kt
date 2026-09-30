@@ -133,6 +133,8 @@ class RunCommand : PetekSubcommand("run") {
             }
             val options =
                 RunOptions(keepData = keepData, swapAccounts = swapAccounts, ownSite = ownership !is OwnershipStatus.Unverified)
+            // One run at a time over this evidence store: a panel of the same workspace may be running one already.
+            val held = container.runLock.acquire("petek run")
             val summaries =
                 try {
                     if (repeat == 1) {
@@ -141,6 +143,7 @@ class RunCommand : PetekSubcommand("run") {
                         container.repeatRunner(runner).repeat(campaign, repeat, options)
                     }
                 } finally {
+                    held.close()
                     container.closeMonitor()
                 }
             if (json) emitJson(summariesJson(summaries)) else summaries.forEach { printSummary(it, config.logDirectory.resolve(LOG_FILE)) }

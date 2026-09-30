@@ -204,6 +204,21 @@ class PanelRunsTest {
         }
 
     @Test
+    fun `a run of another process over the same evidence keeps the panel's run from starting`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val scenario = panel.approved()
+
+            panel.panel.container.runLock.acquire("petek run").use {
+                shouldThrow<PanelConflictException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }.message shouldContain
+                    "Başqa run gedir (petek run"
+            }
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+            panel.ended(started.runId)
+        }
+
+    @Test
     fun `closing the panel stops a running run and still tears it down and writes its report first`() =
         runBlocking<Unit> {
             val llm = PanelLlm().apply { agentGate = CompletableDeferred() }

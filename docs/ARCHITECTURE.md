@@ -301,7 +301,11 @@ earlier one), approves the draft and starts the run on the same site with the fo
 (`PanelRunsAdapter.launch`), and ends with the run (`FINISHED` with its result, or `STOPPED` with the reason: an
 exploration that failed, was stopped or saved no model, an invalid draft, a refused or aborted run). Its rules are the
 parts' own (target policy, reachability, the ownership proof before anything is written, one exploration and one run
-at a time); one test at a time, and `cancelTest` stops the part that is going. The form's team is optional
+at a time); one test at a time, and `cancelTest` stops the part that is going. One run at a time holds across
+processes too (the owner's decision of 2026-09-30): every run, whether the panel, `petek test`, MCP, the explorer's
+session setup or `petek run` starts it, holds the operating system's lock on `<evidence>/run.lock` (`RunLock`), whose
+text says who holds it; a second one is refused with that (the panel's `PanelConflictException`, `petek run`'s exit 2),
+and the lock goes with its process, so a crash leaves none behind. The form's team is optional
 (`PanelInstructions.roles`, `registration` and `departments`): with the page's automatic split nothing is sent, and the
 draft takes the roles, ways in and departments the explorer saw (Faza 25.1–25.2). Regenerating the text of a superseded
 version makes a new draft instead of returning the one that can never be approved again.
