@@ -373,8 +373,9 @@ internal class PlaywrightBrowserSession private constructor(
                     request.setHeader("Content-Type", "application/json")
                 }
             }
-            // The page's own token goes with it, as the page sends it (never elsewhere, never written down).
-            val own = credentials.headersFor(options.baseUrl.resolve(path.trim()))
+            // The page's own token goes with it, as the page sends it (never elsewhere, never written down). An address
+            // the URI parser cannot read gets none; Playwright then says what is wrong with it.
+            val own = runCatching { options.baseUrl.resolve(path.trim()) }.getOrNull()?.let(credentials::headersFor).orEmpty()
             own.forEach { (name, value) -> request.setHeader(name, value) }
             val response = handles.context.request().fetch(path, request)
             try {
