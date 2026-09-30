@@ -983,6 +983,8 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
   `SITE_CHECK` (saytın qüsuru) edilsinmi? Hamısının rədd edildiyi hal ssenari səhvi də ola bildiyi üçün
   `INVESTIGATE` qalır. Tövsiyə: bəli (hakimin qayda müqaviləsi dəyişir, ona görə sahibin qərarıdır).
   **Qərar (sahib, 2026-09-30):** bəli, iki qalib saytın xətasıdır.
+  *Vəziyyət:* `only_one_succeeds`-in qeydi `several_winners:` ilə başlayır (`RaceNotes`), hakim onu `SITE_CHECK`
+  edir; heç kimin udmadığı yarış `INVESTIGATE` qalır. `ThreeSourceJudgeTest`, `OnlyOneSucceedsTest`.
 - [x] **Şirkəti olmayan saytda sınaq toxunuşu (Faza 25, 2026-09-30 tapıldı):** kəşfiyyatçının sınaq toxunuşu (hər
   yaratma formunu bir dəfə göndərmək) yalnız test API-nin `is_test` təsdiqlədiyi test şirkətində yazır (qayda 8). Şirkəti
   olmayan saytda (qeydlər, bloq) kəşfiyyatçı özü qeydiyyatdan keçsə də, onun hesabı "test datası" kimi təsdiqlənə
@@ -1537,6 +1539,8 @@ Açıq sahib qərarları (tərs oxudan):
 - [x] **Mübarizəsiz yarış:** qərar verən sorğunu yalnız bir yarışan göndəribsə (o biri obyekti qərarlaşdırılmış görüb
   sorğusuz cavab veribsə) yarış INCONCLUSIVE olsunmu ("yarış sınanmadı")? Tövsiyə: bəli; `parallel: true` onsuz da
   eyni anda başladır, bu halda saytın eyni anda iki qərarı sınanmayıb. **Qərar (sahib, 2026-09-30):** bəli.
+  *Vəziyyət:* qərar verən sorğunu yalnız qalib göndəribsə yarış `INCONCLUSIVE`-dir (`uncontested: ...`); yarışan
+  sayılır, amma iki qərar eyni anda sınanmayıb. `OnlyOneSucceedsTest`, `RunnerRaceTest`.
 - [x] **Qərarsız run-ın çıxış kodu:** heç bir yoxlama FAILED deyil, amma INCONCLUSIVE var — CI ayırsın deyə çıxış kodu
   3 olsunmu (0 keçdi, 1 saytın xətası, 2 başlamadı)? Tövsiyə: bəli; CI şablonları və README yenilənir.
   **Qərar (sahib, 2026-09-30):** bəli.

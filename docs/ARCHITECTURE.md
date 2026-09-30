@@ -156,13 +156,17 @@ is decided by code from each actor's own requests (AGENTS.md rule 2), never by w
    actor's own request (403, 400, 404, 5xx) is never a lost race: when its agent claimed success anyway, the action is
    FAILED with `request_failed: <request>; agent: <summary>` (an INVESTIGATE finding), otherwise the agent's own
    failure stands. A race interrupted by the budget or an abort still records the racers that already acted.
-4. **Verdict.** `verification` passes when at least two actors raced (reached the start line and acted), exactly one
-   actor won and the requests of every actor could be read. It fails when the site decided wrongly: two winners, or
-   every attempt refused. It is `INCONCLUSIVE` (Faza 24.12: no finding about the site, the "tool gap" shelf, and the
-   run is not PASSED) when the evidence cannot decide: one racer is no race (a race step whose other actors are in
-   another wave, failed earlier or stopped before the start line: `a race needs at least 2 racing actors; only a02
-   raced`, whoever won); no racer sent the request (`no_attempt: no racer sent a request matching ...`); or the
-   requests of an actor could not be read while no second winner is proven. The observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve
+4. **Verdict.** `verification` passes when at least two actors raced (reached the start line and acted), at least
+   two of them sent the deciding request, exactly one actor won and the requests of every actor could be read. It fails
+   when the site decided wrongly: two winners (`several_winners: ...`, a SITE_CHECK finding about the site: the site's
+   own answers show it, the owner's decision of 2026-09-30), or every attempt refused (an INVESTIGATE finding, since a
+   scenario can cause it too). It is `INCONCLUSIVE` (Faza 24.12: no finding about the site, the "tool gap" shelf, and
+   the run is not PASSED; `petek run` exits with 3 when nothing else failed) when the evidence cannot decide: one racer
+   is no race (a race step whose other actors are in another wave, failed earlier or stopped before the start line:
+   `a race needs at least 2 racing actors; only a02 raced`, whoever won); no racer sent the request (`no_attempt: no
+   racer sent a request matching ...`); only the winner sent it while the others found the object decided and did not
+   ask (`uncontested: ...`, the owner's decision of 2026-09-30: the site was never asked two decisions at once); or
+   the requests of an actor could not be read while no second winner is proven. The observed text lists the decisive request per actor (`a02 POST /tickets/t2/approve
    -> 303; a03 POST /tickets/t2/approve -> 409`; an actor that never acted shows `did not race`). With `oracle: {path,
    field, equals}` and a test API, the target's final state must match too, and its answer is kept as an ORACLE
    artifact.

@@ -159,6 +159,18 @@ data class AssertionRecord(
 )
 
 /**
+ * How a race (`only_one_succeeds`) ended, as the lead word of its assertion's note, so the judge and the reports tell
+ * the cases apart without reading prose (the owner's decisions of 2026-09-30).
+ */
+object RaceNotes {
+    /** More than one racer won by the site's own answers: the site decided the same thing twice, a site defect. */
+    const val SEVERAL_WINNERS = "several_winners"
+
+    /** Only one racer sent the deciding request: the site was never asked two decisions at once, so nothing was proved. */
+    const val UNCONTESTED = "uncontested"
+}
+
+/**
  * What a finding is about. [SITE_CHECK]: a deterministic check of the site itself (blind `site_health`, `direct_url`)
  * saw it go wrong — a page wider than a phone, a script error, a broken link, a page open to a role that must not
  * see it; the check's own words say what. [INCONCLUSIVE]: the checks of a step had no evidence to decide with

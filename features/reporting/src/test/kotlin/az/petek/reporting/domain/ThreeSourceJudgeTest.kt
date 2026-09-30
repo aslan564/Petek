@@ -25,6 +25,7 @@ import az.petek.evidence.domain.EvidenceSource.SENDER
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
@@ -359,6 +360,35 @@ class ThreeSourceJudgeTest {
             finding.agentId.shouldBeNull()
             finding.findingClass shouldBe FindingClass.INVESTIGATE
             finding.a shouldBe "exactly one success -> 2 succeeded"
+        }
+
+        @Test
+        fun `a race several racers won by the site's own answers is a defect of the site, one nobody won stays with a human`() {
+            val won =
+                assertion(
+                    "race",
+                    null,
+                    SENDER,
+                    FAILED,
+                    "exactly one success",
+                    "a02 POST /t/approve -> 303; a03 POST /t/approve -> 303",
+                    type = "only_one_succeeds",
+                    note = "${RaceNotes.SEVERAL_WINNERS}: more than one actor succeeded (a02, a03); expected exactly one",
+                )
+            val refused =
+                won.copy(
+                    scenarioStep = "race-2",
+                    observed = "a02 POST /t/approve -> 409; a03 POST /t/approve -> 409",
+                    note = "no actor succeeded: every attempt was refused; expected exactly one winner",
+                )
+
+            val findings = judge.findings(run, listOf(won, refused))
+
+            findings.single { it.scenarioStep == "race" }.let {
+                it.findingClass shouldBe FindingClass.SITE_CHECK
+                it.note shouldContain "more than one racer win the same decision"
+            }
+            findings.single { it.scenarioStep == "race-2" }.findingClass shouldBe FindingClass.INVESTIGATE
         }
 
         @Test

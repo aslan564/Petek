@@ -13,6 +13,7 @@ package az.petek.verification.domain
 
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.evidence.domain.EvidenceSource
+import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.Verdict
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
@@ -29,11 +30,13 @@ import kotlinx.serialization.json.putJsonObject
  * - PASSED when at least [MIN_RACERS] actors raced, exactly one actor succeeded, the requests of every actor could be
  *   read (otherwise a second winner could go unseen) and the oracle condition (if any) did not fail; an oracle that
  *   could not be asked (no test API) is SKIPPED and leaves the verdict to the requests, with a note.
- * - FAILED when the site decided wrongly: more than one winner, every attempt refused (nobody could decide the
- *   object), or the oracle condition failed.
+ * - FAILED when the site decided wrongly: more than one winner (its note leads with [RaceNotes.SEVERAL_WINNERS], a
+ *   site defect), every attempt refused (nobody could decide the object), or the oracle condition failed.
  * - INCONCLUSIVE (Faza 24.12) when the evidence cannot decide: fewer than [MIN_RACERS] racers, no racer sent the
- *   request at all (`no_attempt`, a gap of the agents, not a refusal by the site), or requests that could not be read
- *   where a winner could hide.
+ *   request at all (`no_attempt`, a gap of the agents, not a refusal by the site), requests that could not be read
+ *   where a winner could hide, or a race nobody contested: the winner alone sent the deciding request, the others found
+ *   the object decided and did not ask ([RaceNotes.UNCONTESTED], the owner's decision of 2026-09-30), so the site was
+ *   never asked two decisions at once.
  * - An actor raced when it reached the start line and acted, so its requests were read or found unreadable
  *   ([ActorResult.race] is set). One whose action never ran (awaited event missing, template error) did not race, and
  *   neither did the actors a step never got (a wave without them, a tester that failed earlier): a single racer that
@@ -82,7 +85,7 @@ internal object RaceVerdict {
                 }
 
                 winners.size > 1 -> {
-                    Verdict.FAILED to "more than one actor succeeded ($winnerIds); expected exactly one"
+                    Verdict.FAILED to "${RaceNotes.SEVERAL_WINNERS}: more than one actor succeeded ($winnerIds); expected exactly one"
                 }
 
                 // A winner, or a second one, could hide among actors whose requests are unknown.
@@ -96,6 +99,12 @@ internal object RaceVerdict {
 
                 winners.isEmpty() -> {
                     Verdict.FAILED to "no actor succeeded: every attempt was refused; expected exactly one winner"
+                }
+
+                attempted.size < MIN_RACERS -> {
+                    Verdict.INCONCLUSIVE to
+                        "${RaceNotes.UNCONTESTED}: only $winnerIds sent ${requestOf(spec)}; the others found it decided " +
+                        "and did not ask, so two decisions at once were never tried"
                 }
 
                 else -> {

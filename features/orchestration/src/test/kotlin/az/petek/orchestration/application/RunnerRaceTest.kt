@@ -118,7 +118,7 @@ class RunnerRaceTest {
         }
 
     @Test
-    fun `run 2 - the loser reports the ticket as already decided and nothing counts as failed`() =
+    fun `run 2 - the loser reports the ticket as already decided, nothing failed and the race is undecided`() =
         runTest {
             val f = fixture()
             val decided =
@@ -127,9 +127,10 @@ class RunnerRaceTest {
 
             val summary = f.runner().run(race())
 
+            // The loser never asked: nobody contested the decision, so the race proves nothing (owner, 2026-09-30).
             f.evidence.assertionList
                 .single { it.type == "only_one_succeeds" }
-                .verdict shouldBe Verdict.PASSED
+                .verdict shouldBe Verdict.INCONCLUSIVE
             val loser = f.actionOf("a03")
             loser.status shouldBe StepStatus.PASSED
             loser.detail shouldBe "lost_race: no matching request; won by a02; agent: Bu müraciət artıq qərarlaşdırılıb"
@@ -137,7 +138,10 @@ class RunnerRaceTest {
                 .single()
                 .last()
                 .lostRace shouldBe true
-            summary.outcome shouldBe RunOutcome.PASSED
+            // Not PASSED, since nothing proved the race, yet nothing failed either (`petek run` exits with 3).
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.assertionsInconclusive shouldBe 1
+            summary.assertionsFailed shouldBe 0
             summary.stepsFailed shouldBe 0
             summary.failedAgents shouldBe 0
             f.monitor.statesOf("race", "a03").last() shouldBe TaskState.LOST_RACE

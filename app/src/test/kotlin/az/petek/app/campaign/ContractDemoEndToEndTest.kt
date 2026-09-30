@@ -145,7 +145,9 @@ class ContractDemoEndToEndTest {
                 // Each defect is found where it is, as the site's: the unchanged status (and so no notification to the
                 // ticket's author), the second winner, the employee's approval.
                 findings.map { it.scenarioStep }.toSet() shouldBe setOf("ticket_flow", "ticket_notified", "race", "forbidden")
-                findings.map { it.findingClass }.toSet() shouldBe setOf(FindingClass.BACKEND, FindingClass.INVESTIGATE)
+                // The second winner is the site's own defect: its answers show it (the owner's decision of 2026-09-30).
+                findings.map { it.findingClass }.toSet() shouldBe setOf(FindingClass.BACKEND, FindingClass.SITE_CHECK)
+                findings.single { it.scenarioStep == "race" }.findingClass shouldBe FindingClass.SITE_CHECK
                 val acted = setOf("ticket_flow", "race", "forbidden")
                 findings.forEach { finding ->
                     // What the sender did (A) wherever the tester acted; the receiver (B) or the oracle (C) where checked.

@@ -28,8 +28,10 @@ import az.petek.verification.testing.FakeTemplateRenderer
 import az.petek.verification.testing.SimpleJsonFieldSelector
 import az.petek.verification.testing.assertionInput
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -121,7 +123,7 @@ class OnlyOneSucceedsTest {
             val result = evaluator.evaluateOnlyOneSucceeds(AssertionSpec.OnlyOneSucceeds(APPROVE), results, input)
 
             result.verdict shouldBe Verdict.FAILED
-            result.note shouldBe "more than one actor succeeded (a02, a03); expected exactly one"
+            result.note shouldBe "several_winners: more than one actor succeeded (a02, a03); expected exactly one"
         }
 
     @Test
@@ -131,7 +133,7 @@ class OnlyOneSucceedsTest {
         result.verdict shouldBe Verdict.FAILED
         result.observed shouldBe
             "a02 POST /tickets/t2/approve -> 303; a03 POST /tickets/t2/approve -> 409; a10 POST /tickets/t2/approve -> 303"
-        result.note shouldBe "more than one actor succeeded (a02, a10); expected exactly one"
+        result.note shouldBe "several_winners: more than one actor succeeded (a02, a10); expected exactly one"
     }
 
     // --- who raced ------------------------------------------------------------------------------------------------------
@@ -164,11 +166,13 @@ class OnlyOneSucceedsTest {
     }
 
     @Test
-    fun `an actor that raced without a matching request still counts as a racer`() {
-        // It acted and its requests were read: the target simply saw nothing from it, as when it found the ticket decided.
+    fun `a race the second racer never contested is inconclusive, though it counts as a racer`() {
+        // It acted and its requests were read: the target saw nothing from it, as when it found the ticket decided. It
+        // is a racer (no "needs two racers"), but the site was never asked two decisions at once (owner, 2026-09-30).
         val result = evaluator.evaluateOnlyOneSucceeds(listOf(actor(2, true), racer(3)))
 
-        result.verdict shouldBe Verdict.PASSED
+        result.verdict shouldBe Verdict.INCONCLUSIVE
+        result.note.shouldNotBeNull() shouldStartWith "uncontested: only a02 sent"
         result.observed shouldBe "a02 POST /tickets/t2/approve -> 303; a03 no matching request"
     }
 
@@ -301,7 +305,7 @@ class OnlyOneSucceedsTest {
             val result = evaluator.evaluateOnlyOneSucceeds(withOracle(), listOf(racer(2, request(303)), racer(3, request(200))), input)
 
             result.verdict shouldBe Verdict.FAILED
-            result.note shouldBe "more than one actor succeeded (a02, a03); expected exactly one"
+            result.note shouldBe "several_winners: more than one actor succeeded (a02, a03); expected exactly one"
         }
 
     @Test

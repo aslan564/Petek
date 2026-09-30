@@ -30,7 +30,9 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
   finding of its own: a site defect a deterministic check saw (`unhealthy_page` from `site_health`,
   `access_not_refused` from `direct_url`, `forbidden_accepted` when the site accepted the request a forbidden-action
   step's `http_status` expects it to refuse, sent by the tester's own page during the action) is `SITE_CHECK` with
-  UI/network evidence, a finding about the site told in the check's own words, never a tool gap; a finding without
+  UI/network evidence, a finding about the site told in the check's own words, never a tool gap; so is a race several
+  racers won by the site's own answers (`several_winners`, 2026-09-30), while a race nobody contested is
+  `INCONCLUSIVE` (`uncontested`); a finding without
   evidence of its own links its step's last screenshot, which `site_health`
   takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
   many saw it (2026-09-27). A finding whose step has no check of the sender's own shows as A what the sender did,

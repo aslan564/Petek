@@ -18,6 +18,7 @@ import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
@@ -31,7 +32,9 @@ import az.petek.evidence.domain.Verdict
  * (the "tool gap" shelf) with what each check lacked (Faza 24.12).
  *
  * Rule order matters and is the contract: a failing oracle with a sender that did its part blames the backend,
- * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human.
+ * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human. A race that
+ * several racers won by the site's own answers ([RaceNotes.SEVERAL_WINNERS]) is a SITE_CHECK finding, a defect of the
+ * site (the owner's decision of 2026-09-30); a race nobody won stays with a human, since a scenario can cause it too.
  *
  * The step overload adds one finding per (scenario step, agent, failure key) for agent actions that failed with a
  * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), `request_failed` INVESTIGATE (the target
@@ -131,17 +134,19 @@ class ThreeSourceJudge(
             classify(a, b, c) as? JudgeVerdict.Finding
                 ?: return inconclusive(run, key, group.filter { it.verdict == Verdict.INCONCLUSIVE })
         val failed = evidence.filter { it.verdict == Verdict.FAILED }
+        // Several racers won by the site's own answers: the site decided twice, whatever the other sources say.
+        val severalWinners = failed.any { it.type == ONLY_ONE_SUCCEEDS && it.note?.startsWith(RaceNotes.SEVERAL_WINNERS) == true }
         return FindingRecord(
             findingId = ids.findingId(),
             runId = run.runId,
             stepId = (failed.firstOrNull() ?: evidence.first()).stepId,
             scenarioStep = key.scenarioStep,
             agentId = key.agentId,
-            findingClass = verdict.findingClass,
+            findingClass = if (severalWinners) FindingClass.SITE_CHECK else verdict.findingClass,
             a = a?.value ?: action,
             b = b?.value,
             c = c?.value,
-            note = noteWithDetails(verdict.note, failed.mapNotNull { it.note }),
+            note = noteWithDetails(if (severalWinners) NOTE_SEVERAL_WINNERS else verdict.note, failed.mapNotNull { it.note }),
             artifactIds = evidence.flatMap { it.artifactIds }.distinct(),
             evidenceTier = if (c != null) EvidenceTier.ORACLE_CONFIRMED else EvidenceTier.UI_NETWORK,
         )
@@ -307,6 +312,9 @@ class ThreeSourceJudge(
         const val NOTE_SENDER_ONLY = "The sender's check (A) failed and there is no receiver or oracle evidence to attribute it."
         const val NOTE_NO_ORACLE = "The receiver (B) disagrees and there is no oracle evidence (C) to attribute it."
         const val NOTE_DISAGREE = "The sources disagree in a way the three-source rule cannot attribute."
+        const val NOTE_SEVERAL_WINNERS =
+            "The site let more than one racer win the same decision (each got a success answer): a defect of the site."
+        const val ONLY_ONE_SUCCEEDS = "only_one_succeeds"
         const val NOTE_INCONCLUSIVE =
             "The check ran but its evidence could not decide it: a gap of the test or its scenario, not a defect of the site."
 
