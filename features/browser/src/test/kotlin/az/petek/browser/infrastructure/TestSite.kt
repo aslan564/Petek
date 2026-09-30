@@ -35,6 +35,15 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+/** The tokens of [TestSite]'s token app, a page that signs its calls with a token instead of a cookie. */
+internal object TokenApp {
+    /** The access token the page keeps in localStorage and sends as `Authorization: Bearer …`. */
+    const val TOKEN = "tok-leyla-7f3a9c2e"
+
+    /** The CSRF token the page sends with its calls. */
+    const val CSRF = "csrf-5d1e8b40"
+}
+
 /**
  * A small local website for the real-browser tests (no internet): forms, a cookie login, SSE, polling, a WebSocket
  * attempt, a slow page and a ticket that can be approved only once (form post: 303, then 409; JSON API: 200, then
@@ -64,6 +73,28 @@ internal class TestSite : AutoCloseable {
                 get("/health") { call.respondText(HEALTH_PAGE, ContentType.Text.Html) }
                 get("/facts") { call.respondText(FACTS_PAGE, ContentType.Text.Html) }
                 get("/api/broken") { call.respondText("boom", status = HttpStatusCode.InternalServerError) }
+                get("/token-app") { call.respondText(TOKEN_APP_PAGE, ContentType.Text.Html) }
+                get("/api/token-me") {
+                    if (call.request.headers["Authorization"] != "Bearer ${TokenApp.TOKEN}") {
+                        return@get call.respondText("anonymous", status = HttpStatusCode.Unauthorized)
+                    }
+                    call.respondText("leyla signed in with ${TokenApp.TOKEN}")
+                }
+                post("/api/token-admin") {
+                    when {
+                        call.request.headers["Authorization"] != "Bearer ${TokenApp.TOKEN}" -> {
+                            call.respondText("anonymous", status = HttpStatusCode.Unauthorized)
+                        }
+
+                        call.request.headers["X-CSRF-Token"] != TokenApp.CSRF -> {
+                            call.respondText("no csrf token", status = HttpStatusCode.fromValue(CSRF_MISSING))
+                        }
+
+                        else -> {
+                            call.respondText("leyla (${TokenApp.TOKEN}) may not do this", status = HttpStatusCode.Forbidden)
+                        }
+                    }
+                }
                 get("/dynamic") { call.respondText(DYNAMIC_PAGE, ContentType.Text.Html) }
                 get("/secret") {
                     val submitted = call.request.queryParameters["password"] != null
@@ -150,6 +181,21 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        /** What the token app answers a write without its CSRF token with (as some frameworks do). */
+        const val CSRF_MISSING = 419
+
+        /**
+         * A single-page application that signs its calls with a token it keeps in localStorage, never a cookie: the
+         * page asks `/api/token-me` with `Authorization: Bearer …` and an `X-CSRF-Token`, and shows the answer.
+         */
+        const val TOKEN_APP_PAGE =
+            "<!doctype html><html><head><title>Token</title></head><body><p id='who'>...</p><script>" +
+                "localStorage.setItem('token', '${TokenApp.TOKEN}');" +
+                "fetch('/api/token-me', {headers: {'Authorization': 'Bearer ' + localStorage.getItem('token'), " +
+                "'X-CSRF-Token': '${TokenApp.CSRF}'}})" +
+                ".then(r => r.text()).then(t => { document.getElementById('who').textContent = t; });" +
+                "</script></body></html>"
+
         /** Posts to the address in `?to=` as the page loads and says whether the request went out. */
         const val WRITE_ELSEWHERE_PAGE =
             "<!doctype html><html><head><title>Yazı</title></head><body><p id='state'>...</p><script>" +

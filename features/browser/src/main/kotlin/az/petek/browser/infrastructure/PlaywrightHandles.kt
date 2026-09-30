@@ -77,6 +77,7 @@ internal class PlaywrightHandles private constructor(
             mutations: MutationRecorder,
             clock: HarnessClock,
             health: HealthRecorder? = null,
+            credentials: PageCredentials? = null,
         ): PlaywrightHandles {
             val playwright = Playwright.create()
             try {
@@ -90,6 +91,11 @@ internal class PlaywrightHandles private constructor(
                 observeMutations(page, mutations, clock)
                 acceptDialogs(page, dialogs, clock)
                 if (health != null) observeHealth(page, health, clock)
+                if (credentials !=
+                    null
+                ) {
+                    page.onRequest { request -> credentials.sent(request.url(), request.resourceType(), request.headers()) }
+                }
                 return PlaywrightHandles(playwright, browser, context, page)
             } catch (e: Exception) {
                 runCatching { playwright.close() }

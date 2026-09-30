@@ -1741,6 +1741,20 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
   başlığı ilə ayrı API hostuna göndərən saytda bu yoxlama 401 görə bilər. Həll: test rejimində API-nin eyni origin-dən
   cookie ilə açılması, ya da Pətəkin sessiyanın token-ini istifadə etməyi öyrənməsi. **Qərar (sahib, 2026-09-30):**
   Pətək sessiyanın token-ini istifadə etməyi öyrənsin (sirr kimi: loga, hesabata və AI-a düşmür).
+  *Vəziyyət:* `PageCredentials` (browser): səhifənin öz fetch/XHR sorğularında hədəfə göndərdiyi `Authorization`,
+  `X-Auth-Token`, `X-Access-Token` və CSRF başlıqları (hər birinin sonuncusu) yalnız yaddaşda saxlanır, `http_status`
+  sorğusu onları yalnız hədəfin öz origin-inə yenidən göndərir; Pətək səhifənin storage-ını oxumur. Dəyərlər yazılan
+  parol kimi snapshot, mətn, dialoq, konsol və sorğu cavabında maskalanır; sübut yalnız başlığın adını deyir
+  ("sent with the page's own authorization header"), cookie ilə gedən 401-də isə səhifənin token göndərmədiyini.
+  `PageCredentialsTest`, `PlaywrightBrowserSessionTest` (real Chromium: token-lə imzalanan tətbiq 401 əvəzinə 403
+  qaytarır, token oxunanda maskalıdır), `TargetAnswerAssertionsTest`. Açıq qalan: API ayrı hostdadırsa (məs.
+  `api.example.com`) `http_status` ora getmir, yol yalnız hədəfin öz origin-indədir (aşağıda sual).
+- [ ] **Ayrı API hostu (2026-09-30 tapıldı):** saytın API-si başqa hostdadırsa (`app.example.com` səhifəsi
+  `api.example.com`-a token ilə müraciət edir), `http_status` yoxlaması ora gedə bilmir: yol yalnız hədəfin öz
+  origin-indədir (hədəf siyasəti və sahiblik yalnız onun üçündür). Təklif: `target_profile.api_prefix` tam ünvan da ola
+  bilsin (`https://api.example.com/v1`); o host da `PETEK_PRODUCTION_HOSTS` siyasətindən keçir və sahibliyi ayrıca
+  təsdiqlənir (`petek verify --target https://api.example.com`), səhifənin həmin hosta göndərdiyi token yalnız ora
+  gedir. Təhlükəsizlik qaydasıdır (qayda 8, ADR-0012), ona görə sahibin qərarıdır.
 
 **Sahibin əlavə qərarları (2026-09-25)**
 

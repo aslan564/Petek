@@ -80,7 +80,10 @@ private val logger = KotlinLogging.logger {}
  *   turns that time into harness time from the middle of the round trip that started the watch, so t1 is off by at
  *   most half that round trip plus one check. A navigation or reload ends the watch with the document it lived in.
  * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
- * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
+ * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status. It carries the
+ *   session's cookies and, to the target's origin only, the credential headers the page itself sent there
+ *   ([PageCredentials]: a token the page keeps and sends as `Authorization`, a CSRF header), so a site that signs its
+ *   calls with a token answers the probe as it answers the page.
  * - JavaScript dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are accepted as they open and kept until
  *   [drainDialogs] reports them; see [PlaywrightHandles].
  * - Mutating requests the page sends to the target's origin (form posts, `fetch`, XHR) are recorded with their
@@ -88,6 +91,7 @@ private val logger = KotlinLogging.logger {}
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
  *   text typed with [fill] is masked in error messages. Text typed into a password field is remembered and masked
  *   in every later snapshot, [readText] and [currentUrl], even after the page reveals the field or echoes the value.
+ *   The page's own credentials are masked the same way.
  * - Failures surface as [BrowserActionException] with a short reason. After [close], calls fail the same way.
  */
 internal class PlaywrightBrowserSession private constructor(
@@ -99,6 +103,7 @@ internal class PlaywrightBrowserSession private constructor(
     private val dialogs: DialogRecorder,
     private val mutations: MutationRecorder,
     private val health: HealthRecorder,
+    private val credentials: PageCredentials,
     private val onClosed: (PlaywrightBrowserSession) -> Unit,
 ) : BrowserSession {
     private val closed = AtomicBoolean(false)
@@ -106,6 +111,9 @@ internal class PlaywrightBrowserSession private constructor(
 
     /** Text this session typed into secret fields; masked in everything read back later. Session thread only. */
     private val typedSecrets = LinkedHashSet<String>()
+
+    /** What is masked in everything read back: typed secrets and the page's own credentials. Session thread only. */
+    private fun masked(): Set<String> = typedSecrets + credentials.secrets()
 
     /** Where each running text watch began, to turn the page's times into harness times. Session thread only. */
     private val watchOrigins = HashMap<String, WatchOrigin>()
@@ -165,7 +173,7 @@ internal class PlaywrightBrowserSession private constructor(
                 surviveNavigation {
                     SnapshotParser.parse(page.evaluate(BundledScripts.pageIndexer, SnapshotLimits().asScriptArgument()))
                 }
-            SecretRedactor.redactSnapshot(snapshot, typedSecrets)
+            SecretRedactor.redactSnapshot(snapshot, masked())
         }
 
     override suspend fun click(ref: Int) {
@@ -212,7 +220,7 @@ internal class PlaywrightBrowserSession private constructor(
     override suspend fun readText(selector: String): String? =
         perform("read text of $selector") {
             val matches = page.locator(selector)
-            if (matches.count() == 0) null else SecretRedactor.redactText(matches.first().innerText().trim(), typedSecrets)
+            if (matches.count() == 0) null else SecretRedactor.redactText(matches.first().innerText().trim(), masked())
         }
 
     override suspend fun readAttribute(
@@ -281,7 +289,7 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun count(selector: String): Int = perform("count $selector") { page.locator(selector).count() }
 
-    override suspend fun currentUrl(): String = perform("read the URL") { SecretRedactor.redactText(page.url(), typedSecrets) }
+    override suspend fun currentUrl(): String = perform("read the URL") { SecretRedactor.redactText(page.url(), masked()) }
 
     override suspend fun screenshot(): ByteArray = perform("screenshot") { page.screenshot() }
 
@@ -365,9 +373,12 @@ internal class PlaywrightBrowserSession private constructor(
                     request.setHeader("Content-Type", "application/json")
                 }
             }
+            // The page's own token goes with it, as the page sends it (never elsewhere, never written down).
+            val own = credentials.headersFor(options.baseUrl.resolve(path.trim()))
+            own.forEach { (name, value) -> request.setHeader(name, value) }
             val response = handles.context.request().fetch(path, request)
             try {
-                HttpProbeResult(response.status(), response.text())
+                HttpProbeResult(response.status(), SecretRedactor.redactText(response.text(), masked()), own.keys)
             } finally {
                 response.dispose()
             }
@@ -384,7 +395,7 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read dialogs") {
             // As above: the round trip dispatches a dialog event already received, so the handler answers it first.
             runCatching { page.title() }
-            dialogs.drain { message -> SecretRedactor.redactText(message, typedSecrets) }
+            dialogs.drain { message -> SecretRedactor.redactText(message, masked()) }
         }
 
     override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> =
@@ -401,7 +412,7 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read the page's health") {
             // As above: the round trip dispatches events already received, so they are recorded first.
             runCatching { page.title() }
-            health.since(since, slowAfter) { SecretRedactor.redactText(it, typedSecrets) }
+            health.since(since, slowAfter) { SecretRedactor.redactText(it, masked()) }
         }
 
     override suspend fun links(): List<String> =
@@ -424,7 +435,7 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read the page's facts") {
             surviveNavigation {
                 (page.evaluate(BundledScripts.pageFacts) as? Map<*, *>)?.let {
-                    PageFactsReading.of(it) { text -> SecretRedactor.redactText(text, typedSecrets) }
+                    PageFactsReading.of(it) { text -> SecretRedactor.redactText(text, masked()) }
                 }
             }
         }
@@ -607,7 +618,7 @@ internal class PlaywrightBrowserSession private constructor(
     private fun <T> withSecretValues(capture: () -> T): Pair<T, Set<String>> {
         val before = secretValues()
         val captured = capture()
-        return captured to typedSecrets + before + secretValues()
+        return captured to masked() + before + secretValues()
     }
 
     private fun secretValues(): List<String> = (page.evaluate(BundledScripts.secretValues) as? List<*>).orEmpty().filterIsInstance<String>()
@@ -694,9 +705,12 @@ internal class PlaywrightBrowserSession private constructor(
             val dialogs = DialogRecorder()
             val mutations = MutationRecorder(options.baseUrl)
             val health = HealthRecorder(options.baseUrl)
+            val credentials = PageCredentials(options.baseUrl)
             val handles =
                 try {
-                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock, health) }
+                    thread.runToCompletion {
+                        PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock, health, credentials)
+                    }
                 } catch (e: BrowserActionException) {
                     thread.close()
                     throw e
@@ -705,7 +719,8 @@ internal class PlaywrightBrowserSession private constructor(
                     val reason = if (e is PlaywrightException) PlaywrightFailures.reasonOf(e.message.orEmpty()) else e.message
                     throw BrowserActionException("could not open browser session '${options.label}': $reason", e)
                 }
-            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, health, onClosed)
+            val session =
+                PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, health, credentials, onClosed)
             try {
                 currentCoroutineContext().ensureActive()
             } catch (e: CancellationException) {

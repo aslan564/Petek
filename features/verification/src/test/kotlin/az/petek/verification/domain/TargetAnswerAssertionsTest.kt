@@ -308,6 +308,21 @@ class TargetAnswerAssertionsTest {
         }
 
     @Test
+    fun `a failed http_status says whether the probe carried the page's own token or only the session's cookies`() =
+        runTest {
+            session.fake.httpResponses["POST /api/tickets/42/approve"] =
+                HttpProbeResult(200, "approved", credentials = setOf("x-csrf-token", "authorization"))
+            session.fake.httpResponses["DELETE /api/tickets/42"] = HttpProbeResult(401, "")
+
+            val signed = evaluateOne(HttpStatus("/api/tickets/{last_id}/approve", "POST", 403))
+            val unsigned = evaluateOne(HttpStatus("/api/tickets/{last_id}", "DELETE", 403))
+
+            signed.note shouldBe "target answered 200, expected 403; sent with the page's own authorization, x-csrf-token header"
+            unsigned.note shouldBe
+                "target answered 401, expected 403; only the session's cookies went: the page had sent the target no token of its own"
+        }
+
+    @Test
     fun `http_status evidence keeps at most 2 KB of the body without splitting characters`() =
         runTest {
             session.fake.httpResponses["GET /api/big"] = HttpProbeResult(200, "ə".repeat(3000))

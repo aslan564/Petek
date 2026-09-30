@@ -702,6 +702,30 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `a probe carries the token the page itself signed its calls with, and the token is never read back`() =
+        withSession { session ->
+            session.request("POST", "/api/token-admin").let {
+                it.status shouldBe 401
+                it.credentials shouldBe emptySet()
+            }
+
+            // The page keeps its token in localStorage and signs its own call with it; no cookie is set.
+            session.navigate("/token-app")
+            session.waitForText("leyla signed in", 5.seconds).found shouldBe true
+
+            session.request("POST", "/api/token-admin").let {
+                it.status shouldBe 403
+                it.credentials shouldBe setOf("authorization", "x-csrf-token")
+                it.body shouldBe "leyla (${SecretRedactor.MASK}) may not do this"
+            }
+            session.request("GET", "/api/token-me").status shouldBe 200
+            session.snapshot().visibleText.let {
+                it shouldContain "leyla signed in with"
+                it shouldNotContain TokenApp.TOKEN
+            }
+        }
+
+    @Test
     fun `server-sent events are detected from network traffic`() =
         withSession { session ->
             session.navigate("/sse")

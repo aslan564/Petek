@@ -83,7 +83,10 @@ pattern (`set-password\?token=`) when it does not contain one of the hints above
 
 ## 5. Regular API used by assertions
 
-`http_status` assertions call the target's normal API with the agent's own session cookies. Example:
+`http_status` assertions call the target's normal API with the agent's own session cookies and, where the site signs
+its calls with a token its page keeps (`Authorization: Bearer …`, a CSRF header), with the headers the agent's page itself
+sent the target: Pətək never reads the page's storage, sends them only to the target's own origin and masks them in
+everything it records (2026-09-30). Example:
 `POST /api/tickets/{id}/approve` returns `200` for a manager and `403` for an employee. Approving an already decided
 ticket returns `409`. Only one of two concurrent approvals may succeed. The prefix `/api` is
 `target_profile.api_prefix` (e.g. `/api/v1`); campaign paths may write it as `{api}` (`{api}/tickets/{last_id}/approve`).

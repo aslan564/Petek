@@ -12,6 +12,7 @@
 package az.petek.verification.domain
 
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.WaitOutcome
 import az.petek.campaign.domain.AssertionSpec
@@ -503,10 +504,21 @@ class DefaultAssertionEvaluator(
             if (passed) Verdict.PASSED else Verdict.FAILED,
             expected = AssertionText.describe(rendered),
             observed = response.status.toString(),
-            note = if (passed) null else "target answered ${response.status}, expected ${spec.equals}",
+            note = if (passed) null else "target answered ${response.status}, expected ${spec.equals}${sentWith(response)}",
             rawEvidence = "${response.status} $body",
         )
     }
+
+    /**
+     * How a failed probe was signed: with the credential headers the tester's page had sent the target itself (a token
+     * the page keeps), or with the session's cookies alone, which a site that signs its calls with a token refuses.
+     */
+    private fun sentWith(response: HttpProbeResult): String =
+        when {
+            response.credentials.isNotEmpty() -> "; sent with the page's own ${response.credentials.sorted().joinToString()} header"
+            response.status == UNAUTHORIZED -> "; only the session's cookies went: the page had sent the target no token of its own"
+            else -> ""
+        }
 
     // --- rendering ----------------------------------------------------------------------------------------------------
 
@@ -684,6 +696,9 @@ class DefaultAssertionEvaluator(
 
         /** The note of an oracle check on a target without a test API (Faza 10). */
         const val NO_ORACLE = "N/A (no oracle)"
+
+        /** The answer of a site to a call it could not tell who sent. */
+        const val UNAUTHORIZED = 401
 
         /**
          * Shortest window handed to the browser. An adapter may round a timeout down to whole milliseconds and

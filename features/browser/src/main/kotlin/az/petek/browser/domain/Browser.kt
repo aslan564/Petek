@@ -139,6 +139,11 @@ sealed interface TextWatch {
 data class HttpProbeResult(
     val status: Int,
     val body: String,
+    /**
+     * The names of the credential headers the page itself had sent to the target and the probe sent again (e.g.
+     * `authorization`); never their values. Empty: only the session's cookies went.
+     */
+    val credentials: Set<String> = emptySet(),
 )
 
 enum class RealtimeTransport { WEBSOCKET, SSE, POLLING }
@@ -366,7 +371,10 @@ interface BrowserSession {
      */
     suspend fun setCorrelationId(id: String?) = Unit
 
-    /** HTTP call that carries this session's cookies (for `http_status` assertions). */
+    /**
+     * HTTP call that carries this session's cookies and, to the target, the credential headers its page sent there
+     * itself (for `http_status` assertions); see [HttpProbeResult.credentials].
+     */
     suspend fun request(
         method: String,
         path: String,
