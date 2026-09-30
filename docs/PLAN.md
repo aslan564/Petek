@@ -258,6 +258,11 @@ steps:
 
 `{last_id}` və `{self.email}` kimi şablonlar orkestrator tərəfindən run vaxtı doldurulur: `last_id` = addımın öz hadisəsinin obyekt id-si — gözlədiyi hadisə, yoxlamalarında isə emit etdiyi (Faza 24.6); başqa addımın obyekti `{event.<ad>.id}` ilə adlanır.
 
+İstəyə bağlı `coverage:` (sətirlər siyahısı) ssenarinin yoxlamadıqlarını adlandırır: kəşfiyyatçının görmədiyi rollar,
+yazıla bilməyən test ideyaları və səbəbi (kəşfiyyatçının draftları onu özü yazır). Run onu başlanğıcda sübut bazasına
+yazır və hesabatın xülasəsi göstərir ("Bu ssenarinin yoxlamadıqları"), ki keçən run "hər şey yoxlandı" kimi oxunmasın
+(sahibin qərarı, 2026-09-30). Sətirlər şablon deyil, heç vaxt doldurulmur.
+
 ### Hədəf axınları (`target_profile.flows`)
 
 Pətək istənilən sayta uyğunlaşmalıdır: real saytların axınları çox vaxt kontraktdan fərqlənir (linklə təsdiq, loginə
@@ -1554,6 +1559,11 @@ Açıq sahib qərarları (tərs oxudan):
   run` çıxış 2). `RunLockTest`, `PanelRunsTest`, `RunCommandTest`.
 - [x] **Örtük hesabatda:** kəşfiyyatçının görmədiyi rollar və buraxılan ideyalar run hesabatının xülasəsinə yazılsın?
   Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli.
+  *Vəziyyət:* kampaniyanın `coverage:` bloku (`Campaign.coverage`): kəşfiyyatçının draftı görmədiyi rolları ("yalnız
+  ziyarətçi kimi" də), yaza bilmədiyi ideyaları səbəbi ilə (qeydiyyat və giriş istisna, onları setup edir) və hələ kodla
+  yoxlanmayan kartların sayını yazır; run onu başlanğıcda `SYSTEM` addımı (`coverage`) kimi yazır, `BuildReportUseCase`
+  oxuyur: `index.html` və `report.md`-nin xülasəsində siyahı, `summary.html`-də bir cümlə. `YamlCampaignSourceTest`,
+  `GenerateScenarioUseCaseTest`, `DefaultCampaignRunnerTest`, `BuildReportUseCaseTest`, `HtmlReportWriterTest`.
 
 ### Faza 25 — Ssenari kəşfiyyatdan doğulur (sahibin qərarı, 2026-09-28)
 

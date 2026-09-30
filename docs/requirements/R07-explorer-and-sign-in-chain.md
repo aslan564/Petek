@@ -69,6 +69,10 @@ must be able to register, read the OTP, and fall back to provided credentials if
   and an operation of a signed-in role handing them out) and the test API can seed the test company; a test API
   alone never makes a company draft. When the explorer saw a code but not who gives it, it asks, and the draft takes
   the gate as it is.
+- A draft names what it leaves unchecked in its `coverage:` block (2026-09-30): the team's roles the explorer never
+  saw the site as (or that it saw it only as a visitor), the ideas it could not write and why (sign-up and sign-in
+  excepted: the setup does them), and how many small-bug cards code does not check yet. The run records the block and
+  its report's summary shows it (R03).
 - `OwnAccountRoleSessions`: the owner's accounts from the panel ("Hesablar", password to `.env` as
   `PETEK_ACC_<SITE>_<ROLE>`, the account with its `${VAR}` reference to `targets/<site>.yaml`; the database never
   sees it) or from the target profile. A given `storage_state` file is used as is; a session saved by an earlier

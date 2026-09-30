@@ -26,8 +26,20 @@ data class Campaign(
     val sourceHash: String,
     /** Where settings, assertions and id sources were declared, for validation messages. Empty for code-built campaigns. */
     val sourceLines: SourceLines = SourceLines.NONE,
+    /**
+     * What the scenario leaves unchecked (`coverage:`, one line each): the roles its explorer never saw the site as, the
+     * test ideas it could not write and why. The run records them and its report's summary names them (the owner's
+     * decision of 2026-09-30), so a passed run is never read as "everything was checked".
+     */
+    val coverage: List<String> = emptyList(),
 ) {
     val allSteps: List<ScenarioStep> get() = setup + steps
+
+    companion object {
+        /** The most `coverage:` lines a campaign keeps, and the longest one. */
+        const val MAX_COVERAGE_LINES = 200
+        const val MAX_COVERAGE_CHARS = 600
+    }
 }
 
 data class CampaignSettings(

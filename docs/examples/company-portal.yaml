@@ -177,3 +177,8 @@ steps:
     assert:
       - not_visible: {selector: 'role=button[name="Təsdiqlə"]'}
       - http_status: {path: "{api}/leave-requests/{event.leave_request_created.id}/approve", method: POST, equals: 403}
+
+# What this scenario leaves unchecked (optional; the explorer's drafts write it themselves). The run records the lines
+# and its report's summary names them, so a passed run is never read as "everything was checked".
+coverage:
+  - "Approving a leave request from the link in the manager's email is not tested here, only the page's own button."

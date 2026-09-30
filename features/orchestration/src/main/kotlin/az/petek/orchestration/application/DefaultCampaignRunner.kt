@@ -36,6 +36,7 @@ import az.petek.core.ids.RunTags
 import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
 import az.petek.evidence.domain.ArtifactStore
+import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
@@ -184,6 +185,10 @@ class DefaultCampaignRunner(
         board: AgentBoard,
         tasks: TaskBoard,
     ) {
+        // What the scenario leaves unchecked goes into the evidence once, so the report names it (2026-09-30).
+        if (run.campaign.coverage.isNotEmpty()) {
+            evidence.system(run, null, COVERAGE_ACTION, StepStatus.SKIPPED, run.campaign.coverage.joinToString("\n"))
+        }
         val completed =
             withTimeoutOrNull(run.budget) {
                 planIdentities(run)

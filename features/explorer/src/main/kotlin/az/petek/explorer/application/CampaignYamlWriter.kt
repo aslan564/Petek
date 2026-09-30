@@ -42,7 +42,19 @@ internal object CampaignYamlWriter {
         val stepLines = LinkedHashMap<String, Int>()
         steps(out, "setup", campaign.setup, stepLines)
         steps(out, "steps", campaign.steps, stepLines)
+        coverage(out, campaign)
         return WrittenCampaign(out.text(), stepLines)
+    }
+
+    /** `coverage:`: what the scenario leaves unchecked, one quoted line each, which the run's report names. */
+    private fun coverage(
+        out: Lines,
+        campaign: Campaign,
+    ) {
+        if (campaign.coverage.isEmpty()) return
+        out.add("")
+        out.add("coverage:")
+        campaign.coverage.forEach { out.add("  - ${quote(it)}") }
     }
 
     private fun settings(

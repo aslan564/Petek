@@ -87,6 +87,12 @@ class MarkdownReportWriter : ReportWriter {
                 listOf("Real-time nəqliyyat", s.realtimeTransports.joinToString(", ") { md(it) }.ifEmpty { NONE }),
             ),
         )
+        // What the scenario left unchecked, in the summary itself (2026-09-30).
+        if (model.coverage.isNotEmpty()) {
+            paragraph("**${ReportFormat.COVERAGE_TITLE} (${model.coverage.size}):**")
+            model.coverage.forEach { line("- ${md(it)}") }
+            line()
+        }
     }
 
     private fun StringBuilder.findings(model: ReportModel) {

@@ -76,6 +76,8 @@ class CustomerSummaryWriter(
                 }
                 append("</ul></section>")
             }
+            // A passed run is never read as "everything was checked": what the scenario left out is said here too.
+            if (model.coverage.isNotEmpty()) append("<p class=\"coverage\">").append(esc(t.notChecked(model.coverage.size))).append("</p>")
             append("<p class=\"more\"><a href=\"index.html\">").append(esc(t.details)).append("</a></p>")
             append("</main></body></html>\n")
         }
@@ -103,6 +105,9 @@ class CustomerSummaryWriter(
 
         /** Added to a sentence when several testers saw the same problem. */
         fun seenBy(testers: Int): String
+
+        /** That the scenario left [count] things unchecked, listed in the detailed report. */
+        fun notChecked(count: Int): String
 
         val details: String
     }
@@ -150,6 +155,9 @@ class CustomerSummaryWriter(
 
         override fun seenBy(testers: Int) = " ($testers tester gördü)"
 
+        override fun notChecked(count: Int) =
+            "Bu test hər şeyi əhatə etmir: ssenari $count şeyi yoxlamadı (hansıları və niyə, ətraflı hesabatdadır)."
+
         override val details = "Bütün addımlar, sübutlar və screenshot-lar: ətraflı hesabat"
     }
 
@@ -195,6 +203,9 @@ class CustomerSummaryWriter(
         }
 
         override fun seenBy(testers: Int) = " (seen by $testers testers)"
+
+        override fun notChecked(count: Int) =
+            "This test does not cover everything: its scenario left $count things unchecked (which and why: the detailed report)."
 
         override val details = "Every step, its proof and screenshots: the detailed report"
     }

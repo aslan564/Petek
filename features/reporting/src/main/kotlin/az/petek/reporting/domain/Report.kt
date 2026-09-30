@@ -167,6 +167,8 @@ data class ReportModel(
     val artifactLinks: Map<String, String>,
     /** Token and cost accounting per agent, as recorded by the LLM metering (never estimated). */
     val usage: List<UsageRecord> = emptyList(),
+    /** What the run's scenario left unchecked (its `coverage:` lines), which the summary names (2026-09-30). */
+    val coverage: List<String> = emptyList(),
 ) {
     /** The workspace the run belongs to (ADR-0011); `local` on the owner's machine. */
     val workspaceId: WorkspaceId get() = run.workspaceId

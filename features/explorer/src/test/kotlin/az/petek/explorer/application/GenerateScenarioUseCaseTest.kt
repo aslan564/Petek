@@ -666,6 +666,66 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `the draft names what it leaves unchecked, which the run's report shows, sign-up and sign-in aside`() {
+        val member = setOf("member")
+        val site =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/notes",
+                        Models.form(ActionKind.CREATE, "note-submit", "/notes", Models.field("title", required = true)),
+                        reachableBy = member,
+                    ),
+                ),
+                listOf(
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action("note-submit", ActionKind.CREATE, "/notes", name = "Yadda saxla", allowed = member, httpPath = "/notes"),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(site, owner = null, testApi = false)
+
+        val composed = useCase().compose(site, request(maxIdeas = 50).copy(tenant = tenant, testers = 3))
+
+        val coverage = composed.campaign.coverage
+        coverage.any { it.startsWith("BOUNDARY of 'Yadda saxla' was not written: ") } shouldBe true
+        coverage.last() shouldContain "small-bug cards are not checked by code yet"
+        coverage.none { "login-submit" in it || "Daxil ol" in it } shouldBe true
+        // Written into the draft, read back by the loader as the same lines.
+        reload(composed.yaml).coverage shouldBe coverage
+    }
+
+    @Test
+    fun `a draft whose explorer saw the site only as a visitor says so`() {
+        val site =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page("/login", Models.form(ActionKind.LOGIN, "login-submit", "/login", Models.field("email", "email"))),
+                ),
+                listOf(Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login")),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(site, owner = null, testApi = false)
+
+        val composed = useCase().compose(site, request(maxIdeas = 50).copy(tenant = tenant, testers = 2))
+
+        composed.campaign.coverage.first() shouldBe
+            "The explorer saw the site only as a visitor: what signed-in users see was not explored."
+    }
+
+    @Test
     fun `objects visitors see are not checked as leaks, but a draft must not open for anyone else`() {
         val editor = setOf("member")
         val trial = Models.trial(emptySet(), urlPatternAfter = "/posts/{id}", role = "member")

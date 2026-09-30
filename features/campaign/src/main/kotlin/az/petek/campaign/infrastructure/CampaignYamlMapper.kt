@@ -84,7 +84,22 @@ internal class CampaignYamlMapper(
             val target = top.map("target_profile", TARGET_PROFILE_KEYS)?.let(::targetProfile) ?: TargetProfile.DEFAULT
             val setup = steps(top, "setup", StepPhase.SETUP)
             val steps = steps(top, "steps", StepPhase.MAIN)
-            return Campaign(settings ?: return null, target, setup, steps, sourceHash)
+            val coverage = coverage(top)
+            return Campaign(settings ?: return null, target, setup, steps, sourceHash, coverage = coverage)
+        }
+
+        /** `coverage:`: plain lines naming what the scenario leaves unchecked. */
+        private fun coverage(top: YamlFields): List<String> {
+            val lines = top.textList(COVERAGE) ?: return emptyList()
+            if (lines.size > Campaign.MAX_COVERAGE_LINES) {
+                reader.problem(COVERAGE, "'$COVERAGE' has ${lines.size} lines; at most ${Campaign.MAX_COVERAGE_LINES}")
+            }
+            lines.forEachIndexed { index, line ->
+                if (line.isBlank() || line.length > Campaign.MAX_COVERAGE_CHARS || '\n' in line) {
+                    reader.problem("$COVERAGE[$index]", "'$COVERAGE' lines are 1 to ${Campaign.MAX_COVERAGE_CHARS} characters on one line")
+                }
+            }
+            return lines.map { it.trim() }
         }
 
         // ---- campaign ----
@@ -609,7 +624,8 @@ internal class CampaignYamlMapper(
         val DEFAULT_WAIT_TIMEOUT = 30.seconds
         val DEFAULT_VISIBLE_WITHIN = 5.seconds
 
-        val ROOT_KEYS = linkedSetOf("campaign", "target_profile", "setup", "steps")
+        const val COVERAGE = "coverage"
+        val ROOT_KEYS = linkedSetOf("campaign", "target_profile", "setup", "steps", COVERAGE)
         val SETTINGS_KEYS =
             linkedSetOf(
                 "name",

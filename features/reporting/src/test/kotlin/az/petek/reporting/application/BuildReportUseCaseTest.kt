@@ -19,6 +19,7 @@ import az.petek.core.ids.StepId
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
+import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceSource.HARNESS
 import az.petek.evidence.domain.EvidenceSource.ORACLE
 import az.petek.evidence.domain.EvidenceSource.RECEIVER
@@ -179,6 +180,30 @@ class BuildReportUseCaseTest {
             // A wait that ended before any action has no screenshot yet; another agent never borrows one.
             shots["read_announce/a02/500"].shouldBeNull()
             shots["read_announce/a03/1000"].shouldBeNull()
+        }
+
+    @Test
+    fun `the coverage the run recorded at its start comes back line by line, and counts as no step`() =
+        runTest {
+            evidence.create(run())
+            evidence.step(step("announce", "a01"))
+            evidence.step(
+                step(
+                    "harness",
+                    null,
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "The explorer never saw the site as manager.\nBOUNDARY of 'Göndər' was not written: no rules.",
+                    action = COVERAGE_ACTION,
+                ),
+            )
+
+            val model = useCase.build(RUN_ID)
+
+            model.coverage shouldContainExactly
+                listOf("The explorer never saw the site as manager.", "BOUNDARY of 'Göndər' was not written: no rules.")
+            model.summary.stepsPassed shouldBe 1
+            model.summary.stepsFailed shouldBe 0
         }
 
     @Test

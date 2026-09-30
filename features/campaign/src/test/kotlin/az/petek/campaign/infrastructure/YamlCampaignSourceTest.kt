@@ -87,6 +87,26 @@ class YamlCampaignSourceTest {
 
     private fun withSteps(steps: String): String = header + "\n" + steps.trimIndent()
 
+    @Test
+    fun `coverage lines are kept as written, and one that spans lines or runs too long is refused`() {
+        val steps =
+            """
+            steps:
+              - actor: admin
+                do: "Elan yarat"
+            """
+        val lines = listOf("The explorer never saw the site as manager.", "BOUNDARY of 'Göndər' was not written: no rules.")
+
+        fun coverage(vararg line: String) = "\ncoverage:\n" + line.joinToString("\n") { "  - \"$it\"" }
+
+        val campaign = load(withSteps(steps) + coverage(*lines.toTypedArray()))
+
+        campaign.coverage shouldBe lines
+        load(withSteps(steps)).coverage shouldBe emptyList()
+        issue(withSteps(steps) + coverage("x".repeat(Campaign.MAX_COVERAGE_CHARS + 1)), "'coverage' lines are 1 to")
+        issue(withSteps(steps) + coverage("two\\nlines"), "'coverage' lines are 1 to")
+    }
+
     @Nested
     inner class Defaults {
         private val minimal =

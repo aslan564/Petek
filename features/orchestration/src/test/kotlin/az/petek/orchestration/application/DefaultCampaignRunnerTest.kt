@@ -20,6 +20,7 @@ import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.StepAction
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunTags
+import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
@@ -201,6 +202,23 @@ class DefaultCampaignRunnerTest {
             stored.all { it.status == IdentityStatus.ACTIVE } shouldBe true
             stored.first { it.agentId == AgentId("a05") }.storageStatePath shouldBe
                 Path.of("build", "storage", summary.runId.value, "a05.json").toString()
+        }
+
+    @Test
+    fun `what the scenario leaves unchecked is recorded once at the run's start, and a scenario without it records nothing`() =
+        runTest {
+            val f = fixture().apply { scriptPortal() }
+            val lines = listOf("The explorer never saw the site as manager.", "BOUNDARY of 'Göndər' was not written: no rules.")
+
+            val summary = f.runner().run(portalCampaign().copy(coverage = lines))
+
+            val recorded = f.evidence.stepList.filter { it.runId == summary.runId && it.action == COVERAGE_ACTION }
+            recorded.single().kind shouldBe StepKind.SYSTEM
+            recorded.single().status shouldBe StepStatus.SKIPPED
+            recorded.single().detail shouldBe lines.joinToString("\n")
+            summary.outcome shouldBe RunOutcome.PASSED
+            val plain = f.runner().run(portalCampaign())
+            f.evidence.stepList.none { it.runId == plain.runId && it.action == COVERAGE_ACTION } shouldBe true
         }
 
     @Test

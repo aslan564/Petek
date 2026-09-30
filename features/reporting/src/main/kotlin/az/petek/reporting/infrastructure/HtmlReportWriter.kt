@@ -145,6 +145,16 @@ class HtmlReportWriter : ReportWriter {
                 tile("Xərc", ReportFormat.cost(s.costUsd))
                 tile("Real-time", s.realtimeTransports.joinToString(", ").ifEmpty { NONE }, null, "aşkar edilən nəqliyyat")
             }
+            coverage(model)
+        }
+    }
+
+    /** What the scenario left unchecked, right in the summary: a passed run is never read as "everything was checked". */
+    private fun FlowContent.coverage(model: ReportModel) {
+        if (model.coverage.isEmpty()) return
+        div("coverage") {
+            p { +"${ReportFormat.COVERAGE_TITLE} (${model.coverage.size}):" }
+            ul { model.coverage.forEach { li { +it } } }
         }
     }
 

@@ -32,7 +32,9 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
   step's `http_status` expects it to refuse, sent by the tester's own page during the action) is `SITE_CHECK` with
   UI/network evidence, a finding about the site told in the check's own words, never a tool gap; so is a race several
   racers won by the site's own answers (`several_winners`, 2026-09-30), while a race nobody contested is
-  `INCONCLUSIVE` (`uncontested`); a finding without
+  `INCONCLUSIVE` (`uncontested`); the summary also names what the run's scenario left unchecked (its `coverage:` lines,
+  recorded at the run's start: roles the explorer never saw, ideas it could not write and why; 2026-09-30), so a passed
+  run is never read as "everything was checked"; a finding without
   evidence of its own links its step's last screenshot, which `site_health`
   takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
   many saw it (2026-09-27). A finding whose step has no check of the sender's own shows as A what the sender did,

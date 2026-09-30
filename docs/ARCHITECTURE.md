@@ -128,7 +128,8 @@ sequenceDiagram
 5. **Teardown.** In `finally`, the test company recorded as a run resource is deleted. The oracle refuses companies
    that are not `is_test`.
 6. **Finalize.** The judge turns assertion records into findings. The report (Markdown + HTML) is written to
-   `evidence/<run_id>/report/`.
+   `evidence/<run_id>/report/`. Its summary also names what the scenario left unchecked: the campaign's `coverage:`
+   lines, recorded as a `SYSTEM` step (`coverage`) when the run starts.
 
 The live console board fits the terminal whatever the number of agents: a headline counts the agents per state, the
 rows show the agents that need attention first (working, blocked, failed, waiting) and one line counts the rest.

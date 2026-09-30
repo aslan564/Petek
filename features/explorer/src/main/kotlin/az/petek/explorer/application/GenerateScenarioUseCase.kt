@@ -28,6 +28,7 @@ import az.petek.core.error.PetekException
 import az.petek.core.ids.IdGenerator
 import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
+import az.petek.explorer.domain.ActionKind
 import az.petek.explorer.domain.CardCoverage
 import az.petek.explorer.domain.CardState
 import az.petek.explorer.domain.CoveredIdea
@@ -39,10 +40,12 @@ import az.petek.explorer.domain.GateMaps
 import az.petek.explorer.domain.ScenarioDraft
 import az.petek.explorer.domain.SiteKinds
 import az.petek.explorer.domain.SiteModel
+import az.petek.explorer.domain.SiteModelAccumulator
 import az.petek.explorer.domain.SkippedIdea
 import az.petek.explorer.domain.Slugs
 import az.petek.explorer.domain.SmallBugCatalog
 import az.petek.explorer.domain.TestPatternLibrary
+import az.petek.explorer.domain.UrlPatterns
 import java.security.MessageDigest
 
 /** A generated campaign failed validation: a bug in the generator, never something the owner has to fix. */
@@ -121,6 +124,9 @@ class GenerateScenarioUseCase(
         val setup = composer.setupSteps()
         // One name per site: each exploration's draft is the next version of the same scenario, so versions compare.
         val name = request.name ?: "explorer-${Slugs.of(model.target.host.orEmpty()).ifEmpty { "site" }}"
+        val signUpFunctions = setOf(settings.setup.registerOwner, settings.setup.join)
+        val signUps = setup.filter { (it.action as? StepAction.Run)?.function in signUpFunctions }.map { it.id }
+        val cards = SmallBugCatalog.coverage(model, SiteKinds.of(model).kind, covered, skipped, signUps)
         val draft =
             Campaign(
                 settings = campaignSettings(model, name, settings),
@@ -128,10 +134,8 @@ class GenerateScenarioUseCase(
                 setup = setup,
                 steps = composer.mainSteps,
                 sourceHash = "",
+                coverage = coverage(model, settings, skipped, cards),
             )
-        val signUpFunctions = setOf(settings.setup.registerOwner, settings.setup.join)
-        val signUps = setup.filter { (it.action as? StepAction.Run)?.function in signUpFunctions }.map { it.id }
-        val cards = SmallBugCatalog.coverage(model, SiteKinds.of(model).kind, covered, skipped, signUps)
         val written = CampaignYamlWriter.write(draft, header(model, covered, skipped, cards))
         val campaign =
             draft.copy(
@@ -143,6 +147,60 @@ class GenerateScenarioUseCase(
         if (issues.isNotEmpty()) throw ScenarioGenerationException(issues)
         return ComposedScenario(campaign, written.yaml, covered, skipped, cards)
     }
+
+    /**
+     * What the draft leaves unchecked, as the run's report will name it (the owner's decision of 2026-09-30): the team's
+     * roles the explorer never saw the site as, the ideas it could not write and why (sign-up and sign-in excepted: the
+     * setup does them), and how many small-bug cards of the site's kind code does not check yet.
+     */
+    private fun coverage(
+        model: SiteModel,
+        settings: ScenarioSettings,
+        skipped: List<SkippedIdea>,
+        cards: List<CardCoverage>,
+    ): List<String> {
+        val walked = model.pages.flatMapTo(HashSet()) { it.reachableBy } - SiteModelAccumulator.ANONYMOUS
+        val team =
+            settings.team.roles
+                .filter { it != ScenarioSettings.VISITOR }
+                .map { it.key }
+        val gate = GateMaps.of(model)
+        val lines =
+            buildList {
+                if (walked.isEmpty()) {
+                    // A site with a way in, or a team that signs in, had an inside the explorer never saw.
+                    if (gate.login != null || gate.register != null || team.isNotEmpty()) {
+                        add("The explorer saw the site only as a visitor: what signed-in users see was not explored.")
+                    }
+                } else {
+                    team.filter { it !in walked }.forEach { role ->
+                        add("The explorer never saw the site as $role: the pages only $role sees were not explored.")
+                    }
+                }
+                skipped
+                    .filterNot { model.action(it.idea.actionId)?.kind in SET_UP_KINDS }
+                    .forEach { gap ->
+                        val subject = model.action(gap.idea.actionId)?.name?.let { "'$it'" } ?: "the site's pages"
+                        add("${gap.idea.pattern} of $subject was not written: ${gap.reason}")
+                    }
+                val notYet = cards.filter { it.state == CardState.NOT_YET }
+                if (notYet.isNotEmpty()) {
+                    add("${notYet.size} small-bug cards are not checked by code yet: ${notYet.joinToString { it.card.name.lowercase() }}.")
+                }
+            }.map { plain(it).take(Campaign.MAX_COVERAGE_CHARS) }
+        return lines.take(Campaign.MAX_COVERAGE_LINES)
+    }
+
+    /**
+     * A coverage line as the draft keeps it: one line, and no braces, so no text of the site or a pattern such as
+     * `/notes/{id}` could ever be read as a template placeholder (`{id}` is written `:id`).
+     */
+    private fun plain(line: String): String =
+        line
+            .replace('\n', ' ')
+            .replace(UrlPatterns.ID, ":id")
+            .replace('{', '(')
+            .replace('}', ')')
 
     /** The configured frame, or for a site without companies one made of the roles the explorer saw. */
     private fun frameFor(
@@ -292,5 +350,8 @@ class GenerateScenarioUseCase(
 
     private companion object {
         const val ANNOUNCE_ATTEMPTS = 3
+
+        /** Actions the setup does for every tester (sign-up and sign-in): not a gap of the draft. */
+        val SET_UP_KINDS = setOf(ActionKind.LOGIN, ActionKind.REGISTER)
     }
 }

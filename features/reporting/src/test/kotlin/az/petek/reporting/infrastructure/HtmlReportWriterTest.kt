@@ -123,6 +123,24 @@ class HtmlReportWriterTest {
     }
 
     @Test
+    fun `the summary names what the scenario left unchecked, and says nothing of it when nothing was left out`() {
+        val model =
+            SampleReport.model().copy(
+                coverage = listOf("The explorer never saw the site as manager: <its pages> were not explored."),
+            )
+
+        val text = visibleText(writer.render(model))
+
+        text shouldContain "Bu ssenarinin yoxlamadıqları (1):"
+        // Escaped as any text of the page: a line is data, never markup.
+        text shouldContain "The explorer never saw the site as manager: &lt;its pages&gt; were not explored."
+        visibleText(writer.render(SampleReport.model())) shouldNotContain "yoxlamadıqları"
+        MarkdownReportWriter().render(model) shouldContain "- The explorer never saw the site as manager"
+        CustomerSummaryWriter().render(model) shouldContain "Bu test hər şeyi əhatə etmir: ssenari 1 şeyi yoxlamadı"
+        CustomerSummaryWriter(english = true).render(model) shouldContain "its scenario left 1 things unchecked"
+    }
+
+    @Test
     fun `the stability section is left out for a single run`() {
         writer.render(SampleReport.model(stability = null)) shouldNotContain "Stabillik"
     }

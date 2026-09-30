@@ -17,6 +17,7 @@ import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.AssertionRecord
+import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunRecord
@@ -78,6 +79,11 @@ class BuildReportUseCase(
             stability = stability(run),
             artifactLinks = artifactLinks(runId, artifactRecords),
             usage = usage,
+            coverage =
+                steps
+                    .filter { it.kind == StepKind.SYSTEM && it.action == COVERAGE_ACTION }
+                    .flatMap { it.detail.orEmpty().lines() }
+                    .filter { it.isNotBlank() },
         )
     }
 
