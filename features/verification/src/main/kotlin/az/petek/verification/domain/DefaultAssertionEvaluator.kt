@@ -494,7 +494,7 @@ class DefaultAssertionEvaluator(
         input: AssertionInput,
     ): AssertionResult {
         val rendered = spec.rendered(input)
-        TargetPath.problem(rendered.path)?.let { return unsafePath(spec, rendered, rendered.path, it) }
+        TargetPath.problem(rendered.path, input.apiOrigin)?.let { return unsafePath(spec, rendered, rendered.path, it) }
         val session = input.session ?: return noSession(spec, rendered)
         val response = session.request(rendered.method, rendered.path)
         val passed = response.status == spec.equals

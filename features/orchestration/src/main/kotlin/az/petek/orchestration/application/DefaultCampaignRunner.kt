@@ -29,6 +29,7 @@ import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TemplateRenderer
+import az.petek.campaign.domain.apiOriginInUse
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.RunId
@@ -488,6 +489,8 @@ class DefaultCampaignRunner(
         try {
             val target = run.campaign.settings.target
             val targetHost = target.host?.lowercase()
+            // The site's API on its own host, which the run's start checked like the target (2026-09-30).
+            val api = run.campaign.apiOriginInUse
             val options =
                 SessionOptions(
                     label = agentId.value,
@@ -495,8 +498,11 @@ class DefaultCampaignRunner(
                     localStorage = run.campaign.target.localStorage,
                     correlationHeader = settings.correlationHeader,
                     proxy = proxy,
-                    // No tester page opens a production host or writes to one; the target itself only when it was allowed.
-                    blockedHosts = settings.productionHosts(target).map { it.trim().lowercase() }.toSet() - setOfNotNull(targetHost),
+                    // No tester page opens a production host or writes to one; the target and its API only when allowed.
+                    blockedHosts =
+                        settings.productionHosts(target).map { it.trim().lowercase() }.toSet() -
+                            setOfNotNull(targetHost, api?.host?.lowercase()),
+                    apiOrigin = api,
                 )
             val stored = storageStatePath(run.runId, agentId)
             val signedIn = options.copy(storageState = stored.takeIf(Files::isRegularFile))

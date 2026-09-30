@@ -27,9 +27,11 @@ import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.domain.RunResult
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import az.petek.ownership.domain.OwnershipMethod
 import az.petek.ownership.testing.OwnershipTestKit
 import az.petek.ownership.testing.ScriptedOwnershipProbe
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -46,6 +48,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
@@ -215,6 +218,36 @@ class RunCommandTest {
             cli.run("run", "tiny.yaml").statusCode shouldBe 0
 
             probe.looks.map { it.host } shouldBe listOf("stage.example.com")
+        }
+
+    @Test
+    fun `checks that call the site's API on its own host need that host proved as well, and never a production one`() =
+        runBlocking<Unit> {
+            val probe = ScriptedOwnershipProbe(found = null)
+            val cli = CliHarness(dir, ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe, local = setOf("127.0.0.1")))
+            cli.write("api.yaml", API_CAMPAIGN)
+
+            val refused = cli.run("run", "api.yaml")
+
+            refused.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            refused.stderr shouldContain "nothing was tested on api.stage.example.com"
+            refused.stderr shouldContain "https://api.stage.example.com/.well-known/petek-verification.txt"
+            refused.stderr shouldContain "Its http_status checks call the site's API at api.stage.example.com"
+            cli.browser.options.shouldBeEmpty()
+
+            // Proved: the check calls the API host, and the testers' sessions know it for the page's own token.
+            probe.found = OwnershipMethod.WELL_KNOWN_FILE
+            cli.run("run", "api.yaml").statusCode shouldBe ExitCodes.FAILURE
+            cli.browser.sessions
+                .flatMap { it.actions }
+                .filter { it.startsWith("request") } shouldContain
+                "request POST https://api.stage.example.com/v1/tickets/1/approve"
+            cli.browser.options
+                .map { it.apiOrigin }
+                .toSet() shouldBe setOf(URI("https://api.stage.example.com"))
+
+            cli.env["PETEK_PRODUCTION_HOSTS"] = "api.stage.example.com"
+            cli.run("run", "api.yaml").stderr shouldContain "Refusing to contact the target"
         }
 
     @Test
@@ -530,6 +563,30 @@ class RunCommandTest {
         }
 
     private companion object {
+        /** An owner and an employee whose check calls the site's API on its own host (a full api_prefix). */
+        val API_CAMPAIGN =
+            """
+            campaign:
+              name: api
+              testers: 2
+              seed: 7
+              roles: {admin: 1, manager: 0, employee: 1}
+              departments: [IT]
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            target_profile:
+              api_prefix: https://api.stage.example.com/v1
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up and create the company"
+            steps:
+              - id: look
+                actor: employee[*]
+                do: "Look at the home page"
+                assert:
+                  - http_status: {path: "{api}/tickets/1/approve", method: POST, equals: 403}
+            """.trimIndent()
+
         /** Two visitors that only read: the gate `guest` and the read-only `site_health`. */
         val VISITOR_CAMPAIGN =
             """

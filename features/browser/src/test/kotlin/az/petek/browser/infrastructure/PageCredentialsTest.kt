@@ -54,6 +54,18 @@ class PageCredentialsTest {
     }
 
     @Test
+    fun `what the page sent the site's API on its own host goes back only there, apart from what it sent the target`() {
+        val both = PageCredentials(URI("https://app.example.test"), URI("https://api.example.test"))
+        both.sent("https://app.example.test/me", "fetch", mapOf("x-csrf-token" to "app-csrf-1"))
+        both.sent("https://api.example.test/v1/me", "fetch", mapOf("authorization" to "Bearer api-token-1"))
+        both.sent("https://cdn.example.test/v1/x", "fetch", mapOf("authorization" to "Bearer cdn-token-1"))
+
+        both.headersFor(URI("https://api.example.test/v1/leave/1/approve")) shouldBe mapOf("authorization" to "Bearer api-token-1")
+        both.headersFor(URI("https://app.example.test/admin")) shouldBe mapOf("x-csrf-token" to "app-csrf-1")
+        both.headersFor(URI("https://cdn.example.test/v1/x")).shouldBeEmpty()
+    }
+
+    @Test
     fun `the whole header and the token without its scheme are masked, short values only as the whole header`() {
         credentials.sent(
             "https://app.example.test/api/me",

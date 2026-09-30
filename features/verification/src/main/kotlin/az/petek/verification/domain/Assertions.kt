@@ -21,6 +21,7 @@ import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.Verdict
+import java.net.URI
 import kotlin.time.Duration
 
 /** What an assertion about one actor's step can look at. */
@@ -42,6 +43,11 @@ data class AssertionInput(
      * that the text is shown, and `latency_max` does not apply; [eventTime] would time a delivery long past.
      */
     val earlierDelivery: String? = null,
+    /**
+     * The site's API host when the campaign's `api_prefix` is a full address there (2026-09-30): the one origin other
+     * than the target an `http_status` check may call. Null: only the target.
+     */
+    val apiOrigin: URI? = null,
 )
 
 /**

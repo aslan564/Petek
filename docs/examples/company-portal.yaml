@@ -19,7 +19,7 @@ campaign:
   pacing: {start_stagger_ms: 1500}        # per-IP limits (50 sign-ins a minute): the actors of a step start 1.5 s apart
 
 target_profile:
-  api_prefix: /api/v1
+  api_prefix: /api/v1                     # an API on its own host: the full address, e.g. https://api.portal.example/v1
   local_storage:
     "portal:domain_dialog_dismissed": "1"  # no "Use your own server?" dialog on the first visit
     "portal:lang": az                       # the labels below are the Azerbaijani UI

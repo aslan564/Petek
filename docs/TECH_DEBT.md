@@ -27,11 +27,6 @@ təklifdir (az asılılıqlı olan əvvəl); sahib dəyişə bilər.
   GitHub Actions-ı (`aslan564` / `Petek` / `release.yml`) qeyd edir, workflow `id-token: write` icazəsi və npm 11.5.1+
   ilə tokensiz dərc edir, sonra token silinir.
 
-## Sahibin qərarını gözləyən
-
-- **Ayrı API hostu** (PLAN "Real saytlar üçün açıq sual"): səhifə bir hostda, API başqa hostdadırsa, `http_status`
-  yoxlaması o hosta da getsinmi (o host da production siyasətindən keçib sahibliyini ayrıca sübut etməklə)?
-
 ## Adi prioritet
 
 - **Mağazanın üç kartı** (stok yarışı, səbət və giriş, birdəfəlik kupon; Faza 19): universal yazılır və Pətəkin öz

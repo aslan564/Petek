@@ -81,9 +81,9 @@ private val logger = KotlinLogging.logger {}
  *   most half that round trip plus one check. A navigation or reload ends the watch with the document it lived in.
  * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
  * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status. It carries the
- *   session's cookies and, to the target's origin only, the credential headers the page itself sent there
- *   ([PageCredentials]: a token the page keeps and sends as `Authorization`, a CSRF header), so a site that signs its
- *   calls with a token answers the probe as it answers the page.
+ *   session's cookies and, to the target's origin (and the site's API host, [SessionOptions.apiOrigin]) only, the
+ *   credential headers the page itself sent there ([PageCredentials]: a token the page keeps and sends as
+ *   `Authorization`, a CSRF header), so a site that signs its calls with a token answers the probe as it answers the page.
  * - JavaScript dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are accepted as they open and kept until
  *   [drainDialogs] reports them; see [PlaywrightHandles].
  * - Mutating requests the page sends to the target's origin (form posts, `fetch`, XHR) are recorded with their
@@ -706,7 +706,7 @@ internal class PlaywrightBrowserSession private constructor(
             val dialogs = DialogRecorder()
             val mutations = MutationRecorder(options.baseUrl)
             val health = HealthRecorder(options.baseUrl)
-            val credentials = PageCredentials(options.baseUrl)
+            val credentials = PageCredentials(options.baseUrl, options.apiOrigin)
             val handles =
                 try {
                     thread.runToCompletion {

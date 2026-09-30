@@ -90,6 +90,10 @@ everything it records (2026-09-30). Example:
 `POST /api/tickets/{id}/approve` returns `200` for a manager and `403` for an employee. Approving an already decided
 ticket returns `409`. Only one of two concurrent approvals may succeed. The prefix `/api` is
 `target_profile.api_prefix` (e.g. `/api/v1`); campaign paths may write it as `{api}` (`{api}/tickets/{last_id}/approve`).
+A site whose API lives on its own host gives the full address instead (`https://api.example.com/v1`, 2026-09-30): only
+`http_status` checks go there, never the test API; before a run that calls it, that host passes the production-host
+policy and proves its own ownership like the target (`petek verify --url https://api.example.com`), and the token the
+agent's page sent that host goes back to it alone.
 
 ## 6. A site that differs from the contract
 

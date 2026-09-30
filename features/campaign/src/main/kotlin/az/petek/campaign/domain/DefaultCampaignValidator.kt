@@ -301,6 +301,17 @@ class DefaultCampaignValidator(
             TargetProfileRules(campaign.target, settings.pacing) { path, message -> report(path, message) }.check()
         }
 
+        /**
+         * An oracle path that `{api}` put on the site's API host (a full `api_prefix`, 2026-09-30): only `http_status`
+         * checks go there; the test API is always on the target, where the test token belongs.
+         */
+        private fun apiHostProblem(path: String): String? {
+            val origin = campaign.target.apiOrigin ?: return null
+            if (!ApiAddress.onOrigin(path, origin)) return null
+            return "is on the site's API host $origin ('{api}' with a full api_prefix): only http_status checks go there; " +
+                "oracle paths go to the test API on the target"
+        }
+
         private fun checkIdSource(
             source: IdSource,
             path: String,
@@ -314,7 +325,9 @@ class DefaultCampaignValidator(
                 }
 
                 is IdSource.OracleField -> {
-                    relativePathProblem(source.path)?.let { report(path, "$context: oracle path $it", fallbackLine) }
+                    (apiHostProblem(source.path) ?: relativePathProblem(source.path))?.let {
+                        report(path, "$context: oracle path $it", fallbackLine)
+                    }
                     if (source.field.isBlank()) report(path, "$context: oracle field must not be blank", fallbackLine)
                     checkTemplate(source.path, path, context, scope, fallbackLine)
                 }
@@ -550,12 +563,12 @@ class DefaultCampaignValidator(
                     }
 
                     is AssertionSpec.Oracle -> {
-                        listOfNotNull(relativePathProblem(assertion.path)?.let { "path $it" })
+                        listOfNotNull((apiHostProblem(assertion.path) ?: relativePathProblem(assertion.path))?.let { "path $it" })
                     }
 
                     is AssertionSpec.HttpStatus -> {
                         listOfNotNull(
-                            relativePathProblem(assertion.path)?.let { "path $it" },
+                            httpPathProblem(assertion.path, campaign.target.apiOrigin)?.let { "path $it" },
                             "method '${assertion.method}' is not one of $HTTP_METHODS".takeIf { assertion.method !in HTTP_METHODS },
                             "equals must be an HTTP status (100-599), was ${assertion.equals}".takeIf { assertion.equals !in 100..599 },
                         )
@@ -828,6 +841,20 @@ class DefaultCampaignValidator(
                 !duration.isPositive() -> "must be positive, was $duration"
                 !duration.isFinite() -> "must be finite, was $duration"
                 else -> null
+            }
+
+        /**
+         * An `http_status` path: a path on the target, or an address on the site's API host when `api_prefix` gives one
+         * ([apiOrigin]; that host is checked like the target before a run starts). Any other host is refused.
+         */
+        fun httpPathProblem(
+            path: String,
+            apiOrigin: URI?,
+        ): String? =
+            if (apiOrigin != null && ApiAddress.onOrigin(path, apiOrigin)) {
+                relativePathProblem(path.substring(apiOrigin.toString().length))
+            } else {
+                relativePathProblem(path)
             }
 
         /**

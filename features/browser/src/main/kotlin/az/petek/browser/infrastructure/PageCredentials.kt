@@ -15,42 +15,46 @@ import java.net.URI
 import java.net.URISyntaxException
 
 /**
- * The credential headers the target's page itself sent with its own fetch and XHR calls to the target (the owner's
- * decision of 2026-09-30, docs/PLAN.md): a site that keeps its access token in the page and sends it as
- * `Authorization` (or a CSRF header) answers the session's own probes ([PlaywrightBrowserSession.request], the
- * `http_status` checks) only with it, as it answers the page. Only the headers in [NAMES] of calls to [origin], the
- * latest value of each; kept in memory for the session's life, sent back only to [origin], never logged or written
- * anywhere, and masked like a typed password in everything the session reads back ([secrets], AGENTS.md rule 10).
- * Pətək never reads the page's storage for them: only what the page itself sent counts. Session thread only.
+ * The credential headers the target's page itself sent with its own fetch and XHR calls (the owner's decision of
+ * 2026-09-30, docs/PLAN.md): a site that keeps its access token in the page and sends it as `Authorization` (or a CSRF
+ * header) answers the session's own probes ([PlaywrightBrowserSession.request], the `http_status` checks) only with it,
+ * as it answers the page. Only the headers in [NAMES] of calls to the target's origin ([base]) or to the site's API on
+ * its own host ([api]), the latest value of each, per origin; kept in memory for the session's life, sent back only to
+ * the origin the page sent them to, never logged or written anywhere, and masked like a typed password in everything
+ * the session reads back ([secrets], AGENTS.md rule 10). Pətək never reads the page's storage for them: only what the
+ * page itself sent counts. Session thread only.
  */
 internal class PageCredentials(
     base: URI,
+    api: URI? = null,
 ) {
-    private val origin = LocalStorageSeed.originOf(base)
-    private val sent = LinkedHashMap<String, String>()
+    private val origins = setOfNotNull(LocalStorageSeed.originOf(base), api?.let(LocalStorageSeed::originOf))
+    private val sent = LinkedHashMap<String, LinkedHashMap<String, String>>()
 
-    /** A request the page sent: its credential headers are kept when it is a fetch or XHR call to [origin]. */
+    /** A request the page sent: its credential headers are kept when it is a fetch or XHR call to a known origin. */
     fun sent(
         url: String,
         resourceType: String,
         headers: Map<String, String>,
     ) {
-        if (resourceType !in CALL_TYPES || originOf(url) != origin) return
+        if (resourceType !in CALL_TYPES) return
+        val origin = originOf(url)?.takeIf { it in origins } ?: return
         headers.forEach { (name, value) ->
             val key = name.lowercase()
-            if (key in NAMES && value.isNotBlank()) sent[key] = value
+            if (key in NAMES && value.isNotBlank()) sent.getOrPut(origin) { LinkedHashMap() }[key] = value
         }
     }
 
-    /** The headers to send with a request to [url]: the page's own, when [url] is on [origin]; none elsewhere. */
+    /** The headers to send with a request to [url]: the ones the page sent [url]'s origin itself; none elsewhere. */
     fun headersFor(url: URI): Map<String, String> {
-        if (sent.isEmpty() || originOf(url.toString()) != origin) return emptyMap()
-        return sent.toMap()
+        val origin = originOf(url.toString()) ?: return emptyMap()
+        return sent[origin]?.toMap().orEmpty()
     }
 
     /** What to mask in text read back: every value, and its credential without the scheme (`Bearer …`). */
     fun secrets(): Set<String> =
         sent.values
+            .flatMap { it.values }
             .flatMap { value -> listOf(value, value.substringAfter(' ', "").trim()) }
             .filter { it.length >= MIN_SECRET_LENGTH }
             .toSet()

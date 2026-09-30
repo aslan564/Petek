@@ -210,7 +210,9 @@ screenshot of that moment and reports the step's own `fail: {reason, message, er
 Selectors are profile keys or literal CSS/Playwright selectors. Values are templates rendered by the harness:
 `{self.*}` (with `first_name`/`last_name` split from the display name), `{shared.*}` (awaited until another tester
 publishes it), `{vars.*}`, `{campaign.company}`; `{self.password}` only in `fill` values, never shown (`***`), never in
-anything sent to the LLM. `{api}` in campaign paths is replaced by `target_profile.api_prefix` when the file is loaded.
+anything sent to the LLM. `{api}` in campaign paths is replaced by `target_profile.api_prefix` when the file is loaded;
+a full address there (an API on its own host) is called only by `http_status`, after the run's start checked that
+host like the target (production policy, ownership proof; `Campaign.apiOriginInUse`).
 Test mail can come from Mailpit or from the target's own test API (`TestApiMailbox`; `PETEK_MAIL_SOURCE=mailpit|test-api`,
 chosen in `AppContainer`), and an e-mail link can be picked by the site's own pattern (`set-password\?token=`). The
 `/test/...` API (oracle and test-API mail) is addressed at `PETEK_TEST_API_URL` when it is not on the target's origin

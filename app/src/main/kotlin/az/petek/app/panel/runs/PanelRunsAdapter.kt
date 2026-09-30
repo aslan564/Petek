@@ -177,7 +177,14 @@ internal class PanelRunsAdapter(
                     PanelTargets.allowed(it.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
                     requireOwnSettings(it)
                     PanelTargets.reachable(it.settings.target, lease.container.reachability, PanelInstructions.TARGET)
-                    PanelTargets.runnable(it, lease.container.ownership, PanelInstructions.TARGET)
+                    PanelTargets.runnable(it, lease.container.ownership, PanelInstructions.TARGET).also { cleared ->
+                        PanelTargets.apiHost(
+                            cleared.campaign,
+                            lease.container.config.targetPolicy,
+                            lease.container.ownership,
+                            PanelInstructions.TARGET,
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 lease.close()

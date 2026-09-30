@@ -20,6 +20,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
+import java.net.URI
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -286,13 +287,23 @@ class TargetProfileRulesTest {
     }
 
     @Test
-    fun `the API prefix is empty or a clean path`() {
-        listOf("", "/api", "/api/v1", "/rest/v2.1").forEach { prefix ->
-            messages(TargetProfile.DEFAULT.copy(apiPrefix = prefix)).shouldBeEmpty()
-        }
-        listOf("api", "/api/", "//api", "/api?x=1", "/a pi", "https://x/api").forEach { prefix ->
-            single(TargetProfile.DEFAULT.copy(apiPrefix = prefix), "api_prefix must be empty or a path like /api/v1")
-        }
+    fun `the API prefix is empty, a clean path or the full address of an API on its own host`() {
+        listOf("", "/api", "/api/v1", "/rest/v2.1", "https://api.example.com/v1", "http://127.0.0.1:18081", "https://API.example.com")
+            .forEach { prefix -> messages(TargetProfile.DEFAULT.copy(apiPrefix = prefix)).shouldBeEmpty() }
+        listOf(
+            "api",
+            "/api/",
+            "//api",
+            "/api?x=1",
+            "/a pi",
+            "https://api.example.com/v1/",
+            "https://user:pass@api.example.com/v1",
+            "https://api.example.com/v1?key=1",
+            "ftp://api.example.com/v1",
+            "https:///v1",
+        ).forEach { prefix -> single(TargetProfile.DEFAULT.copy(apiPrefix = prefix), "api_prefix must be empty, a path like /api/v1") }
+        TargetProfile.DEFAULT.copy(apiPrefix = "https://API.example.com:8443/v1").apiOrigin shouldBe URI("https://api.example.com:8443")
+        TargetProfile.DEFAULT.copy(apiPrefix = "/api/v1").apiOrigin shouldBe null
     }
 
     @Test

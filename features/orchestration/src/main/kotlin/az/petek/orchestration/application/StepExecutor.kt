@@ -31,6 +31,7 @@ import az.petek.campaign.domain.TemplateContext
 import az.petek.campaign.domain.TemplateException
 import az.petek.campaign.domain.TemplateRenderer
 import az.petek.campaign.domain.WaitForSpec
+import az.petek.campaign.domain.apiOriginInUse
 import az.petek.campaign.domain.expectsRefusal
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.CorrelationId
@@ -1066,7 +1067,19 @@ internal class StepExecutor(
         earlierDelivery: String? = null,
     ): Verification {
         if (specs.isEmpty()) return Verification(emptyList(), error = false)
-        val input = AssertionInput(run.runId, stepId, actor.step.id, actor.agentId, actor.session, templates, time, watch, earlierDelivery)
+        val input =
+            AssertionInput(
+                run.runId,
+                stepId,
+                actor.step.id,
+                actor.agentId,
+                actor.session,
+                templates,
+                time,
+                watch,
+                earlierDelivery,
+                apiOrigin = run.campaign.apiOriginInUse,
+            )
         return try {
             val records = services.verify.verifyActor(specs, input)
             records.filter { it.verdict == Verdict.FAILED }.forEach { run.tally.assertionFailed(actor.agentId) }

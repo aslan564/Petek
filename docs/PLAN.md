@@ -302,7 +302,8 @@ selektorunun mətni mesaja əlavə olunur.
 Profilin digər açarları: `local_storage` (hər brauzer kontekstinə, səhifə skriptlərindən əvvəl, yalnız hədəf origin-ə
 yazılır, məs. `portal:domain_dialog_dismissed: "1"`), `dismiss` (hər addımdan əvvəl görünən overlay-lər bağlanır;
 selektor olduğu kimi işlənir, şablon ola bilməz),
-`api_prefix` (`{api}` → `/api/v1`, fayl yüklənəndə açılır). `campaign.pacing: {start_stagger_ms, max_parallel_actors}`
+`api_prefix` (`{api}` → `/api/v1`, fayl yüklənəndə açılır; API öz hostundadırsa tam ünvan: `https://api.example.com/v1` —
+ora yalnız `http_status` gedir, host da sahibliyini sübut edir, 2026-09-30). `campaign.pacing: {start_stagger_ms, max_parallel_actors}`
 bir addımın aktorlarını agent id sırası ilə aralıqla və ən çox N paralel başladır (IP limitləri üçün); `parallel: true`
 addımları və yalnız yoxlama edən (`do`/`run`-suz) addımlar bundan asılı deyil. Poçt mənbəyi Mailpit və ya hədəfin test API-si (`GET /test/emails?to=`) ola bilər.
 
@@ -1774,14 +1775,23 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
   parol kimi snapshot, mətn, dialoq, konsol və sorğu cavabında maskalanır; sübut yalnız başlığın adını deyir
   ("sent with the page's own authorization header"), cookie ilə gedən 401-də isə səhifənin token göndərmədiyini.
   `PageCredentialsTest`, `PlaywrightBrowserSessionTest` (real Chromium: token-lə imzalanan tətbiq 401 əvəzinə 403
-  qaytarır, token oxunanda maskalıdır), `TargetAnswerAssertionsTest`. Açıq qalan: API ayrı hostdadırsa (məs.
-  `api.example.com`) `http_status` ora getmir, yol yalnız hədəfin öz origin-indədir (aşağıda sual).
-- [ ] **Ayrı API hostu (2026-09-30 tapıldı):** saytın API-si başqa hostdadırsa (`app.example.com` səhifəsi
+  qaytarır, token oxunanda maskalıdır), `TargetAnswerAssertionsTest`. API ayrı hostdadırsa: aşağıdakı bənd.
+- [x] **Ayrı API hostu (2026-09-30 tapıldı):** saytın API-si başqa hostdadırsa (`app.example.com` səhifəsi
   `api.example.com`-a token ilə müraciət edir), `http_status` yoxlaması ora gedə bilmir: yol yalnız hədəfin öz
   origin-indədir (hədəf siyasəti və sahiblik yalnız onun üçündür). Təklif: `target_profile.api_prefix` tam ünvan da ola
   bilsin (`https://api.example.com/v1`); o host da `PETEK_PRODUCTION_HOSTS` siyasətindən keçir və sahibliyi ayrıca
-  təsdiqlənir (`petek verify --target https://api.example.com`), səhifənin həmin hosta göndərdiyi token yalnız ora
-  gedir. Təhlükəsizlik qaydasıdır (qayda 8, ADR-0012), ona görə sahibin qərarıdır.
+  təsdiqlənir (`petek verify --url https://api.example.com`), səhifənin həmin hosta göndərdiyi token yalnız ora
+  gedir. Təhlükəsizlik qaydasıdır (qayda 8, ADR-0012), ona görə sahibin qərarıdır. **Qərar (sahib, 2026-09-30):**
+  bəli, iki qoruyucu ilə (production siyasəti və hostun öz sahiblik sübutu).
+  *Vəziyyət:* `api_prefix` tam ünvan ola bilər (`TargetProfile.apiOrigin`, `ApiAddress`); `{api}` ora yalnız
+  `http_status`-da gedir — oracle yolu və id mənbəyi orada rədd olunur (test API həmişə hədəfdədir), başqa host heç
+  vaxt. Run başlamazdan əvvəl `Campaign.apiOriginInUse` hədəf kimi yoxlanır: `petek run` (`TargetGuard`, sübut yoxdursa
+  exit 2 və dərc ediləcək sübut) və panel/MCP/`petek test` (`PanelTargets.apiHost`). Qiymətləndirici yolu yalnız həmin
+  origin-də qəbul edir (`TargetPath`), testerlərin sessiyası onu tanıyır (`SessionOptions.apiOrigin`): səhifənin o
+  hosta göndərdiyi token yalnız ora qaytarılır (`PageCredentials`), production siyahısındakı API hostu səhifə üçün də
+  açılmır. Sübut: `petek verify --url https://api.example.com`. `TargetProfileRulesTest`, `DefaultCampaignValidatorTest`,
+  `FlowYamlReadingTest`, `TargetPathTest`, `TargetAnswerAssertionsTest`, `PageCredentialsTest`, `RunCommandTest`,
+  `PanelRunsTest`.
 
 **Sahibin əlavə qərarları (2026-09-25)**
 

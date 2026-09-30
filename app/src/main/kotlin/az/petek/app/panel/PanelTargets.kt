@@ -17,6 +17,7 @@ import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.VisitorRun
+import az.petek.campaign.domain.apiOriginInUse
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.dashboard.domain.FieldProblem
@@ -101,6 +102,40 @@ internal object PanelTargets {
                 ),
             ),
         )
+    }
+
+    /**
+     * The site's API on its own host (a full `api_prefix`, 2026-09-30), when [campaign]'s `http_status` checks call it:
+     * allowed by [policy] and proved as the owner's, like the target, so no one's verified site can point Pətək's checks
+     * at somebody else's server. Otherwise a [PanelRequestException] for [field], in Azerbaijani; nothing is written.
+     */
+    suspend fun apiHost(
+        campaign: Campaign,
+        policy: TargetPolicy,
+        ownership: SiteOwnership,
+        field: String,
+    ) {
+        val api = campaign.apiOriginInUse ?: return
+        val verdict = policy.verify(api)
+        if (verdict is TargetVerdict.Refused) {
+            val why = refusal(api, policy, verdict)
+            throw PanelRequestException(
+                listOf(FieldProblem(field, "Kampaniyanın http_status yoxlamaları saytın API ünvanına (${api.host}) gedir: $why")),
+            )
+        }
+        val status = ownership.check(api)
+        if (status is OwnershipStatus.Unverified) {
+            throw PanelRequestException(
+                listOf(
+                    FieldProblem(
+                        field,
+                        "Kampaniyanın http_status yoxlamaları saytın API ünvanına (${status.host}) gedir; Pətək ora yalnız onun da " +
+                            "sizin olduğu sübut olunandan sonra sorğu göndərir, ona görə heç nə test edilmədi. " +
+                            "${proofHowTo(status)} Sonra yenidən başladın.",
+                    ),
+                ),
+            )
+        }
     }
 
     /** Why a campaign is not a visitor run, said to the owner. */

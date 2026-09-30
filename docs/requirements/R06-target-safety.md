@@ -31,6 +31,10 @@ destroying a customer's data.
   the owner's `allowWrites` and a `TestTargetCheck` that confirms test data: the test company through the API
   (`OracleTestTargetCheck`) or, on a site without companies, the explorer's own new account on the configured, proved
   or local site (`ExplorerAccountTestCheck`); the owner's own accounts never write.
+- **An API on its own host.** A full `api_prefix` (`https://api.example.com/v1`, 2026-09-30) is the only other origin a
+  run may call, and only from `http_status` checks: before the run starts it passes the production-host policy and
+  proves its own ownership like the target (`petek run` exits 2 with the proof to publish; the panel refuses under
+  "Hədəf sayt"); oracle paths there are refused, the test API stays on the target.
 - **Teardown.** Every run ends with teardown (also when aborted or interrupted); `petek teardown --run` repeats it;
   `--keep-data` is explicit and for debugging.
 - **Panel runs.** A run goes to the configured site or to a site with its own target profile (R08), which brings its

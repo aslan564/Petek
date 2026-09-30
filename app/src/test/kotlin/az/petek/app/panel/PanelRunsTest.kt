@@ -43,7 +43,9 @@ import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
+import az.petek.ownership.domain.OwnershipMethod
 import az.petek.ownership.testing.OwnershipTestKit
+import az.petek.ownership.testing.ScriptedOwnershipProbe
 import az.petek.scenarios.domain.ScenarioVersionId
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
@@ -563,6 +565,34 @@ class PanelRunsTest {
         }
 
     @Test
+    fun `checks that call the site's API on its own host start only once that host is proved as well`() =
+        runBlocking<Unit> {
+            val runs = FakeBrowserEngine()
+            val probe = ScriptedOwnershipProbe(found = null)
+            val panel =
+                PanelHarness(
+                    dir,
+                    runs = runs,
+                    scenarios = mapOf("api.yaml" to API_CAMPAIGN),
+                    ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe, local = setOf("127.0.0.1")),
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val refused = shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }
+
+            refused.problems.single().field shouldBe PanelInstructions.TARGET
+            refused.problems.single().message shouldContain "saytın API ünvanına (api.stage.example.com) gedir"
+            refused.problems.single().message shouldContain "https://api.stage.example.com/.well-known/petek-verification.txt"
+            runs.options.shouldBeEmpty()
+
+            probe.found = OwnershipMethod.WELL_KNOWN_FILE
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+            panel.ended(started.runId)
+
+            runs.options.map { it.apiOrigin }.toSet() shouldBe setOf(URI("https://api.stage.example.com"))
+        }
+
+    @Test
     fun `a visitor run starts on a site whose ownership is not proved`() =
         runBlocking<Unit> {
             val runs = FakeBrowserEngine()
@@ -603,4 +633,30 @@ class PanelRunsTest {
                 .single()
                 .target shouldBe "https://stage.example.com"
         }
+
+    private companion object {
+        /** An owner and an employee whose check calls the site's API on its own host (a full api_prefix). */
+        val API_CAMPAIGN =
+            """
+            campaign:
+              name: api
+              testers: 2
+              seed: 7
+              roles: {admin: 1, manager: 0, employee: 1}
+              departments: [IT]
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            target_profile:
+              api_prefix: https://api.stage.example.com/v1
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up and create the company"
+            steps:
+              - id: look
+                actor: employee[*]
+                do: "Look at the home page"
+                assert:
+                  - http_status: {path: "{api}/tickets/1/approve", method: POST, equals: 403}
+            """.trimIndent()
+    }
 }

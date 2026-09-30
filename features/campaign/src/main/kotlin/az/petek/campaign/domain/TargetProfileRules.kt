@@ -18,7 +18,8 @@ import kotlin.time.Duration
 /**
  * Checks the parts of a [TargetProfile] that describe the site's flows (see [Flow]), and the campaign's pacing:
  *
- * - `api_prefix` is empty or `/segment[/segment…]` without a trailing slash, so `{api}/x` stays one path;
+ * - `api_prefix` is empty or `/segment[/segment…]` without a trailing slash, so `{api}/x` stays one path, or the full
+ *   address of the site's API on its own host (`https://api.example.com/v1`, [apiOrigin]);
  * - `local_storage` keys and `dismiss` selectors are not blank, and `dismiss` selectors are not templates;
  * - flows have a known name ([FlowNames]) and steps; `verify_identity` contains an `assert_identity`;
  * - every selector reference is not blank, and one shaped like a key of a known group (`login.emial`) must be a key;
@@ -60,10 +61,11 @@ internal class TargetProfileRules(
     }
 
     private fun checkApiPrefix() {
-        if (!API_PREFIX.matches(target.apiPrefix)) {
+        if (!API_PREFIX.matches(target.apiPrefix) && target.apiOrigin == null) {
             report(
                 "$PROFILE.api_prefix",
-                "$PROFILE.api_prefix must be empty or a path like /api/v1 (no trailing '/', no query), was '${target.apiPrefix}'",
+                "$PROFILE.api_prefix must be empty, a path like /api/v1 or the full address of the site's API on its own host " +
+                    "like https://api.example.com/v1 (no trailing '/', query or credentials), was '${target.apiPrefix}'",
             )
         }
     }

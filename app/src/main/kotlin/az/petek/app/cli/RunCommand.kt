@@ -20,6 +20,7 @@ import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.domain.VisitorRun
+import az.petek.campaign.domain.apiOriginInUse
 import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.core.ids.RunTags
 import az.petek.identity.domain.Identity
@@ -107,6 +108,19 @@ class RunCommand : PetekSubcommand("run") {
                 // Separate IPs only for the owner's own site (Faza 21): nobody spreads load over many addresses elsewhere.
                 if (config.proxies.isNotEmpty()) {
                     echo("Warning: PETEK_PROXIES is not used here: every visitor goes out from this machine's IP.", err = true)
+                }
+            }
+            // The site's API on its own host (a full api_prefix, 2026-09-30) is checked like the target: allowed, and
+            // proved as the owner's, so no one's verified site can point Pətək's checks at somebody else's server.
+            campaign.apiOriginInUse?.let { api ->
+                TargetGuard.requireAllowed(config.targetPolicy, api)
+                val apiOwnership = container.ownership.check(api)
+                if (apiOwnership is OwnershipStatus.Unverified) {
+                    throw OwnershipRequiredException(
+                        apiOwnership,
+                        "Its http_status checks call the site's API at ${apiOwnership.host} (target_profile.api_prefix), " +
+                            "so that host proves its ownership too.",
+                    )
                 }
             }
             if (swapAccounts && campaign.settings.waveSize != null) {

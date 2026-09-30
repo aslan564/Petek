@@ -646,6 +646,19 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `with the API on its own host, only http_status checks may call it, and no other host`() {
+            val api = TargetProfile.DEFAULT.copy(apiPrefix = "https://api.portal.test/v1")
+
+            fun checking(vararg assertions: AssertionSpec) =
+                campaign(announce, step("check", actor = "employee", assertions = assertions.toList(), line = 70), target = api)
+
+            issues(checking(AssertionSpec.HttpStatus("https://api.portal.test/v1/tickets/1/approve", "POST", 403))).shouldBeEmpty()
+            issue(checking(AssertionSpec.Oracle("https://api.portal.test/v1/x", "id", "1", null)), "only http_status checks go there")
+            issue(checking(AssertionSpec.HttpStatus("https://elsewhere.test/x", "GET", 403)), "starting with a single '/'")
+            issue(asserting(AssertionSpec.HttpStatus("https://api.portal.test/v1/x", "GET", 403)), "starting with a single '/'")
+        }
+
+        @Test
         fun `http_status needs a known method and a real status`() {
             issue(asserting(AssertionSpec.HttpStatus("/api/x", "FETCH", 200)), "method 'FETCH'")
             issue(asserting(AssertionSpec.HttpStatus("/api/x", "POST", 42)), "must be an HTTP status")

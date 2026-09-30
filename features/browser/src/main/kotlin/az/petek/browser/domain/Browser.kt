@@ -107,6 +107,11 @@ data class SessionOptions(
      * the owner's production hosts (AGENTS.md rule 8). Other requests there, such as an image a page loads, pass.
      */
     val blockedHosts: Set<String> = emptySet(),
+    /**
+     * The site's API on its own host (a full `api_prefix`, 2026-09-30): the credential headers the page sends there are
+     * kept for the session's own probes to it ([BrowserSession.request]), as those it sends [baseUrl]. Null: none.
+     */
+    val apiOrigin: URI? = null,
 )
 
 /** Result of waiting for something to appear. [observedAt] is the harness time it was seen (t1). */
