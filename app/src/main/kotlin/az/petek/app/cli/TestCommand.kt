@@ -39,9 +39,9 @@ import kotlin.time.Duration.Companion.milliseconds
  * the site, the scenario is drafted only from what it found, approved and run with the tester agents; nobody writes a
  * scenario file. The parts are the panel's own operations over the same object graph, so their rules hold here too
  * (the target policy, the proof of ownership before anything is written, a site that must answer). Progress goes to
- * stdout, the report path at the end. Exit code 0 when the run PASSED, 1 when it FAILED, 2 when the test stopped before a
- * run ended (no site, a refused or silent site, an exploration without a model, a draft that does not validate, a run
- * that was refused or ABORTED).
+ * stdout, the report path at the end. Exit code 0 when the run PASSED, 1 when it FAILED, 3 when it did not pass only
+ * because checks could not be decided, 2 when the test stopped before a run ended (no site, a refused or silent site,
+ * an exploration without a model, a draft that does not validate, a run that was refused or ABORTED).
  */
 class TestCommand : PetekSubcommand(NAME) {
     private val target by option("--target", help = "the site to test (default: PETEK_TARGET)", metavar = "URL")
@@ -172,10 +172,14 @@ class TestCommand : PetekSubcommand(NAME) {
         private const val DEFAULT_STEPS = 40
         private val POLL = 500.milliseconds
 
-        /** 0 when the run PASSED, 1 when it FAILED, 2 when the test stopped before a run ended. */
+        /**
+         * 0 when the run PASSED, 1 when it FAILED, 3 when it did not pass only because checks could not be decided, 2 when
+         * the test stopped before a run ended.
+         */
         fun exitCodeOf(view: TestFlowView): Int =
             when {
                 view.stage == TestStage.FINISHED && view.result == RunResult.PASSED -> ExitCodes.OK
+                view.stage == TestStage.FINISHED && view.result == RunResult.FAILED && view.undecided -> ExitCodes.INCONCLUSIVE
                 view.stage == TestStage.FINISHED && view.result == RunResult.FAILED -> ExitCodes.FAILURE
                 else -> ExitCodes.CONFIG_OR_ABORTED
             }

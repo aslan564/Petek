@@ -42,7 +42,13 @@ data class RunSummaryView(
     val reportAvailable: Boolean,
     val triaged: Boolean,
     val scenarioId: String?,
-)
+    /** Checks whose evidence could not decide them (Faza 24.12). */
+    val assertionsInconclusive: Int = 0,
+) {
+    /** Not PASSED only because checks could not be decided: nothing failed (`petek test` exits with 3). */
+    val undecidedOnly: Boolean
+        get() = result == RunResult.FAILED && stepsFailed == 0 && assertionsFailed == 0 && assertionsInconclusive > 0
+}
 
 /** How the steps of a `--repeat` group behaved across its runs. */
 data class StabilityView(

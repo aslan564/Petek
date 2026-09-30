@@ -201,7 +201,9 @@ explorer's trial touch, `--max-pages`, `--max-minutes`; `--json` prints its end 
 yourself, when you want to decide every step, is planned with `plan scenarios/my-site.yaml` and run with
 `run scenarios/my-site.yaml --repeat 3`.
 
-Exit codes: `0` success, `1` failures found, `2` configuration error or aborted run, `130` interrupted.
+Exit codes: `0` success, `1` failures found, `2` configuration error or aborted run, `3` the run did not pass only
+because some checks could not be decided (nothing failed; the report's "tool gap" shelf says what was missing), `130`
+interrupted.
 
 ## Use it on your own site
 

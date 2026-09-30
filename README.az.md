@@ -200,7 +200,9 @@ Komanda sətri ilə, başdan sona:
 müəyyən etmək istəyəndə yazdığınız kampaniya `plan scenarios/my-site.yaml` ilə planlanır və
 `run scenarios/my-site.yaml --repeat 3` ilə run olunur.
 
-Çıxış kodları: `0` uğur, `1` tapıntı var, `2` konfiqurasiya xətası və ya dayandırılmış run, `130` kəsildi.
+Çıxış kodları: `0` uğur, `1` tapıntı var, `2` konfiqurasiya xətası və ya dayandırılmış run, `3` run yalnız bəzi
+yoxlamaların sübutu qərar üçün yetmədiyinə görə keçmədi (heç nə uğursuz olmadı; nəyin çatmadığı hesabatın "alət
+boşluğu" rəfindədir), `130` kəsildi.
 
 ## Öz saytınızda istifadə
 

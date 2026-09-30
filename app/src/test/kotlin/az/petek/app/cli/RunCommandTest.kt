@@ -21,8 +21,11 @@ import az.petek.app.testing.scriptedLlm
 import az.petek.capacity.domain.HostResourceProbe
 import az.petek.capacity.domain.HostResources
 import az.petek.core.ids.AgentId
+import az.petek.core.ids.RunId
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.domain.RunResult
+import az.petek.orchestration.domain.RunOutcome
+import az.petek.orchestration.domain.RunSummary
 import az.petek.ownership.testing.OwnershipTestKit
 import az.petek.ownership.testing.ScriptedOwnershipProbe
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -71,6 +74,22 @@ class RunCommandTest {
             Files.isRegularFile(Path.of(report).resolveSibling("report.md")) shouldBe true
             cli.evidence { it.evidence.latest() }?.result shouldBe RunResult.PASSED
         }
+
+    @Test
+    fun `a run that did not pass only because checks could not be decided exits with 3, and a failure elsewhere wins`() {
+        fun summary(
+            outcome: RunOutcome,
+            failed: Int = 0,
+            undecided: Int = 0,
+        ) = RunSummary(RunId("run_x"), outcome, 3, 0, failed, 0, null, 10, undecided)
+
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.FAILED, undecided = 1))) shouldBe ExitCodes.INCONCLUSIVE
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.FAILED, undecided = 1), summary(RunOutcome.FAILED, failed = 1))) shouldBe
+            ExitCodes.FAILURE
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.FAILED, undecided = 1), summary(RunOutcome.ABORTED))) shouldBe
+            ExitCodes.CONFIG_OR_ABORTED
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.PASSED))) shouldBe ExitCodes.OK
+    }
 
     @Test
     fun `a site that does not answer is reported and nothing is tested in its place`() =

@@ -1544,6 +1544,9 @@ Açıq sahib qərarları (tərs oxudan):
 - [x] **Qərarsız run-ın çıxış kodu:** heç bir yoxlama FAILED deyil, amma INCONCLUSIVE var — CI ayırsın deyə çıxış kodu
   3 olsunmu (0 keçdi, 1 saytın xətası, 2 başlamadı)? Tövsiyə: bəli; CI şablonları və README yenilənir.
   **Qərar (sahib, 2026-09-30):** bəli.
+  *Vəziyyət:* `ExitCodes.INCONCLUSIVE = 3`: `petek run` (`RunSummary.undecidedOnly`) və `petek test`
+  (`TestFlowView.undecided`, qeydi də bunu deyir) heç bir addım və yoxlama uğursuz olmayıb, amma qərarsız yoxlama
+  varsa 3 qaytarır; uğursuzluq olan run 1, dayandırılan 2 qalır. `RunCommandTest`, `TestCommandTest`, README.
 - [x] **Proseslər arası run kilidi:** evidence qovluğunda fayl kilidi ilə panel, MCP və CLI eyni anda iki run açmasın?
   Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli.
 - [x] **Örtük hesabatda:** kəşfiyyatçının görmədiyi rollar və buraxılan ideyalar run hesabatının xülasəsinə yazılsın?
@@ -1611,7 +1614,7 @@ mərhələsindən sonra.
     yoxlamadan keçməyib, run rədd edilib və ya yarımçıq qalıb). Qaydalar hissələrin öz qaydalarıdır (hədəf siyasəti,
     saytın cavab verməsi, yazmadan əvvəl sahiblik sübutu, bir anda bir kəşfiyyat və bir run); bir anda bir test,
     "Dayandır" gedən hissəni dayandırır. Üç üzü: "Təlimat" ekranında əsas düymə **Test et** (`/api/test`; run başlayanda
-    lövhə özü açılır), `petek test` (çıxış kodu run-ın nəticəsinə görə 0/1/2, `--json`) və MCP `test_site`/`get_test`/
+    lövhə özü açılır), `petek test` (çıxış kodu run-ın nəticəsinə görə 0/1/2, yalnız qərarsız yoxlamalar üçün 3, `--json`) və MCP `test_site`/`get_test`/
     `cancel_test`. Formun komandası istəyə bağlıdır (`PanelInstructions.roles`, `registration`, `departments`):
     "Avtomatik bölgü" açıq olanda heç nə göndərilmir və draft kəşfiyyatçının gördüyü rolları, giriş yollarını və
     şöbələri götürür; şöbə tələbi və MCP-nin müqavilə komandası (IT, HR, menecer payı) çıxdı. Köhnəlmiş (superseded)

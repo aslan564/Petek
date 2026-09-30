@@ -52,7 +52,8 @@ import java.util.Locale
 /**
  * `petek run <campaign.yaml>`: one run (or `--repeat N` runs as one stability group) end to end, then the summary and
  * the report path. Exit code 0 when every run PASSED, 1 when one FAILED, 2 when one was ABORTED or nothing could
- * start (configuration, refused target, invalid campaign).
+ * start (configuration, refused target, invalid campaign), 3 when a run did not pass only because some of its checks
+ * could not be decided (nothing failed).
  */
 class RunCommand : PetekSubcommand("run") {
     private val file by argument("campaign", help = "campaign YAML file, e.g. docs/examples/company-portal.yaml").path()
@@ -314,11 +315,15 @@ class RunCommand : PetekSubcommand("run") {
         /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
         private const val MANUAL_MAIL_TESTERS = 3
 
-        /** The worst outcome decides: any ABORTED run is 2, any FAILED run is 1, else 0. */
+        /**
+         * The worst outcome decides: any ABORTED run is 2, any FAILED run with a failure of its own is 1, a run that did
+         * not pass only because checks could not be decided is 3, else 0.
+         */
         fun exitCodeOf(summaries: List<RunSummary>): Int =
             when {
                 summaries.any { it.outcome == RunOutcome.ABORTED } -> ExitCodes.CONFIG_OR_ABORTED
-                summaries.any { it.outcome == RunOutcome.FAILED } -> ExitCodes.FAILURE
+                summaries.any { it.outcome == RunOutcome.FAILED && !it.undecidedOnly } -> ExitCodes.FAILURE
+                summaries.any { it.outcome == RunOutcome.FAILED } -> ExitCodes.INCONCLUSIVE
                 else -> ExitCodes.OK
             }
     }

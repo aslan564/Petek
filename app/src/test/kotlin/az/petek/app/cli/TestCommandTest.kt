@@ -15,6 +15,8 @@ import az.petek.app.testing.CliHarness
 import az.petek.app.testing.PanelLlm
 import az.petek.app.testing.PanelWaits
 import az.petek.core.ids.RunId
+import az.petek.dashboard.domain.TestFlowView
+import az.petek.dashboard.domain.TestStage
 import az.petek.evidence.domain.RunResult
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 
 /** `petek test`: the main path from the command line, with production wiring, a scripted site and a scripted LLM. */
 class TestCommandTest {
@@ -69,6 +72,15 @@ class TestCommandTest {
             Files.isRegularFile(report) shouldBe true
             report.toString() shouldContain runId.value
         }
+
+    @Test
+    fun `a test whose run did not pass only because checks could not be decided exits with 3`() {
+        val failed = TestFlowView("http://site.test", TestStage.FINISHED, Instant.EPOCH, result = RunResult.FAILED)
+
+        TestCommand.exitCodeOf(failed.copy(undecided = true)) shouldBe ExitCodes.INCONCLUSIVE
+        TestCommand.exitCodeOf(failed) shouldBe ExitCodes.FAILURE
+        TestCommand.exitCodeOf(failed.copy(result = RunResult.PASSED)) shouldBe ExitCodes.OK
+    }
 
     @Test
     fun `without a site nothing starts and the owner is asked for one`() =

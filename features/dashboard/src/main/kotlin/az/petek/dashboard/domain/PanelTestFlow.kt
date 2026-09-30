@@ -72,4 +72,6 @@ data class TestFlowView(
      * waiting for the owner's approval; null when it found nothing new.
      */
     val nextScenarioId: String? = null,
+    /** The run did not pass only because some checks could not be decided; nothing failed (`petek test` exits with 3). */
+    val undecided: Boolean = false,
 )

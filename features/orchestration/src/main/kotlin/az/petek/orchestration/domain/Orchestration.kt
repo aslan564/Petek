@@ -255,4 +255,8 @@ data class RunSummary(
     val durationMs: Long,
     /** Checks whose evidence could not decide them (Faza 24.12); a run with any is not PASSED. */
     val assertionsInconclusive: Int = 0,
-)
+) {
+    /** Not PASSED only because checks could not be decided: no step and no check failed ([assertionsInconclusive] > 0). */
+    val undecidedOnly: Boolean
+        get() = outcome == RunOutcome.FAILED && stepsFailed == 0 && assertionsFailed == 0 && assertionsInconclusive > 0
+}

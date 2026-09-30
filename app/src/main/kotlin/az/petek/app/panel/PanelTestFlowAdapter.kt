@@ -209,8 +209,13 @@ internal class PanelTestFlowAdapter(
 
                 RunResult.FAILED -> {
                     TestStage.FINISHED to
-                        "Test bitdi: run keçmədi (${run.stepsPassed} addım keçdi, ${run.stepsFailed} keçmədi, " +
-                        "${run.assertionsFailed} yoxlama keçmədi). Səbəblər hesabatdadır."
+                        if (run.undecidedOnly) {
+                            "Test bitdi: run keçmədi, çünki ${run.assertionsInconclusive} yoxlamanın sübutu qərar üçün yetmədi; " +
+                                "heç nə uğursuz olmadı. Nəyin çatmadığı hesabatın \"alət boşluğu\" rəfindədir."
+                        } else {
+                            "Test bitdi: run keçmədi (${run.stepsPassed} addım keçdi, ${run.stepsFailed} keçmədi, " +
+                                "${run.assertionsFailed} yoxlama keçmədi). Səbəblər hesabatdadır."
+                        }
                 }
 
                 RunResult.ABORTED -> {
@@ -221,7 +226,14 @@ internal class PanelTestFlowAdapter(
                     TestStage.STOPPED to "Run gözlənilmədən dayandı; səbəb loglardadır (evidence/logs/petek.log)."
                 }
             }
-        update { it.copy(stage = stage, result = run?.result, note = listOfNotNull(scouted, said).joinToString(" ")) }
+        update {
+            it.copy(
+                stage = stage,
+                result = run?.result,
+                note = listOfNotNull(scouted, said).joinToString(" "),
+                undecided = run?.undecidedOnly == true,
+            )
+        }
     }
 
     private fun stop(note: String) = update { it.copy(stage = TestStage.STOPPED, note = note) }

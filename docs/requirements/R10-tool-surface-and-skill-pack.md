@@ -42,7 +42,8 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     from that exploration only, approve and run, in one go (`PanelTestFlow`); `get_test` follows it (stage, ids, the
     run's result, a note for the owner, the report directory) and `cancel_test` stops it. Its form carries no team of
     its own, and neither does `explore_site` any more: the roles, ways in and departments are what the explorer saw.
-    `petek test` is the same on the command line (exit code 0/1/2 by the run's result; `--json`).
+    `petek test` is the same on the command line (exit code 0/1/2 by the run's result, 3 when it did not pass only
+    because checks could not be decided; `--json`).
   - `petek --json <command>` (`CliSession.json`, `PetekSubcommand.emitJson`): one document on stdout for `doctor`
     (`ok`, `checks`), `init` (`changes`), `plan` (`identities`), `run` (`runs`, `exitCode`), `report` (`html`,
     `markdown`), `teardown` (`removed`, `failures`); a failure prints `{"error": ...}` and keeps the exit code.

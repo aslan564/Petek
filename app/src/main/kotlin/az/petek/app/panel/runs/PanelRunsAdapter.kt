@@ -623,6 +623,7 @@ internal class PanelRunsAdapter(
             reportAvailable = reportDirectory(runId) != null,
             triaged = runId in triaged || container.triageResults.forRun(runId).any { it.verdict != null },
             scenarioId = executed(run, versions)?.id?.value,
+            assertionsInconclusive = assertions.count { it.verdict == Verdict.INCONCLUSIVE },
         )
     }
 
