@@ -60,6 +60,9 @@ internal object ReportFormat {
     /** How the reports head what the run's scenario left unchecked (its `coverage:` lines, 2026-09-30). */
     const val COVERAGE_TITLE = "Bu ssenarinin yoxlamadıqları"
 
+    /** The header link that downloads the report as a PDF. */
+    const val PDF_DOWNLOAD = "PDF yüklə"
+
     /** The strength of a finding's proof as the owner reads it (Faza 10). */
     fun evidenceTier(value: EvidenceTier): String =
         when (value) {

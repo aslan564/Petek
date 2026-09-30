@@ -431,6 +431,7 @@ internal object PanelJson {
                     put("repeatGroup", it.repeatGroup)
                     put("repeatIndex", it.repeatIndex)
                     put("reportUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/" else null)
+                    put("pdfUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/report.pdf" else null)
                     put("triaged", it.triaged)
                     put("scenarioId", it.scenarioId)
                 }

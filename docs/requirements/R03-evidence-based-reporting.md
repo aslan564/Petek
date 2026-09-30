@@ -34,7 +34,9 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
   racers won by the site's own answers (`several_winners`, 2026-09-30), while a race nobody contested is
   `INCONCLUSIVE` (`uncontested`); the summary also names what the run's scenario left unchecked (its `coverage:` lines,
   recorded at the run's start: roles the explorer never saw, ideas it could not write and why; 2026-09-30), so a passed
-  run is never read as "everything was checked"; a finding without
+  run is never read as "everything was checked"; the report prints as a PDF when asked for (`report.pdf`: the
+  panel's PDF button and `index.html`'s "PDF yüklə", `petek report --pdf`), from `share.html` by Chromium's own print
+  (`ExportReportPdfUseCase`, `PlaywrightPdfPrinter`; 2026-09-30); a finding without
   evidence of its own links its step's last screenshot, which `site_health`
   takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
   many saw it (2026-09-27). A finding whose step has no check of the sender's own shows as A what the sender did,

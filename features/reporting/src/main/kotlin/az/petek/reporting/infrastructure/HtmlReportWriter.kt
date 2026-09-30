@@ -14,6 +14,7 @@ package az.petek.reporting.infrastructure
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunResult
+import az.petek.reporting.application.ReportLayout
 import az.petek.reporting.domain.LatencyStats
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportWriter
@@ -69,8 +70,14 @@ class HtmlReportWriter : ReportWriter {
         directory: Path,
     ): Path = ReportFormat.writeFile(directory, fileName, render(model))
 
-    /** The HTML document for [model]. */
-    fun render(model: ReportModel): String =
+    /**
+     * The HTML document for [model]; with [pdfLink] its header offers the report as a PDF (`report.pdf` beside it, which
+     * the panel prints when it is asked for and `petek report --pdf` writes).
+     */
+    fun render(
+        model: ReportModel,
+        pdfLink: Boolean = true,
+    ): String =
         buildString {
             append("<!DOCTYPE html>\n")
             appendHTML().html {
@@ -78,7 +85,7 @@ class HtmlReportWriter : ReportWriter {
                 head { head(model) }
                 body {
                     div("wrap") {
-                        pageHeader(model)
+                        pageHeader(model, pdfLink)
                         main {
                             summary(model)
                             findings(model)
@@ -102,10 +109,21 @@ class HtmlReportWriter : ReportWriter {
         style { unsafe { raw(CSS) } }
     }
 
-    private fun FlowContent.pageHeader(model: ReportModel) {
+    private fun FlowContent.pageHeader(
+        model: ReportModel,
+        pdfLink: Boolean,
+    ) {
         val run = model.run
         header("page-header") {
             h1 { +ReportFormat.title(model) }
+            if (pdfLink) {
+                p("actions no-print") {
+                    a(href = ReportLayout.PDF) {
+                        attributes["download"] = "petek-${run.runId.value}.pdf"
+                        +ReportFormat.PDF_DOWNLOAD
+                    }
+                }
+            }
             ul("meta") {
                 li { +"Run: ${run.runId.value}" }
                 li { +"Hədəf: ${run.target}" }
@@ -489,6 +507,22 @@ class HtmlReportWriter : ReportWriter {
             summary { cursor: pointer; color: var(--muted); }
             footer { margin-top: 40px; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
             @media (max-width: 720px) { .abc { grid-template-columns: 1fr; } }
+            .actions { margin: 8px 0 10px; }
+            .actions a { display: inline-block; padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px;
+              background: var(--surface); text-decoration: none; font-size: .9rem; }
+            @media print {
+              :root {
+                color-scheme: light;
+                --bg: #ffffff; --surface: #ffffff; --sunken: #f0f0ec; --text: #1c1c1e; --muted: #55555c;
+                --border: #d8d8d2; --ok: #1a7f37; --ok-bg: #e5f3e9; --bad: #c0362c; --bad-bg: #fbe9e7;
+                --warn: #8a5a00; --warn-bg: #fdf1d6; --info: #0b5cad; --info-bg: #e6effa;
+              }
+              .wrap { max-width: none; padding: 0; }
+              .no-print { display: none; }
+              .scroll { overflow: visible; }
+              .finding, .tile, .source, tr, img { break-inside: avoid; }
+              h2, h3 { break-after: avoid; }
+            }
             """.trimIndent()
     }
 }

@@ -788,6 +788,14 @@ class DemoPanelBackend(
             reportRoot.resolve(runId.value).resolve("report").takeIf { Files.isDirectory(it) }
         }
 
+    /** The demo prints nothing: a small stand-in PDF beside the report, so the panel's link can be followed. */
+    override suspend fun reportPdf(runId: RunId): Path? =
+        reportDirectory(runId)?.let { directory ->
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                directory.resolve("report.pdf").also { if (!Files.exists(it)) Files.writeString(it, "%PDF-1.4 demo\n") }
+            }
+        }
+
     override suspend fun findings(runId: RunId): List<FindingView> = emptyList()
 
     override suspend fun teardown(runId: RunId): TeardownView =

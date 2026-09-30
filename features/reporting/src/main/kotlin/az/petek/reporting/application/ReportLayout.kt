@@ -22,6 +22,9 @@ import java.nio.file.Path
 object ReportLayout {
     const val DIRECTORY = "report"
 
+    /** The report as a PDF, printed on demand ([ExportReportPdfUseCase]); the HTML report links it by this name. */
+    const val PDF = "report.pdf"
+
     fun directory(
         artifacts: ArtifactStore,
         runId: RunId,

@@ -129,6 +129,8 @@ class CiReportWritersTest {
         html shouldNotContain "src=\"../a01/0001-screenshot.png\""
         html shouldContain "<li>AI: codex-cli · model-1</li>"
         html shouldContain "Sübut səviyyələri: Ekran / şəbəkə sübutu: 2"
+        // Sent around on its own: no PDF lies beside it.
+        html shouldNotContain "report.pdf"
     }
 
     @Test

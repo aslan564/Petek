@@ -15,8 +15,11 @@ import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
 import az.petek.dashboard.application.LiveDashboard
 import az.petek.dashboard.domain.PanelBackend
+import az.petek.dashboard.domain.PanelUnavailableException
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
+import io.ktor.http.ContentDisposition
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -39,7 +42,9 @@ import java.nio.file.Path
  * - `GET /report/...` — the shown run's report directory, and `GET /{owner}/{file}` for the report's relative evidence
  *   links (`../a07/0003-screenshot.png`), answered only with a recorded artifact of that path;
  * - `GET /runs/{runId}/report/...` — the report of any run the backend knows, and `GET /runs/{runId}/{owner}/{file}` for
- *   its evidence links, read from that run's evidence directory with the same checks as the report files.
+ *   its evidence links, read from that run's evidence directory with the same checks as the report files;
+ * - `GET /report/report.pdf` and `GET /runs/{runId}/report/report.pdf` — the report as a PDF, printed when asked for
+ *   ([PanelBackend.reportPdf]) and sent as a download.
  */
 internal fun Route.fileRoutes(
     dashboard: LiveDashboard,
@@ -54,6 +59,11 @@ internal fun Route.fileRoutes(
         call.respondArtifact(artifacts, record)
     }
     get("/report") { call.respondRedirect(DashboardJson.REPORT_URL) }
+    get("/report/$PDF_FILE") {
+        val runId = dashboard.currentRunId
+        if (runId == null || reportDirectory() == null) return@get call.notFound("Hesabat hələ hazır deyil.")
+        call.respondPdf(backend, runId)
+    }
     get("/report/{path...}") {
         val root = reportDirectory()
         if (root == null) return@get call.notFound("Hesabat hələ hazır deyil.")
@@ -68,6 +78,10 @@ internal fun Route.fileRoutes(
         call.respondArtifact(artifacts, record)
     }
     get("/runs/{runId}/report") { call.respondRedirect("/runs/${call.parameters["runId"]?.takeIf(PLAIN_ID::matches) ?: ""}/report/") }
+    get("/runs/{runId}/report/$PDF_FILE") {
+        val runId = call.historyRun() ?: return@get call.notFound()
+        call.respondPdf(backend, runId)
+    }
     get("/runs/{runId}/report/{path...}") {
         val root = call.historyRun()?.let { backend.reportDirectory(it) }
         if (root == null) return@get call.notFound("Bu run üçün hesabat yoxdur.")
@@ -101,6 +115,29 @@ private const val REPORT_POLICY =
     "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 private fun ApplicationCall.historyRun(): RunId? = parameters["runId"]?.takeIf(PLAIN_ID::matches)?.let(::RunId)
+
+/** The report printed as a PDF beside it (`report/report.pdf`), the name the HTML report links it by. */
+private const val PDF_FILE = "report.pdf"
+
+/** [runId]'s report as a PDF download, printed now when needed; why not, when it cannot be printed. */
+private suspend fun ApplicationCall.respondPdf(
+    backend: PanelBackend,
+    runId: RunId,
+) {
+    val pdf =
+        try {
+            backend.reportPdf(runId)
+        } catch (e: PanelUnavailableException) {
+            response.header(HttpHeaders.CacheControl, "no-store")
+            return respondText(e.message.orEmpty(), status = HttpStatusCode.ServiceUnavailable)
+        } ?: return notFound("Bu run üçün hesabat yoxdur.")
+    response.header(HttpHeaders.CacheControl, "no-cache")
+    response.header(
+        HttpHeaders.ContentDisposition,
+        ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, "petek-${runId.value}.pdf").toString(),
+    )
+    respond(LocalPathContent(pdf, ContentType.Application.Pdf))
+}
 
 private suspend fun ApplicationCall.respondReportFile(
     root: Path,

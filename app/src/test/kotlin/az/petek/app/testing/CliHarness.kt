@@ -19,6 +19,7 @@ import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
 import az.petek.browser.domain.BrowserEngine
+import az.petek.browser.domain.HtmlPdfPrinter
 import az.petek.capacity.domain.HostResourceProbe
 import az.petek.capacity.domain.HostResources
 import az.petek.core.sqlite.SqliteDatabase
@@ -62,6 +63,8 @@ class CliHarness(
     var explorerBrowser: BrowserEngine? = null,
     /** A roomy machine unless a test says otherwise: capacity advice never warns by accident. */
     var hostResources: HostResourceProbe = HostResourceProbe { HostResources(64L shl 30, 32L shl 30, 32) },
+    /** Prints a report "as a PDF" without Chromium: the file holds a PDF header and the page it was printed from. */
+    var pdfPrinter: HtmlPdfPrinter = HtmlPdfPrinter { html, pdf -> Files.writeString(pdf, "%PDF-fake " + html.fileName) },
 ) {
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
@@ -95,6 +98,7 @@ class CliHarness(
                             browser = browser,
                             reachability = reachability,
                             ownership = ownership,
+                            pdfPrinter = pdfPrinter,
                         ),
                     )
                 },
@@ -109,6 +113,7 @@ class CliHarness(
                             explorerBrowser = explorerBrowser,
                             reachability = reachability,
                             ownership = ownership,
+                            pdfPrinter = pdfPrinter,
                         ),
                     )
                 },

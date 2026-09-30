@@ -48,6 +48,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import kotlin.time.Duration
 
 /**
@@ -112,6 +113,10 @@ class NotesSiteTestEndToEndTest {
             // The testers wrote their notes on the site, each with the draft's own marker.
             site.allNotes.filter { "Pətək yoxlaması" in it.title }.shouldNotBeEmpty()
             Files.exists(Path.of(out.getValue("report").jsonPrimitive.content)) shouldBe true
+            // The report prints as a PDF with Chromium's own print (Faza 12); a copy goes to build/notes-test/.
+            val pdf = pdf(runId)
+            String(Files.readAllBytes(pdf), 0, PDF_MAGIC.length, Charsets.US_ASCII) shouldBe PDF_MAGIC
+            Files.copy(pdf, Files.createDirectories(Path.of("build/notes-test")).resolve("${runId.value}.pdf"), REPLACE_EXISTING)
         }
 
     @Test
@@ -191,6 +196,13 @@ class NotesSiteTestEndToEndTest {
         return out
     }
 
+    /** `petek --json report <run> --pdf`: the report printed as a PDF by the real printer. */
+    private suspend fun pdf(runId: RunId): Path {
+        val result = PetekCommand(runtime()).test(listOf("--json", "report", runId.value, "--pdf"), width = WIDE)
+        val json = Json.parseToJsonElement(result.stdout.substring(result.stdout.indexOf('{'))).jsonObject
+        return Path.of(json.getValue("pdf").jsonPrimitive.content)
+    }
+
     private suspend fun dump(out: JsonObject) {
         val folder = Files.createDirectories(Path.of("build/notes-test"))
         out["explorationId"]?.jsonPrimitive?.contentOrNull?.let { id ->
@@ -240,5 +252,6 @@ class NotesSiteTestEndToEndTest {
     private companion object {
         const val WIDE = 250
         const val TOKEN = "notes-test-token"
+        const val PDF_MAGIC = "%PDF-"
     }
 }

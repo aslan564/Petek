@@ -34,6 +34,7 @@ import az.petek.app.telemetry.LocalFileUsageSink
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.browser.infrastructure.PlaywrightBrowserEngine
+import az.petek.browser.infrastructure.PlaywrightPdfPrinter
 import az.petek.campaign.application.LoadCampaignUseCase
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.DefaultTemplateRenderer
@@ -111,6 +112,7 @@ import az.petek.ownership.infrastructure.InetHostLocality
 import az.petek.ownership.infrastructure.SqliteOwnershipLedger
 import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
+import az.petek.reporting.application.ExportReportPdfUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportWriter
@@ -409,6 +411,15 @@ class AppContainer(
                     CustomerSummaryWriter(english = config.language.value.startsWith("en", ignoreCase = true)),
                 ),
         )
+    }
+
+    /**
+     * The report as a PDF (Faza 12; the owner's decision of 2026-09-30), printed when asked for (the panel's
+     * "PDF yüklə", `petek report --pdf`) from the single-file `share.html` by Chromium's own print; no new library.
+     */
+    val reportPdf: ExportReportPdfUseCase by lazy {
+        val printer = overrides.pdfPrinter ?: PlaywrightPdfPrinter()
+        ExportReportPdfUseCase(artifacts, { html, pdf -> printer.print(html, pdf) }, SHARE_REPORT)
     }
 
     /** What the runner calls after each run: flush LLM usage, then judge and write the report. */

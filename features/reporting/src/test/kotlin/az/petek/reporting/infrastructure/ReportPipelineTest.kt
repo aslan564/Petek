@@ -34,8 +34,10 @@ import az.petek.reporting.ReportTestData.step
 import az.petek.reporting.ReportTestData.usage
 import az.petek.reporting.application.BuildReportUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
+import az.petek.reporting.application.ReportLayout
 import az.petek.reporting.domain.AgentDirectory
 import az.petek.reporting.domain.ThreeSourceJudge
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.paths.shouldExist
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -116,9 +118,9 @@ class ReportPipelineTest {
             md shouldContain "| Xərc | $0.0123 |"
             html shouldContain "Sahil Quliyev (a02)"
             html shouldContain "<img alt=\"screenshot 0002-screenshot.png\" src=\"../a02/0002-screenshot.png\""
-            // Every link in the report resolves to an evidence file next to it.
-            Regex("""(?:href|src)="([^"]+)"""").findAll(html).map { it.groupValues[1] }.toSet().forEach { link ->
-                directory.resolve(link).normalize().shouldExist()
-            }
+            // Every link in the report resolves to an evidence file next to it; only the PDF is printed when asked for.
+            val links = Regex("""(?:href|src)="([^"]+)"""").findAll(html).map { it.groupValues[1] }.toSet()
+            links shouldContain ReportLayout.PDF
+            (links - ReportLayout.PDF).forEach { link -> directory.resolve(link).normalize().shouldExist() }
         }
 }

@@ -120,6 +120,15 @@ class PanelHttpTest {
             history["scenarioId"]!!.jsonPrimitive.content shouldBe approved
             history["reportUrl"]!!.jsonPrimitive.content shouldBe "/runs/${runId.value}/report/"
             get("/runs/${runId.value}/report/").statusCode() shouldBe 200
+            // The report as a PDF: printed when asked for, from the single-file page, and sent as a download.
+            history["pdfUrl"]!!.jsonPrimitive.content shouldBe "/runs/${runId.value}/report/report.pdf"
+            get("/runs/${runId.value}/report/report.pdf").let {
+                it.statusCode() shouldBe 200
+                it.body() shouldBe "%PDF-fake share.html"
+                it.headers().firstValue("Content-Type").get() shouldBe "application/pdf"
+                it.headers().firstValue("Content-Disposition").get() shouldContain "petek-${runId.value}.pdf"
+            }
+            get("/runs/run_unknown/report/report.pdf").statusCode() shouldBe 404
             post("/api/runs", """{"scenarioId":"$approved","target":"portal.example"}""").statusCode() shouldBe 400
             post("/api/runs/cancel").body() shouldBe """{"cancelled":false}"""
         }

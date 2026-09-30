@@ -254,6 +254,18 @@ internal class PanelRunsAdapter(
                 .takeIf { it.resolve(REPORT_FILE).exists() }
         }
 
+    override suspend fun reportPdf(runId: RunId): Path? {
+        if (reportDirectory(runId) == null) return null
+        return try {
+            container.reportPdf.export(runId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.warn(e) { "The report of $runId could not be printed as a PDF" }
+            throw PanelUnavailableException("Hesabat PDF kimi çap edilə bilmədi: ${e.message ?: e::class.simpleName}")
+        }
+    }
+
     override suspend fun findings(runId: RunId): List<FindingView> {
         val findings = container.evidenceQuery.findings(runId)
         if (findings.isEmpty()) return emptyList()

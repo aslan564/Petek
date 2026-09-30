@@ -95,6 +95,8 @@ class UnavailablePanelBackend(
 
     override suspend fun reportDirectory(runId: RunId): Path? = null
 
+    override suspend fun reportPdf(runId: RunId): Path? = null
+
     override suspend fun findings(runId: RunId): List<FindingView> = emptyList()
 
     override suspend fun teardown(runId: RunId): TeardownView = unavailable()

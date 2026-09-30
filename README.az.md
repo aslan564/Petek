@@ -349,7 +349,10 @@ yad `Host`/`Origin` başlıqları rədd edilir.
 Hər run `evidence/<run>/report/`-a yazır: `index.html` və `report.md` (detal qatı: hər addım, sübutu, gecikmə, xərc),
 `summary.html` (müştəri qatı: qısa cümlələrlə bir səhifə, üç rəf — *saytda düzəldilməli*, *Pətək bacarmadı*, *bir insan
 baxmalıdır*), `share.html` (screenshot-lar içində tək fayl; AI provayderi, model və sübut səviyyələri ilə, göndərmək
-üçün), `junit.xml` (addımlar test kimi) və `findings.sarif` (tapıntılar code scanning üçün). `petek run --ci` JUnit və
+üçün), `junit.xml` (addımlar test kimi) və `findings.sarif` (tapıntılar code scanning üçün). Hesabatın PDF-i
+(`report.pdf`) istədiyiniz anda testerlərin işlətdiyi eyni Chromium ilə çap olunur (əlavə kitabxana yoxdur): panelin
+Hesabatlar ekranında **PDF** və ya `index.html`-də **PDF yüklə** (panel onu həmin anda çap edir; diskdən açılan
+hesabatda isə `petek report <run|latest> --pdf` çap etdikdən sonra açılır). `petek run --ci` JUnit və
 SARIF yollarını çap edir, Markdown hesabatı GitHub job summary-yə əlavə edir; şablonlar: `docs/ci/github-actions.yml`,
 `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (və MCP `get_finding_bundle`) kodlaşdıran AI-nıza hər
 tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu ilə verir ki, səbəbi kodunuzda axtarsın.

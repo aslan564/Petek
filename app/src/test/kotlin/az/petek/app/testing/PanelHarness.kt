@@ -107,6 +107,8 @@ internal class PanelHarness(
                             explorerBrowser = site,
                             reachability = reachability,
                             ownership = ownership,
+                            // No Chromium in the panel's tests: the "PDF" holds a PDF header and the page it came from.
+                            pdfPrinter = { html, pdf -> Files.writeString(pdf, "%PDF-fake " + html.fileName) },
                         ),
                     ),
                 )

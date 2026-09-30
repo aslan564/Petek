@@ -352,7 +352,9 @@ Every run writes into `evidence/<run>/report/`: `index.html` and `report.md` (th
 latency, cost), `summary.html` (the customer layer: one page of short sentences on three shelves, *to fix on the site*,
 *Pətək could not do it*, *a person should look*), `share.html` (one file with the screenshots inside, the AI provider and
 model, and the evidence tiers, to send around), `junit.xml` (steps as test cases) and `findings.sarif` (findings for code
-scanning). `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
+scanning). The report as a PDF (`report.pdf`) is printed when you ask for it, by the same Chromium the testers use (no
+extra library): **PDF** on the panel's Reports screen or **PDF yüklə** in `index.html` (the panel prints it on the spot;
+a report opened from the disk has it once `petek report <run|latest> --pdf` printed it). `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
 templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (and MCP
 `get_finding_bundle`) gives your coding AI each finding with its step, request and response, oracle answer and screenshot
 path, so it can look for the cause in your code.

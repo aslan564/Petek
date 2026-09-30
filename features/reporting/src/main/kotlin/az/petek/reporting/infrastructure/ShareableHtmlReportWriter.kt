@@ -42,7 +42,8 @@ class ShareableHtmlReportWriter(
         model: ReportModel,
         directory: Path,
     ): String {
-        val page = base.render(model)
+        // Sent around on its own, so it offers no PDF beside it.
+        val page = base.render(model, pdfLink = false)
         val withImages =
             IMAGE.replace(page) { match ->
                 val link = match.groupValues[2]

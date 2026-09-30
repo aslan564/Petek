@@ -193,6 +193,17 @@ fun interface ReportStore {
     }
 }
 
+/**
+ * Prints a report's self-contained HTML page ([html], every screenshot inside it) to a PDF file ([pdf]); the app gives
+ * the browser's own print (the owner's decision of 2026-09-30).
+ */
+fun interface ReportPdfPrinter {
+    suspend fun print(
+        html: Path,
+        pdf: Path,
+    )
+}
+
 /** Writes one report format into [directory] and returns the written file. */
 interface ReportWriter {
     val fileName: String

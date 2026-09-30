@@ -870,8 +870,15 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
 - [x] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar); hesabat başlığında hədəf, provayder, model,
   sübut səviyyələri.
   **Vəziyyət:** `report/share.html` (screenshot-lar `data:` ilə içində, AI provayderi/model, sübut səviyyələri).
-- [ ] PDF ixracı: **sahibin qərarı (2026-09-30): bəli** ("Qərar gözləyən suallar"); o vaxta qədər brauzerdən
-  "Print → PDF" işləyir.
+- [x] PDF ixracı: **sahibin qərarı (2026-09-30): bəli** ("Qərar gözləyən suallar").
+  **Vəziyyət:** `report/report.pdf` istəniləndə çap olunur (hər run-da yox): panelin Hesabatlar ekranında **PDF**
+  düyməsi, `index.html`-in başlığında **PDF yüklə** keçidi (panel onu həmin anda çap edib yükləmə kimi verir) və
+  `petek report <run> --pdf`. `ExportReportPdfUseCase` `share.html`-i (screenshot-lar içində) `ReportPdfPrinter` ilə
+  çap edir, səhifə dəyişməyibsə yenidən çap etmir; `PlaywrightPdfPrinter` (browser) Chromium-un öz çapıdır: öz
+  Playwright-ı və thread-i (qayda 9), oflayn (sənədin hər sorğusu rədd olunur), bükülü bölmələr açıq, A4, açıq rəng
+  sxemi. `ExportReportPdfUseCaseTest`, `PlaywrightPdfPrinterTest` (real Chromium, hədəfə sorğu getmir),
+  `ReportCommandTest`, `PanelHttpTest`, `NotesSiteTestEndToEndTest` (real run-ın hesabatı PDF olur,
+  `build/notes-test/`-də nüsxəsi).
 - [x] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
 
 Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; iki fərqli kod agenti
@@ -987,6 +994,10 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
   `ImapCodesEndToEndTest` (Faza 16-nın "hazır sayılır"ı, aşağıda).
 - [x] **PDF ixracı (Faza 12):** paylaşılan hesabatın PDF-i üçün OpenPDF (yeni kitabxana, qayda 11)? İndi brauzerin
   "Print → PDF"-i işləyir. Tövsiyə: hələlik lazım deyil. **Qərar (sahib, 2026-09-30):** bəli, PDF ixracı olsun.
+  *Vəziyyət:* PDF ixracı var (Faza 12), amma OpenPDF-siz: Pətəkin artıq işlətdiyi Chromium-un öz çapı ilə
+  (`PlaywrightPdfPrinter`). Səbəb: OpenPDF HTML-i göstərmir, hesabatı yenidən düzmək lazım olardı, standart şriftində
+  "ə" hərfi yoxdur (şrift faylı paketlənməli idi); Chromium isə HTML hesabatı olduğu kimi, screenshot-lar və
+  Azərbaycan hərfləri ilə çap edir. Yeni kitabxana əlavə olunmadı.
 - [x] **İki qalibli yarışın sinfi (Faza 24):** `only_one_succeeds` iki qalib gördükdə (saytın öz cavabları: iki 2xx)
   tapıntı `INVESTIGATE` ("bir insan baxmalıdır") olur, ARCHITECTURE isə bunu "sayt səhv qərar verdi" adlandırır.
   `SITE_CHECK` (saytın qüsuru) edilsinmi? Hamısının rədd edildiyi hal ssenari səhvi də ola bildiyi üçün

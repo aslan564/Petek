@@ -488,6 +488,17 @@ data class BrowserEngineConfig(
     }
 }
 
+/**
+ * Prints a self-contained HTML document ([html]: every image inside it) to a PDF file ([pdf]) with the browser's own
+ * print, offline: nothing the document names is fetched.
+ */
+fun interface HtmlPdfPrinter {
+    suspend fun print(
+        html: Path,
+        pdf: Path,
+    )
+}
+
 /** Owns the browser process(es). [start] returns the factory agents use to open their sessions. */
 interface BrowserEngine {
     suspend fun start(config: BrowserEngineConfig): BrowserSessionFactory

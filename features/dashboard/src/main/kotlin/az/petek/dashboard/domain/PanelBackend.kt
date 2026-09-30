@@ -179,6 +179,12 @@ interface PanelRuns {
     suspend fun reportDirectory(runId: RunId): Path?
 
     /**
+     * A run's report as a PDF (`report.pdf`, printed now when missing or older than the report; the owner's decision of
+     * 2026-09-30); null when the run has no written report. [PanelUnavailableException] when it cannot be printed.
+     */
+    suspend fun reportPdf(runId: RunId): Path?
+
+    /**
      * The judged findings of a run with their three sources and evidence artifacts (which [PanelExplorer.explorationArtifact]
      * then resolves); empty for a run without findings or an unknown run.
      */

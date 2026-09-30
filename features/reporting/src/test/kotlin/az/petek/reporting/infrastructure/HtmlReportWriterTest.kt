@@ -61,6 +61,16 @@ class HtmlReportWriterTest {
     }
 
     @Test
+    fun `the header offers the report as a PDF beside it, and the page prints on light paper without it`() {
+        val html = writer.render(SampleReport.model())
+
+        html shouldContain "<p class=\"actions no-print\"><a href=\"report.pdf\" download=\"petek-run_test.pdf\">PDF yüklə</a></p>"
+        html shouldContain "@media print"
+        html shouldContain ".no-print { display: none; }"
+        writer.render(SampleReport.model(), pdfLink = false) shouldNotContain "report.pdf"
+    }
+
+    @Test
     fun `every section has its Azerbaijani title`() {
         val headings = Regex("<h2>(.*?)</h2>").findAll(writer.render(SampleReport.model())).map { it.groupValues[1] }.toList()
 

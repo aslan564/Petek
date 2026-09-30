@@ -55,6 +55,25 @@ class ReportCommandTest {
         }
 
     @Test
+    fun `with --pdf the report is also printed as a PDF beside it, from the single-file page`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            val runId = finishedRun(cli)
+            val pdf =
+                cli.evidenceDir
+                    .resolve(runId)
+                    .resolve("report")
+                    .resolve("report.pdf")
+
+            val result = cli.run("report", runId, "--pdf")
+
+            result.statusCode shouldBe 0
+            result.stdout shouldContain "PDF: $pdf"
+            Files.readString(pdf) shouldBe "%PDF-fake share.html"
+            cli.run("--json", "report", runId, "--pdf").stdout shouldContain "\"pdf\":\"${pdf.toAbsolutePath()}\""
+        }
+
+    @Test
     fun `latest picks the most recent run`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)

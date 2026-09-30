@@ -41,6 +41,7 @@
         td('Token / xərc', h('div', { class: 'num nowrap', text: fmt.tokens(r.inputTokens + r.outputTokens) + ' token' }), h('div', { class: 'run-sub', text: r.costUsd === null ? 'plan daxilində' : fmt.usd(r.costUsd) })),
         td('', h('div', 'row-actions',
           r.reportUrl ? h('a', { class: 'btn small', title: 'HTML hesabatı aç', attrs: { href: r.reportUrl, target: '_blank', rel: 'noopener', 'aria-label': 'Hesabatı aç' } }, P.icon('file', 'sm'), h('span', { text: 'Hesabat' })) : null,
+          r.pdfUrl ? h('a', { class: 'btn small', title: 'Hesabatı PDF kimi yüklə', attrs: { href: r.pdfUrl, download: '', 'aria-label': 'PDF yüklə' } }, P.icon('download', 'sm'), h('span', { text: 'PDF' })) : null,
           r.result !== 'RUNNING'
             ? h('button', { class: 'btn small' + (r.triaged ? '' : ' ghost'), title: r.triaged ? 'Triaja bax' : 'Triaj et', attrs: { type: 'button', 'aria-label': r.triaged ? 'Triaja bax' : 'Triaj et' }, on: { click: () => P.go('ssenariler', { run: r.runId }) } }, P.icon('flag', 'sm'))
             : null))))))));
