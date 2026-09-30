@@ -864,8 +864,8 @@ Məqsəd: BMAD kimi bir əmrlə hər layihəyə qoşulsun; layihə qalxanda Pət
 - [x] Paylaşıla bilən hesabat: tək fayl HTML (inline screenshot-lar); hesabat başlığında hədəf, provayder, model,
   sübut səviyyələri.
   **Vəziyyət:** `report/share.html` (screenshot-lar `data:` ilə içində, AI provayderi/model, sübut səviyyələri).
-- [ ] PDF ixracı: yeni kitabxana (məs. OpenPDF) tələb edir — **sahib qərarı** (qayda 11, "Qərar gözləyən suallar");
-  o vaxta qədər brauzerdən "Print → PDF" işləyir.
+- [ ] PDF ixracı: **sahibin qərarı (2026-09-30): bəli** ("Qərar gözləyən suallar"); o vaxta qədər brauzerdən
+  "Print → PDF" işləyir.
 - [x] README (ingiliscə + Azərbaycanca): 5 dəqiqədə quraşdırma; `docs/` sənədləri yenilənir.
 
 Hazır sayılır: boş bir Node/Spring layihəsində `npx petek init && npx petek dev` paneli açır; iki fərqli kod agenti
@@ -966,22 +966,24 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
   Kotlin 2.4/JDK 25 ilə uyğundursa; deyilsə nazik implementasiya. **Qərar:** SDK-sız nazik JSON-RPC (Faza 11, R10).
 - [x] **IMAP kitabxanası:** Jakarta Mail (Angus) və ya Ktor üzərində minimal IMAP? Tövsiyə: Jakarta Mail (Angus).
   **Qərar (sahib, 2026-09-26):** Jakarta Mail (Angus).
-- [ ] **Sürü beyni üçün minimum:** OpenAI-uyğun + generic CLI kifayətdirmi, yoxsa Gemini/OpenAI native SDK-ları da?
-  Tövsiyə: hələlik kifayətdir.
+- [x] **Sürü beyni üçün minimum:** OpenAI-uyğun + generic CLI kifayətdirmi, yoxsa Gemini/OpenAI native SDK-ları da?
+  Tövsiyə: hələlik kifayətdir. **Qərar (sahib, 2026-09-30):** hələlik kifayətdir; native SDK əlavə olunmur.
 - [x] **Rol adları:** skill fayllarında ingiliscə, UI-da Azərbaycanca? Tövsiyə: bəli. **Belə qurulub:** `SKILL.md`
   rolları ingiliscədir (explorer, scenario author, judge, root-cause), panel rolları sahibin dilində göstərir
   (`P.roleLabel`).
 - [x] **Ödənişli modulların yeri:** eyni repoda ayrı Gradle modulu (`premium/`) və ya ayrı repo? Tövsiyə: ayrı repo,
   nüvədə yalnız portlar. **Qərar:** ayrı repo (ADR-0011); Konsist qaydası nüvənin onları import etməsini qadağan edir.
-- [ ] **Poçt serverinin e2e testi (Faza 16):** IMAP yolunu real serverlə yoxlamaq üçün GreenMail (test asılılığı, yeni
+- [x] **Poçt serverinin e2e testi (Faza 16):** IMAP yolunu real serverlə yoxlamaq üçün GreenMail (test asılılığı, yeni
   kitabxana, qayda 11)? İndi IMAP saxta gateway ilə test olunur. Tövsiyə: bəli, yalnız test asılılığı kimi.
-- [ ] **PDF ixracı (Faza 12):** paylaşılan hesabatın PDF-i üçün OpenPDF (yeni kitabxana, qayda 11)? İndi brauzerin
-  "Print → PDF"-i işləyir. Tövsiyə: hələlik lazım deyil.
-- [ ] **İki qalibli yarışın sinfi (Faza 24):** `only_one_succeeds` iki qalib gördükdə (saytın öz cavabları: iki 2xx)
+  **Qərar (sahib, 2026-09-30):** bəli, yalnız test asılılığı kimi.
+- [x] **PDF ixracı (Faza 12):** paylaşılan hesabatın PDF-i üçün OpenPDF (yeni kitabxana, qayda 11)? İndi brauzerin
+  "Print → PDF"-i işləyir. Tövsiyə: hələlik lazım deyil. **Qərar (sahib, 2026-09-30):** bəli, PDF ixracı olsun.
+- [x] **İki qalibli yarışın sinfi (Faza 24):** `only_one_succeeds` iki qalib gördükdə (saytın öz cavabları: iki 2xx)
   tapıntı `INVESTIGATE` ("bir insan baxmalıdır") olur, ARCHITECTURE isə bunu "sayt səhv qərar verdi" adlandırır.
   `SITE_CHECK` (saytın qüsuru) edilsinmi? Hamısının rədd edildiyi hal ssenari səhvi də ola bildiyi üçün
   `INVESTIGATE` qalır. Tövsiyə: bəli (hakimin qayda müqaviləsi dəyişir, ona görə sahibin qərarıdır).
-- [ ] **Şirkəti olmayan saytda sınaq toxunuşu (Faza 25, 2026-09-30 tapıldı):** kəşfiyyatçının sınaq toxunuşu (hər
+  **Qərar (sahib, 2026-09-30):** bəli, iki qalib saytın xətasıdır.
+- [x] **Şirkəti olmayan saytda sınaq toxunuşu (Faza 25, 2026-09-30 tapıldı):** kəşfiyyatçının sınaq toxunuşu (hər
   yaratma formunu bir dəfə göndərmək) yalnız test API-nin `is_test` təsdiqlədiyi test şirkətində yazır (qayda 8). Şirkəti
   olmayan saytda (qeydlər, bloq) kəşfiyyatçı özü qeydiyyatdan keçsə də, onun hesabı "test datası" kimi təsdiqlənə
   bilmir, ona görə toxunuş olmur: draft test API-nin nəyi xidmət etdiyini sübut edə bilmir (oracle yoxlaması yazılmır)
@@ -989,7 +991,8 @@ hesabat yazır; təmiz sayt PASSED, ölü linkli sayt draftın yoxlamaları ilə
   ssenarisində, məs. `TenantlessEndToEndTest`, tapılır). Təklif: şirkəti olmayan, sahibliyi təsdiqlənmiş saytda
   kəşfiyyatın özünün bu kəşfiyyatda yaratdığı hesabı test datası sayılsın (toxunuş yalnız o hesabın adından, Pətək
   işarəli mətnlə), test API varsa obyektin həmin hesaba aid olduğu da soruşulsun. Təhlükəsizlik qaydasıdır, ona görə
-  sahibin qərarıdır.
+  sahibin qərarıdır. **Qərar (sahib, 2026-09-30):** bəli, məhdud: yalnız sahibliyi təsdiqlənmiş (və ya lokal) saytda,
+  yalnız kəşfiyyatçının bu kəşfiyyatda özü açdığı hesabdan, Pətək işarəli mətnlə.
 
 ## Pətək 3: yalnız link ilə sürü (2026-09-26)
 
@@ -1531,15 +1534,16 @@ olanlar aşağıdakı suallardadır.
 
 Açıq sahib qərarları (tərs oxudan):
 
-- [ ] **Mübarizəsiz yarış:** qərar verən sorğunu yalnız bir yarışan göndəribsə (o biri obyekti qərarlaşdırılmış görüb
+- [x] **Mübarizəsiz yarış:** qərar verən sorğunu yalnız bir yarışan göndəribsə (o biri obyekti qərarlaşdırılmış görüb
   sorğusuz cavab veribsə) yarış INCONCLUSIVE olsunmu ("yarış sınanmadı")? Tövsiyə: bəli; `parallel: true` onsuz da
-  eyni anda başladır, bu halda saytın eyni anda iki qərarı sınanmayıb.
-- [ ] **Qərarsız run-ın çıxış kodu:** heç bir yoxlama FAILED deyil, amma INCONCLUSIVE var — CI ayırsın deyə çıxış kodu
+  eyni anda başladır, bu halda saytın eyni anda iki qərarı sınanmayıb. **Qərar (sahib, 2026-09-30):** bəli.
+- [x] **Qərarsız run-ın çıxış kodu:** heç bir yoxlama FAILED deyil, amma INCONCLUSIVE var — CI ayırsın deyə çıxış kodu
   3 olsunmu (0 keçdi, 1 saytın xətası, 2 başlamadı)? Tövsiyə: bəli; CI şablonları və README yenilənir.
-- [ ] **Proseslər arası run kilidi:** evidence qovluğunda fayl kilidi ilə panel, MCP və CLI eyni anda iki run açmasın?
-  Tövsiyə: bəli.
-- [ ] **Örtük hesabatda:** kəşfiyyatçının görmədiyi rollar və buraxılan ideyalar run hesabatının xülasəsinə yazılsın?
-  Tövsiyə: bəli.
+  **Qərar (sahib, 2026-09-30):** bəli.
+- [x] **Proseslər arası run kilidi:** evidence qovluğunda fayl kilidi ilə panel, MCP və CLI eyni anda iki run açmasın?
+  Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli.
+- [x] **Örtük hesabatda:** kəşfiyyatçının görmədiyi rollar və buraxılan ideyalar run hesabatının xülasəsinə yazılsın?
+  Tövsiyə: bəli. **Qərar (sahib, 2026-09-30):** bəli.
 
 ### Faza 25 — Ssenari kəşfiyyatdan doğulur (sahibin qərarı, 2026-09-28)
 
@@ -1705,9 +1709,10 @@ Bir `do` addımı accessibility tree ilə təxminən 3–5 min token, `run` add�
 
 **Real saytlar üçün açıq sual**
 
-- [ ] `http_status` yoxlaması agentin cookie-ləri ilə hədəf origin-ə gedir; access token-i JS-də saxlayıb `Authorization`
+- [x] `http_status` yoxlaması agentin cookie-ləri ilə hədəf origin-ə gedir; access token-i JS-də saxlayıb `Authorization`
   başlığı ilə ayrı API hostuna göndərən saytda bu yoxlama 401 görə bilər. Həll: test rejimində API-nin eyni origin-dən
-  cookie ilə açılması, ya da Pətəkin sessiyanın token-ini istifadə etməyi öyrənməsi.
+  cookie ilə açılması, ya da Pətəkin sessiyanın token-ini istifadə etməyi öyrənməsi. **Qərar (sahib, 2026-09-30):**
+  Pətək sessiyanın token-ini istifadə etməyi öyrənsin (sirr kimi: loga, hesabata və AI-a düşmür).
 
 **Sahibin əlavə qərarları (2026-09-25)**
 
