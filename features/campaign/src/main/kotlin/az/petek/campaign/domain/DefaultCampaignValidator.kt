@@ -27,7 +27,8 @@ import kotlin.time.Duration
  *   non-empty, unique and addressable by the actor grammar, names are unique, the budget is positive, the target is
  *   an absolute http(s) URL without credentials (messages mask them);
  * - actors: named departments exist and every expression can match at least one tester under the quotas (a manager
- *   is never a company-code joiner, and employees get the invitations left after the managers);
+ *   is never a company-code joiner, employees get the invitations left after the managers, and a department holds
+ *   only the testers the registry deals to it in turn, [DepartmentDealing]);
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
@@ -440,7 +441,11 @@ class DefaultCampaignValidator(
                     )
                 }
                 if (unknown.isEmpty() && maxMatches(expression) == 0) {
-                    report("actor", "$name: actor '${expression.raw}' can never match a tester with the campaign's role quotas")
+                    report(
+                        "actor",
+                        "$name: actor '${expression.raw}' can never match a tester with the campaign's role quotas" +
+                            dealingHint(expression),
+                    )
                 }
             }
 
@@ -758,19 +763,41 @@ class DefaultCampaignValidator(
 
         private fun maxSelectorMatches(selector: ActorSelector): Int {
             val role = selector.role
-            if (selector.department != null && (role == Role.ADMIN || selector.department !in settings.departments)) return 0
-            if (settings.tenant == Tenant.NONE) {
-                val bound =
-                    minOf(
-                        settings.roles.count(role).coerceAtLeast(0),
-                        selector.registration?.let(settings.registration::count) ?: Int.MAX_VALUE,
-                    )
-                return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
+            var bound = inDepartment(selector) ?: return 0
+            selector.registration?.let { mode ->
+                val joiners = if (settings.tenant == Tenant.NONE) settings.registration.count(mode) else joinersOf(role, mode)
+                bound = minOf(bound, joiners.coerceAtLeast(0))
             }
-            var bound = settings.roles.count(role).coerceAtLeast(0)
-            selector.registration?.let { mode -> bound = minOf(bound, joinersOf(role, mode)) }
             return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
         }
+
+        /**
+         * Testers of the selector's role in its department as the registry deals them ([DepartmentDealing]), all of the
+         * role without a department; null for a department the campaign does not list.
+         */
+        private fun inDepartment(selector: ActorSelector): Int? {
+            val department = selector.department ?: return settings.roles.count(selector.role).coerceAtLeast(0)
+            if (department !in settings.departments) return null
+            return DepartmentDealing.testers(settings, selector.role, department)
+        }
+
+        /**
+         * Why an expression that can never match does so when one of its selectors names a department the registry
+         * deals too few of the role to, although the role alone has enough: ` (the testers are dealt ...)`; else empty.
+         */
+        private fun dealingHint(expression: ActorExpression): String =
+            expression.selectors
+                .distinct()
+                .mapNotNull { selector ->
+                    val department = selector.department ?: return@mapNotNull null
+                    val dealt = DepartmentDealing.testers(settings, selector.role, department)
+                    val needed = selector.nth ?: 1
+                    val total = settings.roles.count(selector.role)
+                    if (dealt >= needed || total < needed) return@mapNotNull null
+                    "department '$department' gets $dealt of the $total '${selector.role.key}' testers"
+                }.takeIf { it.isNotEmpty() }
+                ?.joinToString("; ", prefix = " (the testers are dealt to the departments in turn, so ", postfix = ")")
+                .orEmpty()
 
         /**
          * Upper bound of testers of [role] joining by [mode]: the admin owns the company, managers are always invited

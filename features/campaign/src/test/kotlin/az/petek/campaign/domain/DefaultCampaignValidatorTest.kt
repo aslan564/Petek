@@ -15,6 +15,7 @@ import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.campaign
 import az.petek.campaign.testing.settings
 import az.petek.campaign.testing.step
+import az.petek.core.model.Role
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -438,6 +439,46 @@ class DefaultCampaignValidatorTest {
             val noManagers = settings(roles = RoleQuota(1, 0, 9))
             issue(campaign(step("s", actor = "manager"), settings = noManagers), "can never match a tester")
             issues(campaign(step("s", actor = "manager | employee"), settings = noManagers)).shouldBeEmpty()
+        }
+
+        @Test
+        fun `a department holds only the testers the registry deals to it in turn`() {
+            // Three managers over five departments sit in IT, HR and Satış; the six employees continue the rotation at
+            // Maliyyə: Maliyyə, Əməliyyat, IT, HR, Satış, Maliyyə.
+            val five = settings(departments = listOf("IT", "HR", "Satış", "Maliyyə", "Əməliyyat"))
+            issues(campaign(step("s", actor = "manager[Satış]"), settings = five)).shouldBeEmpty()
+            val finance = issue(campaign(step("s", actor = "manager[Maliyyə]", line = 9), settings = five), "can never match a tester")
+            finance.line shouldBe 9
+            finance.message shouldContain
+                "(the testers are dealt to the departments in turn, so department 'Maliyyə' gets 0 of the 3 'manager' testers)"
+            issues(campaign(step("s", actor = "employee[dept=Maliyyə, n=2]"), settings = five)).shouldBeEmpty()
+            issue(campaign(step("s", actor = "employee[dept=Maliyyə, n=3]"), settings = five), "can never match a tester")
+                .message shouldContain "department 'Maliyyə' gets 2 of the 6 'employee' testers"
+            issues(campaign(step("s", actor = "manager[Maliyyə] | manager[IT]"), settings = five)).shouldBeEmpty()
+            // Over IT and HR the three managers are IT, HR, IT.
+            issues(campaign(step("s", actor = "manager[dept=IT, n=2]"))).shouldBeEmpty()
+            issue(campaign(step("s", actor = "manager[dept=HR, n=2]")), "department 'HR' gets 1 of the 3 'manager' testers")
+        }
+
+        @Test
+        fun `without companies every tester is dealt a department in turn, role after role`() {
+            val editor = checkNotNull(Role.fromKey("editor"))
+            val reader = checkNotNull(Role.fromKey("reader"))
+            val site =
+                settings(
+                    testers = 5,
+                    roles = RoleQuota.of(linkedMapOf(editor to 2, reader to 3)),
+                    registration = RegistrationQuota.selfSignUp(5),
+                    departments = listOf("A", "B"),
+                ).copy(tenant = Tenant.NONE)
+
+            fun on(actor: String) = campaign(step("s", actor = actor), settings = site)
+
+            // a01 editor A, a02 editor B, a03 reader A, a04 reader B, a05 reader A.
+            issues(on("editor[B]")).shouldBeEmpty()
+            issue(on("editor[dept=B, n=2]"), "department 'B' gets 1 of the 2 'editor' testers")
+            issues(on("reader[dept=A, n=2]")).shouldBeEmpty()
+            issue(on("reader[dept=B, n=2]"), "department 'B' gets 1 of the 3 'reader' testers")
         }
     }
 

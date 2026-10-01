@@ -415,7 +415,7 @@ class RunCommandTest {
         }
 
     @Test
-    fun `--testers warns about steps nobody can run anymore`() =
+    fun `--testers that deals no tester to a step's department is refused, naming the step`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write(
@@ -441,8 +441,11 @@ class RunCommandTest {
 
             val result = cli.run("run", "depts.yaml", "--testers", "3")
 
-            result.statusCode shouldBe 0
-            result.stderr shouldContain "Warning: with --testers 3 no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
+            // Two employees are dealt to IT and HR in turn: HR has one, so the step would have nobody.
+            result.statusCode shouldBe 2
+            result.stderr shouldContain "step 'hr_second': actor 'employee[dept=HR, n=2]' can never match a tester"
+            result.stderr shouldContain "department 'HR' gets 1 of the 2 'employee' testers"
+            result.stderr shouldContain "--testers 3 does not fit this campaign"
         }
 
     @Test
