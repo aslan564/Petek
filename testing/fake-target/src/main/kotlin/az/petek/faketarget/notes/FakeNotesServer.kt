@@ -45,14 +45,19 @@ import kotlinx.html.label
 import kotlinx.html.li
 import kotlinx.html.meta
 import kotlinx.html.p
+import kotlinx.html.script
 import kotlinx.html.span
 import kotlinx.html.textArea
 import kotlinx.html.title
 import kotlinx.html.ul
+import kotlinx.html.unsafe
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.net.URI
 import java.security.SecureRandom
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.HexFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -66,6 +71,12 @@ enum class NotesBug {
 
     /** The welcome page links to a help page that does not exist (a dead link every visitor meets). */
     DEAD_LINK,
+
+    /**
+     * The welcome page's sign-up link turns into a tall block 40 px lower: a defect only the page's look shows (the
+     * link still works), for comparing releases by their looks (docs/adr/0014).
+     */
+    SHIFTED_SIGN_UP,
 }
 
 /**
@@ -78,12 +89,18 @@ enum class NotesBug {
  * exploration to its report (Faza 25): then `GET /test/notes/latest?by=<e-mail>` and `GET /test/notes/{id}` answer
  * with the note as JSON for the `X-Test-Token` header, and nothing else of the contract's test API exists. Loopback
  * only, state in memory.
+ *
+ * With [liveClock] the welcome page shows what changes by itself on a real site: a clock ticking every 200 ms and
+ * today's date. [deploy] swaps the defects while the site keeps running, as a new release on the same address.
  */
 class FakeNotesServer(
-    private val bugs: Set<NotesBug> = emptySet(),
+    bugs: Set<NotesBug> = emptySet(),
     /** The test API's token; null: the site has no test API. */
     private val testToken: String? = null,
+    private val liveClock: Boolean = false,
 ) : AutoCloseable {
+    @Volatile
+    private var bugs: Set<NotesBug> = bugs
     private val random = SecureRandom()
     private val users = ConcurrentHashMap<String, User>()
     private val sessions = ConcurrentHashMap<String, String>()
@@ -148,6 +165,12 @@ class FakeNotesServer(
         baseUrl = URI("http://$HOST:$bound")
         logger.info { "Fake notes site on $baseUrl (bugs: $bugs)" }
         return this
+    }
+
+    /** A new release of the site on the same address: from now on it has [bugs], and its accounts and notes stay. */
+    fun deploy(bugs: Set<NotesBug>) {
+        this.bugs = bugs
+        logger.info { "Fake notes site deployed again (bugs: $bugs)" }
     }
 
     override fun close() {
@@ -327,7 +350,33 @@ class FakeNotesServer(
         page("Xoş gəldiniz", null) {
             h1 { +"Qeydlər" }
             p { +"Qeydlərinizi bir yerdə saxlayın." }
-            a(href = "/register") { +"Qeydiyyat" }
+            if (liveClock) {
+                p {
+                    attributes["data-testid"] = "welcome-today"
+                    +"Bu gün: ${LocalDate.now().format(DAY)}"
+                }
+                p {
+                    attributes["data-testid"] = "welcome-clock"
+                    +LocalTime.now().format(TIME)
+                }
+                script {
+                    unsafe {
+                        raw(
+                            "setInterval(function(){var d=new Date(),p=function(n){return String(n).padStart(2,'0')};" +
+                                "document.querySelector('[data-testid=welcome-clock]').textContent=" +
+                                "p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())},200);",
+                        )
+                    }
+                }
+            }
+            a(href = "/register") {
+                if (NotesBug.SHIFTED_SIGN_UP in bugs) {
+                    attributes["style"] =
+                        "display:block;width:240px;height:48px;line-height:48px;margin-top:40px;text-align:center;" +
+                        "background:#1f6feb;color:#fff;border-radius:8px"
+                }
+                +"Qeydiyyat"
+            }
             +" · "
             a(href = "/login") { +"Daxil ol" }
             if (NotesBug.DEAD_LINK in bugs) {
@@ -426,6 +475,8 @@ class FakeNotesServer(
         const val MIN_PASSWORD = 8
         const val GRACE_MILLIS = 100L
         const val TIMEOUT_MILLIS = 2_000L
+        val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
         val EMAIL = Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")
     }
 }
