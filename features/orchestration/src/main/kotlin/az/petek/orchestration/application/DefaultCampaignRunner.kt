@@ -41,6 +41,7 @@ import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
@@ -786,8 +787,16 @@ class DefaultCampaignRunner(
         run.abortedBecause?.let { reason ->
             safely(run, "abort record") { recordAbort(run, reason, board) }
         }
-        safely(run, "roll call") { rollCall.call(run) }
-        safely(run, "steps nobody ran") { recordUncovered(run, board) }
+        var called = false
+        safely(run, "roll call") {
+            rollCall.call(run)
+            called = true
+        }
+        safely(run, "steps nobody ran") {
+            recordUncovered(run, board)
+            // Only a roll call written in full is closed: a report never reads "nobody is missing" from records not written.
+            if (called) evidence.system(run, null, ROLL_CALL_ACTION, StepStatus.PASSED, "done")
+        }
         tasks.closeOpen(run.abortedBecause?.let { "run aborted: $it" } ?: "not run")
         safely(run, "network observation") { recordNetworkObservations(run) }
         safely(run, "company registration") {

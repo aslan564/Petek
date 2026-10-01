@@ -22,6 +22,7 @@ import az.petek.core.model.Role
 import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
@@ -83,6 +84,8 @@ class RunnerRollCallTest {
                 .first()
                 .action shouldBe ROSTER_ACTION
             f.rollCall().shouldBeEmpty()
+            // ...and the roll call is closed, so a report can say nobody is missing.
+            f.system(ROLL_CALL_ACTION).single().detail shouldBe "done"
             summary.outcome shouldBe RunOutcome.PASSED
         }
 

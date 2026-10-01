@@ -16,18 +16,24 @@ import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.CorrelationId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.StepId
+import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceSource.HARNESS
 import az.petek.evidence.domain.EvidenceSource.ORACLE
 import az.petek.evidence.domain.EvidenceSource.RECEIVER
 import az.petek.evidence.domain.EvidenceSource.SENDER
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.NOT_REACHED_ACTION
 import az.petek.evidence.domain.PageTimingRecord
+import az.petek.evidence.domain.ROLL_CALL_ACTION
+import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.evidence.domain.Verdict.FAILED
 import az.petek.evidence.domain.Verdict.PASSED
 import az.petek.evidence.domain.Verdict.SKIPPED
@@ -49,6 +55,7 @@ import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
@@ -175,6 +182,195 @@ class BuildReportUseCaseTest {
             shots[400L].shouldBeNull()
             // A later row of the same agent and step borrows screenshots only, never a look.
             shots[300L].shouldBeNull()
+        }
+
+    @Test
+    fun `the roll call sets the planned testers against who acted, who did not get to which step and the step nobody ran`() =
+        runTest {
+            evidence.create(run())
+            listOf(
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "4 testers: a01, a02, a03, a04", action = ROSTER_ACTION),
+                step(
+                    "harness",
+                    null,
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "over_capacity: 4 testers at once (4 in the run); this machine is advised for up to 2 at once, so slow pages",
+                    action = CAPACITY_ACTION,
+                    stepId = "stp_capacity",
+                ),
+                step("join", "a01", StepStatus.PASSED, StepKind.RUN, stepId = "join_a01"),
+                step("join", "a02", StepStatus.PASSED, StepKind.RUN, stepId = "join_a02"),
+                step("read", "a01", StepStatus.PASSED, StepKind.DO, stepId = "read_a01"),
+                step(
+                    "read",
+                    "a02",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "run_aborted: time budget of 2m used up",
+                    action = NOT_REACHED_ACTION,
+                    stepId = "nr_read_a02",
+                ),
+                step(
+                    "read",
+                    "a03",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "failed_earlier: registration_failed",
+                    action = NOT_REACHED_ACTION,
+                    stepId = "nr_read_a03",
+                ),
+                step(
+                    "second_manager",
+                    null,
+                    StepStatus.FAILED,
+                    StepKind.SYSTEM,
+                    detail = "not_covered: no tester matched 'manager[n=2]' in the run; nobody ran this step",
+                    action = UNCOVERED_ACTION,
+                    stepId = "uncovered",
+                ),
+                step(
+                    "harness",
+                    null,
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "run aborted: time budget of 2m used up; steps not run: approve",
+                    action = ABORT_ACTION,
+                    stepId = "stp_abort",
+                ),
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "done", action = ROLL_CALL_ACTION, stepId = "stp_rc"),
+            ).forEach { evidence.step(it) }
+
+            val model = useCase.build(RUN_ID)
+
+            model.rollCall.planned shouldContainExactly listOf("a01", "a02", "a03", "a04")
+            // A tester the harness only wrote about never acted; the roll call names it instead of counting it.
+            model.rollCall.acted shouldContainExactly listOf("a01", "a02")
+            model.summary.agents shouldBe 2
+            model.rollCall.notReached.map { Triple(it.agentId, it.scenarioStep, it.key) } shouldContainExactly
+                listOf(Triple("a02", "read", "run_aborted"), Triple("a03", "read", "failed_earlier"))
+            model.rollCall.uncovered
+                .single()
+                .scenarioStep shouldBe "second_manager"
+            model.rollCall.abortReason shouldBe "time budget of 2m used up"
+            model.rollCall.overCapacity.shouldNotBeNull()
+            model.rollCall.idle shouldContainExactly listOf("a04")
+            model.rollCall.finished shouldBe 1
+            model.rollCall.complete shouldBe false
+            // The step nobody ran is a failed row; a step a tester did not get to is a row too, never its failure.
+            model.summary.stepsFailed shouldBe 1
+            model.steps.map { it.scenarioStep to it.status } shouldContainAll
+                listOf("second_manager" to "FAILED", "read" to "SKIPPED")
+            model.failedAgents.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a run where every planned tester got to every step is complete`() =
+        runTest {
+            evidence.create(run())
+            evidence.step(step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "1 testers: a01", action = ROSTER_ACTION))
+            evidence.step(step("join", "a01", StepStatus.PASSED, StepKind.RUN))
+            evidence.step(
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "done", action = ROLL_CALL_ACTION, stepId = "rc"),
+            )
+
+            val call = useCase.build(RUN_ID).rollCall
+
+            call.complete shouldBe true
+            call.finished shouldBe 1
+            call.idle.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a run whose roll call was never closed, killed or still going, never says nobody is missing`() =
+        runTest {
+            evidence.create(run())
+            evidence.step(step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "2 testers: a01, a02", action = ROSTER_ACTION))
+            evidence.step(step("join", "a01", StepStatus.PASSED, StepKind.RUN))
+            evidence.step(step("join", "a02", StepStatus.PASSED, StepKind.RUN, stepId = "join_a02"))
+
+            val call = useCase.build(RUN_ID).rollCall
+
+            call.recorded shouldBe false
+            call.complete shouldBe false
+            call.finished.shouldBeNull()
+            call.idle.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a tester out since a failed gate or browser is left out of the steps that began without it, not finished`() =
+        runTest {
+            evidence.create(run())
+            listOf(
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "3 testers: a01, a02, a03", action = ROSTER_ACTION),
+                step("join", "a01", StepStatus.PASSED, StepKind.RUN, stepId = "j1"),
+                step("join", "a02", StepStatus.FAILED, StepKind.RUN, detail = "mail_timeout: no e-mail", stepId = "j2"),
+                step("read", "a01", StepStatus.PASSED, StepKind.DO, stepId = "r1"),
+                step(
+                    "read",
+                    "a02",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "agent failed earlier (mail_timeout)",
+                    action = "skip",
+                    stepId = "s2",
+                ),
+                // a03's browser never opened: it acted nowhere, and every step began without it.
+                step(
+                    "harness",
+                    "a03",
+                    StepStatus.ERROR,
+                    StepKind.SYSTEM,
+                    detail = "browser_error: launch timed out",
+                    action = "open_session",
+                    stepId = "o3",
+                ),
+                step(
+                    "join",
+                    "a03",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "agent failed earlier (browser_error)",
+                    action = "skip",
+                    stepId = "s3j",
+                ),
+                step(
+                    "read",
+                    "a03",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = "agent failed earlier (browser_error)",
+                    action = "skip",
+                    stepId = "s3r",
+                ),
+                // The wave plan left a step's receivers without any wave that could serve them.
+                step(
+                    "late",
+                    null,
+                    StepStatus.FAILED,
+                    StepKind.SYSTEM,
+                    detail = "not_covered: no wave holds both",
+                    action = "coverage",
+                    stepId = "cov",
+                ),
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "done", action = ROLL_CALL_ACTION, stepId = "rc"),
+            ).forEach { evidence.step(it) }
+
+            val model = useCase.build(RUN_ID)
+            val call = model.rollCall
+
+            call.notReached.map { Triple(it.agentId, it.scenarioStep, it.key + ":" + it.reason) } shouldContainExactly
+                listOf(
+                    Triple("a02", "read", "failed_earlier:mail_timeout"),
+                    Triple("a03", "join", "failed_earlier:browser_error"),
+                    Triple("a03", "read", "failed_earlier:browser_error"),
+                )
+            call.idle.shouldBeEmpty()
+            call.finished shouldBe 1
+            call.uncovered.single().scenarioStep shouldBe "late"
+            call.complete shouldBe false
+            model.steps.map { Triple(it.scenarioStep, it.agentId, it.status) } shouldContainAll
+                listOf(Triple("late", null, "FAILED"), Triple("read", "a02", "SKIPPED"), Triple("read", "a03", "SKIPPED"))
         }
 
     @Test

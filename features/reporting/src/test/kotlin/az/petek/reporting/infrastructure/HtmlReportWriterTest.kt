@@ -11,8 +11,11 @@
 
 package az.petek.reporting.infrastructure
 
+import az.petek.reporting.domain.NotReachedRow
 import az.petek.reporting.domain.PageSpeedRow
+import az.petek.reporting.domain.RollCall
 import az.petek.reporting.domain.StepRow
+import az.petek.reporting.domain.UncoveredRow
 import io.kotest.matchers.paths.shouldExist
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -97,6 +100,7 @@ class HtmlReportWriterTest {
                 "Addımlar (3)",
                 "Real-time gecikmə",
                 "Stabillik",
+                "Testerlərin yoxlaması",
                 "Uğursuz agentlər (1)",
                 "İstifadə: token və xərc",
             )
@@ -110,7 +114,7 @@ class HtmlReportWriterTest {
         text shouldContain "Keçməyən addımlar 3"
         text shouldContain "Assertlər 88 / 4 / 2 keçdi / keçmədi / ötürüldü"
         text shouldContain "Tapıntılar 2"
-        text shouldContain "Agentlər 30"
+        text shouldContain "Testerlər 30"
         text shouldContain "Müddət 4 dəq 05 san"
         text shouldContain "Tokenlər 1 325 179 giriş 1 234 567 · keşdən 1 600 · çıxış 89 012"
         text shouldContain "Xərc $0.0420"
@@ -255,9 +259,61 @@ class HtmlReportWriterTest {
     }
 
     @Test
+    fun `the roll call names every tester left out and why, and never claims everyone finished`() {
+        val model =
+            SampleReport.model().copy(
+                failedAgents = emptyList(),
+                rollCall =
+                    RollCall(
+                        planned = listOf("a01", "a02", "a03", "a04"),
+                        acted = listOf("a01", "a02"),
+                        notReached =
+                            listOf(
+                                NotReachedRow("a02", "Vəli Həsənov", "read", "run_aborted", "time budget of 2m used up"),
+                                NotReachedRow("a03", "Sahil Quliyev", "read", "run_aborted", "time budget of 2m used up"),
+                            ),
+                        uncovered = listOf(UncoveredRow("second_manager", "no tester matched 'manager[n=2]' in the run")),
+                        abortReason = "time budget of 2m used up",
+                        overCapacity = "over_capacity: 4 testers at once (4 in the run); this machine is advised for up to 2 at once",
+                        recorded = true,
+                    ),
+            )
+
+        val text = visibleText(writer.render(model))
+
+        text shouldContain "Testerlərin yoxlaması"
+        text shouldContain "Planlanan: 4 tester · İşləyən: 2 · Bütün addımlarını bitirən: 1"
+        text shouldContain "a02, a03"
+        text shouldContain "run dayandırıldı: time budget of 2m used up"
+        text shouldContain "second_manager"
+        text shouldContain "Run vaxtından əvvəl dayandı: time budget of 2m used up"
+        text shouldContain "Eyni anda 4 tester işlədi (run-da 4), bu maşın isə ən çox 2 üçün tövsiyə olunur"
+        text shouldContain "a04"
+        text shouldNotContain "Bütün agentlər addımlarını tamamladı."
+        text shouldContain "Uğursuz agent yoxdur."
+    }
+
+    @Test
+    fun `a roll call that was never closed says nobody knows who is missing, never that everyone finished`() {
+        val model =
+            SampleReport.model().copy(
+                failedAgents = emptyList(),
+                rollCall = RollCall(planned = listOf("a01", "a02"), acted = listOf("a01", "a02")),
+            )
+
+        val text = visibleText(writer.render(model))
+
+        text shouldContain "kimin hansı addıma çatmadığı bilinmir"
+        text shouldNotContain "Bütün addımlarını bitirən"
+        text shouldNotContain "Hər planlanan tester ona verilən bütün addımlara çatdı."
+        text shouldNotContain "Bütün agentlər addımlarını tamamladı."
+    }
+
+    @Test
     fun `empty sections say so instead of printing empty tables`() {
         val empty =
             SampleReport.model().copy(
+                rollCall = RollCall(planned = listOf("a01"), acted = listOf("a01"), recorded = true),
                 steps = emptyList(),
                 latency = emptyList(),
                 findings = emptyList(),

@@ -189,6 +189,53 @@ data class ReportSummary(
     val assertionsInconclusive: Int = 0,
 )
 
+/**
+ * The run's roll call: who the run planned (its `roster` record), who acted, and every planned tester × step that has
+ * no result of its own and why (the runner's `not_reached` records), every step nobody ran (`uncovered`), why the run
+ * stopped early (`abort`) and whether it ran more testers at once than this machine is advised for (`capacity`). The
+ * report says "every tester finished its steps" only when [complete]: nobody is left out silently, whatever N is. A run
+ * whose roll call was never closed (killed before its end, still going, or recorded before roll calls) is never
+ * [complete]: its report says the roll call is missing instead ([recorded]).
+ */
+data class RollCall(
+    /** Testers the run planned, in order; empty for a run recorded before rosters were kept. */
+    val planned: List<String> = emptyList(),
+    /** Testers with at least one action of their own (a step, a check, an AI call). */
+    val acted: List<String> = emptyList(),
+    val notReached: List<NotReachedRow> = emptyList(),
+    val uncovered: List<UncoveredRow> = emptyList(),
+    /** Why the run stopped before its end, as recorded; null when it ran to its end. */
+    val abortReason: String? = null,
+    /** The machine's capacity record when the run was over it (`over_capacity: ...`); null otherwise. */
+    val overCapacity: String? = null,
+    /** The run concluded with its roster and a closed roll call (`roll_call`), so what is missing is known. */
+    val recorded: Boolean = false,
+) {
+    /** Planned testers that never acted and have no step left open: the scenario gave them nothing to do. */
+    val idle: List<String> get() = if (recorded) planned - acted.toSet() - notReached.map { it.agentId }.toSet() else emptyList()
+
+    /** Planned testers with work and no step they did not get to; null when the roll call was not recorded. */
+    val finished: Int? get() = if (recorded) (planned.toSet() - notReached.map { it.agentId }.toSet() - idle.toSet()).size else null
+
+    /** Every planned tester got to every step it was given, every step had a tester, and the run was not stopped. */
+    val complete: Boolean get() = recorded && notReached.isEmpty() && uncovered.isEmpty() && abortReason == null
+}
+
+/** A planned tester × step with no result of its own: [key] is `run_aborted`, `wave_not_started`, `failed_earlier`, `never_reached`. */
+data class NotReachedRow(
+    val agentId: String,
+    val name: String,
+    val scenarioStep: String,
+    val key: String,
+    val reason: String,
+)
+
+/** A scenario step no tester ran in any pass of the run, and why. */
+data class UncoveredRow(
+    val scenarioStep: String,
+    val reason: String,
+)
+
 data class ReportModel(
     val run: RunRecord,
     val summary: ReportSummary,
@@ -207,6 +254,8 @@ data class ReportModel(
     val coverage: List<String> = emptyList(),
     /** How fast each page became usable, per screen, as the testers' browsers timed it (`site_health`'s `perf`). */
     val pageSpeed: List<PageSpeedRow> = emptyList(),
+    /** Every planned tester set against who acted and who did not get to which step, and why ([RollCall]). */
+    val rollCall: RollCall = RollCall(),
 ) {
     /** The workspace the run belongs to (ADR-0011); `local` on the owner's machine. */
     val workspaceId: WorkspaceId get() = run.workspaceId

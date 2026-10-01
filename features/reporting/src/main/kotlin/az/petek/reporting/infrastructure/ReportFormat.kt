@@ -216,4 +216,53 @@ internal object ReportFormat {
     private const val MS_PER_SECOND = 1_000L
     private const val MS_PER_MINUTE = 60_000L
     private const val MS_PER_HOUR = 3_600_000L
+
+    /** The roll call's title, in every format. */
+    const val ROLL_CALL_TITLE = "Testerlərin yoxlaması"
+
+    const val ALL_FINISHED = "Hər planlanan tester ona verilən bütün addımlara çatdı."
+
+    /** Why a planned tester did not get to a step, by the roll call's key, in the owner's words. */
+    fun notReached(key: String): String =
+        when (key) {
+            "run_aborted" -> "run dayandırıldı"
+            "wave_not_started" -> "testerin dalğası başlamadı"
+            "failed_earlier" -> "tester əvvəlki addımda düşdü"
+            "never_reached" -> "run davam etdi, amma tester bu addıma çatmadı (Pətəkin öz boşluğu)"
+            else -> key
+        }
+
+    /**
+     * `Planlanan: 50 tester · İşləyən: 50 · Bütün addımlarını bitirən: 50`; just the testers that acted for a run recorded
+     * before rosters were kept.
+     */
+    fun rollCallLine(model: ReportModel): String {
+        val call = model.rollCall
+        if (call.planned.isEmpty() && call.acted.isEmpty()) return model.summary.agents.toString()
+        return listOfNotNull(
+            call.planned.takeIf { it.isNotEmpty() }?.let { "Planlanan: ${it.size} tester" },
+            "İşləyən: ${call.acted.size}",
+            call.finished?.let { "Bütün addımlarını bitirən: $it" },
+        ).joinToString(" · ")
+    }
+
+    /** Said instead of a roll call a run never closed: whether anybody was left out is not known. */
+    const val ROLL_CALL_MISSING =
+        "Bu run-ın testerlərin yoxlaması yazılmayıb (run sona çatmayıb, hələ gedir və ya yoxlamadan əvvəlki run-dır): " +
+            "kimin hansı addıma çatmadığı bilinmir."
+
+    /** The over-capacity record as a warning: how many ran at once against the machine's advice. */
+    fun overCapacity(detail: String): String {
+        val numbers = OVER_CAPACITY_NUMBERS.find(detail)
+        val head =
+            if (numbers == null) {
+                "Bu maşın üçün tövsiyə olunandan çox tester eyni anda işlədi"
+            } else {
+                val (live, total, advice) = numbers.destructured
+                "Eyni anda $live tester işlədi (run-da $total), bu maşın isə ən çox $advice üçün tövsiyə olunur"
+            }
+        return "$head: gec görünən ekranlar və yavaş səhifələr saytdan yox, maşından ola bilər."
+    }
+
+    private val OVER_CAPACITY_NUMBERS = Regex("""(\d+) testers at once \((\d+) in the run\); this machine is advised for up to (\d+)""")
 }

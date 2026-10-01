@@ -103,6 +103,8 @@ object FailureKeys {
             ACCESS_NOT_REFUSED,
             FORBIDDEN_ACCEPTED,
             "off_site",
+            "not_covered",
+            "never_reached",
         )
 
     /**
@@ -118,7 +120,16 @@ object FailureKeys {
      * emit.
      */
     private val ENVIRONMENT_KEYS: Set<String> =
-        setOf(MAIL_UNAVAILABLE, RATE_LIMITED, "llm_unavailable", "browser_error", "not_covered", "emitter_absent")
+        setOf(
+            MAIL_UNAVAILABLE,
+            RATE_LIMITED,
+            "llm_unavailable",
+            "browser_error",
+            "not_covered",
+            "emitter_absent",
+            // A tester the run went on without: a gap of Pətək itself, never of the site or the tester's agent.
+            "never_reached",
+        )
 
     /**
      * Who a failure with [key] is on (Faza 24.13): [FailureCause.SITE] for the site's own defects, [FailureCause.ENVIRONMENT]

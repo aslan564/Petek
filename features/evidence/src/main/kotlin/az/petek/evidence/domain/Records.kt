@@ -127,6 +127,13 @@ object NotReached {
 const val UNCOVERED_ACTION = "uncovered"
 
 /**
+ * The action of the harness step (agent id null, PASSED) that closes the roll call once its `not_reached` and
+ * `uncovered` records are written: `done`. A report claims that every tester got to its steps only when this record is
+ * there; a run killed before its end (or one recorded before roll calls) has none, and its report says so.
+ */
+const val ROLL_CALL_ACTION = "roll_call"
+
+/**
  * How a page look's sub-action is named after its function (`site_health: look at /pricing (phone)`). Its time is mostly
  * Pətək's own waiting for the page to settle, so a step's speed never counts it (the regression baseline, Faza 14).
  */

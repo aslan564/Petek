@@ -25,6 +25,7 @@ import az.petek.evidence.domain.EvidenceSource.SENDER
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.NOT_REACHED_ACTION
 import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
@@ -494,6 +495,23 @@ class ThreeSourceJudgeTest {
             findings.map { it.findingClass } shouldContainExactly listOf(FindingClass.AGENT_FAILURE, FindingClass.AGENT_FAILURE)
             findings.map { it.note } shouldContainExactly listOf("Agent failure: otp_rejected.", "Agent failure: browser_error.")
             findings.forEach { it.c.shouldBeNull() }
+        }
+
+        @Test
+        fun `a step the roll call says a tester never got to is no finding against that tester`() {
+            val steps =
+                listOf(
+                    step(
+                        "read",
+                        "a08",
+                        StepStatus.FAILED,
+                        StepKind.SYSTEM,
+                        detail = "never_reached: the run went on, but a08 has no record of step 'read'",
+                        action = NOT_REACHED_ACTION,
+                    ),
+                )
+
+            judge.findings(run, emptyList(), steps).shouldBeEmpty()
         }
 
         @Test

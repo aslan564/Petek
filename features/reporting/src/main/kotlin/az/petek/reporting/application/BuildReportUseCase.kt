@@ -13,18 +13,26 @@ package az.petek.reporting.application
 
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
+import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.AssertionRecord
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.NotReached
+import az.petek.evidence.domain.ROLL_CALL_ACTION
+import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
+import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.evidence.domain.UsageRecord
 import az.petek.evidence.domain.Verdict
 import az.petek.reporting.domain.AgentDirectory
@@ -32,14 +40,17 @@ import az.petek.reporting.domain.ExpectedOutcomes
 import az.petek.reporting.domain.FailedAgentRow
 import az.petek.reporting.domain.FailureKeys
 import az.petek.reporting.domain.LatencyStatistics
+import az.petek.reporting.domain.NotReachedRow
 import az.petek.reporting.domain.PageSpeedRow
 import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportSummary
+import az.petek.reporting.domain.RollCall
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
+import az.petek.reporting.domain.UncoveredRow
 import java.time.Duration
 
 /**
@@ -65,7 +76,9 @@ class BuildReportUseCase(
         val artifactRecords = query.artifacts(runId)
         val usage = query.usage(runId)
         val names = agents.names(runId)
-        val tableSteps = steps.filter { it.kind in TABLE_KINDS }
+        // The roll call's own records are rows too: a tester × step it did not get to, a step nobody ran.
+        val tableSteps =
+            steps.filter { it.kind in TABLE_KINDS || it.action in ROLL_CALL_ACTIONS || isWaveGap(it) || isLeftOut(it) }
         val expected = ExpectedOutcomes(steps)
         return ReportModel(
             run = run,
@@ -84,8 +97,109 @@ class BuildReportUseCase(
                     .flatMap { it.detail.orEmpty().lines() }
                     .filter { it.isNotBlank() },
             pageSpeed = PageSpeedRow.of(query.pageTimings(runId)),
+            rollCall = rollCall(run, steps, assertions, usage, names),
         )
     }
+
+    private fun rollCall(
+        run: RunRecord,
+        steps: List<StepRecord>,
+        assertions: List<AssertionRecord>,
+        usage: List<UsageRecord>,
+        names: Map<AgentId, String>,
+    ): RollCall {
+        val harness = steps.filter { it.kind == StepKind.SYSTEM && it.agentId == null }
+        val planned =
+            harness
+                .lastOrNull { it.action == ROSTER_ACTION }
+                ?.detail
+                ?.substringAfter(": ", "")
+                ?.split(", ")
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                .orEmpty()
+        val acted = actingAgents(steps, assertions, usage).map { it.value }
+        val notReached =
+            steps
+                .filter { it.kind == StepKind.SYSTEM && it.agentId != null }
+                .mapNotNull { record -> notReached(record, names) }
+                .distinctBy { it.agentId to it.scenarioStep }
+                .sortedWith(compareBy({ AgentId(it.agentId) }, { it.scenarioStep }))
+        return RollCall(
+            planned = planned.sortedBy(::AgentId),
+            acted = acted.sortedBy(::AgentId),
+            notReached = notReached,
+            uncovered =
+                harness
+                    .filter { it.action == UNCOVERED_ACTION || isWaveGap(it) }
+                    .map {
+                        UncoveredRow(
+                            it.scenarioStep,
+                            it.detail
+                                .orEmpty()
+                                .substringAfter(':')
+                                .trim(),
+                        )
+                    },
+            abortReason =
+                harness
+                    .lastOrNull { it.action == ABORT_ACTION }
+                    ?.detail
+                    ?.substringAfter("run aborted: ")
+                    ?.substringBeforeLast("; steps not run: ")
+                    ?.trim(),
+            overCapacity = harness.lastOrNull { it.action == CAPACITY_ACTION && it.detail.orEmpty().startsWith(OVER_CAPACITY) }?.detail,
+            // Only a concluded run with its roster and a closed roll call says nobody is missing; absence proves nothing.
+            recorded = run.result != RunResult.RUNNING && planned.isNotEmpty() && harness.any { it.action == ROLL_CALL_ACTION },
+        )
+    }
+
+    /**
+     * A tester × step without a result of its own: the roll call's `not_reached` record, or the runner's `skip` of a
+     * tester out since an earlier failure (its gate, its browser) in a step that began without it.
+     */
+    private fun notReached(
+        record: StepRecord,
+        names: Map<AgentId, String>,
+    ): NotReachedRow? {
+        val agentId = record.agentId ?: return null
+        val detail = record.detail.orEmpty()
+        val (key, reason) =
+            when {
+                record.action == NOT_REACHED_ACTION -> {
+                    detail.substringBefore(':').trim() to detail.substringAfter(':', detail).trim()
+                }
+
+                record.action == SKIP_ACTION && detail.startsWith(FAILED_EARLIER_DETAIL) -> {
+                    NotReached.FAILED_EARLIER to detail.removePrefix(FAILED_EARLIER_DETAIL).trim().removeSurrounding("(", ")")
+                }
+
+                else -> {
+                    return null
+                }
+            }
+        return NotReachedRow(agentId.value, names[agentId] ?: agentId.value, record.scenarioStep, key, reason)
+    }
+
+    /** The runner's record of a tester out since an earlier failure in a step that began without it: a row too. */
+    private fun isLeftOut(step: StepRecord): Boolean =
+        step.kind == StepKind.SYSTEM && step.agentId != null && step.action == SKIP_ACTION &&
+            step.detail.orEmpty().startsWith(FAILED_EARLIER_DETAIL)
+
+    /** A wave's receivers that no wave could serve: the runner's agent-less FAILED `coverage` record (`not_covered`). */
+    private fun isWaveGap(step: StepRecord): Boolean =
+        step.kind == StepKind.SYSTEM && step.agentId == null && step.action == WAVE_COVERAGE && step.status == StepStatus.FAILED
+
+    /** Testers with an action of their own: a step, a check or an AI call, never the harness's records about them. */
+    private fun actingAgents(
+        steps: List<StepRecord>,
+        assertions: List<AssertionRecord>,
+        usage: List<UsageRecord>,
+    ): Set<AgentId> =
+        (
+            steps.filter { it.kind != StepKind.SYSTEM }.mapNotNull { it.agentId } +
+                assertions.mapNotNull { it.agentId } + usage.map { it.agentId }
+        ).toSet()
 
     /**
      * A finding made from a step's failure names no artifact of its own; it gets that step's last screenshot, so every
@@ -137,7 +251,7 @@ class BuildReportUseCase(
         usage: List<UsageRecord>,
         expected: ExpectedOutcomes,
     ): ReportSummary {
-        val agents = steps.mapNotNull { it.agentId } + assertions.mapNotNull { it.agentId } + usage.map { it.agentId }
+        val agents = actingAgents(steps, assertions, usage)
         return ReportSummary(
             // An expected refusal or a lost race is the outcome the step asked for.
             stepsPassed = tableSteps.count { it.status == StepStatus.PASSED || expected.isExpected(it) },
@@ -147,7 +261,7 @@ class BuildReportUseCase(
             assertionsSkipped = assertions.count { it.verdict == Verdict.SKIPPED },
             assertionsNotApplicable = assertions.count { it.verdict == Verdict.NOT_APPLICABLE },
             assertionsInconclusive = assertions.count { it.verdict == Verdict.INCONCLUSIVE },
-            agents = agents.distinct().size,
+            agents = agents.size,
             durationMs = durationMs(run, steps),
             inputTokens = usage.sumOf { it.inputTokens },
             outputTokens = usage.sumOf { it.outputTokens },
@@ -180,7 +294,8 @@ class BuildReportUseCase(
         expected: ExpectedOutcomes,
     ): List<FailedAgentRow> =
         steps
-            .filter { it.agentId != null && it.kind != StepKind.ASSERT && expected.isFailure(it) }
+            // A step a tester did not get to is the roll call's, never the tester's failure.
+            .filter { it.agentId != null && it.kind != StepKind.ASSERT && it.action != NOT_REACHED_ACTION && expected.isFailure(it) }
             .groupBy { requireNotNull(it.agentId) to it.scenarioStep }
             .map { (key, failures) ->
                 val (agentId, scenarioStep) = key
@@ -247,6 +362,15 @@ class BuildReportUseCase(
 
     private companion object {
         val TABLE_KINDS = setOf(StepKind.DO, StepKind.RUN, StepKind.WAIT)
+        val ROLL_CALL_ACTIONS = setOf(NOT_REACHED_ACTION, UNCOVERED_ACTION)
+
+        /** The runner's record of a tester it left out of a step that began (`StepExecutor.recordSkippedFailedActors`). */
+        const val SKIP_ACTION = "skip"
+        const val FAILED_EARLIER_DETAIL = "agent failed earlier"
+
+        /** The runner's record of which receivers of a wave could wait for their event (`reportCoverage`). */
+        const val WAVE_COVERAGE = "coverage"
+        const val OVER_CAPACITY = "over_capacity"
 
         /** SYSTEM step recorded by the browser feature; its detail lists the transports seen, e.g. `SSE,POLLING`. */
         const val NETWORK_OBSERVATION = "network_observation"

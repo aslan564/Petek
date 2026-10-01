@@ -18,6 +18,7 @@ import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.NOT_REACHED_ACTION
 import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
@@ -185,7 +186,8 @@ class ThreeSourceJudge(
         val expected = ExpectedOutcomes(steps.filter { it.runId == run.runId })
         return steps
             .asSequence()
-            .filter { it.runId == run.runId && it.agentId != null && it.kind !in NOT_AGENT_ACTIONS }
+            // A step a tester did not get to is the roll call's to show, never a finding against the tester.
+            .filter { it.runId == run.runId && it.agentId != null && it.kind !in NOT_AGENT_ACTIONS && it.action != NOT_REACHED_ACTION }
             .mapNotNull { step -> expected.failureKey(step)?.let { key -> step to key } }
             .distinctBy { (step, key) -> Triple(step.scenarioStep, step.agentId, key) }
             .map { (step, key) -> stepFinding(run, step, key) }

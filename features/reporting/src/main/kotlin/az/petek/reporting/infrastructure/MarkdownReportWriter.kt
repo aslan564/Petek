@@ -40,6 +40,7 @@ class MarkdownReportWriter : ReportWriter {
             latency(model)
             pageSpeed(model)
             stability(model)
+            rollCall(model)
             failedAgents(model)
             usage(model)
         }
@@ -77,7 +78,7 @@ class MarkdownReportWriter : ReportWriter {
                         (if (s.assertionsInconclusive > 0) " · ${s.assertionsInconclusive} ${ReportFormat.INCONCLUSIVE}" else ""),
                 ),
                 listOf("Tapıntılar", model.findings.size.toString()),
-                listOf("Agentlər", s.agents.toString()),
+                listOf("Testerlər", ReportFormat.rollCallLine(model)),
                 listOf("Müddət", ReportFormat.duration(s.durationMs)),
                 listOf(
                     "Tokenlər",
@@ -88,6 +89,8 @@ class MarkdownReportWriter : ReportWriter {
                 listOf("Real-time nəqliyyat", s.realtimeTransports.joinToString(", ") { md(it) }.ifEmpty { NONE }),
             ),
         )
+        model.rollCall.abortReason?.let { paragraph("**Run vaxtından əvvəl dayandı:** ${md(it)}") }
+        model.rollCall.overCapacity?.let { paragraph("**Diqqət:** ${md(ReportFormat.overCapacity(it))}") }
         // What the scenario left unchecked, in the summary itself (2026-09-30).
         if (model.coverage.isNotEmpty()) {
             paragraph("**${ReportFormat.COVERAGE_TITLE} (${model.coverage.size}):**")
@@ -207,9 +210,39 @@ class MarkdownReportWriter : ReportWriter {
         )
     }
 
+    private fun StringBuilder.rollCall(model: ReportModel) {
+        val call = model.rollCall
+        section(ReportFormat.ROLL_CALL_TITLE)
+        paragraph(ReportFormat.rollCallLine(model))
+        if (!call.recorded) paragraph("**Diqqət:** ${ReportFormat.ROLL_CALL_MISSING}")
+        if (call.complete && call.idle.isEmpty()) return paragraph(ReportFormat.ALL_FINISHED)
+        if (call.uncovered.isNotEmpty()) {
+            paragraph("**Heç kimin icra etmədiyi addımlar (${call.uncovered.size})**")
+            table(listOf("Addım", "Səbəb"), call.uncovered.map { listOf(md(it.scenarioStep), md(it.reason)) })
+        }
+        if (call.notReached.isNotEmpty()) {
+            paragraph("**Çatılmayan addımlar (${call.notReached.size})**")
+            table(
+                listOf("Addım", "Testerlər", "Səbəb"),
+                call.notReached.groupBy { Triple(it.scenarioStep, it.key, it.reason) }.map { (key, rows) ->
+                    listOf(
+                        md(key.first),
+                        md(rows.joinToString(", ") { it.agentId }),
+                        md("${ReportFormat.notReached(key.second)}: ${key.third}"),
+                    )
+                },
+            )
+        }
+        if (call.idle.isNotEmpty()) {
+            paragraph("Ssenarinin heç bir addım vermədiyi testerlər (${call.idle.size}): ${md(call.idle.joinToString(", "))}")
+        }
+    }
+
     private fun StringBuilder.failedAgents(model: ReportModel) {
         section("Uğursuz agentlər (${model.failedAgents.size})")
-        if (model.failedAgents.isEmpty()) return paragraph("Bütün agentlər addımlarını tamamladı.")
+        if (model.failedAgents.isEmpty()) {
+            return paragraph(if (model.rollCall.complete) "Bütün agentlər addımlarını tamamladı." else "Uğursuz agent yoxdur.")
+        }
         table(
             listOf("Agent", "Ad", "Addım", "Səbəb"),
             model.failedAgents.map { listOf(md(it.agentId), md(it.name), md(it.scenarioStep), md(it.reason)) },

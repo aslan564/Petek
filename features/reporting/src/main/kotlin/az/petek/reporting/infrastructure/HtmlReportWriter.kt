@@ -93,6 +93,7 @@ class HtmlReportWriter : ReportWriter {
                             latency(model)
                             pageSpeed(model)
                             stability(model)
+                            rollCall(model)
                             failedAgents(model)
                             usage(model)
                         }
@@ -158,13 +159,65 @@ class HtmlReportWriter : ReportWriter {
                         (if (s.assertionsInconclusive > 0) " · ${s.assertionsInconclusive} ${ReportFormat.INCONCLUSIVE}" else ""),
                 )
                 tile("Tapıntılar", model.findings.size.toString(), if (model.findings.isNotEmpty()) "bad" else "ok")
-                tile("Agentlər", s.agents.toString())
+                tile(
+                    "Testerlər",
+                    testers(model),
+                    if (model.rollCall.complete) null else "warn",
+                    ReportFormat.rollCallLine(model).takeIf {
+                        it.contains('·')
+                    },
+                )
                 tile("Müddət", ReportFormat.duration(s.durationMs))
                 tile("Tokenlər", ReportFormat.count(s.inputTokens + s.cacheReadTokens + s.outputTokens), null, tokenHint(model))
                 tile("Xərc", ReportFormat.cost(s.costUsd))
                 tile("Real-time", s.realtimeTransports.joinToString(", ").ifEmpty { NONE }, null, "aşkar edilən nəqliyyat")
             }
             coverage(model)
+            model.rollCall.abortReason?.let { p("warn") { +"Run vaxtından əvvəl dayandı: $it" } }
+            model.rollCall.overCapacity?.let { p("warn") { +ReportFormat.overCapacity(it) } }
+        }
+    }
+
+    /** Acted / planned, or acted alone for a run recorded before rosters were kept. */
+    private fun testers(model: ReportModel): String {
+        val planned = model.rollCall.planned.size
+        return if (planned == 0) model.summary.agents.toString() else "${model.summary.agents} / $planned"
+    }
+
+    /** Every planned tester: who did not get to which step and why, which step nobody ran, who had nothing to do. */
+    private fun FlowContent.rollCall(model: ReportModel) {
+        val call = model.rollCall
+        section {
+            h2 { +ReportFormat.ROLL_CALL_TITLE }
+            p { +ReportFormat.rollCallLine(model) }
+            if (!call.recorded) p("warn") { +ReportFormat.ROLL_CALL_MISSING }
+            if (call.complete && call.idle.isEmpty()) return@section empty(ReportFormat.ALL_FINISHED)
+            if (call.uncovered.isNotEmpty()) {
+                h3 { +"Heç kimin icra etmədiyi addımlar (${call.uncovered.size})" }
+                dataTable(listOf("Addım", "Səbəb")) {
+                    call.uncovered.forEach { row ->
+                        tr {
+                            td { +row.scenarioStep }
+                            td { +row.reason }
+                        }
+                    }
+                }
+            }
+            if (call.notReached.isNotEmpty()) {
+                h3 { +"Çatılmayan addımlar (${call.notReached.size})" }
+                dataTable(listOf("Addım", "Testerlər", "Səbəb")) {
+                    call.notReached.groupBy { Triple(it.scenarioStep, it.key, it.reason) }.forEach { (key, rows) ->
+                        tr {
+                            td { +key.first }
+                            td { +rows.joinToString(", ") { it.agentId } }
+                            td { +"${ReportFormat.notReached(key.second)}: ${key.third}" }
+                        }
+                    }
+                }
+            }
+            if (call.idle.isNotEmpty()) {
+                p("muted") { +"Ssenarinin heç bir addım vermədiyi testerlər (${call.idle.size}): ${call.idle.joinToString(", ")}" }
+            }
         }
     }
 
@@ -352,7 +405,9 @@ class HtmlReportWriter : ReportWriter {
     private fun FlowContent.failedAgents(model: ReportModel) {
         section {
             h2 { +"Uğursuz agentlər (${model.failedAgents.size})" }
-            if (model.failedAgents.isEmpty()) return@section empty("Bütün agentlər addımlarını tamamladı.")
+            if (model.failedAgents.isEmpty()) {
+                return@section empty(if (model.rollCall.complete) "Bütün agentlər addımlarını tamamladı." else "Uğursuz agent yoxdur.")
+            }
             dataTable(listOf("Agent", "Ad", "Addım", "Səbəb")) {
                 model.failedAgents.forEach { row ->
                     tr {
@@ -493,6 +548,7 @@ class HtmlReportWriter : ReportWriter {
             .tile.ok .v { color: var(--ok); }
             .tile.bad .v { color: var(--bad); }
             .tile.warn .v { color: var(--warn); }
+            p.warn { color: var(--warn); }
             .tile.muted .v { color: var(--muted); }
             .scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
             table { border-collapse: collapse; width: 100%; font-size: .9rem; }
