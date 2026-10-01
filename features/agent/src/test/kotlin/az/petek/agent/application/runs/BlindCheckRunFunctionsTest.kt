@@ -60,6 +60,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import java.io.IOException
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /** `site_health` and `direct_url`: blind checks decided by code from what the browser saw (Faza 13). */
@@ -285,7 +286,7 @@ class BlindCheckRunFunctionsTest {
                 RunFunctionFixture(AgentTestData.itEmployee, contractSite = false, session = { browser ->
                     object : BrowserSession by browser {
                         override suspend fun look(request: LookRequest): PageLook? {
-                            delay(RunTrace.LOOK_TIMEOUT + 1.seconds)
+                            delay(RunTrace.lookTimeout(request) + 1.seconds)
                             return Looks.look("/")
                         }
                     }
@@ -299,6 +300,36 @@ class BlindCheckRunFunctionsTest {
                 it.detail shouldBe "not captured: timed out after 30s"
             }
             fixture.evidence.pageLookList.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a look is given the time its own settle budget and loads ask for`() =
+        runTest {
+            var takes = 35.seconds
+            val fixture =
+                RunFunctionFixture(AgentTestData.itEmployee, contractSite = false, session = { browser ->
+                    object : BrowserSession by browser {
+                        override suspend fun look(request: LookRequest): PageLook? {
+                            delay(takes)
+                            return Looks.look("/")
+                        }
+                    }
+                })
+            // A page that never calms down uses up 15 s of settling on each of its two loads, and more to load and capture.
+            val patient = mapOf("checks" to "look", "pages" to "/", "look_settle_ms" to "15000", "look_loads" to "2")
+
+            val outcome = fixture.run("site_health", patient)
+
+            outcome.summary shouldContain "Kept 1 look(s)."
+            fixture.steps.single { it.action == "site_health: look at /" }.status shouldBe StepStatus.PASSED
+            fixture.evidence.pageLookList shouldHaveSize 1
+
+            takes = 55.seconds
+            fixture.run("site_health", patient).summary shouldContain "Kept 0 look(s); 1 could not be taken or kept."
+            fixture.steps.last { it.action == "site_health: look at /" }.detail shouldBe "not captured: timed out after 54s"
+            RunTrace.lookTimeout(LookRequest()) shouldBe 30.seconds
+            RunTrace.lookTimeout(LookRequest(settle = 15.seconds, loads = 1)) shouldBe 30.seconds
+            RunTrace.lookTimeout(LookRequest(settle = 10.minutes)) shouldBe RunTrace.MAX_LOOK_TIMEOUT
         }
 
     @Test

@@ -198,7 +198,7 @@ internal class RunTrace(
      * Takes a look of the current page ([page], on [device]) for comparing releases (`site_health`'s `look`) and keeps
      * it: its frames as visual artifacts of this sub-action, then the page look record ([StepEvidence.pageLook]). A
      * look never fails the step: one the session cannot take, that the browser refuses or that takes longer than
-     * [LOOK_TIMEOUT] is a SKIPPED sub-action saying why, and null is returned. So is one taken but not kept (its frames or
+     * [lookTimeout] is a SKIPPED sub-action saying why, and null is returned. So is one taken but not kept (its frames or
      * record could not be written): a SKIPPED sub-action after it says so, since the look has no evidence to compare.
      */
     suspend fun look(
@@ -216,15 +216,16 @@ internal class RunTrace(
             return null
         }
 
+        val timeout = lookTimeout(request)
         val taken =
             try {
                 // Wrapped, so a session that cannot take a look (null) is told apart from the time running out (null).
-                withTimeoutOrNull(LOOK_TIMEOUT) { Taken(session.look(request)) }
+                withTimeoutOrNull(timeout) { Taken(session.look(request)) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: BrowserActionException) {
                 return notCaptured(errorDetail(e) ?: e::class.simpleName.orEmpty())
-            } ?: return notCaptured("timed out after $LOOK_TIMEOUT")
+            } ?: return notCaptured("timed out after $timeout")
         val look = taken.look ?: return notCaptured("this session cannot take looks")
         if (look.shots.none { it.kind == LookShotKind.MAIN }) return notCaptured("the browser gave no main frame")
         val stepId = record(description, started, StepStatus.PASSED, withNote(LookNotes.of(look, page), session.dialogNote()))
@@ -295,7 +296,24 @@ internal class RunTrace(
     companion object {
         private const val MAX_SELECTOR_CHARS = 80
 
-        /** The longest a look may take: two loads of a long page settle and are captured well within it. */
-        val LOOK_TIMEOUT = 30.seconds
+        /** The least time a look is given, whatever it asks for: a default look's two loads take well under it. */
+        val MIN_LOOK_TIMEOUT = 30.seconds
+
+        /** The most time a look is given, below the agent's inactivity watchdog (120 s by default). */
+        val MAX_LOOK_TIMEOUT = 60.seconds
+
+        /**
+         * Besides its settle budget, what one load of a look may take: opening the page again, waiting for the network
+         * to go idle, its frames half a second apart and reading the page.
+         */
+        val LOOK_LOAD_ALLOWANCE = 12.seconds
+
+        /**
+         * The longest [request] may take: each load's settle budget, which a page that never calms down uses up, plus
+         * [LOOK_LOAD_ALLOWANCE], within [MIN_LOOK_TIMEOUT] and [MAX_LOOK_TIMEOUT] (30 s for the default look, 54 s for
+         * two loads of 15 s each). A look given less than its own settings ask for could never be kept.
+         */
+        fun lookTimeout(request: LookRequest): Duration =
+            ((request.settle + LOOK_LOAD_ALLOWANCE) * request.loads).coerceIn(MIN_LOOK_TIMEOUT, MAX_LOOK_TIMEOUT)
     }
 }
