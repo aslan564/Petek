@@ -961,8 +961,22 @@ nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
   isə səhifə və ekran üzrə yüklənmə və LCP-ni tutuşdurur (25%-dən çox və ən azı 300 ms), CLS 0,10-u keçib 0,05
   artanda da pisləşmə sayılır. `PlaywrightBrowserSessionTest` (real Chromium), `BlindCheckRunFunctionsTest`,
   `RunComparerTest`, `BuildReportUseCaseTest`, `HtmlReportWriterTest`, `RestoringBrowserSessionTest`,
-  `NotesSiteTestEndToEndTest` (real run hər ekran üçün yazır). Qalan: vizual fərq və əlçatanlıq ölçüsü (axe-core
-  yeni kitabxanadır, qayda 11).
+  `NotesSiteTestEndToEndTest` (real run hər ekran üçün yazır).
+  **Vizual fərq (2026-10-01, ADR-0014):** `site_health`-in açıq istənən `look` yoxlaması hər səhifəni hər ekranda kodla
+  çəkir: səhifə sakitləşir (yuxarı, şriftlər, şəkillər, şəbəkə), CSS miqyasında `look_max_height`-ə qədər (4000 px)
+  bir neçə kadr və ikinci yüklənmə; kadrlar `VISUAL` artefaktları, oxunanlar `page_look` cədvəlindədir. Maskalar
+  ölçülür, səhifəyə heç nə çəkilmir: profilin `target_profile.visual.mask`-ı, addımın `look_mask`-ı, `data-petek-mask`,
+  başqa saytın çərçivələri və video, tarix/saat mətnləri, run-ın öz mətnləri. `petek compare` görünüşləri addım,
+  səhifə və ekran üzrə JDK ilə pikseldən-pikselə tutuşdurur (sətir hizalanması, YIQ rəng məsafəsi 0,10, 1 px
+  sürüşmə sayılmır, öz-özünə dəyişən hissə nəzərə alınmır); nəticə dəyişib / dəyişməyib / tutuşdurulmur (səbəbi
+  ilə). `compare-<baseline>.html`-in "Görünüş" bölməsi əvvəl/indi/fərq kəsiklərini göstərir (`report/visual/`,
+  `visual.json` keş). Standart qapı `report`: dəyişən görünüş göstərilir, pisləşmə sayılmır; `--visual fail`, panelin
+  `?visual=fail`, MCP `compare_runs.visual` onu pisləşmə sayır. Draftlar setup-ın əvvəlinə ziyarətçi səhifələrinin
+  hər ekranda görünüşünü qoyur. `PlaywrightBrowserSessionTest` (real Chromium), `PixelDiffTest`, `RowAlignmentTest`,
+  `LookJudgeTest`, `CompareLooksTest`, `BlindCheckRunFunctionsTest`, `GenerateScenarioUseCaseTest`,
+  `VisualRegressionEndToEndTest` (saxta saytın yeni versiyası qeydiyyat düyməsini sürüşdürür: hər iki ekranda
+  "dəyişib", giriş səhifəsi dəyişməyib, saat maskalanıb). Qalan: əlçatanlıq ölçüsü (axe-core yeni kitabxanadır,
+  qayda 11).
 - [ ] Production "yalnız oxu" monitorinq rejimi (yazan addım yoxdur, 2–3 agent, cron).
 - [ ] Ödənişli modullar (ayrı repo/modul, Faza 8 portları arxasında): hosted sürü (Redis/NATS ilə çoxmaşınlı
   orkestrasiya), hesabat tarixçəsi/trend və paylaşılan panel, SSO/audit, hesabat hostingi.
@@ -1044,6 +1058,10 @@ nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
   heç vaxt yazmır. Toxunuş yalnız o hesabdan, `Pətək sınaq` işarəsi ilə yazır; panel bunu bir sətirlə deyir.
   `ExplorerAccountTestCheckTest`, `TestCompanyRoleSessionsTest`, `NotesSiteTestEndToEndTest` (draftda `oracle` və
   `direct_url`, qeydi başqasına açan sayt FAILED).
+- [ ] **Vizual fərqin standart dəyərləri (ADR-0014, 2026-10-01):** (1) dəyişən görünüş standart olaraq yalnız
+  göstərilsin (`report`), CI-ni yalnız `--visual fail` yıxsın? (2) səhifə ən çox 4000 CSS px hündürlüyə qədər
+  çəkilsin? (3) hər kadr təxminən 0,2–1,5 MB yer tutur; görünüş yalnız açıq istənəndə (draftlarda ziyarətçi
+  səhifələri) çəkilir, köhnə kadrlar silinmir. Tövsiyə: üçünə də bəli. *Vəziyyət:* belə qurulub, sahib dəyişə bilər.
 
 ## Pətək 3: yalnız link ilə sürü (2026-09-26)
 

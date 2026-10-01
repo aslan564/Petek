@@ -46,6 +46,10 @@ Selectors are `[data-testid="<id>"]`. Elements that show an object carry `data-i
 | Tickets | `/tickets` | `ticket-create`, `ticket-title`, `ticket-description`, `ticket-department` (select), `ticket-submit`, `ticket-item` (+`data-id`) | — |
 | Ticket detail | `/tickets/{id}` | `ticket-status`, `ticket-set-in-progress`, `ticket-assignee` (select), `ticket-assign`, `ticket-approve`, `ticket-reject`, `ticket-error` | action buttons appear only for users allowed to use them |
 
+Page looks (ADR-0014): an element that changes by itself on every visit (a clock, a rotating banner, an advert) may
+carry `data-petek-mask` (optionally with a name, `data-petek-mask="banner"`); its area is not compared between
+releases. The owner can name the same elements in the target profile instead (`target_profile.visual.mask`).
+
 Real-time: the target may use WebSocket, SSE or polling. Pətək does not need to be told. It measures when a text
 appears in each receiver's DOM (t1) against the harness emit time (t0). It detects the transport from network traffic
 and reports it.

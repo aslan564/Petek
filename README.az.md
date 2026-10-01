@@ -357,7 +357,11 @@ başlayanda saytın versiyasını adlandırın (`petek run --release v1.4.2` və
 `petek compare <run|latest>` (və ya Hesabatlar ekranında **Müqayisə**) run-ı ssenarinin əvvəlki run-ı, adlı run və ya
 versiya (`--baseline`) ilə tutuşdurur və `compare-<baseline run>.html`, `.md` yazır: sayt nəyi sındırıb, nəyi düzəldib, nə hələ də
 sınıqdır və nəyi yavaşladıb (canlı çatdırılma və deterministik `run` addımları; AI addımının vaxtı əsasən AI-ın özünündür).
-Nəsə pisləşibsə çıxış kodu 1-dir (CI üçün). `petek run --ci` JUnit və
+Ssenari səhifələrin görünüşünü çəkibsə (`site_health`, `checks: look`; draftlar ziyarətçi səhifələrini hər ekranda
+çəkir), **Görünüş** bölməsi hansı səhifənin hansı ekranda fərqli göründüyünü əvvəl, indi və fərq şəkilləri ilə
+göstərir; tarix, saat, run-ın öz mətnləri və öz-özünə dəyişən hissələr tutuşdurulmur, `target_profile.visual.mask`
+(və ya saytda `data-petek-mask`) daha çoxunu gizlədir. Dəyişən görünüş göstərilir, pisləşmə isə yalnız `--visual fail`
+ilə sayılır (docs/adr/0014). Nəsə pisləşibsə çıxış kodu 1-dir (CI üçün). `petek run --ci` JUnit və
 SARIF yollarını çap edir, Markdown hesabatı GitHub job summary-yə əlavə edir; şablonlar: `docs/ci/github-actions.yml`,
 `docs/ci/gitlab-ci.yml`. `petek --json findings <run|latest>` (və MCP `get_finding_bundle`) kodlaşdıran AI-nıza hər
 tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu ilə verir ki, səbəbi kodunuzda axtarsın.

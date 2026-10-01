@@ -29,7 +29,8 @@ particular coding agent would tie the product to a vendor (R09); the host AI alr
     2025-06-18; the client's version when supported), `notifications/*` ignored, `ping`, `tools/list`, `tools/call`.
     Requests run concurrently, responses are written one line at a time; stdout carries protocol only, logs go to
     stderr and the file. `McpTools` holds the tools (30: Faza 25.3's 29 and `compare_runs`, the regression baseline of
-    2026-09-30, whose `run_campaign` also takes `release`) with JSON-Schema arguments; results are the panel's own JSON
+    2026-09-30, whose `run_campaign` also takes `release`; `compare_runs.visual` is the look gate, ADR-0014) with
+    JSON-Schema arguments; results are the panel's own JSON
     (`PanelJson`) as text plus `structuredContent`; a panel failure is an `isError` result with the Azerbaijani
     message, a protocol mistake a JSON-RPC error (-32700, -32600, -32601, -32602). `McpSettings.allowWrites`
     (`--allow-writes`) gates `cancel_exploration`, `approve_scenario`, `freeze_scenario`, `run_campaign`, `cancel_run`,
