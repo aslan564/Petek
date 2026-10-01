@@ -108,7 +108,9 @@ internal data class StepResult(
  * Reception checks: in a step with `wait_for`, `visible_text` (and the `latency_max` that reads its latency) are
  * evaluated right after the event arrives, before the actor's own action. Their deadline is t0 + `within`, so
  * evaluating them after a multi-second LLM action would measure the agent instead of the target's delivery
- * (design decision 3: t1 - t0 is the real delivery latency). Every other assertion runs after the action.
+ * (design decision 3: t1 - t0 is the real delivery latency). Every other assertion runs after the action, unless the
+ * action did not complete (an error, or a stop that is no refusal): then they are recorded as not evaluated, since the
+ * page and the site's records after a tester's stop say nothing about the site ([unfinished]).
  *
  * Races (`only_one_succeeds`): whether an actor succeeded is decided by code from the requests its own browser sent
  * during the action ([BrowserSession.mutations], judged by [RaceEvidence]), never by the agent's `done(success)` or
@@ -284,7 +286,12 @@ internal class StepExecutor(
             // In the checks: the object this actor emitted when the step emits, else the one it waited for; never another's.
             val lastId = if (step.emits != null) emitted?.event?.objectId else waited?.event?.objectId
             val checks =
-                verifyActor(
+                unfinished(performed.outcome)?.let { key ->
+                    // What the site shows after an action that never completed says nothing about the site (see [unfinished]).
+                    val reason = "not evaluated: the action did not complete ($key)"
+                    evidence.skippedAssertions(run, actor.stepId, step.id, identity.agentId, afterActionSpecs(step), reason)
+                    Verification(emptyList(), error = false)
+                } ?: verifyActor(
                     actor,
                     actor.stepId,
                     afterActionSpecs(step),
@@ -586,6 +593,18 @@ internal class StepExecutor(
     private fun stoppedByAgent(outcome: ActionOutcome): Boolean =
         (outcome.status == ActionStatus.FAILED || outcome.status == ActionStatus.BLOCKED) &&
             (outcome.failureReason == FailureReason.PROBLEM_REPORTED || outcome.failureReason == FailureReason.PERMISSION_DENIED)
+
+    /**
+     * The failure key of an action that did not complete, or null when it did (or ended on the agent's own answer): an
+     * error, or a stop that is no refusal (the watchdog's `timeout`, `llm_unavailable`). The checks after such an action
+     * are recorded as not evaluated instead of run: a tester stopped before it opened the list leaves no read receipt,
+     * and that missing receipt is the tester's stop, never a defect of the site. The action's own record carries the
+     * failure. A refusal and a problem the agent reported are answers about the site, so their checks still run.
+     */
+    private fun unfinished(outcome: ActionOutcome): String? {
+        val stopped = outcome.status == ActionStatus.ERROR || (outcome.status == ActionStatus.BLOCKED && !isRefusal(outcome))
+        return if (stopped) outcome.failureReason?.key ?: outcome.status.name.lowercase() else null
+    }
 
     /** The page as the action left it, when the agent could not leave evidence itself (it crashed or got stuck). */
     private suspend fun failureScreenshot(
