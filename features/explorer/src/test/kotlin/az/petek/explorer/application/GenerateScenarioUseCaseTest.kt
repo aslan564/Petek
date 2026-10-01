@@ -108,9 +108,9 @@ class GenerateScenarioUseCaseTest {
         validator.validate(campaign, runFunctions).shouldBeEmpty()
         campaign.settings.tenant shouldBe Tenant.NONE
         campaign.settings.departments.shouldBeEmpty()
-        // People sign in here: every tester checks the pages a visitor sees before the gates.
+        // People sign in here: every tester looks at and checks the pages a visitor sees before the gates.
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly
-            listOf("site_health", "page_checks", "register_and_login")
+            listOf("site_health", "site_health", "page_checks", "register_and_login")
         campaign.allSteps.none { (it.action as? StepAction.Run)?.function in setOf("register_owner", "seed_company") } shouldBe true
         // The portal model shows a sign-in but no sign-up form: its testers take the owner's accounts.
         campaign.settings.registration.login shouldBe campaign.settings.testers
@@ -131,7 +131,7 @@ class GenerateScenarioUseCaseTest {
         validator.validate(campaign, runFunctions).shouldBeEmpty()
         campaign.settings.testers shouldBe 30
         campaign.settings.registration.guest shouldBe 30
-        campaign.setup.map { it.id } shouldContainExactly listOf("gates")
+        campaign.setup.map { it.id } shouldContainExactly listOf("site-look", "gates")
         campaign.steps.map { it.id } shouldContainExactly listOf("site-pages", "site-content")
         campaign.steps.forEach { step ->
             step.actors.raw shouldBe "anonymous[*]"
@@ -160,14 +160,73 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `public pages get a look step first in setup before anyone signs in`() {
+        val composed = useCase().compose(Models.portal(), request())
+
+        val look = composed.campaign.setup.first()
+        look.id shouldBe "public-look"
+        look.actors.raw shouldBe "admin | manager[*] | employee[*]"
+        look.action shouldBe
+            StepAction.Run(
+                "site_health",
+                mapOf(
+                    "checks" to "look",
+                    "pages" to "/login",
+                    "share" to "work",
+                    "devices" to "phone,tablet,desktop",
+                ),
+            )
+        // A draft names no masks and no look arguments: those are the owner's to add.
+        composed.campaign.target.visual.mask
+            .shouldBeEmpty()
+        composed.yaml shouldNotContain "look_"
+        // The other checks stay as they were: a look is asked for by name only.
+        (
+            composed.campaign.setup
+                .single { it.id == "public-pages" }
+                .action as StepAction.Run
+        ).args["checks"]!! shouldNotContain "look"
+        reload(composed.yaml).setup.first() shouldBe look
+    }
+
+    @Test
+    fun `a site without sign-in gets its looks in a setup step of their own`() {
+        val site = Models.model(listOf(Models.page("/"), Models.page("/about")), emptyList(), roles = listOf("anonymous"))
+
+        val campaign = useCase().compose(site, request().copy(tenant = Tenant.NONE, testers = 4)).campaign
+
+        // The site's own checks run after the scenario's writes; its looks come before anything was written.
+        val look = campaign.setup.first()
+        look.id shouldBe "site-look"
+        look.actors.raw shouldBe "anonymous[*]"
+        (look.action as StepAction.Run).args shouldBe
+            mapOf("checks" to "look", "pages" to "/,/about", "share" to "work", "devices" to "phone,tablet,desktop")
+        campaign.steps.none { (it.action as StepAction.Run).args["checks"]!!.contains("look") } shouldBe true
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `pages only a role sees get no look`() {
+        val campaign = useCase().compose(Models.portal(), request(maxIdeas = 50)).campaign
+
+        val looks = campaign.allSteps.filter { ((it.action as? StepAction.Run)?.args?.get("checks") ?: "").split(',').contains("look") }
+        looks.map { it.id } shouldContainExactly listOf("public-look")
+        (looks.single().action as StepAction.Run).args["pages"] shouldBe "/login"
+        campaign.steps.filter { it.id.endsWith("-pages") }.forEach { step ->
+            (step.action as StepAction.Run).args["checks"]!! shouldNotContain "look"
+        }
+    }
+
+    @Test
     fun `a draft from the portal model validates and covers the top ideas with code-checkable steps`() {
         val composed = useCase().compose(Models.portal(), request())
 
         val campaign = composed.campaign
         validator.validate(campaign, runFunctions).shouldBeEmpty()
-        campaign.setup.map { it.id } shouldContainExactly listOf("public-pages", "public-content", "owner_signup", "seed", "join")
+        campaign.setup.map { it.id } shouldContainExactly
+            listOf("public-look", "public-pages", "public-content", "owner_signup", "seed", "join")
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly
-            listOf("site_health", "page_checks", "register_owner", "seed_company", "register_and_login")
+            listOf("site_health", "site_health", "page_checks", "register_owner", "seed_company", "register_and_login")
         campaign.steps.map { it.id }.filterNot { it.endsWith("-pages") || it.endsWith("-content") } shouldContainExactly
             listOf(
                 "announcement-submit-watch",
