@@ -15,9 +15,9 @@ import az.petek.evidence.domain.LookBox
 import java.util.BitSet
 
 /**
- * Two captures as they are compared: cut to the same height when they were taken with different height caps, and
- * whether each one stops above the end of its page (rows at the other capture's bottom may then be below this one's
- * cap, not missing from its page).
+ * Two captures as they are compared, and whether each one stops above the end of its page (rows at the other capture's
+ * bottom may then be below this one's cap, not missing from its page). When they were taken with different height caps
+ * and a cap cut one of them, both are cut to that height; a capture that reached the end of its page sets no height.
  */
 class CapturePair(
     val before: Raster,
@@ -34,7 +34,15 @@ class CapturePair(
             afterPageHeight: Int,
             afterMaxHeight: Int,
         ): CapturePair {
-            val height = if (beforeMaxHeight != afterMaxHeight) minOf(before.height, after.height) else Int.MAX_VALUE
+            val height =
+                if (beforeMaxHeight == afterMaxHeight) {
+                    Int.MAX_VALUE
+                } else {
+                    minOf(
+                        if (beforePageHeight > before.height) before.height else Int.MAX_VALUE,
+                        if (afterPageHeight > after.height) after.height else Int.MAX_VALUE,
+                    )
+                }
             val b = before.top(height)
             val a = after.top(height)
             return CapturePair(b, a, beforePageHeight > b.height, afterPageHeight > a.height)

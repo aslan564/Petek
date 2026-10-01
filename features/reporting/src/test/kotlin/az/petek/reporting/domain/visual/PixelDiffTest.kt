@@ -236,4 +236,31 @@ class PixelDiffTest {
         result.bands.map { Triple(it.kind, it.counted, it.cutByLimit) } shouldContainExactly
             listOf(Triple(BandKind.REMOVED, true, false), Triple(BandKind.INSERTED, false, true))
     }
+
+    @Test
+    fun `captures with different caps are both cut where the lower cap cut one of them`() {
+        // The same 300-row page, captured to a 200-row cap and then to a 400-row cap.
+        val page = page(40, 300)
+        val pair = CapturePair.of(page.top(200), 300, 200, page, 300, 400)
+
+        val result = diff(pair)
+
+        (pair.before.height to pair.after.height) shouldBe (200 to 200)
+        (pair.beforeCapped to pair.afterCapped) shouldBe (true to true)
+        result.bands.shouldBeEmpty()
+        result.changed shouldBe false
+    }
+
+    @Test
+    fun `with different caps a capture that reached the end of its page is not cut to the other one's height`() {
+        // The baseline's 500-row page is cut by its 400-row cap and the new release keeps only its first 300 rows,
+        // captured whole under an 800-row cap; then the reverse, 200 rows appended to a 300-row page.
+        val long = page(40, 500)
+        val removed = CapturePair.of(long.top(400), 500, 400, long.top(300), 300, 800)
+        val short = page(40, 300)
+        val appended = CapturePair.of(short, 300, 800, short.inserted(300, page(40, 200, seed = 5)).top(400), 500, 400)
+
+        diff(removed).bands shouldContainExactly listOf(Band(BandKind.REMOVED, 300, 100, 300, counted = true))
+        diff(appended).bands shouldContainExactly listOf(Band(BandKind.INSERTED, 300, 100, 300, counted = true))
+    }
 }
