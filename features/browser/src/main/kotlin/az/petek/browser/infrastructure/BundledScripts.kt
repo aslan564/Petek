@@ -52,6 +52,15 @@ internal object BundledScripts {
     /** Element function resolving a `<select>` option by label, then value; see [PlaywrightBrowserSession.select]. */
     val resolveOption: String = load("resolve-option.js")
 
+    /**
+     * Page function bringing the page to rest before a look (`{settleMs, maxHeight, fontsMs, quietMs, stepMs}` ->
+     * `{fontsReady, pendingImages, quiet, pageHeight, width, height}`); see [PlaywrightBrowserSession.look].
+     */
+    val lookSettle: String = load("look-settle.js")
+
+    /** Page function reading a look's facts, areas and anchors after its final frame; [LookReading] reads the result. */
+    val lookRead: String = load("look-read.js")
+
     /** Node.js program hosting the shared Chromium; see [PlaywrightDriver.browserServerCommand]. */
     val browserServer: String = load("browser-server.js")
 

@@ -17,20 +17,31 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.BrowserTopology
 import az.petek.browser.domain.DialogType
+import az.petek.browser.domain.LookArea
+import az.petek.browser.domain.LookAreaReason
+import az.petek.browser.domain.LookRequest
+import az.petek.browser.domain.LookSelector
+import az.petek.browser.domain.LookShotKind
+import az.petek.browser.domain.PageAnchor
 import az.petek.browser.domain.RealtimeTransport
+import az.petek.browser.domain.RunText
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.core.time.SystemHarnessClock
+import com.microsoft.playwright.options.ScreenshotScale
+import com.microsoft.playwright.options.ScreenshotType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeInRange
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -51,6 +62,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.io.TempDir
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.net.ServerSocket
 import java.nio.file.Path
@@ -801,6 +813,369 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `a look of a still page is steady and keeps one frame`() =
+        withSession { session ->
+            // Landed further down: the look starts from the top all the same, and its second load is a reload.
+            session.navigate("/look/still#bottom")
+
+            val look = session.look(LookRequest(settle = 1.seconds)).shouldNotBeNull()
+
+            look.shots.map { it.kind } shouldBe listOf(LookShotKind.MAIN)
+            look.shots.single().let {
+                it.width shouldBe 1280
+                it.height shouldBe 2420
+                decode(it.png).height shouldBe 2420
+            }
+            look.settled shouldBe true
+            look.unsettled.shouldBeEmpty()
+            look.viewport shouldBe Viewport(1280, 800)
+            look.pageHeight shouldBe 2420
+            look.landedPath shouldBe "/look/still"
+            look.status shouldBe 200
+            look.fonts.shouldBeEmpty()
+            look.renderer shouldStartWith "chromium "
+            look.renderer shouldEndWith "; headless"
+        }
+
+    @Test
+    fun `a look keeps the earlier frame of a page whose clock ticks and masks the clock text as time`() =
+        withSession { session ->
+            session.navigate("/look/clock")
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            look.shots.map { it.kind } shouldBe listOf(LookShotKind.MAIN, LookShotKind.MOVED)
+            look.shots[0].png.contentEquals(look.shots[1].png) shouldBe false
+            look.shots.forEach { shot ->
+                shot.height shouldBe 800
+                val clock = shot.areas.single()
+                clock.reason shouldBe LookAreaReason.TIME_TEXT
+                clock.source shouldBe "clock"
+                clock.x shouldBeInRange 19..21
+                clock.y shouldBeInRange 38..42
+                clock.width shouldBeInRange 30..60
+            }
+        }
+
+    @Test
+    fun `a look resets an infinite CSS animation, so two looks are byte-identical`() =
+        withSession { session ->
+            session.navigate("/look/spinner")
+            val request = LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)
+
+            val first = session.look(request).shouldNotBeNull()
+            delay(300)
+            val second = session.look(request).shouldNotBeNull()
+
+            first.shots.map { it.kind } shouldBe listOf(LookShotKind.MAIN)
+            second.shots.map { it.kind } shouldBe listOf(LookShotKind.MAIN)
+            first.shots
+                .single()
+                .png
+                .contentEquals(second.shots.single().png) shouldBe true
+        }
+
+    @Test
+    fun `a look hides the caret of a field the page keeps focused`() =
+        withSession { session ->
+            session.navigate("/look/caret")
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            // The look blurred the field and the page focused it again: its caret would show in every frame.
+            session.isSelectorVisible("#field:focus") shouldBe true
+            val image = decode(look.shots.single().png)
+            (41..238).all { x -> (41..68).all { y -> image.rgbAt(x, y) == WHITE } } shouldBe true
+        }
+
+    @Test
+    fun `a look finds selector, data-petek-mask, run text, time text and cross-origin frame areas in page coordinates`() =
+        withSession { session ->
+            session.navigate("/look/masks")
+            val request =
+                LookRequest(
+                    maxHeight = 0,
+                    loads = 1,
+                    settle = 1.seconds,
+                    selectors = listOf(LookSelector("visual.banner", ".banner"), LookSelector("look_mask:visual.promo", "#promo")),
+                    runTexts = listOf(RunText("tester_name", "Leyla Quliyeva"), RunText("tester_email", "leyla@portal.example")),
+                    runTag = "ab12",
+                )
+
+            val look = session.look(request).shouldNotBeNull()
+
+            val areas = look.shots.single().areas
+            val elements = setOf(LookAreaReason.PROFILE, LookAreaReason.STEP, LookAreaReason.MARKUP, LookAreaReason.EMBED)
+            // The site's own frame (127.0.0.1) is not masked; the one of another origin (localhost) is.
+            areas.filter { it.reason in elements } shouldContainExactlyInAnyOrder
+                listOf(
+                    LookArea(10, 10, 200, 50, LookAreaReason.PROFILE, "visual.banner"),
+                    LookArea(220, 10, 100, 50, LookAreaReason.STEP, "look_mask:visual.promo"),
+                    LookArea(10, 70, 300, 30, LookAreaReason.MARKUP, "ticker"),
+                    LookArea(10, 270, 200, 100, LookAreaReason.EMBED, "iframe"),
+                )
+            val texts = areas.filter { it.reason !in elements }
+            texts.map { it.reason to it.source } shouldContainExactlyInAnyOrder
+                listOf(
+                    LookAreaReason.RUN_TEXT to "tester_name",
+                    LookAreaReason.RUN_TEXT to "run_mark",
+                    LookAreaReason.RUN_TEXT to "tester_email",
+                    LookAreaReason.TIME_TEXT to "date",
+                    LookAreaReason.TIME_TEXT to "clock",
+                    LookAreaReason.TIME_TEXT to "time",
+                )
+
+            fun area(source: String) = texts.single { it.source == source }
+            // Only the words themselves: the name after the greeting, the date and the time on their line.
+            area("tester_name").let {
+                it.x shouldBeGreaterThan 40
+                it.y shouldBeInRange 108..112
+            }
+            area("run_mark").y shouldBeInRange 138..142
+            area("date").y shouldBeInRange 168..172
+            area("clock").x shouldBeGreaterThan area("date").x + area("date").width
+            area("time").let { (it.x to it.y) shouldBe (10 to 200) }
+            area("tester_email").let { (it.x to it.y) shouldBe (10 to 230) }
+            look.anchors shouldContainExactly
+                listOf(PageAnchor("#promo", 220, 10, 100, 50), PageAnchor("[data-testid=\"footer\"]", 0, 400, 400, 40))
+        }
+
+    @Test
+    fun `what does not show is not masked, though its boxes lie over what does`() =
+        withSession { session ->
+            session.navigate("/look/hidden")
+            val request =
+                LookRequest(
+                    maxHeight = 0,
+                    loads = 1,
+                    settle = 1.seconds,
+                    selectors = listOf(LookSelector("visual.who", ".who"), LookSelector("visual.hero", "#hero")),
+                    runTexts = listOf(RunText("tester_name", "Leyla Quliyeva")),
+                )
+
+            val areas =
+                session
+                    .look(request)
+                    .shouldNotBeNull()
+                    .shots
+                    .single()
+                    .areas
+
+            // Nothing of the collapsed menu over the picture, the transparent, screen-reader-only, scrolled-away and
+            // clipped lines, nor of the shadow root's collapsed parts.
+            areas.map { it.reason to it.source } shouldContainExactlyInAnyOrder
+                listOf(
+                    LookAreaReason.PROFILE to "visual.hero",
+                    LookAreaReason.TIME_TEXT to "date",
+                    LookAreaReason.TIME_TEXT to "date",
+                    LookAreaReason.RUN_TEXT to "tester_name",
+                )
+            areas.single { it.reason == LookAreaReason.PROFILE } shouldBe LookArea(10, 20, 600, 200, LookAreaReason.PROFILE, "visual.hero")
+            val (cut, positioned) = areas.filter { it.reason == LookAreaReason.TIME_TEXT }.sortedBy { it.y }
+            // Only the part of the date its 10 px high box shows.
+            cut.y shouldBeInRange 320..321
+            cut.y + cut.height shouldBe 330
+            // Positioned out of a collapsed box that is not its containing block, so shown.
+            positioned.y shouldBeInRange 379..382
+            areas.single { it.reason == LookAreaReason.RUN_TEXT }.y shouldBeInRange 598..602
+        }
+
+    @Test
+    fun `a full-page look stops at its height limit and reports the page's real height`() =
+        withSession { session ->
+            session.navigate("/look/tall")
+
+            val look = session.look(LookRequest(maxHeight = 1_500, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            look.pageHeight shouldBe 3_000
+            val image = decode(look.shots.single().png)
+            (image.width to image.height) shouldBe (1280 to 1500)
+            image.rgbAt(10, 1_400) shouldBe 0x33EE33
+        }
+
+    @Test
+    fun `a full-page look keeps every CSS pixel of the page at the same image pixel`() =
+        withSession { session ->
+            session.navigate("/look/tall")
+
+            val look = session.look(LookRequest(maxHeight = 2_000, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            val image = decode(look.shots.single().png)
+            (image.width to image.height) shouldBe (1280 to 2000)
+            image.rgbAt(1_279, 999) shouldBe 0xEE3333
+            image.rgbAt(1_279, 1_000) shouldBe 0x33EE33
+        }
+
+    @Test
+    fun `a look's frames are asked for at CSS scale, so a screen with more device pixels gives the same image`() {
+        // Every session draws one device pixel per CSS pixel, where both scales give the same image: only the request
+        // tells them apart.
+        val options = PlaywrightBrowserSession.lookShotOptions(maxHeight = 2_000, viewport = Viewport(1280, 800), pageHeight = 3_000)
+
+        options.scale shouldBe ScreenshotScale.CSS
+        options.type shouldBe ScreenshotType.PNG
+        options.fullPage shouldBe true
+        options.clip.shouldNotBeNull().let { listOf(it.x, it.y, it.width, it.height) } shouldBe listOf(0.0, 0.0, 1280.0, 2000.0)
+    }
+
+    @Test
+    fun `a band one screen high keeps the screen's height in a full-page look`() =
+        withSession { session ->
+            session.navigate("/look/screen")
+
+            val look = session.look(LookRequest(maxHeight = 2_000, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            val image = decode(look.shots.single().png)
+            image.rgbAt(10, 799) shouldBe 0x3333EE
+            image.rgbAt(10, 800) shouldBe 0xEE3333
+        }
+
+    @Test
+    fun `a look loads lazy images below the fold before it is taken`() =
+        withSession { session ->
+            val before = site.lazyImages.get()
+            session.navigate("/look/lazy")
+            delay(300)
+            site.lazyImages.get() shouldBe before
+
+            val look = session.look(LookRequest(maxHeight = 6_200, loads = 1, settle = 4.seconds)).shouldNotBeNull()
+
+            site.lazyImages.get() shouldBe before + 1
+            look.settled shouldBe true
+            val image = decode(look.shots.single().png)
+            image.height shouldBe 6_100
+            image.rgbAt(50, 6_050) shouldBe 0xFF0000
+        }
+
+    @Test
+    fun `a look reports the path it landed on and the page's status`() =
+        withSession { session ->
+            session.navigate("/look/old")
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            look.landedPath shouldBe "/look/missing"
+            look.status shouldBe 404
+        }
+
+    @Test
+    fun `a page that goes to another address during a look gives no look`() =
+        withSession { session ->
+            session.navigate("/look/wandering")
+
+            session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldBeNull()
+        }
+
+    @Test
+    fun `a look whose second load lands on another page gives no look`() =
+        withSession { session ->
+            session.navigate("/look/once/moved")
+
+            session.look(LookRequest(maxHeight = 0, settle = 1.seconds)).shouldBeNull()
+        }
+
+    @Test
+    fun `a look whose second load answers with another status gives no look`() =
+        withSession { session ->
+            // The same page again, but refused: its frame alone would pass for the first load's.
+            session.navigate("/look/once/refused")
+
+            session.look(LookRequest(maxHeight = 0, settle = 1.seconds)).shouldBeNull()
+        }
+
+    @Test
+    fun `a page that goes to another one while it settles is drawn as a look of that page draws it`() =
+        withSession { session ->
+            session.navigate("/look/still")
+            val direct = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+            // The jump comes while the look settles the page: its field loses the focus.
+            session.navigate("/look/jump")
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            look.landedPath shouldBe "/look/still"
+            look.shots
+                .single()
+                .png
+                .contentEquals(direct.shots.single().png) shouldBe true
+        }
+
+    @Test
+    fun `a look keeps the reloaded frame of a page that changes on every load`() =
+        withSession { session ->
+            session.navigate("/look/still")
+            session.navigate("/look/random")
+
+            val look = session.look(LookRequest(maxHeight = 0, settle = 1.seconds)).shouldNotBeNull()
+
+            look.shots.map { it.kind } shouldBe listOf(LookShotKind.MAIN, LookShotKind.RELOADED)
+            look.shots[0].png.contentEquals(look.shots[1].png) shouldBe false
+            // Opening the same address again replaces the history entry: the back button still leads to the page before.
+            session.currentUrl() shouldEndWith "/look/random"
+            session.goBack() shouldBe true
+            session.currentUrl() shouldEndWith "/look/still"
+        }
+
+    @Test
+    fun `an invalid mask selector is reported and the look is still taken`() =
+        withSession { session ->
+            session.navigate("/look/still")
+            val selectors = listOf(LookSelector("visual.broken", "div["), LookSelector("visual.title", "h1"))
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds, selectors = selectors)).shouldNotBeNull()
+
+            look.rejectedSelectors shouldBe listOf("div[")
+            look.shots.single().areas shouldBe listOf(LookArea(0, 0, 1280, 60, LookAreaReason.PROFILE, "visual.title"))
+        }
+
+    @Test
+    fun `after a look the page is at the top with no added nodes or attributes`() =
+        withSession { session ->
+            // The top of the page as a look leaves it drawn (see the next test).
+            session.navigate("/look/still")
+            session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+            val top = session.screenshot()
+            session.navigate("/look/still#bottom")
+            val dom = session.domSnapshot()
+            session.screenshot().contentEquals(top) shouldBe false
+
+            session.look(LookRequest(loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            session.screenshot().contentEquals(top) shouldBe true
+            session.domSnapshot() shouldBe dom
+        }
+
+    @Test
+    fun `a look of the first screen and a full-page look draw the page alike`() =
+        withSession { session ->
+            // Chromium draws a document differently after its first capture beyond the screen; looks are drawn as after it.
+            session.navigate("/look/still")
+            val screen =
+                decode(
+                    session
+                        .look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds))
+                        .shouldNotBeNull()
+                        .shots
+                        .single()
+                        .png,
+                )
+            session.navigate("/look/random")
+            session.navigate("/look/still")
+            val page =
+                decode(
+                    session
+                        .look(LookRequest(loads = 1, settle = 1.seconds))
+                        .shouldNotBeNull()
+                        .shots
+                        .single()
+                        .png,
+                )
+
+            page.height shouldBe 2_420
+            (0 until screen.height).all { y -> (0 until screen.width).all { x -> screen.rgbAt(x, y) == page.rgbAt(x, y) } } shouldBe true
+        }
+
+    @Test
     fun `accessibility and DOM snapshots describe the page`() =
         withSession { session ->
             session.navigate("/form")
@@ -1025,6 +1400,13 @@ class PlaywrightBrowserSessionTest {
         session.waitForText("Salam, $user", 3.seconds).found shouldBe true
     }
 
+    private fun decode(png: ByteArray): BufferedImage = ImageIO.read(ByteArrayInputStream(png)).shouldNotBeNull()
+
+    private fun BufferedImage.rgbAt(
+        x: Int,
+        y: Int,
+    ): Int = getRGB(x, y) and RGB
+
     private fun liveThreadNames(): List<String> =
         Thread
             .getAllStackTraces()
@@ -1033,6 +1415,9 @@ class PlaywrightBrowserSessionTest {
             .map { it.name }
 
     private companion object {
+        const val RGB = 0xFFFFFF
+        const val WHITE = 0xFFFFFF
+
         /**
          * Pages whose text appears one second after they load, the element stamped with that moment: appended to the
          * document, revealed by a style change, and inside a shadow root, which no change of the document announces.
