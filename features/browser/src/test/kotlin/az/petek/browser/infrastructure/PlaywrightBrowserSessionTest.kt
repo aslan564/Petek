@@ -926,6 +926,46 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `what does not show is not masked, though its boxes lie over what does`() =
+        withSession { session ->
+            session.navigate("/look/hidden")
+            val request =
+                LookRequest(
+                    maxHeight = 0,
+                    loads = 1,
+                    settle = 1.seconds,
+                    selectors = listOf(LookSelector("visual.who", ".who"), LookSelector("visual.hero", "#hero")),
+                    runTexts = listOf(RunText("tester_name", "Leyla Quliyeva")),
+                )
+
+            val areas =
+                session
+                    .look(request)
+                    .shouldNotBeNull()
+                    .shots
+                    .single()
+                    .areas
+
+            // Nothing of the collapsed menu over the picture, the transparent, screen-reader-only, scrolled-away and
+            // clipped lines, nor of the shadow root's collapsed parts.
+            areas.map { it.reason to it.source } shouldContainExactlyInAnyOrder
+                listOf(
+                    LookAreaReason.PROFILE to "visual.hero",
+                    LookAreaReason.TIME_TEXT to "date",
+                    LookAreaReason.TIME_TEXT to "date",
+                    LookAreaReason.RUN_TEXT to "tester_name",
+                )
+            areas.single { it.reason == LookAreaReason.PROFILE } shouldBe LookArea(10, 20, 600, 200, LookAreaReason.PROFILE, "visual.hero")
+            val (cut, positioned) = areas.filter { it.reason == LookAreaReason.TIME_TEXT }.sortedBy { it.y }
+            // Only the part of the date its 10 px high box shows.
+            cut.y shouldBeInRange 320..321
+            cut.y + cut.height shouldBe 330
+            // Positioned out of a collapsed box that is not its containing block, so shown.
+            positioned.y shouldBeInRange 379..382
+            areas.single { it.reason == LookAreaReason.RUN_TEXT }.y shouldBeInRange 598..602
+        }
+
+    @Test
     fun `a full-page look stops at its height limit and reports the page's real height`() =
         withSession { session ->
             session.navigate("/look/tall")

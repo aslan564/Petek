@@ -193,6 +193,7 @@ internal class TestSite : AutoCloseable {
         get("/look/clock") { call.respondText(LOOK_CLOCK_PAGE, ContentType.Text.Html) }
         get("/look/spinner") { call.respondText(LOOK_SPINNER_PAGE, ContentType.Text.Html) }
         get("/look/masks") { call.respondText(lookMasksPage(call.request.local.localPort), ContentType.Text.Html) }
+        get("/look/hidden") { call.respondText(LOOK_HIDDEN_PAGE, ContentType.Text.Html) }
         get("/look/frame") { call.respondText(LOOK_FRAME_PAGE, ContentType.Text.Html) }
         get("/look/tall") { call.respondText(LOOK_TALL_PAGE, ContentType.Text.Html) }
         get("/look/screen") { call.respondText(LOOK_SCREEN_PAGE, ContentType.Text.Html) }
@@ -304,6 +305,46 @@ internal class TestSite : AutoCloseable {
             <iframe src="/look/frame" style="left: 220px; top: 270px"></iframe>
             <p style="display: none">Leyla Quliyeva 2026-10-01</p>
             <div data-testid="footer" style="left: 0; top: 400px; width: 400px; height: 40px">Alt</div>
+            </body></html>
+            """.trimIndent()
+
+        /**
+         * The run's name, dates and times where they have boxes but do not show: a collapsed menu (also a selector's
+         * element and a `<time>` there) over a picture, a transparent line, a screen-reader-only text, a scrolled-away
+         * line, a `clip-path` that hides all, and collapsed parts of a shadow root (its own text and a slotted one). Shown
+         * are a date half cut by its box, one positioned out of a collapsed box that is not its containing block, and the
+         * greeting at the bottom.
+         */
+        val LOOK_HIDDEN_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Gizli</title><style>
+              body { margin: 0; font: 16px/20px sans-serif }
+              body > * { position: absolute; left: 10px; margin: 0 }
+              .shut { height: 0; overflow: hidden }
+            </style></head><body>
+            <header style="top: 0; width: 600px; height: 20px">
+              <ul class="shut" style="max-height: 0; height: auto; margin: 0; padding: 0; list-style: none">
+                <li class="who">Daxil olub: Leyla Quliyeva</li>
+                <li>Son giriş 2026-10-01 14:05 <time>dünən</time></li>
+              </ul>
+            </header>
+            <div id="hero" style="top: 20px; width: 600px; height: 200px; background: #36c"></div>
+            <p style="top: 240px; opacity: 0">Yeniləndi 2026-09-30</p>
+            <p style="top: 280px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden;
+              clip: rect(0 0 0 0); white-space: nowrap">Leyla Quliyeva</span>Qiymət</p>
+            <div style="top: 320px; width: 300px; height: 10px; overflow: hidden">Son baxış 2026-09-29</div>
+            <section style="top: 360px; width: 400px; height: 60px">
+              <div class="shut"><p style="position: absolute; left: 10px; top: 20px; margin: 0">Görüş 2026-10-02</p></div>
+            </section>
+            <div style="top: 440px; width: 200px; height: 20px; overflow: auto"><p style="margin: 0; padding-top: 40px">2026-10-03</p></div>
+            <div style="top: 500px; width: 300px; clip-path: inset(50%)">Saat 09:15</div>
+            <div id="host" style="top: 540px; width: 300px; height: 40px"><span>2026-10-04</span></div>
+            <p style="top: 600px">Salam, Leyla Quliyeva</p>
+            <script>
+              document.getElementById('host').attachShadow({ mode: 'open' }).innerHTML =
+                '<div class="x" style="height: 0; overflow: hidden">Leyla Quliyeva <slot></slot></div>';
+            </script>
             </body></html>
             """.trimIndent()
 
