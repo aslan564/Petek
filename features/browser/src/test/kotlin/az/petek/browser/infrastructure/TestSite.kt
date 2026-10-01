@@ -20,6 +20,7 @@ import io.ktor.server.request.contentType
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.Routing
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -46,8 +47,9 @@ internal object TokenApp {
 
 /**
  * A small local website for the real-browser tests (no internet): forms, a cookie login, SSE, polling, a WebSocket
- * attempt, a slow page and a ticket that can be approved only once (form post: 303, then 409; JSON API: 200, then
- * 409). Pages are plain HTML with inline scripts so that what the browser does is obvious.
+ * attempt, a slow page, a ticket that can be approved only once (form post: 303, then 409; JSON API: 200, then
+ * 409) and pages to take looks of (`/look/...`). Pages are plain HTML with inline scripts so that what the browser does
+ * is obvious.
  */
 internal class TestSite : AutoCloseable {
     /** Ticket ids already approved; each test uses its own id. */
@@ -58,6 +60,12 @@ internal class TestSite : AutoCloseable {
 
     /** How many writes reached `/api/write` (a page elsewhere posts there with `/write-elsewhere?to=`). */
     val writes = AtomicInteger()
+
+    /** How often the lazy image far below the fold of `/look/lazy` was asked for. */
+    val lazyImages = AtomicInteger()
+
+    /** How often `/look/random` was asked for: each answer shows another number. */
+    private val randomLoads = AtomicInteger()
 
     private val server =
         embeddedServer(CIO, host = "127.0.0.1", port = 0) {
@@ -168,8 +176,33 @@ internal class TestSite : AutoCloseable {
                 }
                 get("/write-elsewhere") { call.respondText(WRITE_ELSEWHERE_PAGE, ContentType.Text.Html) }
                 delete("/api/tickets/{id}") { call.respondText("gone", status = HttpStatusCode.Forbidden) }
+                lookPages()
             }
         }.start(wait = false)
+
+    /** Pages for looks (`BrowserSession.look`): still, moving, masked, tall, lazy, random and redirected ones. */
+    private fun Routing.lookPages() {
+        get("/look/still") { call.respondText(LOOK_STILL_PAGE, ContentType.Text.Html) }
+        get("/look/clock") { call.respondText(LOOK_CLOCK_PAGE, ContentType.Text.Html) }
+        get("/look/spinner") { call.respondText(LOOK_SPINNER_PAGE, ContentType.Text.Html) }
+        get("/look/masks") { call.respondText(lookMasksPage(call.request.local.localPort), ContentType.Text.Html) }
+        get("/look/frame") { call.respondText(LOOK_FRAME_PAGE, ContentType.Text.Html) }
+        get("/look/tall") { call.respondText(LOOK_TALL_PAGE, ContentType.Text.Html) }
+        get("/look/screen") { call.respondText(LOOK_SCREEN_PAGE, ContentType.Text.Html) }
+        get("/look/lazy") { call.respondText(LOOK_LAZY_PAGE, ContentType.Text.Html) }
+        get("/look/lazy.svg") {
+            lazyImages.incrementAndGet()
+            delay(LAZY_IMAGE_DELAY_MS)
+            call.respondText(RED_SQUARE, ContentType.Image.SVG)
+        }
+        get("/look/random") {
+            val number = randomLoads.incrementAndGet() * 7_919 % 100_000
+            call.respondText(LOOK_RANDOM_PAGE.replace("NUMBER", number.toString()), ContentType.Text.Html)
+        }
+        get("/look/wandering") { call.respondText(LOOK_WANDERING_PAGE, ContentType.Text.Html) }
+        get("/look/old") { call.respondRedirect("/look/missing") }
+        get("/look/missing") { call.respondText(LOOK_MISSING_PAGE, ContentType.Text.Html, HttpStatusCode.NotFound) }
+    }
 
     val baseUrl: URI =
         runBlocking {
@@ -181,6 +214,147 @@ internal class TestSite : AutoCloseable {
     }
 
     private companion object {
+        const val LAZY_IMAGE_DELAY_MS = 300L
+
+        /** A page that never changes by itself: a heading, a field and, far below, an anchor to land on. */
+        val LOOK_STILL_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Sakit</title><style>body { margin: 0; font: 16px/20px sans-serif }</style></head><body>
+            <h1 data-testid="title" style="margin: 0; padding: 20px">Sakit səhifə</h1>
+            <p id="intro" style="margin: 0 20px">Heç nə dəyişmir.</p>
+            <input id="name" value="Ad" style="margin: 20px">
+            <div id="bottom" style="position: absolute; top: 2400px; height: 20px">Son</div>
+            </body></html>
+            """.trimIndent()
+
+        /** A clock written by script, a tick every 100 ms (`mm:ss`), so every frame of the page differs. */
+        val LOOK_CLOCK_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Saat</title></head><body style="margin: 0">
+            <p id="clock" style="position: absolute; left: 20px; top: 40px; margin: 0; font: 16px/20px monospace">00:00</p>
+            <script>
+              var ticks = 0;
+              var clock = document.getElementById('clock');
+              setInterval(function () {
+                ticks += 1;
+                var two = function (n) { return String(n).padStart(2, '0'); };
+                clock.textContent = two(Math.floor(ticks / 60) % 24) + ':' + two(ticks % 60);
+              }, 100);
+            </script>
+            </body></html>
+            """.trimIndent()
+
+        /** An endless CSS spinner, a fade that ends, and a field focused as the page opens (its caret blinks). */
+        val LOOK_SPINNER_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Fırlanan</title><style>
+              @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+              @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+              .spinner { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px; border: 6px solid #ccc;
+                border-top-color: #06c; border-radius: 50%; animation: spin 1s linear infinite }
+              .fade { position: absolute; left: 140px; top: 40px; width: 80px; height: 40px; background: #c30;
+                animation: fade 5s ease-in forwards }
+              input { position: absolute; left: 40px; top: 120px }
+            </style></head><body>
+            <div class="spinner"></div><div class="fade"></div><input id="field" autofocus>
+            </body></html>
+            """.trimIndent()
+
+        /**
+         * Everything a look masks, at known places: an owner's selector, a step's selector, `data-petek-mask`, the run's
+         * own name, mark and e-mail, dates and a time, a `<time>`, a frame of another origin (localhost against
+         * 127.0.0.1) next to one of the site's own, and an element with a test id.
+         */
+        fun lookMasksPage(port: Int): String =
+            """
+            <!doctype html>
+            <html><head><title>Maskalar</title><style>
+              body { margin: 0; font: 16px/20px sans-serif }
+              body > * { position: absolute; margin: 0 }
+              iframe { border: 0; width: 200px; height: 100px }
+            </style></head><body>
+            <div class="banner" style="left: 10px; top: 10px; width: 200px; height: 50px; background: #fc0">Reklam</div>
+            <div id="promo" style="left: 220px; top: 10px; width: 100px; height: 50px; background: #0cf">Aksiya</div>
+            <div data-petek-mask="ticker" style="left: 10px; top: 70px; width: 300px; height: 30px">Xəbər lenti</div>
+            <p style="left: 10px; top: 110px">Salam, Leyla Quliyeva</p>
+            <p style="left: 10px; top: 140px">Bilet ab12-7 yaradıldı</p>
+            <p style="left: 10px; top: 170px">Yeniləndi: 2026-10-01, saat 14:05</p>
+            <time style="left: 10px; top: 200px">dünən</time>
+            <input value="leyla@portal.example" style="left: 10px; top: 230px; width: 200px; height: 24px">
+            <iframe src="http://localhost:$port/look/frame" style="left: 10px; top: 270px"></iframe>
+            <iframe src="/look/frame" style="left: 220px; top: 270px"></iframe>
+            <p style="display: none">Leyla Quliyeva 2026-10-01</p>
+            <div data-testid="footer" style="left: 0; top: 400px; width: 400px; height: 40px">Alt</div>
+            </body></html>
+            """.trimIndent()
+
+        const val LOOK_FRAME_PAGE = "<!doctype html><html><body style='margin: 0; background: #9c9'>Çərçivə</body></html>"
+
+        /** 3000 px of three colour bands, 1000 px each. */
+        val LOOK_TALL_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Uzun</title></head><body style="margin: 0">
+            <div style="height: 1000px; background: #e33"></div>
+            <div style="height: 1000px; background: #3e3"></div>
+            <div style="height: 1000px; background: #33e"></div>
+            </body></html>
+            """.trimIndent()
+
+        /** A first band one screen high (`100vh`), then 2000 px of another colour. */
+        val LOOK_SCREEN_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Ekran</title></head><body style="margin: 0">
+            <div style="height: 100vh; background: #33e"></div>
+            <div style="height: 2000px; background: #e33"></div>
+            </body></html>
+            """.trimIndent()
+
+        /** A lazy image 6000 px down, answered after [LAZY_IMAGE_DELAY_MS]: the browser asks for it only near the screen. */
+        val LOOK_LAZY_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Tənbəl</title></head><body style="margin: 0">
+            <div style="height: 6000px">Uzun səhifə</div>
+            <img loading="lazy" src="/look/lazy.svg" width="100" height="100" style="display: block" alt="Qırmızı">
+            </body></html>
+            """.trimIndent()
+
+        const val RED_SQUARE =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='#f00'/></svg>"
+
+        /** Another number on every load. */
+        val LOOK_RANDOM_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Təsadüfi</title></head><body style="margin: 0; font: 32px/40px sans-serif">
+            <p style="margin: 20px">Bu dəfə: NUMBER</p>
+            </body></html>
+            """.trimIndent()
+
+        /** Goes to another address of its own every 200 ms (`history.pushState`), as a slideshow that names each slide. */
+        val LOOK_WANDERING_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Gəzən</title></head><body>
+            <p>Slayd</p>
+            <script>
+              var slide = 0;
+              setInterval(function () { slide += 1; history.pushState(null, '', '/look/wandering/' + slide); }, 200);
+            </script>
+            </body></html>
+            """.trimIndent()
+
+        val LOOK_MISSING_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Tapılmadı</title></head><body><h1>Səhifə tapılmadı</h1></body></html>
+            """.trimIndent()
+
         /** What the token app answers a write without its CSRF token with (as some frameworks do). */
         const val CSRF_MISSING = 419
 
