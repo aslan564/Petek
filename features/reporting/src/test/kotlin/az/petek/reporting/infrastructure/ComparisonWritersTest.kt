@@ -75,7 +75,7 @@ class ComparisonWritersTest {
             facts =
                 listOf(
                     LookFact(LookFactKind.HEIGHT, "2310", "2430"),
-                    LookFact(LookFactKind.FONTS, "", "Inter 700 normal"),
+                    LookFact(LookFactKind.FONTS, "", "Demo Sans 700 normal"),
                     LookFact(LookFactKind.TESTERS, "8", "10"),
                 ),
             before = side(base, "0003-visual.png"),
@@ -158,7 +158,7 @@ class ComparisonWritersTest {
         html shouldContain "href=\"../a01/0004-visual.png\">indi</a>"
         html shouldContain "href=\"$visual.png\">fərq</a>"
         html shouldContain "hündürlük 2310 → 2430 px"
-        html shouldContain "şriftlər: +Inter 700 normal"
+        html shouldContain "şriftlər: +Demo Sans 700 normal"
         html shouldContain "bu addımda tester sayı fərqlidir (8 → 10)"
         html shouldContain "Sahə 120×18 @ 10,20: run-ın öz məzmunu (sayılmır)"
         html shouldContain "Tutuşdurulmayan: run mətni 1,2%, tarix/saat 0,3%, öz-özünə dəyişən 4,0%"

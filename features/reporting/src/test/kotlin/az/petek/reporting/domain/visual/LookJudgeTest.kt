@@ -101,8 +101,8 @@ class LookJudgeTest {
         val decision =
             decide(
                 LookJudge.Input(
-                    before.copy(fonts = listOf("Arial 400 normal", "Inter 400 normal"), testers = 8),
-                    after.copy(fonts = listOf("Inter 400 normal", "Inter 700 normal"), testers = 10),
+                    before.copy(fonts = listOf("Demo Serif 400 normal", "Demo Sans 400 normal"), testers = 8),
+                    after.copy(fonts = listOf("Demo Sans 400 normal", "Demo Sans 700 normal"), testers = 10),
                     changed = true,
                 ),
             )
@@ -110,7 +110,7 @@ class LookJudgeTest {
         decision.change shouldBe LookChange.CHANGED
         decision.facts shouldContainExactly
             listOf(
-                LookFact(LookFactKind.FONTS, "Arial 400 normal", "Inter 700 normal"),
+                LookFact(LookFactKind.FONTS, "Demo Serif 400 normal", "Demo Sans 700 normal"),
                 LookFact(LookFactKind.TESTERS, "8", "10"),
             )
     }

@@ -50,7 +50,7 @@ object LookTestData {
         maxHeight: Int = 4_000,
         testers: Int = 4,
         settled: Boolean = true,
-        fonts: List<String> = listOf("Inter 400 normal"),
+        fonts: List<String> = listOf("Demo Sans 400 normal"),
         anchors: List<LookAnchor> = emptyList(),
         recordedAtMs: Long = 0,
     ) = PageLookRecord(
