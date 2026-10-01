@@ -441,7 +441,7 @@ class RunCommandTest {
 
             val result = cli.run("run", "depts.yaml", "--testers", "3")
 
-            result.statusCode shouldBe 0
+            result.statusCode shouldBe 1
             result.stderr shouldContain "Warning: with --testers 3 no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
         }
 
