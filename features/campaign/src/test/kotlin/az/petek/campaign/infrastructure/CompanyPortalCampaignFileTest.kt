@@ -13,6 +13,7 @@ package az.petek.campaign.infrastructure
 
 import az.petek.campaign.domain.ActorSelector
 import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.CssSelectors
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.Flow
 import az.petek.campaign.domain.FlowNames
@@ -105,6 +106,13 @@ class CompanyPortalCampaignFileTest {
         target.localStorage["portal:domain_dialog_dismissed"] shouldBe "1"
         target.localStorage["portal:lang"] shouldBe "az"
         target.dismiss shouldContainExactly listOf("role=button[name=\"Qəbul edirəm\"]")
+    }
+
+    @Test
+    fun `the example's visual masks are read`() {
+        target.visual.mask shouldContainExactly listOf("visual.online_count", "aside .news-ticker")
+        target.visual.mask.map { target.resolveSelector(it) } shouldContainExactly listOf("header .online-count", "aside .news-ticker")
+        target.visual.mask.map { CssSelectors.playwrightOnly(target.resolveSelector(it)) } shouldBe listOf(null, null)
     }
 
     @Test

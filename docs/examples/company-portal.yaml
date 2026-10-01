@@ -53,6 +53,14 @@ target_profile:
     join.password: 'input[autocomplete="new-password"] >> nth=0'
     join.confirm_password: 'input[autocomplete="new-password"] >> nth=1'
     join.submit: 'form button[type="submit"]'
+    visual.online_count: 'header .online-count'
+  # What site_health's look check never compares between releases (it changes by itself): selector keys or plain CSS,
+  # found in the page with querySelectorAll, so no Playwright selectors here. The run's own texts, dates and times,
+  # frames of other sites and [data-petek-mask] elements are masked without being named.
+  visual:
+    mask:
+      - visual.online_count
+      - 'aside .news-ticker'
   flows:
     # Owner sign-up: the form, then the verification link from the e-mail (a backend page), then the SPA's status page
     # until the registration saga has created the company. It ends signed out; register_owner then publishes the
