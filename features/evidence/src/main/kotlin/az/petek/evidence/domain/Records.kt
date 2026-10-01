@@ -94,8 +94,8 @@ const val ABORT_ACTION = "abort"
 /**
  * The roll call at a run's end (passed, failed or aborted, with waves or without): every tester the run planned for a
  * step that has no final record of its own for it gets one harness step with this action, its agent id and the
- * scenario step, SKIPPED, the detail saying why with a leading key from [NotReached]. So no planned tester × step is
- * missing from the evidence, whatever stopped it.
+ * scenario step, the detail saying why with a leading key from [NotReached]. So no planned tester × step is missing from
+ * the evidence, whatever stopped it. SKIPPED, except [NotReached.NEVER_REACHED], which is FAILED.
  */
 const val NOT_REACHED_ACTION = "not_reached"
 
@@ -112,7 +112,8 @@ object NotReached {
 
     /**
      * `never_reached: ...`: the run went on, yet the tester never got to the step. A gap of Pətək itself, never of the
-     * site or the tester: it is counted as a failed step (with no agent), so such a run is not PASSED.
+     * site or the tester: its record is FAILED and it is counted as a failed step (with no agent, so the tester is not
+     * among the run's failed agents), so such a run is not PASSED.
      */
     const val NEVER_REACHED = "never_reached"
 }

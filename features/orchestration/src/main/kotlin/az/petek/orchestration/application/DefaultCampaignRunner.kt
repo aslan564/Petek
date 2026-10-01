@@ -41,8 +41,6 @@ import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceRecorder
-import az.petek.evidence.domain.NOT_REACHED_ACTION
-import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
@@ -155,6 +153,7 @@ class DefaultCampaignRunner(
     private val objectIds = ObjectIdReader(oracle, fields, renderer)
     private val teardown = OracleTeardownUseCase(runs, oracle)
     private val identityPlanner = PlanIdentitiesUseCase(identityGenerator, identities)
+    private val rollCall = RollCall(actors, evidence)
 
     override suspend fun run(
         campaign: Campaign,
@@ -776,7 +775,7 @@ class DefaultCampaignRunner(
         run.abortedBecause?.let { reason ->
             safely(run, "abort record") { recordAbort(run, reason, board) }
         }
-        safely(run, "roll call") { rollCall(run) }
+        safely(run, "roll call") { rollCall.call(run) }
         safely(run, "steps nobody ran") { recordUncovered(run, board) }
         tasks.closeOpen(run.abortedBecause?.let { "run aborted: $it" } ?: "not run")
         safely(run, "network observation") { recordNetworkObservations(run) }
@@ -842,63 +841,6 @@ class DefaultCampaignRunner(
         val detail = "run aborted: $reason; steps not run: ${notRun.joinToString("; ").ifEmpty { "-" }}"
         evidence.system(run, null, ABORT_ACTION, StepStatus.SKIPPED, detail)
         board.message(detail)
-    }
-
-    /**
-     * The roll call: every tester each planned pass had for a step (the actors it started with, or would have started
-     * with when it never began, and the testers out since an earlier failure) that has no final record of its own for
-     * it gets a `not_reached` record saying why, so nobody planned is missing from the evidence ([NotReached]). A gap
-     * in a run that went on to its end is Pətək's own and counts as a failed step (with no agent).
-     *
-     * Who was out is read when the step began: a step that began skipped its planned testers out by then with a record
-     * of their own, and a tester that failed only later was never planned for it (with `n`, its place went to the next
-     * tester). Only a step that never began names, at the end, the planned testers out by then.
-     */
-    private suspend fun rollCall(run: RunState) {
-        val aborted = run.abortedBecause
-        for (pass in run.passes) {
-            for (planned in pass.steps) {
-                val stepId = planned.step.id
-                val chosen = run.chosenIn(pass.number, stepId)
-                val acting =
-                    chosen ?: actors.resolve(planned.step.actors, planned.pool.filterNot { run.isFailed(it.agentId) }).map { it.agentId }
-                val failed =
-                    if (chosen != null) {
-                        emptyList()
-                    } else {
-                        actors.resolve(planned.step.actors, planned.pool).map { it.agentId }.filter(run::isFailed)
-                    }
-                (acting + failed)
-                    .distinct()
-                    .sorted()
-                    .filterNot { run.isSettled(pass.number, stepId, it) }
-                    .forEach { agentId ->
-                        val why =
-                            when {
-                                agentId !in acting -> {
-                                    "${NotReached.FAILED_EARLIER}: ${run.failureReason(agentId) ?: "failed"}"
-                                }
-
-                                chosen == null && pass.wave != null && !run.hasBegun(pass.number) -> {
-                                    "${NotReached.WAVE_NOT_STARTED}: wave ${pass.wave} of ${pass.waves} never began; run aborted: $aborted"
-                                }
-
-                                aborted != null -> {
-                                    "${NotReached.RUN_ABORTED}: $aborted"
-                                }
-
-                                else -> {
-                                    "${NotReached.NEVER_REACHED}: the run went on, but $agentId has no record of step '$stepId'"
-                                }
-                            }
-                        evidence.system(run, agentId, NOT_REACHED_ACTION, StepStatus.SKIPPED, why, stepId)
-                        if (aborted == null && agentId in acting) {
-                            logger.warn { "run ${run.runId}: $agentId has no record of step '$stepId' in pass ${pass.number}" }
-                            run.tally.step(Tally.FAIL, null)
-                        }
-                    }
-            }
-        }
     }
 
     /**
