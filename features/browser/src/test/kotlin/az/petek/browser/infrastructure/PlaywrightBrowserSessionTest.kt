@@ -1002,13 +1002,17 @@ class PlaywrightBrowserSessionTest {
     @Test
     fun `a look keeps the reloaded frame of a page that changes on every load`() =
         withSession { session ->
+            session.navigate("/look/still")
             session.navigate("/look/random")
 
             val look = session.look(LookRequest(maxHeight = 0, settle = 1.seconds)).shouldNotBeNull()
 
             look.shots.map { it.kind } shouldBe listOf(LookShotKind.MAIN, LookShotKind.RELOADED)
             look.shots[0].png.contentEquals(look.shots[1].png) shouldBe false
+            // Opening the same address again replaces the history entry: the back button still leads to the page before.
             session.currentUrl() shouldEndWith "/look/random"
+            session.goBack() shouldBe true
+            session.currentUrl() shouldEndWith "/look/still"
         }
 
     @Test
