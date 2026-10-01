@@ -19,6 +19,7 @@ import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
+import az.petek.evidence.domain.isLookAction
 import az.petek.reporting.domain.visual.LookChange
 import az.petek.reporting.domain.visual.LookComparison
 import az.petek.reporting.domain.visual.VisualGate
@@ -342,7 +343,11 @@ class RunComparer(
             evidence.assertions.mapTo(this) { it.scenarioStep }
         }
 
-    /** Per scenario step, the median over actors of the time from the actor's first to its last `run` record. */
+    /**
+     * Per scenario step, the median over actors of the time from the actor's first to its last `run` record, less the
+     * actor's page looks: a look waits for the page to settle (a busy page makes it wait longer), which is Pətək's
+     * time, not the site's answer.
+     */
     private fun runTimes(steps: List<StepRecord>): Map<String, Long> =
         steps
             .filter { it.kind == StepKind.RUN && it.agentId != null }
@@ -350,7 +355,9 @@ class RunComparer(
             .mapValues { (_, records) ->
                 val perActor =
                     records.groupBy { it.agentId }.values.map { own ->
-                        Duration.between(own.minOf { it.startedAt }, own.maxOf { it.endedAt }).toMillis()
+                        val span = Duration.between(own.minOf { it.startedAt }, own.maxOf { it.endedAt }).toMillis()
+                        val looks = own.filter { isLookAction(it.action) }.sumOf { Duration.between(it.startedAt, it.endedAt).toMillis() }
+                        (span - looks).coerceAtLeast(0)
                     }
                 median(perActor)
             }

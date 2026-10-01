@@ -137,7 +137,7 @@ class SqliteEvidenceRecorderTest {
                     renderer = "chromium 141.0; Mac OS X aarch64; headless",
                     settled = false,
                     unsettled = listOf("network", "images"),
-                    fonts = listOf("Inter 400 normal", "Inter 700 normal"),
+                    fonts = listOf("Sans 400 normal", "Sans 700 normal"),
                     frames =
                         listOf(
                             LookFrame(

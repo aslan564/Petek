@@ -167,19 +167,44 @@ class PixelDiffTest {
     }
 
     @Test
-    fun `a region touching the run's own text is run content and not counted`() {
-        val page = blank(120, 60)
+    fun `a region the run's own longer text pushed sideways is run content and not counted`() {
+        val page = blank(100, 60)
+        val name = LookBox(20, 22, 30, 10)
+        val longer = LookBox(20, 22, 40, 10)
 
         val result =
             diff(
-                page.painted(20, 20, 40, 16, BLACK),
-                page.painted(20, 20, 40, 16, RED),
-                runTextAfter = listOf(LookBox(64, 22, 30, 10)),
+                page.painted(name.x, name.y, name.width, name.height, BLACK).painted(58, 20, 42, 16, BLUE),
+                page.painted(longer.x, longer.y, longer.width, longer.height, BLACK).painted(68, 20, 32, 16, BLUE),
+                ignoreBefore = PixelMask.of(100, 60, listOf(name), t.halo),
+                ignoreAfter = PixelMask.of(100, 60, listOf(longer), t.halo),
+                runTextBefore = listOf(name),
+                runTextAfter = listOf(longer),
             )
 
         result.regions shouldHaveSize 1
         result.regions.single().runContent shouldBe true
         result.changed shouldBe false
+    }
+
+    @Test
+    fun `a recolour around the run's own text still counts`() {
+        val page = blank(160, 60)
+        val name = LookBox(60, 13, 40, 14)
+        val mask = PixelMask.of(160, 60, listOf(name), t.halo)
+
+        val result =
+            diff(
+                page.painted(0, 0, 160, 40, BLUE).painted(name.x, name.y, name.width, name.height, WHITE),
+                page.painted(0, 0, 160, 40, RED).painted(name.x, name.y, name.width, name.height, WHITE),
+                ignoreBefore = mask,
+                ignoreAfter = mask,
+                runTextBefore = listOf(name),
+                runTextAfter = listOf(name),
+            )
+
+        result.regions.single().runContent shouldBe false
+        result.changed shouldBe true
     }
 
     @Test

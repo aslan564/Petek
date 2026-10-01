@@ -189,6 +189,35 @@ class RunComparerTest {
     }
 
     @Test
+    fun `the time a step's page looks waited for the page to settle is never the step's speed`() {
+        fun looked(
+            runId: RunId,
+            lookMs: Long,
+        ) = listOf(
+            step("public-look", "a01", kind = StepKind.RUN, action = "site_health: look at / (phone)", durationMs = lookMs, runId = runId),
+            step(
+                "public-look",
+                "a01",
+                kind = StepKind.RUN,
+                action = "run site_health",
+                stepId = "stp_public-look_summary",
+                durationMs = lookMs + 1_000,
+                runId = runId,
+            ),
+        )
+
+        // The new release's page polls: each look waits its whole settle budget, the step's own work takes as long.
+        val comparison = RunComparer().compare(evidence(before, looked(before, 3_000)), evidence(after, looked(after, 11_000)))
+
+        comparison.steps.single().let {
+            it.beforeMs shouldBe 1_000
+            it.afterMs shouldBe 1_000
+            it.speed shouldBe null
+        }
+        comparison.regressed shouldBe false
+    }
+
+    @Test
     fun `a page that loads later or shows its main content later on a screen is slower, one that jumps more is worse`() {
         fun timed(
             runId: RunId,

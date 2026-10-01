@@ -158,7 +158,7 @@ class BlindCheckRunFunctionsTest {
                     )
                 home.anchors shouldBe listOf(LookAnchor("[data-testid=\"news\"]", LookBox(0, 100, 375, 300)))
                 home.renderer shouldBe "chromium 141.0; Test OS x64; headless"
-                home.fonts shouldBe listOf("Inter 400 normal")
+                home.fonts shouldBe listOf("Sans 400 normal")
                 String(fixture.artifacts.contents.getValue(home.frames.first().artifactId)) shouldBe "visual:/:MAIN"
                 fixture.evidence.stepList
                     .single { it.stepId == home.stepId }

@@ -48,7 +48,7 @@ object Looks {
             renderer = "chromium 141.0; Test OS x64; headless",
             settled = settled,
             unsettled = unsettled,
-            fonts = listOf("Inter 400 normal"),
+            fonts = listOf("Sans 400 normal"),
             anchors = anchors,
             rejectedSelectors = rejectedSelectors,
         )

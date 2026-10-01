@@ -87,6 +87,20 @@ class LookJudgeTest {
     }
 
     @Test
+    fun `a path part of the run's own data or a session id never makes a page changed by itself`() {
+        val tenant = look("a01", RunId("run_before"), page = "/dashboard", landedPath = "/acme-r1/dashboard")
+        val slug = decide(LookJudge.Input(tenant, tenant.copy(runId = RunId("run_after"), landedPath = "/acme-r2/dashboard")))
+        val session = decide(LookJudge.Input(before, after.copy(landedPath = "/qiymetler;jsessionid=A1B2/")))
+
+        slug.change shouldBe LookChange.UNCHANGED
+        slug.facts shouldContainExactly listOf(LookFact(LookFactKind.LANDED, "/acme-r1/dashboard", "/acme-r2/dashboard"))
+        session.change shouldBe LookChange.UNCHANGED
+        session.facts.shouldBeEmpty()
+        LookJudge.otherPage("/acme/qiymetler", "/acme/giris") shouldBe true
+        LookJudge.otherPage("/qiymetler", "/en/qiymetler") shouldBe true
+    }
+
+    @Test
     fun `a height change alone is a fact, not a change`() {
         val taller = decide(LookJudge.Input(before.copy(pageHeight = 2_310), after.copy(pageHeight = 2_430)))
         val alike = decide(LookJudge.Input(before.copy(pageHeight = 2_310), after.copy(pageHeight = 2_315)))

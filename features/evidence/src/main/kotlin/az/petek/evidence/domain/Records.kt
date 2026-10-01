@@ -68,6 +68,15 @@ enum class StepKind { DO, RUN, WAIT, EMIT, ASSERT, SYSTEM }
  */
 const val COVERAGE_ACTION = "scenario_coverage"
 
+/**
+ * How a page look's sub-action is named after its function (`site_health: look at /pricing (phone)`). Its time is mostly
+ * Pətək's own waiting for the page to settle, so a step's speed never counts it (the regression baseline, Faza 14).
+ */
+const val LOOK_ACTION = "look at "
+
+/** Whether [action] (a step record's action) is a page look's sub-action ([LOOK_ACTION]). */
+fun isLookAction(action: String): Boolean = action.substringAfter(": ").startsWith(LOOK_ACTION)
+
 enum class StepStatus { PASSED, FAILED, SKIPPED, BLOCKED, ERROR }
 
 /** One action of one agent (or of the harness when [agentId] is null). */

@@ -115,10 +115,21 @@ object LookJudge {
         val moving = maxOf(input.movingBefore, input.movingAfter)
         val ignored = maxOf(input.ignoredBefore, input.ignoredAfter)
         return when {
-            input.before.landedPath != input.after.landedPath || input.before.status != input.after.status -> Decision(LookChange.CHANGED)
-            moving > t.movingLimit -> Decision(LookChange.NOT_COMPARABLE, LookReason.KEPT_MOVING, moving)
-            ignored > t.ignoredLimit -> Decision(LookChange.NOT_COMPARABLE, LookReason.MOSTLY_IGNORED, ignored)
-            else -> null
+            otherPage(input.before.landedPath, input.after.landedPath) || input.before.status != input.after.status -> {
+                Decision(LookChange.CHANGED)
+            }
+
+            moving > t.movingLimit -> {
+                Decision(LookChange.NOT_COMPARABLE, LookReason.KEPT_MOVING, moving)
+            }
+
+            ignored > t.ignoredLimit -> {
+                Decision(LookChange.NOT_COMPARABLE, LookReason.MOSTLY_IGNORED, ignored)
+            }
+
+            else -> {
+                null
+            }
         }
     }
 
@@ -129,7 +140,9 @@ object LookJudge {
         t: VisualThresholds,
     ): List<LookFact> =
         buildList {
-            if (before.landedPath != after.landedPath) add(LookFact(LookFactKind.LANDED, before.landedPath, after.landedPath))
+            if (path(before.landedPath) != path(after.landedPath)) {
+                add(LookFact(LookFactKind.LANDED, before.landedPath, after.landedPath))
+            }
             if (before.status !=
                 after.status
             ) {
@@ -143,4 +156,27 @@ object LookJudge {
             if (gone.isNotEmpty() || new.isNotEmpty()) add(LookFact(LookFactKind.FONTS, gone.joinToString(", "), new.joinToString(", ")))
             if (before.testers != after.testers) add(LookFact(LookFactKind.TESTERS, before.testers.toString(), after.testers.toString()))
         }
+
+    /**
+     * Whether two landed paths are another page by code: another number of segments or another last segment, their
+     * `;` parameters (a session id) dropped. A segment before the last that differs may be the run's own data (a test
+     * company's slug: `/acme-r1/dashboard` and `/acme-r2/dashboard`), so it is only a fact and the pixels decide.
+     */
+    fun otherPage(
+        before: String,
+        after: String,
+    ): Boolean {
+        val a = segments(before)
+        val b = segments(after)
+        return a.size != b.size || a.lastOrNull() != b.lastOrNull()
+    }
+
+    /** The path without `;` parameters or a trailing slash. */
+    private fun path(landed: String): String = segments(landed).joinToString("/", prefix = "/")
+
+    private fun segments(landed: String): List<String> =
+        landed
+            .split('/')
+            .map { it.substringBefore(';') }
+            .filter { it.isNotEmpty() }
 }

@@ -28,6 +28,7 @@ import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageTiming
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
+import az.petek.evidence.domain.LOOK_ACTION
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import kotlinx.coroutines.CancellationException
@@ -207,7 +208,7 @@ internal class RunTrace(
         request: LookRequest,
     ): PageLook? {
         val on = device?.let { " ($it)" } ?: ""
-        val description = "look at $page$on"
+        val description = "$LOOK_ACTION$page$on"
         val started = evidence.now()
         subActions++
 

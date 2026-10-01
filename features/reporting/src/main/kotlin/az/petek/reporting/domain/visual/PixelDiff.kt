@@ -150,7 +150,9 @@ object PixelDiff {
         val regions =
             cells.components().filter { it.size >= t.regionCells }.map { component ->
                 val (box, pixels) = extent(component, cells, differing, width, height)
-                val runContent = texts.any { meets(grown(box, t.cell), it) }
+                val touching = texts.filter { meets(grown(box, t.cell), it) }
+                val runContent =
+                    touching.isNotEmpty() && !changedBeyondText(component, cells, differing, before, after, alignment, touching, t)
                 if (!runContent) component.forEach { counted.set(it % cells.columns, it / cells.columns) }
                 ChangedRegion(box, pixels, component.size, runContent)
             }
@@ -249,6 +251,64 @@ object PixelDiff {
     private fun green(packed: Int) = packed ushr GREEN and MASK
 
     private fun blue(packed: Int) = packed and MASK
+
+    /**
+     * Whether a region that touches the run's own [texts] changed beyond what their other length explains. A differing
+     * pixel is explained when it lies by such a text (its box grown by a cell), or when its colour is on the same row of
+     * the other capture within the texts' width both ways and the other capture's colour is on its row too: the rest of
+     * the line moved sideways. A recolour or a new element next to a tester's name is not explained, and counts.
+     */
+    private fun changedBeyondText(
+        component: IntArray,
+        cells: CellMask,
+        differing: BitSet,
+        before: Raster,
+        after: Raster,
+        alignment: Alignment,
+        texts: List<LookBox>,
+        t: VisualThresholds,
+    ): Boolean {
+        val width = after.width
+        val reach = minOf(width, texts.maxOf { it.width } + t.cell)
+        val near = texts.map { grown(it, t.cell) }
+        var changedCells = 0
+        component.forEach { index ->
+            val cx = index % cells.columns
+            val cy = index / cells.columns
+            var unexplained = 0
+            for (y in cy * cells.cell until minOf((cy + 1) * cells.cell, after.height)) {
+                val yb = alignment.beforeOf(y)
+                for (x in cx * cells.cell until minOf((cx + 1) * cells.cell, width)) {
+                    if (!differing[y * width + x]) continue
+                    if (near.any { x in it.x until it.x + it.width && y in it.y until it.y + it.height }) continue
+                    val moved =
+                        yb >= 0 && x < before.width &&
+                            onRow(before, yb, x, after.argb[y * width + x], reach, t.maxDelta) &&
+                            onRow(after, y, x, before.argb[yb * before.width + x], reach, t.maxDelta)
+                    if (!moved) unexplained++
+                }
+            }
+            if (unexplained >= t.cellPixels) changedCells++
+        }
+        return changedCells >= t.regionCells
+    }
+
+    /** Whether [color] is on row [y] of [raster] within [reach] pixels of [x], either way. */
+    private fun onRow(
+        raster: Raster,
+        y: Int,
+        x: Int,
+        color: Int,
+        reach: Int,
+        maxDelta: Double,
+    ): Boolean {
+        val row = y * raster.width
+        for (nx in maxOf(0, x - reach)..minOf(raster.width - 1, x + reach)) {
+            val c = raster.argb[row + nx]
+            if (c == color || delta(c, color) <= maxDelta) return true
+        }
+        return false
+    }
 
     /** The bounding box of a component's differing pixels and their count. */
     private fun extent(

@@ -27,7 +27,8 @@ Screenshots of tester steps are poor material: an AI drove the page there, at a 
   the owner's `target_profile.visual.mask` (selector keys or plain CSS, at most 50), the step's `look_mask`, elements
   marked `data-petek-mask`, video and frames of another origin, dates and times of day written on the page, and the
   run's own texts (testers' names and e-mails, the company code, the run's mark; never a password, never stored as
-  values). A region touching the run's own text is "the run's own content" and never counts.
+  values). A change next to the run's own text is "the run's own content" only where that text's other length explains
+  it (the rest of the line moved sideways); a recolour or a new element beside a tester's name still counts.
 - **The diff is JDK only** (`javax.imageio` PNG decoding and `BufferedImage` pixel arrays, kept to reporting
   infrastructure; domain and application never import `java.awt`/`javax.imageio`, checked by `ArchitectureTest`).
   Rows are aligned by hashes of their pixels (an inserted or removed band moves what is below it, not everything),
@@ -36,7 +37,9 @@ Screenshots of tester steps are poor material: an AI drove the page there, at a 
   reload, other testers' looks of the same page) is noise and ignored. A band at the bottom of a capture is a
   height-cap artifact only when the other capture was cut by its cap.
 - **Verdict by code.** Per step, page and screen: UNCHANGED, CHANGED (code proved a difference in every pair of
-  samples, or the page lands elsewhere or answers another status), NOT_COMPARABLE with a reason (another browser or
+  samples, or the page lands on another page, i.e. another number of path segments or another last segment, `;`
+  parameters such as a session id dropped, or answers another status; a path part that may be the run's own data, such
+  as a test company's slug, is only a fact), NOT_COMPARABLE with a reason (another browser or
   system, another screen, the page kept moving, mostly masked, not settled, a missing frame, a frame whose sha256 no
   longer matches its record, 429/503 answers, a look missing on one side), ADDED or REMOVED with the scenario.
 - **The gate is the owner's:** `report` by default, a changed look is shown but the comparison is not worse; `fail`
@@ -44,6 +47,8 @@ Screenshots of tester steps are poor material: an AI drove the page there, at a 
 - **Derived pictures, not evidence.** The overlay, before/after/difference crops and `visual.json` (the inputs by
   artifact id and verified sha256, the outputs by sha256: a cache) are written under
   `report/visual/<baseline run>/` beside `compare-<baseline run>.html`; frames are linked where they are, never copied.
+- **A look's time is Pətək's.** The waits of a look (the page settling, its frames, the second load) are left out of the
+  step's speed, so a busy page never makes a step "slower"; the page's own timing is `perf`'s.
 - **Drafts** start their setup with one look step (`public-look`, or `site-look` on a site without sign-in) of the
   visitor's pages on phone, tablet and desktop before anyone signs in or writes, carrying the first-visit timing too.
 
