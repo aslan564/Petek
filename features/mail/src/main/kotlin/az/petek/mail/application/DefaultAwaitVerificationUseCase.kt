@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private val logger = KotlinLogging.logger {}
 
@@ -36,18 +37,25 @@ private val logger = KotlinLogging.logger {}
  * that do not satisfy the purpose are left unread: another step may still need them (the invitation link is read
  * after the code in some flows).
  *
- * A [MailboxException] is retried at the next poll. If the mailbox is still failing when the time is up, that
- * failure is thrown instead of [MailTimeoutException]: "the inbox is unreachable" is an environment problem, while
- * `mail_timeout` is a finding about the target. Only `delay`/`withTimeoutOrNull` measure time, so virtual time works.
- * [awaitLink] polls the same way, with the extractor's pattern rule deciding which message is usable.
+ * A [MailboxException] is retried at the next poll. When the time is up, one last look is taken, bounded by
+ * [lastLookTimeout] rather than by the wait: a poll the deadline cut short, or one that queued behind other testers'
+ * polls of a shared inbox, must not turn a message that did arrive in time into `mail_timeout`, a finding about the
+ * target. Only that last look decides: a usable message is returned, an inbox that fails it (or does not answer it in
+ * time) throws [MailboxException], "the inbox could not be read", an environment problem, and only an inbox that
+ * answered "nothing usable" ends in [MailTimeoutException]. Only `delay`/`withTimeoutOrNull` measure time, so virtual
+ * time works. [awaitLink] polls the same way, with the extractor's pattern rule deciding which message is usable.
  */
 class DefaultAwaitVerificationUseCase(
     private val mailbox: Mailbox,
     private val extractor: VerificationExtractor,
     private val candidatesPerPoll: Int = 10,
+    private val lastLookTimeout: Duration = DEFAULT_LAST_LOOK_TIMEOUT,
 ) : AwaitVerificationUseCase {
     init {
         require(candidatesPerPoll > 0) { "candidatesPerPoll must be positive, was $candidatesPerPoll" }
+        require(lastLookTimeout.isPositive() && lastLookTimeout.isFinite()) {
+            "lastLookTimeout must be positive and finite, was $lastLookTimeout"
+        }
     }
 
     override suspend fun await(
@@ -90,8 +98,25 @@ class DefaultAwaitVerificationUseCase(
         ): VerificationCode {
             require(timeout.isPositive()) { "timeout must be positive, was $timeout" }
             require(pollInterval.isPositive()) { "pollInterval must be positive, was $pollInterval" }
-            val found = withTimeoutOrNull(timeout) { pollUntilFound(pollInterval) }
-            return found ?: throw (lastFailure ?: MailTimeoutException(to, timeout))
+            return withTimeoutOrNull(timeout) { pollUntilFound(pollInterval) } ?: lastLook(timeout)
+        }
+
+        /** The look once [timeout] is over; see the class comment for what each answer means. */
+        private suspend fun lastLook(timeout: Duration): VerificationCode {
+            val answer =
+                withTimeoutOrNull(lastLookTimeout) {
+                    try {
+                        Result.success(pollOnce())
+                    } catch (e: MailboxException) {
+                        Result.failure(e)
+                    }
+                } ?: throw MailboxException(
+                    "The inbox did not answer the last look for mail to $to within $lastLookTimeout after the $timeout wait",
+                    lastFailure,
+                )
+            val code = answer.getOrThrow() ?: throw MailTimeoutException(to, timeout)
+            logger.info { "Mail to $to found by the last look after the $timeout wait (the inbox answered slowly)" }
+            return code
         }
 
         suspend fun pollUntilFound(pollInterval: Duration): VerificationCode {
@@ -130,5 +155,10 @@ class DefaultAwaitVerificationUseCase(
                 logger.info { "Mail ${message.id} to $to ('${message.subject}') has no $wanted; still waiting" }
             }
         }
+    }
+
+    companion object {
+        /** How long the last look may take: a few slow answers of a busy inbox, far less than a stuck one would take. */
+        val DEFAULT_LAST_LOOK_TIMEOUT: Duration = 30.seconds
     }
 }
