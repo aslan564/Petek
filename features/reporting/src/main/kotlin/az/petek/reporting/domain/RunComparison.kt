@@ -19,6 +19,10 @@ import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
+import az.petek.reporting.domain.visual.LookChange
+import az.petek.reporting.domain.visual.LookComparison
+import az.petek.reporting.domain.visual.VisualGate
+import az.petek.reporting.domain.visual.VisualThresholds
 import java.time.Duration
 
 /**
@@ -36,6 +40,9 @@ import java.time.Duration
  *   mostly the AI thinking, so it is not compared.
  * - [scenarioChanged]: the two runs came from different campaign files (another hash). Steps are still matched by their
  *   ids; a step found in only one of them is then [StepChange.ADDED] or [StepChange.REMOVED].
+ * - [looks]: how the pages looked (`site_health`'s `look`, docs/adr/0014), attached after the comparison by the
+ *   reporting application. Under [VisualGate.REPORT] (the default) a changed look is shown, never a regression; under
+ *   [VisualGate.FAIL] it counts as one. A look that is not comparable never does.
  */
 data class RunComparison(
     val baseline: RunRecord,
@@ -45,6 +52,10 @@ data class RunComparison(
     val deliveries: List<DeliveryComparison>,
     val thresholds: SpeedThresholds,
     val pages: List<PageComparison> = emptyList(),
+    val looks: List<LookComparison> = emptyList(),
+    val visualGate: VisualGate = VisualGate.REPORT,
+    /** The thresholds [looks] were compared with; null when no look was compared. */
+    val visualThresholds: VisualThresholds? = null,
 ) {
     val newFailures: List<StepComparison> get() = steps.filter { it.change == StepChange.NEW_FAILURE }
     val fixed: List<StepComparison> get() = steps.filter { it.change == StepChange.FIXED }
@@ -54,9 +65,20 @@ data class RunComparison(
     /** Pages that became usable later, or jumped more while loading. */
     val worsePages: List<PageComparison> get() = pages.filter { it.speed == SpeedChange.SLOWER || it.shiftGrew }
 
-    /** The later run is worse: a step the site passed before fails now, or something the site sets got slower. */
+    /** Pages that look different now. */
+    val changedLooks: List<LookComparison> get() = looks.filter { it.change == LookChange.CHANGED }
+
+    /** Looks that could not be compared, each with its reason. */
+    val incomparableLooks: List<LookComparison> get() = looks.filter { it.change == LookChange.NOT_COMPARABLE }
+
+    /**
+     * The later run is worse: a step the site passed before fails now, something the site sets got slower, or, under
+     * [VisualGate.FAIL] only, a page looks different.
+     */
     val regressed: Boolean
-        get() = newFailures.isNotEmpty() || slowerSteps.isNotEmpty() || slowerDeliveries.isNotEmpty() || worsePages.isNotEmpty()
+        get() =
+            newFailures.isNotEmpty() || slowerSteps.isNotEmpty() || slowerDeliveries.isNotEmpty() || worsePages.isNotEmpty() ||
+                (visualGate == VisualGate.FAIL && changedLooks.isNotEmpty())
 }
 
 /** How one step's result changed from the baseline to the current run. */
