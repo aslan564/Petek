@@ -11,12 +11,10 @@
 
 package az.petek.app.panel.scenarios
 
-import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.RunPlans
 import az.petek.app.panel.explorer.DraftSettings
 import az.petek.app.panel.explorer.PanelExplorerAdapter
-import az.petek.core.ids.RunTags
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.FieldProblem
 import az.petek.dashboard.domain.PanelConflictException
@@ -191,11 +189,8 @@ internal class PanelScenariosAdapter(
         val campaign = container.scenarioValidator.check(version.yaml, version.fileName).campaign ?: return null
         val identities =
             try {
-                container.identityGenerator
-                    .generate(
-                        IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
-                        RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
-                    ).identities
+                // As the run plans them, with the owner's accounts its `login` testers sign in with.
+                container.previewIdentities(campaign)
             } catch (e: Exception) {
                 logger.warn(e) { "No identities could be planned for ${version.label}" }
                 emptyList()

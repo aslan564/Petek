@@ -21,6 +21,7 @@ import az.petek.agent.application.TesterAgentFactory
 import az.petek.agent.application.runs.RunFunctions
 import az.petek.agent.domain.JsonDecisionProtocol
 import az.petek.agent.domain.RepeatedStateLoopDetector
+import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.diagnostics.CliVersion
@@ -36,6 +37,8 @@ import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.browser.infrastructure.PlaywrightBrowserEngine
 import az.petek.browser.infrastructure.PlaywrightPdfPrinter
 import az.petek.campaign.application.LoadCampaignUseCase
+import az.petek.campaign.domain.Campaign
+import az.petek.campaign.domain.CampaignSettings
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.DefaultTemplateRenderer
 import az.petek.campaign.domain.TemplateRenderer
@@ -44,6 +47,7 @@ import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.capacity.domain.HostResourceProbe
 import az.petek.capacity.infrastructure.SystemHostResourceProbe
 import az.petek.core.ids.IdGenerator
+import az.petek.core.ids.RunTags
 import az.petek.core.ids.UuidV7IdGenerator
 import az.petek.core.model.Role
 import az.petek.core.security.Secret
@@ -68,8 +72,10 @@ import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
 import az.petek.identity.domain.GivenAccount
 import az.petek.identity.domain.HmacPasswordDeriver
+import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityRegistryGenerator
 import az.petek.identity.domain.IdentityRepository
+import az.petek.identity.domain.IdentitySpec
 import az.petek.identity.infrastructure.SqliteIdentityRepository
 import az.petek.llm.application.ConcurrencyLimitedLlmClient
 import az.petek.llm.application.MeteredLlmClient
@@ -242,6 +248,24 @@ class AppContainer(
     }
 
     val planIdentities: PlanIdentitiesUseCase by lazy { PlanIdentitiesUseCase(identityGenerator, identities) }
+
+    /**
+     * What the testers of a campaign with [settings] are planned from, as the runner plans them: its quotas, the mail
+     * domain and inbox, and the owner's accounts for its target that its `login` testers sign in with, without which a
+     * registry with `login` testers cannot be built at all.
+     */
+    fun identitySpecFor(settings: CampaignSettings): IdentitySpec =
+        IdentitySpecs.of(settings, config.mailDomain, config.mailInbox, ownAccountsFor(settings.target))
+
+    /**
+     * The testers a run of [campaign] will plan, generated ahead for what is said before it starts (the warnings of
+     * `petek run` and of the panel, the panel's run plan); nothing is stored. Throws what the run's own planning would
+     * ([az.petek.identity.domain.IdentityConflictException] for a registry that cannot be built).
+     */
+    fun previewIdentities(campaign: Campaign): List<Identity> =
+        identityGenerator
+            .generate(identitySpecFor(campaign.settings), RunTags.forPlan(campaign.sourceHash, campaign.settings.seed))
+            .identities
 
     // --- target, mail, LLM, browser -----------------------------------------------------------------------------
 
@@ -471,7 +495,8 @@ class AppContainer(
 
     /**
      * The owner's accounts for [site] that `login` testers may take (Faza 18): its profile's accounts with an e-mail and
-     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17).
+     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17). The runner
+     * plans its testers with them, and so does every preview of its registry ([identitySpecFor]).
      */
     private fun ownAccountsFor(site: URI): List<GivenAccount> =
         config

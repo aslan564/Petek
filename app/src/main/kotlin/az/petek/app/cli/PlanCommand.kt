@@ -11,7 +11,7 @@
 
 package az.petek.app.cli
 
-import az.petek.app.campaign.IdentitySpecs
+import az.petek.app.campaign.CoverageWarnings
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.core.ids.RunId
@@ -22,15 +22,18 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
 /**
- * `petek plan <campaign.yaml>`: validates the campaign and shows who would test (docs/PLAN.md Faza 1). The identities
- * are generated for a plan id and tag derived from the campaign's hash and seed, and stored with `replaceAll`, so
- * planning the same file again prints and stores exactly the same registry. Nothing touches the target.
+ * `petek plan <campaign.yaml>`: validates the campaign and shows who would test (docs/PLAN.md Faza 1), with the same
+ * warnings `petek run` gives before it starts ([CoverageWarnings]: steps nobody would perform, per wave). The identities
+ * are generated as the run generates them (its `login` testers take the owner's accounts for the target, kept in the
+ * local registry as a run keeps them) for a plan id and tag derived from the campaign's hash and seed, and stored with
+ * `replaceAll`, so planning the same file again prints and stores exactly the same registry. Nothing touches the target.
  */
 class PlanCommand : PetekSubcommand("plan") {
     private val file by argument("campaign", help = "campaign YAML file, e.g. docs/examples/company-portal.yaml").path()
@@ -41,16 +44,16 @@ class PlanCommand : PetekSubcommand("plan") {
         withContainer { container ->
             val path = session.resolve(file)
             val campaign = withContext(Dispatchers.IO) { container.campaigns.execute(path, container.knownRunFunctions) }
-            // Valid, but likely not what was meant (Faza 24.15): said on stderr, so a JSON answer stays clean.
-            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { echo("Warning: $it", err = true) }
             val runId = planRunId(campaign)
             val tag = RunTags.forPlan(campaign.sourceHash, campaign.settings.seed)
-            val plan =
-                container.planIdentities.execute(
-                    runId,
-                    tag,
-                    IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
-                )
+            // Planned as the run plans them, with the owner's accounts its `login` testers sign in with.
+            val plan = container.planIdentities.execute(runId, tag, container.identitySpecFor(campaign.settings))
+            // Valid, but likely not what was meant (Faza 24.15), and every step that would start with nobody to perform
+            // it, wave by wave, as `petek run` says it: on stderr, so a JSON answer stays clean (it lists them too).
+            val warnings =
+                DefaultCampaignValidator(container.templateRenderer).warnings(campaign).map { it.toString() } +
+                    CoverageWarnings.of(campaign, plan.identities)
+            warnings.forEach { echo("Warning: $it", err = true) }
             if (json) {
                 emitJson(
                     buildJsonObject {
@@ -58,6 +61,7 @@ class PlanCommand : PetekSubcommand("plan") {
                         put("seed", campaign.settings.seed)
                         put("planId", runId.value)
                         put("tag", plan.runTag.value)
+                        putJsonArray("warnings") { warnings.forEach { add(it) } }
                         putJsonArray("identities") {
                             plan.identities.forEach { identity ->
                                 addJsonObject {

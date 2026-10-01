@@ -27,7 +27,8 @@ import kotlin.time.Duration
  *   non-empty, unique and addressable by the actor grammar, names are unique, the budget is positive, the target is
  *   an absolute http(s) URL without credentials (messages mask them);
  * - actors: named departments exist and every expression can match at least one tester under the quotas (a manager
- *   is never a company-code joiner, and employees get the invitations left after the managers);
+ *   is never a company-code joiner, employees get the invitations left after the managers, and a department holds
+ *   only the testers the registry deals to it in turn, [DepartmentDealing]);
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
@@ -44,6 +45,10 @@ import kotlin.time.Duration
  *   `{pass}` is allowed in every campaign template (see [Placeholder.Pass]);
  * - an event other steps wait for or name, emitted by a step up to several testers run, needs one emitter or a race;
  * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
+ *
+ * [warnings] (never blocking): a `parallel` step with more actors than `campaign.pacing.max_parallel_actors`, and
+ * `{last_id}` in the checks of a step several testers emit whose id source can read a colleague's object (`dom`, or an
+ * oracle path that does not name the tester).
  *
  * Issue lines come from [Campaign.sourceLines], falling back to [ScenarioStep.line].
  */
@@ -90,28 +95,104 @@ class DefaultCampaignValidator(
             return issues.toList()
         }
 
+        /** Every step with its YAML path (`setup[0]`, `steps[3]`), in the order the run performs them. */
+        private val located: List<Pair<String, ScenarioStep>> =
+            campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
+                campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
+
+        /** Valid, but likely not what the owner meant (Faza 24.15), step by step: never blocks a run. */
+        fun warnings(): List<ValidationIssue> =
+            located.flatMap { (path, step) -> listOfNotNull(pacingWarning(path, step), sharedIdSourceWarning(path, step)) }
+
         /**
          * A `parallel` step (every race) starts all its actors at the same instant and so ignores
-         * `campaign.pacing.max_parallel_actors` (Faza 24.15): with more actors than the limit, the site may turn the
-         * extra ones away (429) exactly where the race needs every racer.
+         * `campaign.pacing.max_parallel_actors`: with more actors than the limit, the site may turn the extra ones away
+         * (429) exactly where the race needs every racer.
          */
-        fun warnings(): List<ValidationIssue> {
-            val limit = settings.pacing.maxParallelActors ?: return emptyList()
-            val located =
-                campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
-                    campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
-            return located.mapNotNull { (path, step) ->
-                val actors = maxMatches(step.actors)
-                if (!step.parallel || actors <= limit) return@mapNotNull null
-                val what = if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) "race" else "parallel step"
-                ValidationIssue(
-                    campaign.sourceLines.lineOf("$path.parallel") ?: campaign.sourceLines.lineOf(path) ?: step.line,
-                    "$what '${step.id}' starts up to $actors testers at the same instant, more than " +
-                        "campaign.pacing.max_parallel_actors ($limit): a parallel step ignores the limit so its actors start " +
-                        "together, and the site may refuse the extra ones (429); give it fewer actors or raise the limit",
-                )
-            }
+        private fun pacingWarning(
+            path: String,
+            step: ScenarioStep,
+        ): ValidationIssue? {
+            val limit = settings.pacing.maxParallelActors ?: return null
+            val actors = maxMatches(step.actors)
+            if (!step.parallel || actors <= limit) return null
+            val what = if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) "race" else "parallel step"
+            return ValidationIssue(
+                campaign.sourceLines.lineOf("$path.parallel") ?: step.line,
+                "$what '${step.id}' starts up to $actors testers at the same instant, more than " +
+                    "campaign.pacing.max_parallel_actors ($limit): a parallel step ignores the limit so its actors start " +
+                    "together, and the site may refuse the extra ones (429); give it fewer actors or raise the limit",
+            )
         }
+
+        /**
+         * `{last_id}` in the checks of a step that several testers emit is meant to be each tester's own object (Faza
+         * 24.6), but an id read from the tester's page (`dom`, e.g. the first item of a list) or from an oracle path
+         * that does not name the tester (`/test/tickets/latest`) can be a colleague's object made at the same moment:
+         * the check then tests the colleague's object twice and the tester's own never. Only a source scoped to the
+         * tester is safe: the URL the tester's own write led to (`url_regex`), an oracle path with a placeholder naming
+         * the tester ([Placeholder.TESTER_SCOPED_SELF_FIELDS]), which the harness fills in before it asks, or the agent's
+         * own report. A `dom` selector never is: the harness reads it as written, so a placeholder in it is not filled in
+         * and names nobody. A race is left out: only its winner emits. An event other steps consume from several
+         * emitters is an error already.
+         */
+        private fun sharedIdSourceWarning(
+            path: String,
+            step: ScenarioStep,
+        ): ValidationIssue? {
+            val emits = step.emits ?: return null
+            if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) return null
+            val emitters = maxMatches(step.actors)
+            if (emitters < 2 || !usesLastIdInChecks(step)) return null
+            val own = emits.idSource
+            val source = own ?: campaign.target.idSource(emits.event) ?: return null
+            val read = sharedSourceText(source) ?: return null
+            val declared = if (own != null) "emits.id_from" else "target_profile.id_sources.${emits.event}"
+            val unfilled =
+                (source as? IdSource.DomAttribute)
+                    ?.let { templates.placeholders(it.selector) }
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { names ->
+                        "; the harness reads a dom selector as written, so ${names.joinToString { "{$it}" }} in it is not " +
+                            "filled in and names nobody"
+                    }.orEmpty()
+            return ValidationIssue(
+                campaign.sourceLines.lineOf(if (own != null) "$path.emits.id_from" else "$path.emits") ?: step.line,
+                "step '${step.id}': {last_id} in its checks is the id of each tester's '${emits.event}' object, read from " +
+                    "$read ($declared), but up to $emitters testers emit it here, so a tester can read a colleague's object " +
+                    "made at the same moment and check it instead of its own; read the id from the tester's own write: " +
+                    "url_regex on the page it lands on, or an oracle path naming the tester, e.g. " +
+                    "/test/<objects>/latest?by={self.email}$unfilled",
+            )
+        }
+
+        private fun usesLastIdInChecks(step: ScenarioStep): Boolean =
+            step.assertions
+                .flatMap(::assertionTemplates)
+                .flatMap { templates.placeholders(it) }
+                .any { Placeholder.parse(it) == Placeholder.LastId }
+
+        /** How [source] reads an id that need not be the tester's own (`dom '<selector>'`), or null when it is scoped to the tester. */
+        private fun sharedSourceText(source: IdSource): String? =
+            when (source) {
+                is IdSource.DomAttribute -> {
+                    "dom '${source.selector}' (${source.attribute})"
+                }
+
+                is IdSource.OracleField -> {
+                    "oracle '${source.path}' (${source.field})".takeUnless { namesTester(source.path) }
+                }
+
+                is IdSource.UrlRegex, IdSource.AgentReport -> {
+                    null
+                }
+            }
+
+        /** Whether an oracle [path] names one tester: the harness renders it for each tester before it asks. */
+        private fun namesTester(path: String): Boolean =
+            templates.placeholders(path).any {
+                (Placeholder.parse(it) as? Placeholder.Self)?.field in Placeholder.TESTER_SCOPED_SELF_FIELDS
+            }
 
         private fun report(
             path: String,
@@ -366,9 +447,6 @@ class DefaultCampaignValidator(
             if (campaign.allSteps.isEmpty()) report("steps", "the campaign has no setup or steps")
             val emittedBefore = LinkedHashSet<String>()
             val firstLineOfId = mutableMapOf<String, Int?>()
-            val located =
-                campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
-                    campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
             located.forEach { (path, step) ->
                 StepRules(path, step, emittedBefore.toSet()).check(firstLineOfId)
                 step.emits?.let { emittedBefore += it.event }
@@ -440,7 +518,11 @@ class DefaultCampaignValidator(
                     )
                 }
                 if (unknown.isEmpty() && maxMatches(expression) == 0) {
-                    report("actor", "$name: actor '${expression.raw}' can never match a tester with the campaign's role quotas")
+                    report(
+                        "actor",
+                        "$name: actor '${expression.raw}' can never match a tester with the campaign's role quotas" +
+                            dealingHint(expression),
+                    )
                 }
             }
 
@@ -758,19 +840,41 @@ class DefaultCampaignValidator(
 
         private fun maxSelectorMatches(selector: ActorSelector): Int {
             val role = selector.role
-            if (selector.department != null && (role == Role.ADMIN || selector.department !in settings.departments)) return 0
-            if (settings.tenant == Tenant.NONE) {
-                val bound =
-                    minOf(
-                        settings.roles.count(role).coerceAtLeast(0),
-                        selector.registration?.let(settings.registration::count) ?: Int.MAX_VALUE,
-                    )
-                return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
+            var bound = inDepartment(selector) ?: return 0
+            selector.registration?.let { mode ->
+                val joiners = if (settings.tenant == Tenant.NONE) settings.registration.count(mode) else joinersOf(role, mode)
+                bound = minOf(bound, joiners.coerceAtLeast(0))
             }
-            var bound = settings.roles.count(role).coerceAtLeast(0)
-            selector.registration?.let { mode -> bound = minOf(bound, joinersOf(role, mode)) }
             return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
         }
+
+        /**
+         * Testers of the selector's role in its department as the registry deals them ([DepartmentDealing]), all of the
+         * role without a department; null for a department the campaign does not list.
+         */
+        private fun inDepartment(selector: ActorSelector): Int? {
+            val department = selector.department ?: return settings.roles.count(selector.role).coerceAtLeast(0)
+            if (department !in settings.departments) return null
+            return DepartmentDealing.testers(settings, selector.role, department)
+        }
+
+        /**
+         * Why an expression that can never match does so when one of its selectors names a department the registry
+         * deals too few of the role to, although the role alone has enough: ` (the testers are dealt ...)`; else empty.
+         */
+        private fun dealingHint(expression: ActorExpression): String =
+            expression.selectors
+                .distinct()
+                .mapNotNull { selector ->
+                    val department = selector.department ?: return@mapNotNull null
+                    val dealt = DepartmentDealing.testers(settings, selector.role, department)
+                    val needed = selector.nth ?: 1
+                    val total = settings.roles.count(selector.role)
+                    if (dealt >= needed || total < needed) return@mapNotNull null
+                    "department '$department' gets $dealt of the $total '${selector.role.key}' testers"
+                }.takeIf { it.isNotEmpty() }
+                ?.joinToString("; ", prefix = " (the testers are dealt to the departments in turn, so ", postfix = ")")
+                .orEmpty()
 
         /**
          * Upper bound of testers of [role] joining by [mode]: the admin owns the company, managers are always invited

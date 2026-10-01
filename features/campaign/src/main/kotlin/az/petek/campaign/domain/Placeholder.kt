@@ -80,6 +80,12 @@ sealed interface Placeholder {
         val CAMPAIGN_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "department", "role", "phone")
 
         /**
+         * `self` fields that tell one tester from every other (each tester's own e-mail, name, agent id and phone), so an
+         * oracle path naming one finds that tester's objects only; a department or role is shared with colleagues.
+         */
+        val TESTER_SCOPED_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "phone")
+
+        /**
          * `self` fields flows may use (see [Flow]): the campaign's, the display name split for sign-up forms that ask
          * for first and last name separately, and the password, which only the harness types (flows never reach the LLM).
          */

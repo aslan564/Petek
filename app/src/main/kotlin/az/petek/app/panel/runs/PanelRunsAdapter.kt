@@ -12,7 +12,6 @@
 package az.petek.app.panel.runs
 
 import az.petek.app.campaign.CampaignScaler
-import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.campaign.ScalingException
 import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
@@ -31,7 +30,6 @@ import az.petek.core.error.PetekException
 import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
-import az.petek.core.ids.RunTags
 import az.petek.dashboard.domain.BundleEvidenceView
 import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.FieldProblem
@@ -59,6 +57,7 @@ import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
+import az.petek.identity.domain.Identity
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.MonitorView
@@ -663,62 +662,86 @@ internal class PanelRunsAdapter(
     }
 
     /**
-     * Which steps nobody can run with this tester count (they will be skipped), which receivers a wave leaves without
-     * an emitter, which races the waves leave with a single racer (they never pass there: the verdict is inconclusive),
-     * and a manual mail source for many testers; never blocks. Empty when they cannot be worked out.
+     * What the campaign's make-up leaves undone, said before the run starts; never blocks. The validator's warnings, a
+     * manual mail source for many testers, and what the testers the run will plan ([AppContainer.previewIdentities],
+     * with the owner's accounts of its `login` testers) leave undone ([coverageWarnings]). A registry that cannot be built
+     * is said too, never passed over in silence: its checks were not made.
      */
     private fun warningsFor(
         campaign: Campaign,
         container: AppContainer,
     ): List<String> =
-        try {
-            val identities =
-                container.identityGenerator
-                    .generate(
-                        IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
-                        RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
-                    ).identities
-            buildList {
-                DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { add(it.toString()) }
-                if (container.config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
-                    add(
-                        "PETEK_MAIL_SOURCE=manual: ${campaign.settings.testers} testerin hər birinin e-poçt kodunu siz " +
-                            "yazırsınız; sürü üçün test poçt qutusu (mailpit, test-api, imap) uyğundur.",
-                    )
-                }
-                val uncovered = CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver())
-                if (uncovered.isNotEmpty()) {
-                    add(
-                        "${campaign.settings.testers} testerlə bu addımları icra edən olmayacaq və onlar buraxılacaq: " +
-                            uncovered.joinToString { it.id },
-                    )
-                }
-                CampaignScaler.waitsWithoutEmitter(campaign, identities, DefaultActorResolver()).forEach { gap ->
-                    val never = if (gap.covered) "" else " Heç bir dalğada ikisi bir yerdə deyil, ona görə bu addım heç yoxlanmayacaq."
-                    add(
-                        "dalğa ölçüsü ${campaign.settings.waveSize} olduğu üçün '${gap.step.id}' addımı " +
-                            "${gap.waves.joinToString()} nömrəli dalğada '${gap.step.waitFor?.event}' hadisəsini gözləyir, " +
-                            "amma orada onu emit edən '${gap.emitter.id}' addımının testeri yoxdur; oradakı qəbul edənlər " +
-                            "buraxılacaq.$never",
-                    )
-                }
-                CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
-                    val where =
-                        if (split.waves.size == 1) {
-                            "${split.waves.single()} nömrəli dalğada"
-                        } else {
-                            "${split.waves.joinToString()} nömrəli dalğalarda"
-                        }
-                    add(
-                        "dalğa ölçüsü ${campaign.settings.waveSize} olduğu üçün '${split.step.id}' yarışının $where yalnız bir " +
-                            "iştirakçı qalır və yarış orada keçmir; yarış üçün eyni dalğada ən azı 2 iştirakçı lazımdır.",
-                    )
-                }
+        buildList {
+            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { add(it.toString()) }
+            if (container.config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
+                add(
+                    "PETEK_MAIL_SOURCE=manual: ${campaign.settings.testers} testerin hər birinin e-poçt kodunu siz " +
+                        "yazırsınız; sürü üçün test poçt qutusu (mailpit, test-api, imap) uyğundur.",
+                )
             }
-        } catch (e: Exception) {
-            logger.debug(e) { "steps that cannot run could not be checked" }
-            emptyList()
+            val identities =
+                try {
+                    container.previewIdentities(campaign)
+                } catch (e: Exception) {
+                    logger.debug(e) { "the testers of the run could not be planned ahead" }
+                    val why = (e as? PetekException)?.message ?: e::class.simpleName
+                    add(
+                        "Testerlərin reyestri əvvəlcədən qurula bilmədi ($why); ona görə heç kimin icra etməyəcəyi addımlar, " +
+                            "dalğaların gözləmələri və yarışları yoxlanmadı.",
+                    )
+                    return@buildList
+                }
+            addAll(coverageWarnings(campaign, identities))
         }
+
+    /**
+     * Which steps start with nobody to perform them (in the run, or wave by wave: those some waves skip and those no
+     * wave performs), which receivers a wave leaves without an emitter, and which races the waves leave with a single
+     * racer (they never pass there: the verdict is inconclusive).
+     */
+    private fun coverageWarnings(
+        campaign: Campaign,
+        identities: List<Identity>,
+    ): List<String> =
+        buildList {
+            val size = campaign.settings.waveSize
+            val gaps = CampaignScaler.stepsWithoutActors(campaign, identities, DefaultActorResolver())
+            val nowhere = gaps.filter { it.waves.isEmpty() }
+            if (nowhere.isNotEmpty()) {
+                add(
+                    "${campaign.settings.testers} testerlə bu addımları icra edən olmayacaq və onlar buraxılacaq: " +
+                        nowhere.joinToString { it.step.id },
+                )
+            }
+            gaps.filter { it.waves.isNotEmpty() }.forEach { gap ->
+                val nobody = "dalğa ölçüsü $size ilə '${gap.step.actors.raw}' ${inWaves(gap.waves)} heç kimə uyğun gəlmir"
+                add(
+                    if (gap.covered) {
+                        "$nobody, ona görə '${gap.step.id}' addımı orada buraxılacaq; digər dalğalar onu icra edir."
+                    } else {
+                        "$nobody; '${gap.step.id}' addımı başladığı hər dalğada buraxılacaq və heç icra olunmayacaq."
+                    },
+                )
+            }
+            CampaignScaler.waitsWithoutEmitter(campaign, identities, DefaultActorResolver()).forEach { gap ->
+                val never = if (gap.covered) "" else " Heç bir dalğada ikisi bir yerdə deyil, ona görə bu addım heç yoxlanmayacaq."
+                add(
+                    "dalğa ölçüsü $size olduğu üçün '${gap.step.id}' addımı " +
+                        "${gap.waves.joinToString()} nömrəli dalğada '${gap.step.waitFor?.event}' hadisəsini gözləyir, " +
+                        "amma orada onu emit edən '${gap.emitter.id}' addımının testeri yoxdur; oradakı qəbul edənlər " +
+                        "buraxılacaq.$never",
+                )
+            }
+            CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
+                add(
+                    "dalğa ölçüsü $size olduğu üçün '${split.step.id}' yarışının ${inWaves(split.waves)} yalnız bir " +
+                        "iştirakçı qalır və yarış orada keçmir; yarış üçün eyni dalğada ən azı 2 iştirakçı lazımdır.",
+                )
+            }
+        }
+
+    private fun inWaves(waves: List<Int>): String =
+        if (waves.size == 1) "${waves.single()} nömrəli dalğada" else "${waves.joinToString()} nömrəli dalğalarda"
 
     // --- views ----------------------------------------------------------------------------------------------------
 

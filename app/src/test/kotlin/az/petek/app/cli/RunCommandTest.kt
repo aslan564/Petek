@@ -39,6 +39,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -438,7 +439,7 @@ class RunCommandTest {
         }
 
     @Test
-    fun `--testers warns about steps nobody can run anymore`() =
+    fun `--testers that deals no tester to a step's department is refused, naming the step`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write(
@@ -464,8 +465,71 @@ class RunCommandTest {
 
             val result = cli.run("run", "depts.yaml", "--testers", "3")
 
-            result.statusCode shouldBe 1
-            result.stderr shouldContain "Warning: with --testers 3 no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
+            // Two employees are dealt to IT and HR in turn: HR has one, so the step would have nobody.
+            result.statusCode shouldBe 2
+            result.stderr shouldContain "step 'hr_second': actor 'employee[dept=HR, n=2]' can never match a tester"
+            result.stderr shouldContain "department 'HR' gets 1 of the 2 'employee' testers"
+            result.stderr shouldContain "--testers 3 does not fit this campaign"
+        }
+
+    @Test
+    fun `every run says which steps nobody would perform, wave by wave, without --testers too`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("second.yaml", SECOND_MANAGER_IN_WAVES)
+
+            val result = cli.run("run", "second.yaml")
+
+            // Waves of two: a02 (manager) and a04 in wave 1, a03 (manager) and a05 in wave 2, the admin in both. The
+            // second manager of a wave never exists, and the step starts in wave 1 only.
+            result.stderr shouldContain
+                "Warning: with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so " +
+                "step 'second_manager' (line 15) is never performed."
+        }
+
+    @Test
+    fun `a run whose testers sign in with the owner's accounts previews them for its warnings and starts`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to "owner-writer-pass"))
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/notes.yaml"),
+                """
+                target:
+                  name: notes
+                  url: ${CliHarness.UNUSED_TARGET}
+                  tenant: none
+                  test_api: {mode: none}
+                  accounts:
+                    - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                """.trimIndent() + "\n",
+            )
+            cli.write(
+                "login.yaml",
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 3
+                  seed: 12
+                  roles: {writer: 2, reader: 1}
+                  registration: {self: 1, login: 1, guest: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 3}
+                setup:
+                  - id: gates
+                    actor: [writer[*], reader]
+                    run: register_and_login
+                steps:
+                  - id: who-am-i
+                    actor: writer[*]
+                    run: verify_identity
+                """,
+            )
+
+            val result = cli.run("run", "login.yaml")
+
+            result.stderr shouldNotContain "Identity registry cannot be built"
+            result.stdout shouldContain "Running 'notes-login' with 3 agents"
         }
 
     @Test
@@ -629,6 +693,28 @@ class RunCommandTest {
               - id: health
                 actor: visitor[n=1]
                 run: {function: site_health, args: {checks: "console,mobile", pages: "/"}}
+            """.trimIndent()
+
+        /** Five testers in waves of two: one manager in each wave, so `manager[n=2]` matches nobody in any of them. */
+        val SECOND_MANAGER_IN_WAVES =
+            """
+            campaign:
+              name: second
+              testers: 5
+              seed: 3
+              wave_size: 2
+              roles: {admin: 1, manager: 2, employee: 2}
+              departments: [IT, HR]
+              registration: {invite: 3, company_code: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up"
+            steps:
+              - id: second_manager
+                actor: manager[n=2]
+                do: "Open the page as the second manager"
             """.trimIndent()
     }
 }

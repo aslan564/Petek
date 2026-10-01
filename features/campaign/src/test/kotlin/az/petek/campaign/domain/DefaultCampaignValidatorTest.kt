@@ -15,6 +15,7 @@ import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.campaign
 import az.petek.campaign.testing.settings
 import az.petek.campaign.testing.step
+import az.petek.core.model.Role
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -438,6 +439,46 @@ class DefaultCampaignValidatorTest {
             val noManagers = settings(roles = RoleQuota(1, 0, 9))
             issue(campaign(step("s", actor = "manager"), settings = noManagers), "can never match a tester")
             issues(campaign(step("s", actor = "manager | employee"), settings = noManagers)).shouldBeEmpty()
+        }
+
+        @Test
+        fun `a department holds only the testers the registry deals to it in turn`() {
+            // Three managers over five departments sit in IT, HR and Satış; the six employees continue the rotation at
+            // Maliyyə: Maliyyə, Əməliyyat, IT, HR, Satış, Maliyyə.
+            val five = settings(departments = listOf("IT", "HR", "Satış", "Maliyyə", "Əməliyyat"))
+            issues(campaign(step("s", actor = "manager[Satış]"), settings = five)).shouldBeEmpty()
+            val finance = issue(campaign(step("s", actor = "manager[Maliyyə]", line = 9), settings = five), "can never match a tester")
+            finance.line shouldBe 9
+            finance.message shouldContain
+                "(the testers are dealt to the departments in turn, so department 'Maliyyə' gets 0 of the 3 'manager' testers)"
+            issues(campaign(step("s", actor = "employee[dept=Maliyyə, n=2]"), settings = five)).shouldBeEmpty()
+            issue(campaign(step("s", actor = "employee[dept=Maliyyə, n=3]"), settings = five), "can never match a tester")
+                .message shouldContain "department 'Maliyyə' gets 2 of the 6 'employee' testers"
+            issues(campaign(step("s", actor = "manager[Maliyyə] | manager[IT]"), settings = five)).shouldBeEmpty()
+            // Over IT and HR the three managers are IT, HR, IT.
+            issues(campaign(step("s", actor = "manager[dept=IT, n=2]"))).shouldBeEmpty()
+            issue(campaign(step("s", actor = "manager[dept=HR, n=2]")), "department 'HR' gets 1 of the 3 'manager' testers")
+        }
+
+        @Test
+        fun `without companies every tester is dealt a department in turn, role after role`() {
+            val editor = checkNotNull(Role.fromKey("editor"))
+            val reader = checkNotNull(Role.fromKey("reader"))
+            val site =
+                settings(
+                    testers = 5,
+                    roles = RoleQuota.of(linkedMapOf(editor to 2, reader to 3)),
+                    registration = RegistrationQuota.selfSignUp(5),
+                    departments = listOf("A", "B"),
+                ).copy(tenant = Tenant.NONE)
+
+            fun on(actor: String) = campaign(step("s", actor = actor), settings = site)
+
+            // a01 editor A, a02 editor B, a03 reader A, a04 reader B, a05 reader A.
+            issues(on("editor[B]")).shouldBeEmpty()
+            issue(on("editor[dept=B, n=2]"), "department 'B' gets 1 of the 2 'editor' testers")
+            issues(on("reader[dept=A, n=2]")).shouldBeEmpty()
+            issue(on("reader[dept=B, n=2]"), "department 'B' gets 1 of the 3 'reader' testers")
         }
     }
 
@@ -924,6 +965,74 @@ class DefaultCampaignValidatorTest {
             issue(campaign(announce, target = profile("announcement_created" to oracle)), "{self.password} is not available")
             val fine = IdSource.OracleField("/test/announcements/latest?by={self.email}", "id")
             issues(campaign(announce, target = profile("announcement_created" to fine))).shouldBeEmpty()
+        }
+
+        /** The ticket each employee creates, checked through `{last_id}` (Faza 24.6). */
+        private val ownTicket = listOf(AssertionSpec.Oracle("/test/tickets/{last_id}", "created_by", "{self.email}", null))
+
+        private fun tickets(
+            source: IdSource?,
+            actor: String = "employee[*]",
+            assertions: List<AssertionSpec> = ownTicket,
+        ) = step("ticket", actor = actor, emits = "ticket_created", idSource = source, assertions = assertions, line = 40)
+
+        @Test
+        fun `last_id read from the page or from an oracle path that does not name the tester is warned about when many emit`() {
+            val firstItem = IdSource.DomAttribute("[data-testid=ticket-item]:first-child", "data-id")
+            val campaign = campaign(tickets(firstItem))
+
+            issues(campaign).shouldBeEmpty()
+            val warning = validator.warnings(campaign).single()
+            warning.line shouldBe 40
+            warning.message shouldContain
+                "step 'ticket': {last_id} in its checks is the id of each tester's 'ticket_created' object, read from " +
+                "dom '[data-testid=ticket-item]:first-child' (data-id) (emits.id_from), but up to 6 testers emit it here"
+            warning.message shouldContain "a tester can read a colleague's object made at the same moment"
+            warning.message shouldContain "url_regex on the page it lands on, or an oracle path naming the tester"
+            warning.message shouldContain "?by={self.email}"
+            warning.message shouldNotContain "dom selector naming"
+            // The target profile's source for the event counts the same, and so does a department, shared by colleagues.
+            val latest = IdSource.OracleField("/test/tickets/latest", "id")
+            validator.warnings(campaign(tickets(null), target = profile("ticket_created" to latest))).single().message shouldContain
+                "read from oracle '/test/tickets/latest' (id) (target_profile.id_sources.ticket_created)"
+            val sameDepartment = IdSource.OracleField("/test/tickets/latest?dept={self.department}", "id")
+            validator.warnings(campaign(tickets(sameDepartment))) shouldHaveSize 1
+        }
+
+        @Test
+        fun `a dom selector naming the tester is warned about too, since the harness reads it as written`() {
+            val mine = IdSource.DomAttribute("[data-owner='{self.email}'] [data-testid=ticket-item]", "data-id")
+
+            // ObjectIdReader passes a dom selector to the page unrendered: `{self.email}` there names nobody, so the read
+            // finds no element and the id falls back to the agent's report.
+            val warning = validator.warnings(campaign(tickets(mine))).single()
+
+            warning.message shouldContain "read from dom '[data-owner='{self.email}'] [data-testid=ticket-item]' (data-id)"
+            warning.message shouldContain
+                "the harness reads a dom selector as written, so {self.email} in it is not filled in and names nobody"
+        }
+
+        @Test
+        fun `last_id from a source scoped to the tester, one emitter, a race or checks without last_id say nothing`() {
+            listOf(
+                IdSource.OracleField("/test/tickets/latest?by={self.email}", "id"),
+                IdSource.UrlRegex("/tickets/([0-9]+)"),
+                IdSource.AgentReport,
+                null,
+            ).forEach { source -> validator.warnings(campaign(tickets(source))).shouldBeEmpty() }
+            val firstItem = IdSource.DomAttribute("[data-testid=ticket-item]:first-child", "data-id")
+            validator.warnings(campaign(tickets(firstItem, actor = "employee[dept=IT, n=1]"))).shouldBeEmpty()
+            validator
+                .warnings(
+                    campaign(tickets(firstItem, assertions = listOf(AssertionSpec.VisibleText("OK", 5.seconds)))),
+                ).shouldBeEmpty()
+            val race =
+                tickets(
+                    firstItem,
+                    actor = "manager[*]",
+                    assertions = ownTicket + AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/tickets")),
+                ).copy(parallel = true)
+            validator.warnings(campaign(race)).shouldBeEmpty()
         }
     }
 

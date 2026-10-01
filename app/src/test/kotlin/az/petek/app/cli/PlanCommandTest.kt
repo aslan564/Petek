@@ -105,6 +105,88 @@ class PlanCommandTest {
         }
 
     @Test
+    fun `plan says which steps nobody would perform, wave by wave, as run does`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write(
+                "waves.yaml",
+                """
+                campaign:
+                  name: plan-waves
+                  testers: 5
+                  seed: 3
+                  wave_size: 2
+                  roles: {admin: 1, manager: 2, employee: 2}
+                  departments: [IT, HR]
+                  registration: {invite: 3, company_code: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                steps:
+                  - id: second_manager
+                    actor: manager[n=2]
+                    do: "Open the page as the second manager"
+                """,
+            )
+
+            val result = cli.run("plan", "waves.yaml")
+            val answer = cli.run("--json", "plan", "waves.yaml")
+
+            // One manager in each wave of two: the second manager of a wave never exists.
+            val warning =
+                "with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so step " +
+                    "'second_manager' (line 11) is never performed."
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "Warning: $warning"
+            result.stdout shouldContain "5 identities"
+            answer.stdout shouldContain warning
+        }
+
+    @Test
+    fun `a campaign whose testers sign in with the owner's accounts is planned with them, with its warnings`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to "owner-writer-pass"))
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/notes.yaml"),
+                """
+                target:
+                  name: notes
+                  url: ${CliHarness.UNUSED_TARGET}
+                  tenant: none
+                  test_api: {mode: none}
+                  accounts:
+                    - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                """.trimIndent() + "\n",
+            )
+            cli.write(
+                "login.yaml",
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 4
+                  seed: 12
+                  wave_size: 2
+                  roles: {writer: 2, reader: 2}
+                  registration: {self: 3, login: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                steps:
+                  - id: second_writer
+                    actor: writer[n=2]
+                    do: "Open the note as the second writer"
+                """,
+            )
+
+            val result = cli.run("plan", "login.yaml")
+
+            // Without the owner's account the registry of a `login` tester cannot be built, and plan said nothing else.
+            result.stderr shouldNotContain "Identity registry cannot be built"
+            result.statusCode shouldBe 0
+            result.stdout shouldContain "writer@owner.example"
+            result.stderr shouldContain "Warning: with campaign.wave_size 2 no tester matches 'writer[n=2]'"
+            result.output shouldNotContain "owner-writer-pass"
+        }
+
+    @Test
     fun `passwords are never printed`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)

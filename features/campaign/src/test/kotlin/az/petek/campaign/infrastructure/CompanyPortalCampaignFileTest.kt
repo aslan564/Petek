@@ -13,6 +13,7 @@ package az.petek.campaign.infrastructure
 
 import az.petek.campaign.domain.ActorSelector
 import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.CssSelectors
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.Flow
@@ -37,6 +38,7 @@ import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import java.net.URI
 import java.nio.file.Files
@@ -74,25 +76,39 @@ class CompanyPortalCampaignFileTest {
         quoteActorFlowLists(text) shouldBe text
     }
 
-    @Test
-    fun `it validates for any number of testers that leaves two managers for the race`() {
-        listOf(5, 6, 8, 12, 20, 30, 50, 100, 500).forEach { testers ->
-            val nonAdmins = testers - 1
-            val managers = maxOf(2, (nonAdmins * 5 / 29.0).roundToInt())
-            val invite = maxOf(managers, (nonAdmins + 1) / 2)
-            val scaled =
-                campaign.copy(
-                    settings =
-                        campaign.settings.copy(
-                            testers = testers,
-                            roles = RoleQuota(admin = 1, manager = managers, employee = nonAdmins - managers),
-                            registration = RegistrationQuota(invite = invite, companyCode = nonAdmins - invite),
-                        ),
-                )
+    /** The campaign with [testers] testers in its own ratios, keeping at least the two managers of the race. */
+    private fun scaled(testers: Int): Campaign {
+        val nonAdmins = testers - 1
+        val managers = maxOf(2, (nonAdmins * 5 / 29.0).roundToInt())
+        val invite = maxOf(managers, (nonAdmins + 1) / 2)
+        return campaign.copy(
+            settings =
+                campaign.settings.copy(
+                    testers = testers,
+                    roles = RoleQuota(admin = 1, manager = managers, employee = nonAdmins - managers),
+                    registration = RegistrationQuota(invite = invite, companyCode = nonAdmins - invite),
+                ),
+        )
+    }
 
-            val issues = DefaultCampaignValidator().validate(scaled, KNOWN_RUN_FUNCTIONS)
+    @Test
+    fun `it validates for any number of testers that leaves two managers for the race and an employee in IT`() {
+        listOf(8, 12, 20, 30, 50, 100, 500).forEach { testers ->
+            val issues = DefaultCampaignValidator().validate(scaled(testers), KNOWN_RUN_FUNCTIONS)
 
             check(issues.isEmpty()) { "$testers testers: $issues" }
+        }
+    }
+
+    @Test
+    fun `with too few testers to deal an employee to IT the leave request is reported as having nobody`() {
+        // Two managers take IT and HR, the employees continue the rotation at Satış: 2 or 3 of them never reach IT.
+        listOf(5, 6).forEach { testers ->
+            val issues = DefaultCampaignValidator().validate(scaled(testers), KNOWN_RUN_FUNCTIONS)
+
+            val issue = checkNotNull(issues.singleOrNull()) { "$testers testers: $issues" }
+            issue.message shouldContain "step 'leave_request': actor 'employee[dept=IT, n=1]' can never match a tester"
+            issue.message shouldContain "department 'IT' gets 0 of the ${testers - 3} 'employee' testers"
         }
     }
 
