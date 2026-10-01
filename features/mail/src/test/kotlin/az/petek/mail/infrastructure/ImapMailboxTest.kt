@@ -18,6 +18,7 @@ import az.petek.mail.domain.MailMessage
 import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailTimeoutException
 import az.petek.mail.domain.MailboxException
+import az.petek.mail.domain.UnreadableMailException
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
@@ -72,6 +73,8 @@ class ImapMailboxTest {
         private var failures: Int = Int.MAX_VALUE,
         /** How many mark conversations set the flags and then fail, like a round whose CLOSE timed out after its STORE. */
         private var marksFailingAfterTheStore: Int = 0,
+        /** By recipient: the UIDs of that tester's messages the server has but that cannot be read, with why. */
+        var unreadable: Map<String, Map<Long, String>> = emptyMap(),
     ) : ImapGateway {
         /** The recipients of each search conversation, in order. */
         val searched = mutableListOf<List<String>>()
@@ -83,12 +86,12 @@ class ImapMailboxTest {
             messages = messages + message
         }
 
-        override suspend fun find(queries: List<ImapQuery>): List<List<MailMessage>> {
+        override suspend fun find(queries: List<ImapQuery>): List<ImapFound> {
             conversations++
             delay(latency)
             failure?.takeIf { failures-- > 0 }?.let { throw it }
             searched += queries.map { it.recipient }
-            return queries.map { messages }
+            return queries.map { ImapFound(messages, unreadable[it.recipient].orEmpty()) }
         }
 
         override suspend fun markSeen(ids: Collection<String>) {
@@ -266,6 +269,59 @@ class ImapMailboxTest {
             // The deadline, then the last looks of all hundred, which share the round in progress and one more.
             currentTime shouldBeLessThanOrEqual 62_000
         }
+
+    @Test
+    fun `a tester whose mail cannot be read learns it with what could be read, and the others in the round are untouched`() =
+        runTest {
+            val gateway =
+                FakeGateway(
+                    listOf(
+                        codeMail("1", tester(1), start.plusSeconds(1), "111111"),
+                        message("2", tester(2), start.plusSeconds(2)).copy(subject = "Xoş gəlmisiniz", text = "Hesabınız hazırdır."),
+                    ),
+                    latency = 1.seconds,
+                    unreadable = mapOf(tester(2) to mapOf(3L to "Unknown charset x-unknown-charset-9")),
+                )
+            val mailbox = mailbox(gateway)
+
+            val (a, b) =
+                listOf(tester(1), tester(2)).map { async { runCatching { mailbox.findRecent(it, start) } } }.awaitAll()
+
+            a.getOrThrow().map { it.id } shouldContainExactly listOf("1")
+            val error = b.exceptionOrNull().shouldBeInstanceOf<UnreadableMailException>()
+            error.message shouldBe
+                "Mail to ${tester(2)} is in the IMAP inbox test@company.example@imap.company.example but cannot be read: " +
+                "message 3 (Unknown charset x-unknown-charset-9)"
+            error.readable.map { it.id } shouldContainExactly listOf("2")
+            gateway.conversations shouldBe 1
+        }
+
+    @Test
+    fun `a tester whose code mail cannot be read ends with an inbox failure at the deadline, never with no e-mail sent`() =
+        runTest {
+            val gateway =
+                FakeGateway(latency = 600.milliseconds, unreadable = mapOf(tester(2) to mapOf(3L to "Unknown charset x-unknown-charset-9")))
+            gateway.deliver(codeMail("1", tester(1), start, "111111"))
+            val verification = DefaultAwaitVerificationUseCase(mailbox(gateway), DefaultVerificationExtractor())
+
+            val (a, b) =
+                listOf(tester(1), tester(2))
+                    .map { async { runCatching { verification.await(it, start, MailPurpose.CODE, timeout = 10.seconds) } } }
+                    .awaitAll()
+
+            a.getOrThrow().code shouldBe "111111"
+            b.exceptionOrNull().shouldBeInstanceOf<UnreadableMailException>().message shouldContain "message 3"
+        }
+
+    @Test
+    fun `a message whose envelope cannot be read may be the tester's whose address its raw headers name, or anyone's without them`() {
+        val query = ImapQuery.of(tester(1), start, unreadOnly = true, limit = 10)
+        val named = ImapUnreadable(1, "BAD", "Tester <${tester(1).uppercase()}>\nsomeone@company.example")
+        val other = ImapUnreadable(2, "BAD", tester(2))
+        val nameless = ImapUnreadable(3, "BAD", rawRecipients = null)
+
+        ImapSelection.mayBelongTo(query, listOf(named, other, nameless)) shouldContainExactly listOf(named, nameless)
+    }
 
     @Test
     fun `a tester that stops waiting is left out of the next round, and the others are still answered`() =

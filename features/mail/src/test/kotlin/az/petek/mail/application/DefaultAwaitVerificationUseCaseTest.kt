@@ -17,6 +17,7 @@ import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailTimeoutException
 import az.petek.mail.domain.Mailbox
 import az.petek.mail.domain.MailboxException
+import az.petek.mail.domain.UnreadableMailException
 import az.petek.mail.testing.FakeMailbox
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
@@ -332,6 +333,32 @@ class DefaultAwaitVerificationUseCaseTest {
             val error = shouldThrow<MailboxException> { useCase.await(ELI, SINCE, MailPurpose.CODE, timeout = 3.seconds) }
 
             error.message shouldBe "Mailpit is down (poll ${mailbox.polls})"
+        }
+
+    @Test
+    fun `mail that is there but cannot be read ends the wait as an inbox failure, and a readable code beside it is still used`() =
+        runTest {
+            // The inbox holds a mail to the tester it cannot read, and answers with what it could read.
+            val partly =
+                object : Mailbox by mailbox {
+                    override suspend fun findRecent(
+                        to: String,
+                        since: Instant,
+                        unreadOnly: Boolean,
+                        limit: Int,
+                    ): List<MailMessage> {
+                        val readable = mailbox.findRecent(to, since, unreadOnly, limit)
+                        throw UnreadableMailException("Mail to $to is in the inbox but cannot be read: message 9 (bad charset)", readable)
+                    }
+                }
+            val useCase = DefaultAwaitVerificationUseCase(partly, DefaultVerificationExtractor())
+            mailbox.fake.deliver(mail("welcome", "Xoş gəlmisiniz", "Hesabınız hazırdır."))
+
+            shouldThrow<UnreadableMailException> {
+                useCase.await(ELI, SINCE, MailPurpose.CODE, timeout = 5.seconds)
+            }.message shouldContain "message 9"
+            mailbox.fake.deliver(codeMail("code", "482913", at = SINCE.plusSeconds(2)))
+            useCase.await(ELI, SINCE, MailPurpose.CODE, timeout = 5.seconds).code shouldBe "482913"
         }
 
     @Test

@@ -15,6 +15,7 @@ import az.petek.mail.domain.MailAddresses
 import az.petek.mail.domain.MailMessage
 import az.petek.mail.domain.Mailbox
 import az.petek.mail.domain.MailboxException
+import az.petek.mail.domain.UnreadableMailException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.mail.MessagingException
 import kotlinx.coroutines.CancellationException
@@ -45,7 +46,9 @@ private val logger = KotlinLogging.logger {}
  *
  * Reading never marks a message read ([markRead] does). Server and protocol failures become [MailboxException]
  * naming the host and the tester's own action, never the password; a failed round fails only the requests in it, and
- * the next round starts afresh. A caller that stops waiting (its time is up) is left out of the rounds not yet started.
+ * the next round starts afresh. A tester's message that is there but cannot be read fails only that tester's search,
+ * with [UnreadableMailException] naming it and carrying the messages that could be read. A caller that stops waiting
+ * (its time is up) is left out of the rounds not yet started.
  */
 class ImapMailbox internal constructor(
     private val settings: ImapSettings,
@@ -75,12 +78,16 @@ class ImapMailbox internal constructor(
         limit: Int,
     ): List<MailMessage> {
         val query = ImapQuery.of(to, since, unreadOnly, limit)
+        val found = ask(Search(query))
         // The gateway already answers by these rules; they are applied here again so that no gateway, however it
         // searches, can hand one tester another tester's mail.
-        return ask(Search(query))
-            .filter(query::accepts)
-            .sortedWith(NEWEST_FIRST)
-            .take(limit)
+        val messages =
+            found.messages
+                .filter(query::accepts)
+                .sortedWith(NEWEST_FIRST)
+                .take(limit)
+        if (found.unreadable.isNotEmpty()) throw unreadable(query, found.unreadable, messages)
+        return messages
     }
 
     override suspend fun markRead(messageId: String) {
@@ -167,6 +174,19 @@ class ImapMailbox internal constructor(
         e: Exception,
     ) = MailboxException("Cannot ${request.action} in the IMAP inbox ${settings.username}@${settings.host}: ${e.message}", e)
 
+    private fun unreadable(
+        query: ImapQuery,
+        unreadable: Map<Long, String>,
+        readable: List<MailMessage>,
+    ): UnreadableMailException {
+        val which = unreadable.entries.joinToString { (uid, why) -> "$uid ($why)" }
+        val noun = if (unreadable.size == 1) "message" else "messages"
+        return UnreadableMailException(
+            "Mail to ${query.recipient} is in the IMAP inbox ${settings.username}@${settings.host} but cannot be read: $noun $which",
+            readable,
+        )
+    }
+
     private fun closed(request: Request<*>) =
         MailboxException("Cannot ${request.action}: the IMAP inbox ${settings.username}@${settings.host} is closed")
 
@@ -186,7 +206,7 @@ class ImapMailbox internal constructor(
 
     private class Search(
         val query: ImapQuery,
-    ) : Request<List<MailMessage>>("search for mail to ${query.recipient}")
+    ) : Request<ImapFound>("search for mail to ${query.recipient}")
 
     private class MarkSeen(
         val id: String,
@@ -237,13 +257,22 @@ internal data class ImapQuery(
     }
 }
 
+/**
+ * A gateway's answer to one [ImapQuery]: its [messages], read in full, and those of its messages that are there but
+ * could not be read, by UID with why ([unreadable]); never left out silently, as the site did send them.
+ */
+internal data class ImapFound(
+    val messages: List<MailMessage>,
+    val unreadable: Map<Long, String> = emptyMap(),
+)
+
 /** The IMAP conversations, separated so [ImapMailbox]'s rounds and matching are testable without a server. */
 internal interface ImapGateway : AutoCloseable {
     /**
      * One conversation answering every query: for each, in the order given, its messages by the [ImapQuery] rules
-     * (exact recipient, arrival, read state), newest first, at most its limit, read in full.
+     * (exact recipient, arrival, read state), newest first, at most its limit, read in full ([ImapFound]).
      */
-    suspend fun find(queries: List<ImapQuery>): List<List<MailMessage>>
+    suspend fun find(queries: List<ImapQuery>): List<ImapFound>
 
     /** One conversation marking every message of [ids] (UIDs) seen; ids the server does not know are ignored. */
     suspend fun markSeen(ids: Collection<String>)

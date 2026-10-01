@@ -16,6 +16,7 @@ import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailTimeoutException
 import az.petek.mail.domain.Mailbox
 import az.petek.mail.domain.MailboxException
+import az.petek.mail.domain.UnreadableMailException
 import az.petek.mail.domain.VerificationCode
 import az.petek.mail.domain.VerificationExtractor
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -43,7 +44,9 @@ private val logger = KotlinLogging.logger {}
  * polls of a shared inbox, must not turn a message that did arrive in time into `mail_timeout`, a finding about the
  * target. Only that last look decides: a usable message is returned, an inbox that fails it (or does not answer it in
  * time) throws [MailboxException], "the inbox could not be read", an environment problem, and only an inbox that
- * answered "nothing usable" ends in [MailTimeoutException].
+ * answered "nothing usable" ends in [MailTimeoutException]. Mail that is there but cannot be read
+ * ([UnreadableMailException]) is such a failure too whenever nothing that could be read is usable: the site did send
+ * it, so the wait never ends as "no e-mail sent" while it is there.
  *
  * Once a code is taken from a message it is the answer, whatever happens to the mark that follows: a mark the inbox
  * fails, or one the deadline cuts off (it may already have set the flag, so no later unread search would see the
@@ -172,17 +175,24 @@ class DefaultAwaitVerificationUseCase(
             return found.code
         }
 
+        /**
+         * The newest usable message among those found; null when there is none. When some of the tester's mail could
+         * not be read and nothing that could is usable, that failure is thrown: the mail it waits for may be that one.
+         */
         private suspend fun newestUsable(): Taken? {
-            val candidates =
-                mailbox
-                    .findRecent(to, since, unreadOnly = true, limit = candidatesPerPoll)
-                    .filter { !it.read && it.id !in unconfirmed }
-                    .sortedByDescending { it.receivedAt }
+            val (found, unreadable) =
+                try {
+                    mailbox.findRecent(to, since, unreadOnly = true, limit = candidatesPerPoll) to null
+                } catch (e: UnreadableMailException) {
+                    e.readable to e
+                }
+            val candidates = found.filter { !it.read && it.id !in unconfirmed }.sortedByDescending { it.receivedAt }
             for (message in candidates) {
                 val code = extract(message)
                 if (code != null) return Taken(message.id, code)
                 reportSkip(message)
             }
+            if (unreadable != null) throw unreadable
             return null
         }
 

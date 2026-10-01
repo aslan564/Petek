@@ -56,7 +56,8 @@ private val logger = KotlinLogging.logger {}
  * (recipients, arrival, `\Seen`) come in one fetch, each tester's messages are told apart by the exact address before
  * any limit applies, and only the chosen messages are downloaded, in one more fetch, and only once: a message's content
  * never changes under its UID, so it is kept ([MessageCache]) for the next rounds. A message that cannot be read (a
- * broken MIME part, an unknown charset) is skipped and logged, so it never fails the other testers' round.
+ * broken MIME part, an unknown charset) never fails the other testers' round: it is reported, with why, only to the
+ * testers it may belong to ([ImapFound.unreadable]), so that none of them takes its absence for "no e-mail sent".
  */
 internal class AngusImapGateway(
     private val settings: ImapSettings,
@@ -85,7 +86,7 @@ internal class AngusImapGateway(
 
     private fun isLoopback(host: String): Boolean = host.lowercase() in setOf("localhost", "127.0.0.1", "::1") || host.startsWith("127.")
 
-    override suspend fun find(queries: List<ImapQuery>): List<List<MailMessage>> {
+    override suspend fun find(queries: List<ImapQuery>): List<ImapFound> {
         if (queries.isEmpty()) return emptyList()
         return withContext(Dispatchers.IO) { withFolder(Folder.READ_ONLY) { folder -> find(folder, queries) } }
     }
@@ -111,7 +112,7 @@ internal class AngusImapGateway(
     private fun find(
         folder: Folder,
         queries: List<ImapQuery>,
-    ): List<List<MailMessage>> {
+    ): List<ImapFound> {
         val uids = folder as UIDFolder
         if (bodies.keepFor(uids.uidValidity)) reportedUnreadable.clear()
         // IMAP dates are days in the server's zone: a day earlier covers any zone.
@@ -127,9 +128,10 @@ internal class AngusImapGateway(
                 .sortedBy { it.messageNumber }
                 .takeLast(MAX_SCANNED)
                 .toTypedArray()
-        if (found.isEmpty()) return queries.map { emptyList() }
+        if (found.isEmpty()) return queries.map { ImapFound(emptyList()) }
         folder.fetch(found, ENVELOPES)
         val messages = HashMap<Long, Message>()
+        val unreadableEnvelopes = HashMap<Long, String>()
         val envelopes =
             found.mapNotNull { message ->
                 val uid =
@@ -139,38 +141,51 @@ internal class AngusImapGateway(
                         return@mapNotNull null
                     }
                 messages[uid] = message
-                readable(
-                    uid,
-                ) { ImapEnvelope(uid, MimeMail.recipients(message), MimeMail.receivedAt(message), message.isSet(Flags.Flag.SEEN)) }
+                readable(uid, unreadableEnvelopes) {
+                    ImapEnvelope(uid, MimeMail.recipients(message), MimeMail.receivedAt(message), message.isSet(Flags.Flag.SEEN))
+                }
             }
         val selected = ImapSelection.select(queries, envelopes)
         val wanted = selected.flatten().distinct()
         val chosen = HashMap<Long, MailMessage>()
         wanted.forEach { uid -> bodies[uid]?.let { chosen[uid] = it } }
-        chosen += download(folder, wanted.filter { it !in chosen }.map { it to messages.getValue(it) })
+        val unreadableBodies = HashMap<Long, String>()
+        chosen += download(folder, wanted.filter { it !in chosen }.map { it to messages.getValue(it) }, unreadableBodies)
         val read = envelopes.associate { it.uid to it.read }
-        return selected.map { uidsOfQuery -> uidsOfQuery.mapNotNull { uid -> chosen[uid]?.copy(read = read.getValue(uid)) } }
+        // Whose a message is whose very envelope could not be read is known only from its raw recipient headers.
+        val unknownOwner = unreadableEnvelopes.map { (uid, why) -> ImapUnreadable(uid, why, rawRecipients(messages.getValue(uid))) }
+        return queries.mapIndexed { index, query ->
+            val uidsOfQuery = selected[index]
+            ImapFound(
+                messages = uidsOfQuery.mapNotNull { uid -> chosen[uid]?.copy(read = read.getValue(uid)) },
+                unreadable =
+                    uidsOfQuery.filter { it in unreadableBodies }.associateWith { unreadableBodies.getValue(it) } +
+                        ImapSelection.mayBelongTo(query, unknownOwner).associate { it.uid to it.why },
+            )
+        }
     }
 
-    /** Reads [wanted] in full with one fetch and keeps them for later rounds. */
+    /** Reads [wanted] in full with one fetch and keeps them for later rounds; those that cannot be read go to [unreadable]. */
     private fun download(
         folder: Folder,
         wanted: List<Pair<Long, Message>>,
+        unreadable: MutableMap<Long, String>,
     ): Map<Long, MailMessage> {
         if (wanted.isEmpty()) return emptyMap()
         folder.fetch(wanted.map { it.second }.toTypedArray(), WHOLE_MESSAGES)
         return wanted
-            .mapNotNull { (uid, message) -> readable(uid) { MimeMail.read(uid.toString(), message) }?.let { uid to it } }
+            .mapNotNull { (uid, message) -> readable(uid, unreadable) { MimeMail.read(uid.toString(), message) }?.let { uid to it } }
             .toMap()
             .onEach { (uid, message) -> bodies.put(uid, message) }
     }
 
     /**
-     * [block]'s reading of message [uid], or null when the message is gone or cannot be read (logged once); a lost
-     * connection still fails the round, as it fails every message of it.
+     * [block]'s reading of message [uid], or null when the message is gone, or cannot be read: then [unreadable] gets
+     * why (logged once). A lost connection still fails the round, as it fails every message of it.
      */
     private fun <T : Any> readable(
         uid: Long,
+        unreadable: MutableMap<Long, String>,
         block: () -> T,
     ): T? =
         try {
@@ -182,18 +197,33 @@ internal class AngusImapGateway(
         } catch (_: MessageRemovedException) {
             null
         } catch (e: MessagingException) {
-            unreadable(uid, e)
+            unreadable(uid, e, unreadable)
         } catch (e: IOException) {
-            unreadable(uid, e)
+            unreadable(uid, e, unreadable)
         }
 
     private fun unreadable(
         uid: Long,
         e: Exception,
+        unreadable: MutableMap<Long, String>,
     ): Nothing? {
-        if (reportedUnreadable.add(uid)) logger.warn { "Skipping IMAP message $uid: it cannot be read (${e.message})" }
+        val why = e.message?.takeIf { it.isNotBlank() } ?: e::class.java.simpleName
+        unreadable[uid] = why
+        if (reportedUnreadable.add(uid)) logger.warn { "IMAP message $uid cannot be read, reported to the testers it is for: $why" }
         return null
     }
+
+    /** The raw text of [message]'s recipient headers, or null when not even that can be read. */
+    private fun rawRecipients(message: Message): String? =
+        try {
+            ImapSearch.RECIPIENT_HEADERS.flatMap { message.getHeader(it)?.toList().orEmpty() }.joinToString("\n")
+        } catch (e: FolderClosedException) {
+            throw e
+        } catch (e: StoreClosedException) {
+            throw e
+        } catch (_: MessagingException) {
+            null
+        }
 
     private fun <T> withFolder(
         mode: Int,
@@ -247,8 +277,28 @@ internal data class ImapEnvelope(
     val read: Boolean,
 )
 
+/**
+ * A message of a round whose envelope could not be read, so whose it is cannot be told by its exact recipient: [why],
+ * and [rawRecipients], the raw text of its recipient headers (null when not even that could be read).
+ */
+internal data class ImapUnreadable(
+    val uid: Long,
+    val why: String,
+    val rawRecipients: String?,
+)
+
 /** Which of a round's messages answer which tester. Pure. */
 internal object ImapSelection {
+    /**
+     * Those of [unreadable] that may be [query]'s: whose raw recipient headers contain its address, as the server's
+     * search matched them, or whose headers could not be read at all. Rather counted against a tester whose they are
+     * not (it then learns of an unreadable inbox, never of a site that sent nothing) than left out silently.
+     */
+    fun mayBelongTo(
+        query: ImapQuery,
+        unreadable: List<ImapUnreadable>,
+    ): List<ImapUnreadable> = unreadable.filter { it.rawRecipients?.contains(query.recipient, ignoreCase = true) ?: true }
+
     /**
      * For each query, in order, the UIDs of its messages among [envelopes] by the [ImapQuery] rules, newest first
      * (within one second, the higher UID arrived later) and at most its limit. The limit applies only after the exact
@@ -345,6 +395,9 @@ internal object ImapSearch {
 
     const val DELIVERED_TO = "Delivered-To"
     const val ORIGINAL_TO = "X-Original-To"
+
+    /** The headers that may name a tester: those [addressedTo] searches. */
+    val RECIPIENT_HEADERS: List<String> = listOf("To", "Cc", DELIVERED_TO, ORIGINAL_TO)
 }
 
 /** Reads a Jakarta Mail message into a [MailMessage]: recipients, received time, `\Seen`, plain text and HTML. Pure. */

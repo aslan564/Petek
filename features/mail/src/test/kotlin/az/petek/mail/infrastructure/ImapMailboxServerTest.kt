@@ -12,7 +12,11 @@
 package az.petek.mail.infrastructure
 
 import az.petek.core.security.Secret
+import az.petek.mail.application.DefaultAwaitVerificationUseCase
+import az.petek.mail.domain.DefaultVerificationExtractor
+import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailboxException
+import az.petek.mail.domain.UnreadableMailException
 import com.icegreen.greenmail.util.GreenMail
 import com.icegreen.greenmail.util.ServerSetup
 import io.kotest.assertions.throwables.shouldThrow
@@ -23,6 +27,7 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import jakarta.mail.Message
 import jakarta.mail.Session
 import jakarta.mail.Transport
@@ -38,6 +43,8 @@ import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Properties
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * [ImapMailbox] against a real IMAP server (GreenMail, test only; the owner's decision of 2026-09-30): the owner's
@@ -84,6 +91,20 @@ class ImapMailboxServerTest {
             transport.sendMessage(message, arrayOf(InternetAddress(INBOX)))
         }
     }
+
+    /** A code mail to [to] in a charset no JVM knows: the server has it, but it cannot be read. */
+    private fun deliverUnreadable(to: String) =
+        deliverRaw(
+            """
+            From: no-reply@portal.test
+            To: $to
+            Subject: Kod
+            MIME-Version: 1.0
+            Content-Type: text/plain; charset="x-unknown-charset-9"
+
+            Kod: 482913
+            """.trimIndent().replace("\n", "\r\n"),
+        )
 
     /** Sends [raw] (an RFC 822 message) as it is, over SMTP, to the owner's box. */
     private fun deliverRaw(raw: String) {
@@ -145,28 +166,47 @@ class ImapMailboxServerTest {
         }
 
     @Test
-    fun `a mail that cannot be read is skipped without failing the other testers asking in the same round`() =
+    fun `a mail that cannot be read fails only its own tester's search, naming it, and the others in the round are answered`() =
         runBlocking<Unit> {
             deliver("Kod A", to = TESTER_A)
-            deliverRaw(
-                """
-                From: no-reply@portal.test
-                To: $TESTER_B
-                Subject: Kod B
-                MIME-Version: 1.0
-                Content-Type: text/plain; charset="x-unknown-charset-9"
-
-                Kod: 482913
-                """.trimIndent().replace("\n", "\r\n"),
-            )
+            deliverUnreadable(TESTER_B)
 
             val (a, b) =
                 coroutineScope {
-                    listOf(TESTER_A, TESTER_B).map { async(Dispatchers.Default) { mailbox.findRecent(it, since, true, 10) } }.awaitAll()
+                    listOf(TESTER_A, TESTER_B)
+                        .map { async(Dispatchers.Default) { runCatching { mailbox.findRecent(it, since, true, 10) } } }
+                        .awaitAll()
                 }
 
-            a.map { it.subject } shouldContainExactly listOf("Kod A")
-            b.shouldBeEmpty()
+            a.getOrThrow().map { it.subject } shouldContainExactly listOf("Kod A")
+            val error = b.exceptionOrNull().shouldBeInstanceOf<UnreadableMailException>()
+            error.message.shouldNotBeNull() shouldContain "Mail to $TESTER_B is in the IMAP inbox $INBOX@$LOOPBACK but cannot be read"
+            error.message.shouldNotBeNull() shouldContain "x-unknown-charset-9"
+            error.readable.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a tester whose code mail cannot be read ends with an inbox failure, never with no e-mail sent`() =
+        runBlocking<Unit> {
+            deliverUnreadable(TESTER_B)
+            val verification = DefaultAwaitVerificationUseCase(mailbox, DefaultVerificationExtractor(), lastLookTimeout = 5.seconds)
+
+            val error =
+                shouldThrow<MailboxException> {
+                    verification.await(TESTER_B, since, MailPurpose.CODE, timeout = 1.seconds, pollInterval = 250.milliseconds)
+                }
+
+            error.message.shouldNotBeNull() shouldContain "cannot be read"
+        }
+
+    @Test
+    fun `a tester's readable code is used though another of its mails cannot be read`() =
+        runBlocking<Unit> {
+            deliverUnreadable(TESTER_B)
+            deliver("Kod B", to = TESTER_B)
+            val verification = DefaultAwaitVerificationUseCase(mailbox, DefaultVerificationExtractor())
+
+            verification.await(TESTER_B, since, MailPurpose.CODE, timeout = 10.seconds).code shouldBe "482913"
         }
 
     @Test
