@@ -29,6 +29,8 @@ import az.petek.browser.domain.SessionOptions
 import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.core.time.SystemHarnessClock
+import com.microsoft.playwright.options.ScreenshotScale
+import com.microsoft.playwright.options.ScreenshotType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -856,7 +858,7 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
-    fun `a look resets an infinite CSS animation and hides the caret, so two looks are byte-identical`() =
+    fun `a look resets an infinite CSS animation, so two looks are byte-identical`() =
         withSession { session ->
             session.navigate("/look/spinner")
             val request = LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)
@@ -871,6 +873,19 @@ class PlaywrightBrowserSessionTest {
                 .single()
                 .png
                 .contentEquals(second.shots.single().png) shouldBe true
+        }
+
+    @Test
+    fun `a look hides the caret of a field the page keeps focused`() =
+        withSession { session ->
+            session.navigate("/look/caret")
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            // The look blurred the field and the page focused it again: its caret would show in every frame.
+            session.isSelectorVisible("#field:focus") shouldBe true
+            val image = decode(look.shots.single().png)
+            (41..238).all { x -> (41..68).all { y -> image.rgbAt(x, y) == WHITE } } shouldBe true
         }
 
     @Test
@@ -979,7 +994,7 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
-    fun `CSS scale gives one image pixel per CSS pixel`() =
+    fun `a full-page look keeps every CSS pixel of the page at the same image pixel`() =
         withSession { session ->
             session.navigate("/look/tall")
 
@@ -990,6 +1005,18 @@ class PlaywrightBrowserSessionTest {
             image.rgbAt(1_279, 999) shouldBe 0xEE3333
             image.rgbAt(1_279, 1_000) shouldBe 0x33EE33
         }
+
+    @Test
+    fun `a look's frames are asked for at CSS scale, so a screen with more device pixels gives the same image`() {
+        // Every session draws one device pixel per CSS pixel, where both scales give the same image: only the request
+        // tells them apart.
+        val options = PlaywrightBrowserSession.lookShotOptions(maxHeight = 2_000, viewport = Viewport(1280, 800), pageHeight = 3_000)
+
+        options.scale shouldBe ScreenshotScale.CSS
+        options.type shouldBe ScreenshotType.PNG
+        options.fullPage shouldBe true
+        options.clip.shouldNotBeNull().let { listOf(it.x, it.y, it.width, it.height) } shouldBe listOf(0.0, 0.0, 1280.0, 2000.0)
+    }
 
     @Test
     fun `a band one screen high keeps the screen's height in a full-page look`() =
@@ -1389,6 +1416,7 @@ class PlaywrightBrowserSessionTest {
 
     private companion object {
         const val RGB = 0xFFFFFF
+        const val WHITE = 0xFFFFFF
 
         /**
          * Pages whose text appears one second after they load, the element stamped with that moment: appended to the

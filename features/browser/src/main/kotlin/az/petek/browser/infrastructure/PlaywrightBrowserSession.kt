@@ -654,33 +654,6 @@ internal class PlaywrightBrowserSession private constructor(
         }
     }
 
-    /**
-     * A look's frame: PNG at CSS scale (one image pixel per CSS pixel), the whole page down to the capture height (at least
-     * the first screen; only the first screen when [maxHeight] is 0), finite CSS animations finished and infinite ones
-     * started over, transitions off and the caret hidden by [LOOK_STYLE], a style that applies only while the frame is
-     * taken. Not Playwright's own caret hiding: it writes the caret colour into every field's `style` attribute and leaves
-     * `style=""` behind on fields that had none.
-     */
-    private fun lookShotOptions(
-        maxHeight: Int,
-        viewport: Viewport,
-        pageHeight: Int,
-    ): Page.ScreenshotOptions =
-        Page
-            .ScreenshotOptions()
-            .setType(ScreenshotType.PNG)
-            .setAnimations(ScreenshotAnimations.DISABLED)
-            .setCaret(ScreenshotCaret.INITIAL)
-            .setScale(ScreenshotScale.CSS)
-            .setStyle(LOOK_STYLE)
-            .setTimeout(LOOK_LOAD_TIMEOUT_MS)
-            .apply {
-                if (maxHeight > 0) {
-                    setFullPage(true)
-                    setClip(0.0, 0.0, viewport.width.toDouble(), max(viewport.height, min(pageHeight, maxHeight)).toDouble())
-                }
-            }
-
     private fun lookReadArguments(
         request: LookRequest,
         captureHeight: Int,
@@ -1062,6 +1035,33 @@ internal class PlaywrightBrowserSession private constructor(
             logger.debug { "browser session '${options.label}' opened ($connector)" }
             return session
         }
+
+        /**
+         * A look's frame: PNG at CSS scale (one image pixel per CSS pixel, also on a screen with more device pixels), the
+         * whole page down to the capture height (at least the first screen; only the first screen when [maxHeight] is 0),
+         * finite CSS animations finished and infinite ones started over, transitions off and the caret hidden by
+         * [LOOK_STYLE], a style that applies only while the frame is taken. Not Playwright's own caret hiding: it writes
+         * the caret colour into every field's `style` attribute and leaves `style=""` behind on fields that had none.
+         */
+        internal fun lookShotOptions(
+            maxHeight: Int,
+            viewport: Viewport,
+            pageHeight: Int,
+        ): Page.ScreenshotOptions =
+            Page
+                .ScreenshotOptions()
+                .setType(ScreenshotType.PNG)
+                .setAnimations(ScreenshotAnimations.DISABLED)
+                .setCaret(ScreenshotCaret.INITIAL)
+                .setScale(ScreenshotScale.CSS)
+                .setStyle(LOOK_STYLE)
+                .setTimeout(LOOK_LOAD_TIMEOUT_MS)
+                .apply {
+                    if (maxHeight > 0) {
+                        setFullPage(true)
+                        setClip(0.0, 0.0, viewport.width.toDouble(), max(viewport.height, min(pageHeight, maxHeight)).toDouble())
+                    }
+                }
 
         private fun visibleOnly(): Locator.FilterOptions = Locator.FilterOptions().setVisible(true)
     }

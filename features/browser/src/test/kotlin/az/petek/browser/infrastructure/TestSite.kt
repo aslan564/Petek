@@ -192,6 +192,7 @@ internal class TestSite : AutoCloseable {
         get("/look/still") { call.respondText(LOOK_STILL_PAGE, ContentType.Text.Html) }
         get("/look/clock") { call.respondText(LOOK_CLOCK_PAGE, ContentType.Text.Html) }
         get("/look/spinner") { call.respondText(LOOK_SPINNER_PAGE, ContentType.Text.Html) }
+        get("/look/caret") { call.respondText(LOOK_CARET_PAGE, ContentType.Text.Html) }
         get("/look/masks") { call.respondText(lookMasksPage(call.request.local.localPort), ContentType.Text.Html) }
         get("/look/hidden") { call.respondText(LOOK_HIDDEN_PAGE, ContentType.Text.Html) }
         get("/look/frame") { call.respondText(LOOK_FRAME_PAGE, ContentType.Text.Html) }
@@ -263,7 +264,7 @@ internal class TestSite : AutoCloseable {
             </body></html>
             """.trimIndent()
 
-        /** An endless CSS spinner, a fade that ends, and a field focused as the page opens (its caret blinks). */
+        /** An endless CSS spinner and a fade that ends. */
         val LOOK_SPINNER_PAGE =
             """
             <!doctype html>
@@ -274,9 +275,22 @@ internal class TestSite : AutoCloseable {
                 border-top-color: #06c; border-radius: 50%; animation: spin 1s linear infinite }
               .fade { position: absolute; left: 140px; top: 40px; width: 80px; height: 40px; background: #c30;
                 animation: fade 5s ease-in forwards }
-              input { position: absolute; left: 40px; top: 120px }
             </style></head><body>
-            <div class="spinner"></div><div class="fade"></div><input id="field" autofocus>
+            <div class="spinner"></div><div class="fade"></div>
+            </body></html>
+            """.trimIndent()
+
+        /**
+         * A white field focused as the page opens and again whenever it loses the focus, with a caret that does not blink
+         * (`caret-animation: manual`): it would show in every frame. No focus ring.
+         */
+        val LOOK_CARET_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Kursor</title></head><body style="margin: 0">
+            <input id="field" autofocus onblur="setTimeout(() => this.focus())" style="position: absolute; left: 40px;
+              top: 40px; width: 200px; height: 30px; box-sizing: border-box; border: 1px solid #888; padding: 0 4px;
+              outline: none; background: #fff; caret-color: #000; caret-animation: manual">
             </body></html>
             """.trimIndent()
 
