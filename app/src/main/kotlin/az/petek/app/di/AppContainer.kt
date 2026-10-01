@@ -353,7 +353,8 @@ class AppContainer(
 
     // --- agents, verification, orchestration, reporting ---------------------------------------------------------
 
-    private val watchdog = InactivityWatchdog()
+    /** A slow AI answer is the provider's to bound, never the inactivity timeout's (see [InactivityWatchdog]). */
+    private val watchdog = InactivityWatchdog(aiCallTimeout = LlmProviders.AGENT_CALL_GUARD)
 
     /** Evidence recorded by agents also proves they are alive (see [InactivityWatchdog]). */
     private val agentRecorder: EvidenceRecorder by lazy { ProgressTrackingRecorder(recorder, watchdog::progress) }

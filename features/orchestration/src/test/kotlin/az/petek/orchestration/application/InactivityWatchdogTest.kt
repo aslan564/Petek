@@ -228,16 +228,17 @@ class InactivityWatchdogTest {
             shouldThrow<CancellationException> { guarded.await() }
         }
 
-    /** One AI slot shared by everyone; a02's answer takes [other], everyone else's 10 s (a call of [hangs] never answers). */
+    /** One AI slot shared by everyone; a02's answer takes [other], everyone else's [own] (a call of [hangs] never answers). */
     private class OneSlot(
         other: Duration,
         hangs: String? = null,
+        own: Duration = 10.seconds,
     ) {
         val llm =
             ConcurrencyLimitedLlmClient(
                 ScriptedLlmClient { request ->
                     if (request.label == hangs) awaitCancellation()
-                    delay(if (request.label == "a02") other else 10.seconds)
+                    delay(if (request.label == "a02") other else own)
                     JsonObject(emptyMap())
                 },
                 permits = 1,
@@ -267,9 +268,26 @@ class InactivityWatchdogTest {
         }
 
     @Test
-    fun `an AI call that does not answer is blocked as the AI's problem, not the agent's`() =
+    fun `a slow AI answer is waited for past the inactivity timeout, since the provider's own timeout bounds it`() =
         runTest {
             val watchdog = InactivityWatchdog()
+            // 150 s for one decision of a thinking model: more than the 120 s of inactivity, less than the provider's limit.
+            val slot = OneSlot(other = 1.seconds, own = 150.seconds)
+
+            val outcome =
+                watchdog.guard(a01, 120.seconds) {
+                    slot.ask("a01")
+                    done
+                }
+
+            outcome shouldBe done
+            currentTime shouldBe 150_000
+        }
+
+    @Test
+    fun `an AI call still unanswered after its own bound is blocked as the AI's problem, not the agent's`() =
+        runTest {
+            val watchdog = InactivityWatchdog(aiCallTimeout = 270.seconds)
             val slot = OneSlot(other = 1.seconds, hangs = "a01")
 
             val outcome =
@@ -280,15 +298,15 @@ class InactivityWatchdogTest {
 
             outcome.status shouldBe ActionStatus.BLOCKED
             outcome.failureReason shouldBe FailureReason.LLM_UNAVAILABLE
-            outcome.summary shouldContain "the AI did not answer within 30s"
-            currentTime shouldBe 30_000
+            outcome.summary shouldContain "the AI did not answer within 4m 30s"
+            currentTime shouldBe 270_000
             slot.llm.availablePermits shouldBe 1
         }
 
     @Test
-    fun `the clock starts afresh when the slot comes, so a call that hangs after a long wait is still caught`() =
+    fun `the call's bound starts when the slot comes, so a call that hangs after a long wait is still caught`() =
         runTest {
-            val watchdog = InactivityWatchdog()
+            val watchdog = InactivityWatchdog(aiCallTimeout = 60.seconds)
             val slot = OneSlot(other = 100.seconds, hangs = "a01")
             val other = async { slot.ask("a02") }
             delay(1.seconds)
@@ -301,7 +319,7 @@ class InactivityWatchdogTest {
             other.await()
 
             outcome.failureReason shouldBe FailureReason.LLM_UNAVAILABLE
-            currentTime shouldBe 130_000
+            currentTime shouldBe 160_000
         }
 
     @Test

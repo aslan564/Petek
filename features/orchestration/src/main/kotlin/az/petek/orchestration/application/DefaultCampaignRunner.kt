@@ -123,8 +123,9 @@ private val logger = KotlinLogging.logger {}
  * progress-reporting view of its session). Wrap the recorder given to the agent loop and run functions in a
  * [ProgressTrackingRecorder] reporting to the same [watchdog] as well, so that recorded evidence also counts (e.g. a
  * run function that waits for an e-mail but records its sub-steps). Waiting for one of the AI slots the testers share
- * never counts as inactivity, however many testers queue for them (see [InactivityWatchdog]). The run's [EventBus]
- * comes from [busFactory] (one per run); [sharedStateFactory] creates the run's [SharedRunState].
+ * never counts as inactivity, however many testers queue for them, and neither does a slow answer the provider's own
+ * timeout allows (see [InactivityWatchdog]). The run's [EventBus] comes from [busFactory] (one per run);
+ * [sharedStateFactory] creates the run's [SharedRunState].
  */
 class DefaultCampaignRunner(
     identityGenerator: IdentityRegistryGenerator,

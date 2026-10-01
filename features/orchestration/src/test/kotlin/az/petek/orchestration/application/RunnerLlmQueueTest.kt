@@ -27,6 +27,7 @@ import az.petek.orchestration.testing.RunnerFixture
 import az.petek.orchestration.testing.VirtualClock
 import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
+import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -95,5 +96,46 @@ class RunnerLlmQueueTest {
             summary.stepsPassed shouldBe 100
             // 300 decisions through 6 slots at 15 s each: the queue, not the watchdog, sets the pace.
             currentTime shouldBe 750_000
+        }
+
+    @Test
+    fun `a decision slower than the inactivity timeout but within the provider's limit blocks nobody, also in setup`() =
+        runTest {
+            val f = fixture()
+            // A thinking model on a loaded machine: 150 s for one decision, past the 120 s of inactivity.
+            val llm =
+                RetryingLlmClient(
+                    ConcurrencyLimitedLlmClient(
+                        ScriptedLlmClient { _ ->
+                            delay(150.seconds)
+                            JsonObject(emptyMap())
+                        },
+                        permits = 6,
+                    ),
+                )
+            f.agents.script = { call, runtime ->
+                runtime.session.snapshot()
+                llm.complete(LlmRequest("system", emptyList(), JsonObject(emptyMap()), label = "${call.agentId}/${call.scenarioStep}"))
+                runtime.session.click(1)
+                ActionOutcome(ActionStatus.SUCCEEDED, "done")
+            }
+            val campaign =
+                campaign(
+                    managers = 0,
+                    employees = 3,
+                    setup = listOf(setupStep("join", employees(), StepAction.Do("Join the company"))),
+                    steps = listOf(step("read", employees(), StepAction.Do("Read the announcement"))),
+                )
+
+            val summary = f.runner().run(campaign)
+
+            f.steps("join", StepKind.DO).map { it.status } shouldBe List(3) { StepStatus.PASSED }
+            // Nobody was dropped after setup: all three read.
+            f.steps("read", StepKind.DO).map { it.status } shouldBe List(3) { StepStatus.PASSED }
+            f.monitor.tasks
+                .filter { it.state == TaskState.BLOCKED }
+                .shouldBeEmpty()
+            summary.outcome shouldBe RunOutcome.PASSED
+            currentTime shouldBe 300_000
         }
 }

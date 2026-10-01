@@ -38,6 +38,13 @@ object LlmProviders {
     /** One agent decision may take a while with thinking models; the CLI kills the process tree after this. */
     val AGENT_CALL_TIMEOUT: Duration = 240.seconds
 
+    /**
+     * How long the run's watchdog lets one attempt of an agent's AI call stay at the provider before it gives the tester
+     * up (`llm_unavailable`): past [AGENT_CALL_TIMEOUT], so the provider's own timeout, and the retry after it, always
+     * come first. Only a provider that overruns its own timeout meets it.
+     */
+    val AGENT_CALL_GUARD: Duration = AGENT_CALL_TIMEOUT + 30.seconds
+
     /** `petek doctor` waits at most this long for its single test call. */
     val DOCTOR_CALL_TIMEOUT: Duration = 90.seconds
 
