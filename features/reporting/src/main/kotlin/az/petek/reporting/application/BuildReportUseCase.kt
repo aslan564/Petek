@@ -40,9 +40,7 @@ import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
-import java.nio.file.Path
 import java.time.Duration
-import kotlin.io.path.invariantSeparatorsPathString
 
 /**
  * Collects everything the report shows for one run from the evidence store (docs/PLAN.md "Sübut bazası və
@@ -218,40 +216,10 @@ class BuildReportUseCase(
     private fun artifactLinks(
         runId: RunId,
         records: List<ArtifactRecord>,
-    ): Map<String, String> {
-        val reportDirectory = ReportLayout.directory(artifacts, runId).normalize()
-        return records
-            .mapNotNull { record -> link(reportDirectory, runId, record)?.let { record.artifactId.value to it } }
+    ): Map<String, String> =
+        records
+            .mapNotNull { record -> ReportLayout.link(artifacts, runId, record)?.let { record.artifactId.value to it } }
             .toMap()
-    }
-
-    /**
-     * Relative from the report directory to the file. When the store cannot resolve the record, or its path cannot
-     * be related to the report directory, the store's layout rule (`<runId>/<owner>/<file>`) is applied to the
-     * recorded path; a recorded path that does not follow it (another run, `..` segments) gets no link at all.
-     */
-    private fun link(
-        reportDirectory: Path,
-        runId: RunId,
-        record: ArtifactRecord,
-    ): String? =
-        try {
-            reportDirectory.relativize(artifacts.resolve(record).normalize()).invariantSeparatorsPathString
-        } catch (_: IllegalArgumentException) {
-            layoutLink(runId, record.relativePath)
-        }
-
-    private fun layoutLink(
-        runId: RunId,
-        relativePath: String,
-    ): String? {
-        val path = relativePath.replace('\\', '/')
-        val prefix = "$runId/"
-        if (!path.startsWith(prefix)) return null
-        val inRun = path.removePrefix(prefix)
-        val segments = inRun.split('/')
-        return if (segments.any { it.isEmpty() || it == "." || it == ".." }) null else "../$inRun"
-    }
 
     /**
      * The screenshot a step row links to: the last one taken in that step record or, for a record without one of its

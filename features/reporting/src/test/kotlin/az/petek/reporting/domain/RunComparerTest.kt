@@ -28,6 +28,11 @@ import az.petek.reporting.ReportTestData.event
 import az.petek.reporting.ReportTestData.receipt
 import az.petek.reporting.ReportTestData.run
 import az.petek.reporting.ReportTestData.step
+import az.petek.reporting.domain.visual.LookChange
+import az.petek.reporting.domain.visual.LookComparison
+import az.petek.reporting.domain.visual.LookKey
+import az.petek.reporting.domain.visual.LookReason
+import az.petek.reporting.domain.visual.VisualGate
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -262,5 +267,48 @@ class RunComparerTest {
             it.speed shouldBe SpeedChange.SLOWER
         }
         comparison.regressed shouldBe true
+    }
+
+    /** Both runs passing every step, with [looks] attached the way the reporting application attaches them. */
+    private fun withLooks(
+        gate: VisualGate,
+        vararg looks: LookChange,
+    ) = RunComparer()
+        .compare(evidence(before, passed(before, "public-look")), evidence(after, passed(after, "public-look")))
+        .copy(
+            looks =
+                looks.mapIndexed { i, change ->
+                    LookComparison(
+                        i + 1,
+                        LookKey("public-look", "/page-$i", "phone"),
+                        change,
+                        LookReason.KEPT_MOVING.takeIf {
+                            change == LookChange.NOT_COMPARABLE
+                        },
+                    )
+                },
+            visualGate = gate,
+        )
+
+    @Test
+    fun `a changed look is shown but does not make the comparison worse under the report gate`() {
+        val comparison = withLooks(VisualGate.REPORT, LookChange.CHANGED, LookChange.UNCHANGED)
+
+        comparison.changedLooks.map { it.key.page } shouldContainExactly listOf("/page-0")
+        comparison.regressed shouldBe false
+    }
+
+    @Test
+    fun `a changed look makes the comparison worse under the fail gate`() {
+        withLooks(VisualGate.FAIL, LookChange.CHANGED, LookChange.UNCHANGED).regressed shouldBe true
+        withLooks(VisualGate.FAIL, LookChange.UNCHANGED, LookChange.ADDED, LookChange.REMOVED).regressed shouldBe false
+    }
+
+    @Test
+    fun `looks that are not comparable never make it worse`() {
+        val comparison = withLooks(VisualGate.FAIL, LookChange.NOT_COMPARABLE, LookChange.NOT_COMPARABLE)
+
+        comparison.incomparableLooks.size shouldBe 2
+        comparison.regressed shouldBe false
     }
 }
