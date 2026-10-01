@@ -21,6 +21,7 @@ import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.TargetProfile
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
+import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
@@ -48,6 +49,8 @@ class RunFunctionFixture(
     contractSite: Boolean = true,
     /** The agent's session around the plain [browser] (without [contractSite]), e.g. one that answers some calls itself. */
     session: (FakeBrowserSession) -> BrowserSession = { it },
+    /** The store the run functions write artifacts to, around [artifacts], e.g. one that refuses some writes. */
+    artifactStore: (InMemoryArtifactStore) -> ArtifactStore = { it },
 ) {
     val clock = FakeHarnessClock()
     val verification = FakeVerification()
@@ -63,7 +66,7 @@ class RunFunctionFixture(
             oracle = oracleOverride?.invoke(oracle) ?: oracle,
             verification = verification,
             recorder = evidence,
-            artifacts = artifacts,
+            artifacts = artifactStore(artifacts),
             clock = clock,
             ids = SequentialIdGenerator(),
             settings = settings,

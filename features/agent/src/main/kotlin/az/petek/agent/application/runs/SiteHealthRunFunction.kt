@@ -42,8 +42,8 @@ import kotlin.time.Duration.Companion.milliseconds
  *   the top, down to `look_max_height`, loaded `look_loads` times ([LookRequests]), kept as visual frames and a
  *   [az.petek.evidence.domain.PageLookRecord]. The owner's `target_profile.visual.mask`, the step's `look_mask` and the
  *   run's own texts ([RunTexts]) are not compared. Only asked for by name, and it never fails the step: a look the
- *   browser cannot take is a skipped sub-action. At most [PageShare.MAX_LOOKS_PER_JOB] testers look at one page on
- *   one screen.
+ *   browser cannot take, or whose frames cannot be kept, is a skipped sub-action. At most [PageShare.MAX_LOOKS_PER_JOB]
+ *   testers look at one page on one screen.
  *
  * With `share: work` the step's testers split the pages and devices between them (each job a page on a phone, tablet
  * or desktop), with `share: pages` the pages, and with `share: links` each checks every page but asks about only its
@@ -149,7 +149,7 @@ internal class SiteHealthRunFunction(
                     when {
                         lookRequest == null -> ""
                         looksMissed == 0 -> " Kept $looks look(s)."
-                        else -> " Kept $looks look(s); $looksMissed could not be taken."
+                        else -> " Kept $looks look(s); $looksMissed could not be taken or kept."
                     }
                 if (problems.isEmpty()) {
                     succeeded("Checked ${jobs.size} page(s) for ${checks.sorted().joinToString()}: nothing wrong.$looked")

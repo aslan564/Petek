@@ -33,7 +33,11 @@ import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.SlowResponse
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.VisualProfile
+import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
+import az.petek.core.ids.StepId
+import az.petek.evidence.domain.ArtifactRecord
+import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.LookAnchor
 import az.petek.evidence.domain.LookBox
@@ -54,6 +58,7 @@ import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.io.IOException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -258,7 +263,7 @@ class BlindCheckRunFunctionsTest {
             val outcome = fixture.run("site_health", mapOf("checks" to "look,console", "pages" to "/"))
 
             outcome.status shouldBe ActionStatus.SUCCEEDED
-            outcome.summary shouldContain "Kept 0 look(s); 1 could not be taken."
+            outcome.summary shouldContain "Kept 0 look(s); 1 could not be taken or kept."
             val look = fixture.steps.single { it.action == "site_health: look at /" }
             look.status shouldBe StepStatus.SKIPPED
             look.detail shouldBe "not captured: this session cannot take looks"
@@ -294,6 +299,43 @@ class BlindCheckRunFunctionsTest {
                 it.detail shouldBe "not captured: timed out after 30s"
             }
             fixture.evidence.pageLookList.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a look whose frames cannot all be written is not kept, and is counted as missed`() =
+        runTest {
+            var visualWrites = 0
+            val fixture =
+                RunFunctionFixture(AgentTestData.itEmployee, contractSite = false, artifactStore = { store ->
+                    object : ArtifactStore by store {
+                        override suspend fun write(
+                            runId: RunId,
+                            stepId: StepId,
+                            owner: String,
+                            type: ArtifactType,
+                            bytes: ByteArray,
+                        ): ArtifactRecord {
+                            if (type == ArtifactType.VISUAL && ++visualWrites == 2) throw IOException("No space left on device")
+                            return store.write(runId, stepId, owner, type, bytes)
+                        }
+                    }
+                })
+            fixture.browser.pageLook = Looks.look("/", LookShotKind.MAIN, LookShotKind.RELOADED)
+
+            val outcome = fixture.run("site_health", mapOf("checks" to "look", "pages" to "/"))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            outcome.summary shouldContain "Kept 0 look(s); 1 could not be taken or kept."
+            // No record names a look whose frames are not all there (AGENTS.md rule 5), and the evidence says why.
+            fixture.evidence.pageLookList.shouldBeEmpty()
+            fixture.artifactsOf(ArtifactType.VISUAL) shouldHaveSize 1
+            fixture.steps.single { it.action == "site_health: keep the look of /" }.let {
+                it.status shouldBe StepStatus.SKIPPED
+                it.detail shouldBe "not kept: No space left on device"
+            }
+            // The frames that were written belong to the look's own sub-action, which says what it saw.
+            val look = fixture.steps.single { it.action == "site_health: look at /" }
+            fixture.artifactsOf(ArtifactType.VISUAL).single().stepId shouldBe look.stepId
         }
 
     @Test

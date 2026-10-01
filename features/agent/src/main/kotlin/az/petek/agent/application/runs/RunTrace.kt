@@ -198,14 +198,16 @@ internal class RunTrace(
      * Takes a look of the current page ([page], on [device]) for comparing releases (`site_health`'s `look`) and keeps
      * it: its frames as visual artifacts of this sub-action, then the page look record ([StepEvidence.pageLook]). A
      * look never fails the step: one the session cannot take, that the browser refuses or that takes longer than
-     * [LOOK_TIMEOUT] is a SKIPPED sub-action saying why, and null is returned.
+     * [LOOK_TIMEOUT] is a SKIPPED sub-action saying why, and null is returned. So is one taken but not kept (its frames or
+     * record could not be written): a SKIPPED sub-action after it says so, since the look has no evidence to compare.
      */
     suspend fun look(
         page: String,
         device: String?,
         request: LookRequest,
     ): PageLook? {
-        val description = "look at $page" + (device?.let { " ($it)" } ?: "")
+        val on = device?.let { " ($it)" } ?: ""
+        val description = "look at $page$on"
         val started = evidence.now()
         subActions++
 
@@ -225,8 +227,11 @@ internal class RunTrace(
             } ?: return notCaptured("timed out after $LOOK_TIMEOUT")
         val look = taken.look ?: return notCaptured("this session cannot take looks")
         if (look.shots.none { it.kind == LookShotKind.MAIN }) return notCaptured("the browser gave no main frame")
-        record(description, started, StepStatus.PASSED, withNote(LookNotes.of(look, page), session.dialogNote()))
-        lastStepId?.let { evidence.pageLook(runtime, step, it, page, device, look, request.maxHeight) }
+        val stepId = record(description, started, StepStatus.PASSED, withNote(LookNotes.of(look, page), session.dialogNote()))
+        evidence.pageLook(runtime, step, stepId, page, device, look, request.maxHeight)?.let { problem ->
+            note("keep the look of $page$on", StepStatus.SKIPPED, "not kept: $problem")
+            return null
+        }
         return look
     }
 
@@ -276,8 +281,10 @@ internal class RunTrace(
         started: HarnessTimestamp,
         status: StepStatus,
         detail: String?,
-    ) {
-        lastStepId = evidence.record(runtime, step, StepKind.RUN, "$function: $description", null, started, status, detail)
+    ): StepId {
+        val stepId = evidence.record(runtime, step, StepKind.RUN, "$function: $description", null, started, status, detail)
+        lastStepId = stepId
+        return stepId
     }
 
     /** What [BrowserSession.look][az.petek.browser.domain.BrowserSession.look] gave, null included. */

@@ -123,7 +123,8 @@ internal class StepEvidence(
      * Keeps [look], the look of [page] for [runtime]'s tester on [device] taken by the sub-action [stepId] with the height
      * cap [maxHeight]: every frame, the main one first, as a [ArtifactType.VISUAL] artifact of [stepId], then the
      * [PageLookRecord] naming them. When a frame cannot be written no record is written either (AGENTS.md rule 5: no
-     * look without its picture); the failure is logged, and the step it documents goes on.
+     * look without its picture); the failure is logged, and the step it documents goes on. Returns null when the look
+     * was kept, else why it was not (redacted), so the look is not counted as kept.
      */
     suspend fun pageLook(
         runtime: AgentRuntime,
@@ -133,9 +134,9 @@ internal class StepEvidence(
         device: String?,
         look: PageLook,
         maxHeight: Int,
-    ) {
+    ): String? {
         val agentId = runtime.identity.agentId
-        try {
+        return try {
             val frames =
                 look.shots.sortedBy { it.kind.ordinal }.map { shot ->
                     val artifact = artifacts.write(runtime.runId, stepId, agentId.value, ArtifactType.VISUAL, shot.png)
@@ -166,10 +167,13 @@ internal class StepEvidence(
                     recordedAt = clock.now().wall,
                 ),
             )
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logger.warn { "$agentId: could not keep the look of $page for $stepId: ${runtime.redact(e.message.orEmpty())}" }
+            val why = runtime.redact(e.message.orEmpty()).ifBlank { e::class.simpleName.orEmpty() }
+            logger.warn { "$agentId: could not keep the look of $page for $stepId: $why" }
+            why
         }
     }
 
