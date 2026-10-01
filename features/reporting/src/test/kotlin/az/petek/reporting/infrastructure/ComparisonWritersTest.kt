@@ -143,7 +143,7 @@ class ComparisonWritersTest {
     private fun html(comparison: RunComparison) = ComparisonHtmlWriter().render(comparison).replace(Regex(">\\s+<"), "><")
 
     @Test
-    fun `compare,html shows before, now and difference crops for each changed look with links to the whole pages`() {
+    fun `the comparison page shows before, now and difference crops for each changed look with links to the whole pages`() {
         val html = html(comparison())
 
         html shouldContain "<section id=\"gorunus\">"
@@ -212,7 +212,7 @@ class ComparisonWritersTest {
     }
 
     @Test
-    fun `compare,md lists the looks with relative links to the difference pictures`() {
+    fun `the Markdown comparison lists the looks with relative links to the difference pictures`() {
         val md = ComparisonMarkdownWriter().render(comparison())
 
         md shouldContain "- Nəticə: **pisləşmə yoxdur · görünüş dəyişib (1 səhifə)**"
