@@ -16,6 +16,9 @@ import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.FailureReason
 import az.petek.browser.domain.BrowserActionException
 import az.petek.core.ids.AgentId
+import az.petek.llm.application.ConcurrencyLimitedLlmClient
+import az.petek.llm.domain.LlmRequest
+import az.petek.llm.testing.ScriptedLlmClient
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -29,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -222,6 +226,98 @@ class InactivityWatchdogTest {
             guarded.cancel()
 
             shouldThrow<CancellationException> { guarded.await() }
+        }
+
+    /** One AI slot shared by everyone; a02's answer takes [other], everyone else's 10 s (a call of [hangs] never answers). */
+    private class OneSlot(
+        other: Duration,
+        hangs: String? = null,
+    ) {
+        val llm =
+            ConcurrencyLimitedLlmClient(
+                ScriptedLlmClient { request ->
+                    if (request.label == hangs) awaitCancellation()
+                    delay(if (request.label == "a02") other else 10.seconds)
+                    JsonObject(emptyMap())
+                },
+                permits = 1,
+            )
+
+        suspend fun ask(label: String) = llm.complete(LlmRequest("system", emptyList(), JsonObject(emptyMap()), label = label))
+    }
+
+    @Test
+    fun `time spent waiting for an AI slot never counts against the agent`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+            val slot = OneSlot(other = 100.seconds)
+            // a02 holds the only slot for 100 s, more than three times a01's timeout.
+            val other = async { slot.ask("a02") }
+            delay(1.seconds)
+
+            val outcome =
+                watchdog.guard(a01, 30.seconds) {
+                    slot.ask("a01")
+                    done
+                }
+            other.await()
+
+            outcome shouldBe done
+            currentTime shouldBe 110_000
+        }
+
+    @Test
+    fun `an AI call that does not answer is blocked as the AI's problem, not the agent's`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+            val slot = OneSlot(other = 1.seconds, hangs = "a01")
+
+            val outcome =
+                watchdog.guard(a01, 30.seconds) {
+                    slot.ask("a01")
+                    done
+                }
+
+            outcome.status shouldBe ActionStatus.BLOCKED
+            outcome.failureReason shouldBe FailureReason.LLM_UNAVAILABLE
+            outcome.summary shouldContain "the AI did not answer within 30s"
+            currentTime shouldBe 30_000
+            slot.llm.availablePermits shouldBe 1
+        }
+
+    @Test
+    fun `the clock starts afresh when the slot comes, so a call that hangs after a long wait is still caught`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+            val slot = OneSlot(other = 100.seconds, hangs = "a01")
+            val other = async { slot.ask("a02") }
+            delay(1.seconds)
+
+            val outcome =
+                watchdog.guard(a01, 30.seconds) {
+                    slot.ask("a01")
+                    done
+                }
+            other.await()
+
+            outcome.failureReason shouldBe FailureReason.LLM_UNAVAILABLE
+            currentTime shouldBe 130_000
+        }
+
+    @Test
+    fun `an agent that goes quiet after its AI answered is blocked as before`() =
+        runTest {
+            val watchdog = InactivityWatchdog()
+            val slot = OneSlot(other = 1.seconds)
+
+            val outcome =
+                watchdog.guard(a01, 30.seconds) {
+                    slot.ask("a01")
+                    awaitCancellation()
+                }
+
+            outcome.failureReason shouldBe FailureReason.TIMEOUT
+            currentTime shouldBe 40_000
         }
 
     @Test
