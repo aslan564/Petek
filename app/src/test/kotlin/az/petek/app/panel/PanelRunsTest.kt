@@ -215,8 +215,8 @@ class PanelRunsTest {
                 listOf(
                     "dalğa ölçüsü 2 ilə 'writer[IT]' 2 nömrəli dalğada heç kimə uyğun gəlmir, ona görə 'it_note' addımı orada " +
                         "buraxılacaq; digər dalğalar onu icra edir.",
-                    "dalğa ölçüsü 2 ilə 'writer[n=2]' 1 nömrəli dalğada heç kimə uyğun gəlmir; 'second_writer' addımı başladığı " +
-                        "hər dalğada buraxılacaq və heç icra olunmayacaq.",
+                    "dalğa ölçüsü 2 ilə 'writer[n=2]' 1 nömrəli dalğada heç kimə uyğun gəlmir; 'second_writer' addımını heç bir " +
+                        "dalğada icra edən olmayacaq, ona görə run keçməyəcək.",
                 )
             panel.ended(started.runId)
         }

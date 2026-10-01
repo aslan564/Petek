@@ -336,8 +336,8 @@ class CampaignScalerTest {
 
         warnings.take(2) shouldContainExactly
             listOf(
-                "with campaign.wave_size 10 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so step " +
-                    "'second_manager' (line ${line("second_manager")}) is never performed.",
+                "with campaign.wave_size 10 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so nobody " +
+                    "performs step 'second_manager' (line ${line("second_manager")}) and the run fails for it (not_covered).",
                 "with campaign.wave_size 10 no tester matches 'manager[IT]' in wave 2, 3, 4, 5, so step 'it_post' " +
                     "(line ${line("it_post")}) is skipped there; other waves perform it.",
             )
@@ -352,8 +352,8 @@ class CampaignScalerTest {
         DefaultCampaignValidator().validate(withoutWaves, emptySet()).shouldBeEmpty()
         CoverageWarnings.of(withoutWaves, identitiesOf(withoutWaves)) shouldContainExactly
             listOf(
-                "no tester matches 'employee[dept=IT, reg=invite, n=9]', so step 'alone' " +
-                    "(line ${withoutWaves.allSteps.last().line}) will be skipped: nobody performs it.",
+                "no tester matches 'employee[dept=IT, reg=invite, n=9]', so nobody performs step 'alone' " +
+                    "(line ${withoutWaves.allSteps.last().line}) and the run fails for it (not_covered).",
             )
     }
 

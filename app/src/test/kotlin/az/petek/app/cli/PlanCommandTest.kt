@@ -132,8 +132,8 @@ class PlanCommandTest {
 
             // One manager in each wave of two: the second manager of a wave never exists.
             val warning =
-                "with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so step " +
-                    "'second_manager' (line 11) is never performed."
+                "with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so nobody " +
+                    "performs step 'second_manager' (line 11) and the run fails for it (not_covered)."
             result.statusCode shouldBe 0
             result.stderr shouldContain "Warning: $warning"
             result.stdout shouldContain "5 identities"

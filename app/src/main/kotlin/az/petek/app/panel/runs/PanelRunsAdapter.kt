@@ -709,7 +709,7 @@ internal class PanelRunsAdapter(
             val nowhere = gaps.filter { it.waves.isEmpty() }
             if (nowhere.isNotEmpty()) {
                 add(
-                    "${campaign.settings.testers} testerlə bu addımları icra edən olmayacaq və onlar buraxılacaq: " +
+                    "${campaign.settings.testers} testerlə bu addımları icra edən olmayacaq, ona görə run keçməyəcək: " +
                         nowhere.joinToString { it.step.id },
                 )
             }
@@ -719,7 +719,7 @@ internal class PanelRunsAdapter(
                     if (gap.covered) {
                         "$nobody, ona görə '${gap.step.id}' addımı orada buraxılacaq; digər dalğalar onu icra edir."
                     } else {
-                        "$nobody; '${gap.step.id}' addımı başladığı hər dalğada buraxılacaq və heç icra olunmayacaq."
+                        "$nobody; '${gap.step.id}' addımını heç bir dalğada icra edən olmayacaq, ona görə run keçməyəcək."
                     },
                 )
             }

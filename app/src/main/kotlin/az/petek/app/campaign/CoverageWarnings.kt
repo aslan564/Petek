@@ -45,9 +45,9 @@ object CoverageWarnings {
                 val matches = "${context}no tester matches '${gap.step.actors.raw}'"
                 val waves = gap.waves.joinToString()
                 when {
-                    gap.waves.isEmpty() -> "$matches, so $step will be skipped: nobody performs it."
+                    gap.waves.isEmpty() -> "$matches, so nobody performs $step $FAILS"
                     gap.covered -> "$matches in wave $waves, so $step is skipped there; other waves perform it."
-                    else -> "$matches in wave $waves, every wave it starts in, so $step is never performed."
+                    else -> "$matches in wave $waves, every wave it starts in, so nobody performs $step $FAILS"
                 }
             }
         val waits =
@@ -65,4 +65,7 @@ object CoverageWarnings {
             }
         return uncovered + waits + races
     }
+
+    /** A step nobody performs fails the run (the runner records it `uncovered`, `not_covered`). */
+    private const val FAILS = "and the run fails for it (not_covered)."
 }

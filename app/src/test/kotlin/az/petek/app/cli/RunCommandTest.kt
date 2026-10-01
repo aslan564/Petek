@@ -484,7 +484,7 @@ class RunCommandTest {
             // second manager of a wave never exists, and the step starts in wave 1 only.
             result.stderr shouldContain
                 "Warning: with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so " +
-                "step 'second_manager' (line 15) is never performed."
+                "nobody performs step 'second_manager' (line 15) and the run fails for it (not_covered)."
         }
 
     @Test
