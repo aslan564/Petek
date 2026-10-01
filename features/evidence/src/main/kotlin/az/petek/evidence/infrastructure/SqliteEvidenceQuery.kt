@@ -21,6 +21,7 @@ import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageLookRecord
 import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
@@ -120,6 +121,38 @@ internal class SqliteEvidenceQuery(
                         largestPaintMs = it[PageTimingTable.largestPaintMs],
                         layoutShift = it[PageTimingTable.layoutShift],
                         recordedAt = it[PageTimingTable.recordedAt],
+                    )
+                }
+        }
+
+    override suspend fun pageLooks(runId: RunId): List<PageLookRecord> =
+        db.read {
+            PageLookTable
+                .selectAll()
+                .where { PageLookTable.runId eq runId }
+                .orderBy(PageLookTable.seq to SortOrder.ASC)
+                .map {
+                    PageLookRecord(
+                        runId = it[PageLookTable.runId],
+                        stepId = it[PageLookTable.stepId],
+                        agentId = it[PageLookTable.agentId],
+                        scenarioStep = it[PageLookTable.scenarioStep],
+                        page = it[PageLookTable.page],
+                        device = it[PageLookTable.device],
+                        landedPath = it[PageLookTable.landedPath],
+                        status = it[PageLookTable.status],
+                        viewportWidth = it[PageLookTable.viewportWidth],
+                        viewportHeight = it[PageLookTable.viewportHeight],
+                        pageHeight = it[PageLookTable.pageHeight],
+                        maxHeight = it[PageLookTable.maxHeight],
+                        testers = it[PageLookTable.testers],
+                        renderer = it[PageLookTable.renderer],
+                        settled = it[PageLookTable.settled],
+                        unsettled = LookJson.strings(it[PageLookTable.unsettled]),
+                        fonts = LookJson.strings(it[PageLookTable.fonts]),
+                        frames = LookJson.frames(it[PageLookTable.frames]),
+                        anchors = LookJson.anchors(it[PageLookTable.anchors]),
+                        recordedAt = it[PageLookTable.recordedAt],
                     )
                 }
         }

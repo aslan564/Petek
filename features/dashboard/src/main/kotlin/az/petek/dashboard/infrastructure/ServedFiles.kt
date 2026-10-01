@@ -29,7 +29,7 @@ import kotlin.io.path.isRegularFile
 internal object ArtifactContent {
     fun type(type: ArtifactType): ContentType =
         when (type) {
-            ArtifactType.SCREENSHOT -> ContentType.Image.PNG
+            ArtifactType.SCREENSHOT, ArtifactType.VISUAL -> ContentType.Image.PNG
             ArtifactType.MAIL, ArtifactType.ORACLE -> ContentType.Application.Json.withCharset(Charsets.UTF_8)
             ArtifactType.A11Y, ArtifactType.DOM, ArtifactType.HTTP, ArtifactType.PROMPT, ArtifactType.LOG -> TEXT
         }

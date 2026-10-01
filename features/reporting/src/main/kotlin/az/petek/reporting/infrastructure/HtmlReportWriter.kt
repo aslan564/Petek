@@ -522,7 +522,8 @@ class HtmlReportWriter : ReportWriter {
             .thumbs img { width: 180px; height: auto; display: block; border: 1px solid var(--border); border-radius: 6px; }
             .thumbs .file { display: inline-block; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
               font-size: .85rem; }
-            img.thumb { width: 96px; height: auto; display: block; border: 1px solid var(--border); border-radius: 4px; }
+            img.thumb { width: 96px; height: auto; max-height: 160px; object-fit: cover; object-position: top; display: block;
+              border: 1px solid var(--border); border-radius: 4px; }
             .muted, .empty { color: var(--muted); }
             .empty { font-style: italic; }
             details { margin-top: 10px; }

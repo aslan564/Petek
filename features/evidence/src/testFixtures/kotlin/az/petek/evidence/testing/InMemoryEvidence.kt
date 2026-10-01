@@ -23,6 +23,7 @@ import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageLookRecord
 import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
@@ -51,6 +52,7 @@ class InMemoryEvidence :
     val runList = CopyOnWriteArrayList<RunRecord>()
     val resourceList = CopyOnWriteArrayList<RunResource>()
     val pageTimingList = CopyOnWriteArrayList<PageTimingRecord>()
+    val pageLookList = CopyOnWriteArrayList<PageLookRecord>()
 
     override suspend fun step(record: StepRecord) {
         stepList += record
@@ -99,6 +101,12 @@ class InMemoryEvidence :
     }
 
     override suspend fun pageTimings(runId: RunId) = pageTimingList.filter { it.runId == runId }
+
+    override suspend fun pageLook(record: PageLookRecord) {
+        pageLookList += record
+    }
+
+    override suspend fun pageLooks(runId: RunId) = pageLookList.filter { it.runId == runId }
 
     override suspend fun create(run: RunRecord) {
         runList += run

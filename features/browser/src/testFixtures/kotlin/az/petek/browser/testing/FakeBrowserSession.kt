@@ -16,10 +16,12 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.DialogType
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.LookRequest
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.TextWatch
@@ -306,6 +308,22 @@ class FakeBrowserSession(
     var timing: PageTiming? = null
 
     override suspend fun pageTiming(): PageTiming? = pageTimingByUrl[url] ?: timing
+
+    /** What [look] gives for the current page, by URL, else [look]; null plays a session that cannot take looks. */
+    val lookByUrl = ConcurrentHashMap<String, PageLook>()
+    var pageLook: PageLook? = null
+
+    /** Every look asked for, in order. */
+    val lookRequests = CopyOnWriteArrayList<LookRequest>()
+
+    /** Thrown by [look] when set, e.g. a [BrowserActionException]. */
+    var lookFailure: Exception? = null
+
+    override suspend fun look(request: LookRequest): PageLook? {
+        lookRequests += request
+        lookFailure?.let { throw it }
+        return lookByUrl[url] ?: pageLook
+    }
 
     override suspend fun close() {
         closed = true

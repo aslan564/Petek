@@ -463,6 +463,12 @@ interface BrowserSession {
     /** How fast the current page became usable, as the browser timed it ([PageTiming]); null when the session cannot read it. */
     suspend fun pageTiming(): PageTiming? = null
 
+    /**
+     * A look of the current page for comparing releases ([LookRequest], `site_health`'s `look`); null when this session
+     * cannot take one, or the page navigated away during it. The page is left at its top, with nothing added to it.
+     */
+    suspend fun look(request: LookRequest): PageLook? = null
+
     suspend fun close()
 }
 

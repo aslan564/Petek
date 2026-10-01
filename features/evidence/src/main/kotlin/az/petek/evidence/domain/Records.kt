@@ -138,6 +138,107 @@ data class PageTimingRecord(
     val recordedAt: Instant,
 )
 
+/** A box on a page look, in CSS pixels of its captured image (`0,0` is the page's top-left corner). */
+data class LookBox(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
+
+/** Why an area of a page look is not compared between releases (the look's masks, recorded by code, never painted). */
+enum class LookMaskReason {
+    /** A selector of the owner's target profile (`target_profile.visual.mask`). */
+    PROFILE,
+
+    /** A selector the step named (`site_health`'s `look_mask`). */
+    STEP,
+
+    /** An element the site marked `data-petek-mask` (docs/TARGET_CONTRACT.md). */
+    MARKUP,
+
+    /** The run's own texts on the page: the testers' names and e-mails, the company code, the run's mark. */
+    RUN_TEXT,
+
+    /** A date or a time of day written on the page. */
+    TIME_TEXT,
+
+    /** Video and frames of another origin: not what the site itself drew. */
+    EMBED,
+}
+
+/** One masked area of a look; [source] names it (a selector key, or the kind of run text, never the text itself). */
+data class LookMask(
+    val box: LookBox,
+    val reason: LookMaskReason,
+    val source: String,
+)
+
+enum class LookFrameKind {
+    /** The look itself: the page once it stopped changing, or after the settle budget. */
+    MAIN,
+
+    /** A frame of the same load that differed from [MAIN]: what moves by itself. */
+    MOVED,
+
+    /** The page after a reload, when it differed from [MAIN]: what changes from load to load. */
+    RELOADED,
+}
+
+/** One captured image of a look, stored as the [ArtifactType.VISUAL] artifact [artifactId]. */
+data class LookFrame(
+    val artifactId: ArtifactId,
+    val kind: LookFrameKind,
+    val width: Int,
+    val height: Int,
+    val masks: List<LookMask>,
+)
+
+/** An element a mask could name ([selector]: a test id or a stable id), for the comparison's mask suggestions only. */
+data class LookAnchor(
+    val selector: String,
+    val box: LookBox,
+)
+
+/**
+ * One look of a page on one screen (`site_health`'s `look`, docs/adr/0014): how the page looked to a tester, taken by
+ * code, kept as [ArtifactType.VISUAL] frames on the look's own sub-action [stepId]. Releases are compared by them
+ * (`petek compare`, the regression baseline, Faza 14). [frames] starts with the [LookFrameKind.MAIN] frame.
+ */
+data class PageLookRecord(
+    val runId: RunId,
+    val stepId: StepId,
+    val agentId: AgentId,
+    val scenarioStep: String,
+    /** The page's path on the target, as the step asked for it. */
+    val page: String,
+    /** `phone`, `tablet` or `desktop` when the step chose a screen; null: the session's own. */
+    val device: String?,
+    /** The path the browser ended on (the site may have redirected it). */
+    val landedPath: String,
+    /** The HTTP status of the page's own answer, when the browser reported it. */
+    val status: Int?,
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+    /** The document's whole height, before the look's height cap. */
+    val pageHeight: Int,
+    /** The cap the look was taken with, in CSS pixels; 0: the first screen only. */
+    val maxHeight: Int,
+    /** How many testers shared the step (visited-link colours can differ when this does). */
+    val testers: Int,
+    /** Browser, version, system and mode, e.g. `chromium 141.0; Mac OS X aarch64; headless`. */
+    val renderer: String,
+    /** The page finished loading (fonts, images, network) within the settle budget. */
+    val settled: Boolean,
+    /** What had not finished when [settled] is false: `network`, `fonts`, `images`. */
+    val unsettled: List<String>,
+    /** The loaded font faces, `family weight style`, sorted. */
+    val fonts: List<String>,
+    val frames: List<LookFrame>,
+    val anchors: List<LookAnchor>,
+    val recordedAt: Instant,
+)
+
 /** Kind of a stored artifact; [extension] is the file extension it is written with, so viewers open it right. */
 enum class ArtifactType(
     val extension: String,
@@ -154,6 +255,12 @@ enum class ArtifactType(
     ORACLE("json"),
     PROMPT("txt"),
     LOG("txt"),
+
+    /**
+     * A page look's frame (`site_health`'s `look`, [PageLookRecord]): kept apart from [SCREENSHOT] so a look never
+     * stands for its step's screenshot in the report or on the live board.
+     */
+    VISUAL("png"),
 }
 
 data class ArtifactRecord(

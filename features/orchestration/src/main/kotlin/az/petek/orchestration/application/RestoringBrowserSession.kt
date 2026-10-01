@@ -15,10 +15,12 @@ import az.petek.browser.domain.BrowserContextLostException
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.LookRequest
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.TextWatch
@@ -196,6 +198,8 @@ internal class RestoringBrowserSession(
     override suspend fun pageFacts(): PageFacts? = guarded { it.pageFacts() }
 
     override suspend fun pageTiming(): PageTiming? = guarded { it.pageTiming() }
+
+    override suspend fun look(request: LookRequest): PageLook? = guarded { it.look(request) }
 
     override suspend fun close() = current.close()
 

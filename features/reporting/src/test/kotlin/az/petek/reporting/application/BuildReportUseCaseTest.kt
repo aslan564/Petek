@@ -158,6 +158,26 @@ class BuildReportUseCaseTest {
         }
 
     @Test
+    fun `a page look's capture is linked from its own sub-action only`() =
+        runTest {
+            evidence.create(run())
+            listOf(
+                step("public-look", "a02", StepStatus.PASSED, StepKind.RUN, stepId = "open", startOffsetMs = 0, durationMs = 400),
+                step("public-look", "a02", StepStatus.PASSED, StepKind.RUN, stepId = "look", startOffsetMs = 1_000),
+                step("public-look", "a02", StepStatus.PASSED, StepKind.RUN, stepId = "after", startOffsetMs = 2_000, durationMs = 300),
+            ).forEach { evidence.step(it) }
+            val main = artifact("look", "a02", ArtifactType.VISUAL)
+            artifact("look", "a02", ArtifactType.VISUAL)
+
+            val shots = useCase.build(RUN_ID).steps.associate { it.durationMs to it.screenshot }
+
+            shots[1_000L] shouldBe main.artifactId.value
+            shots[400L].shouldBeNull()
+            // A later row of the same agent and step borrows screenshots only, never a look.
+            shots[300L].shouldBeNull()
+        }
+
+    @Test
     fun `a row without its own screenshot links the last one its agent took in that scenario step up to its end`() =
         runTest {
             evidence.create(run())

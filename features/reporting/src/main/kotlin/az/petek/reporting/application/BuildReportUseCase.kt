@@ -256,14 +256,17 @@ class BuildReportUseCase(
     /**
      * The screenshot a step row links to: the last one taken in that step record or, for a record without one of its
      * own (the orchestrator's per-actor summary of an action, a wait), the last one the same agent took in the same
-     * scenario step up to that record's end. So every row with an outcome points at evidence (AGENTS.md rule 5).
+     * scenario step up to that record's end. So every row with an outcome points at evidence (AGENTS.md rule 5). A page
+     * look's sub-action links its own main frame ([ArtifactType.VISUAL], recorded first); no other row borrows a look.
      */
     private class Screenshots(
         steps: List<StepRecord>,
         artifacts: List<ArtifactRecord>,
     ) {
         private val shots = artifacts.filter { it.type == ArtifactType.SCREENSHOT }
-        private val lastOfStep = shots.associateBy { it.stepId }
+        private val lastOfStep =
+            artifacts.filter { it.type == ArtifactType.VISUAL }.groupBy { it.stepId }.mapValues { it.value.first() } +
+                shots.associateBy { it.stepId }
         private val takenIn = steps.associateBy { it.stepId }
         private val byActorStep = shots.filter { it.stepId in takenIn }.groupBy { takenIn.getValue(it.stepId).actorStep() }
 
