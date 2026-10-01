@@ -22,6 +22,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -42,8 +43,14 @@ private val logger = KotlinLogging.logger {}
  * polls of a shared inbox, must not turn a message that did arrive in time into `mail_timeout`, a finding about the
  * target. Only that last look decides: a usable message is returned, an inbox that fails it (or does not answer it in
  * time) throws [MailboxException], "the inbox could not be read", an environment problem, and only an inbox that
- * answered "nothing usable" ends in [MailTimeoutException]. Only `delay`/`withTimeoutOrNull` measure time, so virtual
- * time works. [awaitLink] polls the same way, with the extractor's pattern rule deciding which message is usable.
+ * answered "nothing usable" ends in [MailTimeoutException].
+ *
+ * Once a code is taken from a message it is the answer, whatever happens to the mark that follows: a mark the inbox
+ * fails, or one the deadline cuts off (it may already have set the flag, so no later unread search would see the
+ * message again), never turns a code that was found into `mail_timeout`. A mark cut off by the deadline is tried once
+ * more, bounded by [lastLookTimeout]; a message the inbox did not confirm as read is remembered and never handed out
+ * again, so an old code is not reused either way. Only `delay`/`withTimeoutOrNull` measure time, so virtual time
+ * works. [awaitLink] polls the same way, with the extractor's pattern rule deciding which message is usable.
  */
 class DefaultAwaitVerificationUseCase(
     private val mailbox: Mailbox,
@@ -51,6 +58,12 @@ class DefaultAwaitVerificationUseCase(
     private val candidatesPerPoll: Int = 10,
     private val lastLookTimeout: Duration = DEFAULT_LAST_LOOK_TIMEOUT,
 ) : AwaitVerificationUseCase {
+    /**
+     * Messages whose code was handed out though the inbox did not confirm them read: never handed out again. Only
+     * these are kept, so the set grows only with the inbox's failures.
+     */
+    private val unconfirmed: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     init {
         require(candidatesPerPoll > 0) { "candidatesPerPoll must be positive, was $candidatesPerPoll" }
         require(lastLookTimeout.isPositive() && lastLookTimeout.isFinite()) {
@@ -92,13 +105,23 @@ class DefaultAwaitVerificationUseCase(
             private set
         private val reportedSkips = mutableSetOf<String>()
 
+        /** The code this wait took and the message it came from, kept from before the mark so nothing can lose it. */
+        private var taken: Taken? = null
+
         suspend fun await(
             timeout: Duration,
             pollInterval: Duration,
         ): VerificationCode {
             require(timeout.isPositive()) { "timeout must be positive, was $timeout" }
             require(pollInterval.isPositive()) { "pollInterval must be positive, was $pollInterval" }
-            return withTimeoutOrNull(timeout) { pollUntilFound(pollInterval) } ?: lastLook(timeout)
+            withTimeoutOrNull(timeout) { pollUntilFound(pollInterval) }?.let { return it }
+            taken?.let { found ->
+                // The deadline cut off the mark of a code already taken: the code stands; the mark is tried once more.
+                withTimeoutOrNull(lastLookTimeout) { mark(found) }
+                    ?: keepUnconfirmed(found, "the inbox did not answer the mark within $lastLookTimeout after the $timeout wait")
+                return found.code
+            }
+            return lastLook(timeout)
         }
 
         /** The look once [timeout] is over; see the class comment for what each answer means. */
@@ -110,10 +133,18 @@ class DefaultAwaitVerificationUseCase(
                     } catch (e: MailboxException) {
                         Result.failure(e)
                     }
-                } ?: throw MailboxException(
+                }
+            if (answer == null) {
+                // The last look took a code, but the inbox did not answer its mark in time: the code stands.
+                taken?.let { found ->
+                    keepUnconfirmed(found, "the inbox did not answer the mark within $lastLookTimeout")
+                    return found.code
+                }
+                throw MailboxException(
                     "The inbox did not answer the last look for mail to $to within $lastLookTimeout after the $timeout wait",
                     lastFailure,
                 )
+            }
             val code = answer.getOrThrow() ?: throw MailTimeoutException(to, timeout)
             logger.info { "Mail to $to found by the last look after the $timeout wait (the inbox answered slowly)" }
             return code
@@ -133,21 +164,43 @@ class DefaultAwaitVerificationUseCase(
             }
         }
 
+        /** The code of the newest usable message, taken and marked read; null when there is none yet. */
         private suspend fun pollOnce(): VerificationCode? {
+            val found = newestUsable() ?: return null
+            taken = found
+            mark(found)
+            return found.code
+        }
+
+        private suspend fun newestUsable(): Taken? {
             val candidates =
                 mailbox
                     .findRecent(to, since, unreadOnly = true, limit = candidatesPerPoll)
-                    .filter { !it.read }
+                    .filter { !it.read && it.id !in unconfirmed }
                     .sortedByDescending { it.receivedAt }
             for (message in candidates) {
                 val code = extract(message)
-                if (code != null) {
-                    mailbox.markRead(message.id)
-                    return code
-                }
+                if (code != null) return Taken(message.id, code)
                 reportSkip(message)
             }
             return null
+        }
+
+        /** Marks [found]'s message read; a mark the inbox fails leaves the code standing (see [unconfirmed]). */
+        private suspend fun mark(found: Taken) {
+            try {
+                mailbox.markRead(found.messageId)
+            } catch (e: MailboxException) {
+                keepUnconfirmed(found, e.message.orEmpty())
+            }
+        }
+
+        private fun keepUnconfirmed(
+            found: Taken,
+            why: String,
+        ) {
+            unconfirmed += found.messageId
+            logger.warn { "Mail ${found.messageId} to $to was not confirmed read ($why); its $wanted is used now and never again" }
         }
 
         private fun reportSkip(message: MailMessage) {
@@ -156,6 +209,12 @@ class DefaultAwaitVerificationUseCase(
             }
         }
     }
+
+    /** A code taken from message [messageId]. */
+    private class Taken(
+        val messageId: String,
+        val code: VerificationCode,
+    )
 
     companion object {
         /** How long the last look may take: a few slow answers of a busy inbox, far less than a stuck one would take. */

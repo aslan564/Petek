@@ -70,6 +70,8 @@ class ImapMailboxTest {
         private val latency: Duration = Duration.ZERO,
         /** How many conversations [failure] fails; all of them by default. */
         private var failures: Int = Int.MAX_VALUE,
+        /** How many mark conversations set the flags and then fail, like a round whose CLOSE timed out after its STORE. */
+        private var marksFailingAfterTheStore: Int = 0,
     ) : ImapGateway {
         /** The recipients of each search conversation, in order. */
         val searched = mutableListOf<List<String>>()
@@ -95,6 +97,7 @@ class ImapMailboxTest {
             failure?.takeIf { failures-- > 0 }?.let { throw it }
             seen += ids
             messages = messages.map { if (it.id in ids) it.copy(read = true) else it }
+            if (marksFailingAfterTheStore-- > 0) throw MessagingException("CLOSE timed out")
         }
 
         override fun close() {
@@ -216,6 +219,25 @@ class ImapMailboxTest {
             waits.maxOf { it.third } shouldBeLessThanOrEqual 6_000
             gateway.messages.count { it.read } shouldBe TESTERS
             gateway.searched.maxOf { it.size } shouldBeGreaterThan TESTERS / 2
+        }
+
+    @Test
+    fun `a mark round that set the flags and then failed costs none of its testers their code`() =
+        runTest {
+            val gateway = FakeGateway(latency = 600.milliseconds, marksFailingAfterTheStore = 1)
+            val verification = DefaultAwaitVerificationUseCase(mailbox(gateway), DefaultVerificationExtractor())
+            val testers = (1..5).map(::tester)
+            testers.forEachIndexed { index, tester -> gateway.deliver(codeMail("${index + 1}", tester, start, "${100_000 + index}")) }
+
+            val found =
+                testers
+                    .map { async { verification.await(it, start, MailPurpose.CODE, timeout = 30.seconds, pollInterval = 1.seconds) } }
+                    .awaitAll()
+
+            found.map { it.code } shouldContainExactly testers.indices.map { "${100_000 + it}" }
+            // All five were marked in that one failed round.
+            gateway.seen shouldContainExactly testers.indices.map { "${it + 1}" }
+            gateway.messages.count { it.read } shouldBe 5
         }
 
     @Test

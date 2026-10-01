@@ -343,17 +343,98 @@ class DefaultAwaitVerificationUseCaseTest {
         }
 
     @Test
-    fun `a failed markRead is retried and the code is returned once the mail is marked read`() =
+    fun `a code whose mark fails is returned at once, and its message is never handed out again`() =
         runTest {
             mailbox.fake.deliver(codeMail("m1", "482913"))
-            mailbox.failingMarkReads = 1
+            mailbox.failingMarkReads = Int.MAX_VALUE
 
             useCase.await(ELI, SINCE, MailPurpose.CODE).code shouldBe "482913"
 
+            mailbox.polls shouldBe 1
+            currentTime shouldBe 0
+            // The inbox still shows it unread, yet a later wait of the same tester never reuses the old code.
             mailbox.fake.messages
                 .single()
-                .read shouldBe true
-            mailbox.polls shouldBe 2
+                .read shouldBe false
+            shouldThrow<MailTimeoutException> { useCase.await(ELI, SINCE, MailPurpose.CODE, timeout = 3.seconds) }
+            launch {
+                delay(1_500)
+                mailbox.fake.deliver(codeMail("m2", "553311", at = SINCE.plusSeconds(9)))
+            }
+            useCase.await(ELI, SINCE, MailPurpose.CODE).code shouldBe "553311"
+        }
+
+    @Test
+    fun `a code whose mark set the flag on the server and then failed is still returned`() =
+        runTest {
+            // Like an IMAP round whose STORE was applied but whose CLOSE then timed out.
+            val flaggedThenFailed =
+                object : Mailbox by mailbox {
+                    override suspend fun markRead(messageId: String) {
+                        mailbox.fake.markRead(messageId)
+                        throw MailboxException("IMAP CLOSE timed out")
+                    }
+                }
+            launch {
+                delay(2_500)
+                mailbox.fake.deliver(codeMail("m1", "482913", at = SINCE.plusSeconds(2)))
+            }
+
+            val result =
+                DefaultAwaitVerificationUseCase(flaggedThenFailed, DefaultVerificationExtractor())
+                    .await(ELI, SINCE, MailPurpose.CODE, timeout = 30.seconds, pollInterval = 1.seconds)
+
+            result.code shouldBe "482913"
+            currentTime shouldBe 3_000
+        }
+
+    @Test
+    fun `a code whose mark the deadline cut off after the flag was set is still returned, its mark tried once more`() =
+        runTest {
+            // A slow shared inbox: the flag is set at once, but the answer to the mark comes two seconds later.
+            val slowMark =
+                object : Mailbox by mailbox {
+                    override suspend fun markRead(messageId: String) {
+                        mailbox.markRead(messageId)
+                        delay(2_000)
+                    }
+                }
+            launch {
+                delay(3_500)
+                mailbox.fake.deliver(codeMail("m1", "482913", at = SINCE.plusSeconds(3)))
+            }
+
+            val result =
+                DefaultAwaitVerificationUseCase(slowMark, DefaultVerificationExtractor())
+                    .await(ELI, SINCE, MailPurpose.CODE, timeout = 5.seconds, pollInterval = 1.seconds)
+
+            // Found by the poll at 4 s; the deadline at 5 s cut its mark; the second mark ended at 7 s.
+            result.code shouldBe "482913"
+            mailbox.markedRead shouldContainExactly listOf("m1", "m1")
+            mailbox.polls shouldBe 5
+            currentTime shouldBe 7_000
+        }
+
+    @Test
+    fun `a code taken by the last look is returned though its mark is not answered within the last look's limit`() =
+        runTest {
+            val stuckMark =
+                object : Mailbox by mailbox {
+                    override suspend fun markRead(messageId: String) {
+                        mailbox.markRead(messageId)
+                        delay(1.hours)
+                    }
+                }
+            // Arrives after the last poll within the time, so only the last look sees it.
+            launch {
+                delay(4_500)
+                mailbox.fake.deliver(codeMail("m1", "482913", at = SINCE.plusSeconds(4)))
+            }
+            val useCase = DefaultAwaitVerificationUseCase(stuckMark, DefaultVerificationExtractor(), lastLookTimeout = 20.seconds)
+
+            useCase.await(ELI, SINCE, MailPurpose.CODE, timeout = 5.seconds, pollInterval = 1.seconds).code shouldBe "482913"
+
+            currentTime shouldBe 25_000
         }
 
     @Test
