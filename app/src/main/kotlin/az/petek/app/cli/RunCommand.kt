@@ -13,7 +13,6 @@ package az.petek.app.cli
 
 import az.petek.app.campaign.CampaignScaler
 import az.petek.app.campaign.CoverageWarnings
-import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
 import az.petek.campaign.domain.Campaign
@@ -23,7 +22,6 @@ import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.domain.VisitorRun
 import az.petek.campaign.domain.apiOriginInUse
 import az.petek.capacity.application.RecommendCapacityUseCase
-import az.petek.core.ids.RunTags
 import az.petek.evidence.domain.ReleaseNames
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.DefaultActorResolver
@@ -135,7 +133,8 @@ class RunCommand : PetekSubcommand("run") {
             if (swapAccounts && campaign.settings.waveSize != null) {
                 echo("Warning: --swap-accounts is not done in a campaign with campaign.wave_size; the run says so too.", err = true)
             }
-            val identities = previewIdentities(container, campaign)
+            // The registry the run will plan, with the owner's accounts its `login` testers sign in with.
+            val identities = container.previewIdentities(campaign)
             // Steps nobody would perform, waits and races the waves break: said on every run, scaled or not.
             CoverageWarnings.of(campaign, identities, testers = agents).forEach { echo("Warning: $it", err = true) }
             warnAboutCapacity(campaign, identities, container)
@@ -199,25 +198,6 @@ class RunCommand : PetekSubcommand("run") {
         }
         return scaled
     }
-
-    /**
-     * The identities a run of [campaign] will plan, generated ahead for the warnings (nothing is stored): with the
-     * owner's accounts the runner gives its `login` testers, without which such a registry cannot be built at all.
-     */
-    private fun previewIdentities(
-        container: AppContainer,
-        campaign: Campaign,
-    ): List<Identity> =
-        container.identityGenerator
-            .generate(
-                IdentitySpecs.of(
-                    campaign.settings,
-                    container.config.mailDomain,
-                    container.config.mailInbox,
-                    container.ownAccountsFor(campaign.settings.target),
-                ),
-                RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
-            ).identities
 
     /**
      * More testers live at once than this machine is advised to carry (`petek capacity`), said before the run starts:

@@ -11,6 +11,7 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.ResolvedAccount
 import az.petek.app.config.ResolvedTarget
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelHarness.Companion.tinyCampaign
@@ -243,6 +244,47 @@ class PanelScenariosTest {
                 .single { it.id == "read_announce" }
                 .agentIds.size shouldBe 24
             plan.steps.single { it.id == "leave_race" }.parallel shouldBe true
+        }
+
+    @Test
+    fun `a scenario whose testers sign in with the owner's accounts is planned with them`() =
+        runBlocking<Unit> {
+            val login =
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 3
+                  seed: 12
+                  roles: {writer: 2, reader: 1}
+                  registration: {self: 2, login: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                steps:
+                  - id: write
+                    actor: writer[*]
+                    do: "Write a note"
+                """.trimIndent() + "\n"
+            val owner = ResolvedAccount("writer", "writer@owner.example", Secret("owner-writer-pass"), null, "Sahibin Yazarı")
+            val panel =
+                harness(
+                    mapOf("login.yaml" to login),
+                    targets = listOf(ResolvedTarget(TargetSpec("notes", URI("http://127.0.0.1:9")), null, listOf(owner))),
+                )
+
+            val plan =
+                panel.backend
+                    .runPlan(
+                        panel.backend
+                            .scenarios()
+                            .single()
+                            .id,
+                    ).shouldNotBeNull()
+
+            // Without the owner's account a registry with a `login` tester cannot be built, and the plan had nobody.
+            plan.steps
+                .single { it.id == "write" }
+                .agentIds
+                .map { it.value } shouldContainExactly listOf("a01", "a02")
         }
 
     @Test

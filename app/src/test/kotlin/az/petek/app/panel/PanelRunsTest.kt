@@ -12,6 +12,7 @@
 package az.petek.app.panel
 
 import az.petek.app.config.MailSource
+import az.petek.app.config.ResolvedAccount
 import az.petek.app.config.ResolvedTarget
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.panel.explorer.RoleSessionSource
@@ -26,6 +27,7 @@ import az.petek.app.testing.PanelWaits.exploration
 import az.petek.campaign.domain.TargetMail
 import az.petek.campaign.domain.TargetSpec
 import az.petek.core.ids.RunId
+import az.petek.core.security.Secret
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.PanelConflictException
@@ -56,6 +58,7 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -160,6 +163,79 @@ class PanelRunsTest {
             val board = panel.ended(started.runId)
             board.run.outcome shouldBe RunOutcome.PASSED
             board.timeline.map { it.text }.filter { "Diqqət" in it } shouldContainExactly listOf("Diqqət: ${started.warnings.single()}")
+        }
+
+    /**
+     * A site without companies whose first writer signs in with the owner's account, in waves of two: each wave holds
+     * one writer, so the second writer of a wave never exists, and the IT writer's note is written in its own wave only.
+     */
+    private val loginInWaves =
+        """
+        campaign:
+          name: notes-login
+          tenant: none
+          testers: 4
+          seed: 12
+          wave_size: 2
+          roles: {writer: 2, reader: 2}
+          departments: [IT, HR]
+          registration: {self: 3, login: 1}
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        steps:
+          - id: it_note
+            actor: writer[IT]
+            do: "Write a note"
+            emits: noted
+          - id: second_writer
+            actor: writer[n=2]
+            do: "Open the note as the second writer"
+        """.trimIndent() + "\n"
+
+    private fun ownerAccounts(site: URI): ResolvedTarget =
+        ResolvedTarget(
+            TargetSpec("notes", site),
+            testToken = null,
+            accounts = listOf(ResolvedAccount("writer", "writer@owner.example", Secret("owner-writer-pass"), null, "Sahibin Yazarı")),
+        )
+
+    @Test
+    fun `a run whose testers sign in with the owner's accounts is told, wave by wave, which steps start with nobody`() =
+        runBlocking<Unit> {
+            val site = PanelWaits.site()
+            val panel =
+                PanelHarness(dir, site = site, scenarios = mapOf("login.yaml" to loginInWaves), targets = listOf(ownerAccounts(site.base)))
+                    .also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            // Planned ahead with the owner's account, as the run plans them: without it the registry of a `login`
+            // tester cannot be built, and the panel said nothing at all.
+            started.warnings.filter { "heç kimə uyğun gəlmir" in it } shouldContainExactly
+                listOf(
+                    "dalğa ölçüsü 2 ilə 'writer[IT]' 2 nömrəli dalğada heç kimə uyğun gəlmir, ona görə 'it_note' addımı orada " +
+                        "buraxılacaq; digər dalğalar onu icra edir.",
+                    "dalğa ölçüsü 2 ilə 'writer[n=2]' 1 nömrəli dalğada heç kimə uyğun gəlmir; 'second_writer' addımı başladığı " +
+                        "hər dalğada buraxılacaq və heç icra olunmayacaq.",
+                )
+            panel.ended(started.runId)
+        }
+
+    @Test
+    fun `testers that cannot be planned ahead are said to have left the run's checks undone`() =
+        runBlocking<Unit> {
+            val panel = PanelHarness(dir, site = PanelWaits.site(), scenarios = mapOf("login.yaml" to loginInWaves)).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            // No owner's account for the `login` tester: said with its reason, where the panel used to say nothing.
+            started.warnings.single { "reyestri" in it } shouldBe
+                "Testerlərin reyestri əvvəlcədən qurula bilmədi (Identity registry cannot be built: 1 testers sign in with " +
+                "the owner's accounts, but only 0 accounts match their roles (give more accounts in the target profile or " +
+                "the panel, or let more testers sign up)); ona görə heç kimin icra etməyəcəyi addımlar, dalğaların " +
+                "gözləmələri və yarışları yoxlanmadı."
+            panel.ended(started.runId).run.outcome shouldNotBe RunOutcome.PASSED
         }
 
     @Test

@@ -141,6 +141,52 @@ class PlanCommandTest {
         }
 
     @Test
+    fun `a campaign whose testers sign in with the owner's accounts is planned with them, with its warnings`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to "owner-writer-pass"))
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/notes.yaml"),
+                """
+                target:
+                  name: notes
+                  url: ${CliHarness.UNUSED_TARGET}
+                  tenant: none
+                  test_api: {mode: none}
+                  accounts:
+                    - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                """.trimIndent() + "\n",
+            )
+            cli.write(
+                "login.yaml",
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 4
+                  seed: 12
+                  wave_size: 2
+                  roles: {writer: 2, reader: 2}
+                  registration: {self: 3, login: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                steps:
+                  - id: second_writer
+                    actor: writer[n=2]
+                    do: "Open the note as the second writer"
+                """,
+            )
+
+            val result = cli.run("plan", "login.yaml")
+
+            // Without the owner's account the registry of a `login` tester cannot be built, and plan said nothing else.
+            result.stderr shouldNotContain "Identity registry cannot be built"
+            result.statusCode shouldBe 0
+            result.stdout shouldContain "writer@owner.example"
+            result.stderr shouldContain "Warning: with campaign.wave_size 2 no tester matches 'writer[n=2]'"
+            result.output shouldNotContain "owner-writer-pass"
+        }
+
+    @Test
     fun `passwords are never printed`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
