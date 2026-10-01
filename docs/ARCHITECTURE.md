@@ -124,10 +124,25 @@ sequenceDiagram
      hands a receiver the first pass's event (Faza 24.4). A tester that failed a main step stays out
      (`swap_accounts` SKIPPED), and so does the whole swap in a run with waves.
 4. **Watchdog.** An agent with no progress for `inactivityTimeout` is marked `blocked`. Its current action is cancelled
-   and it moves to the next step.
-5. **Teardown.** In `finally`, the test company recorded as a run resource is deleted. The oracle refuses companies
+   and it moves to the next step. Waiting for one of the shared AI slots (`PETEK_LLM_CONCURRENCY`) and waiting for the
+   provider's answer never count as inactivity (`LlmCallObserver`, 2026-10-01), so a big run's queue never blocks a
+   tester; an AI attempt still unanswered after its own bound is `blocked` with `llm_unavailable` (the surroundings),
+   inactivity alone stays `timeout`. Checks after an action that did not complete are recorded SKIPPED ("not
+   evaluated"), never as a site defect.
+5. **Roll call.** At the start the run records its `roster` (every planned tester) and, from the host probe, its
+   `capacity` record (`within_capacity` or `over_capacity`, never a verdict). When the run concludes (passed, failed,
+   aborted or cancelled), every planned tester × step without a result of its own gets a `not_reached` record saying
+   why (`run_aborted`, `wave_not_started`, `failed_earlier`, `never_reached`); a tester left out of a step that began
+   without it (out since its gate or browser failed) keeps the runner's `skip` record, which the report reads the same
+   way. A step no tester ran in any pass gets an `uncovered` record (FAILED, `not_covered`, so the run cannot pass), an
+   early stop an `abort` record (steps not run per wave), and the closed roll call a `roll_call` record. A crashed
+   browser context is restored with the storage state saved since. The report's "Testerlərin yoxlaması" sets the
+   planned testers against who acted and lists who did not get to which step and why; it says nobody is missing only
+   when the roll call was closed, so a process killed before its end leaves a report that says the roll call is
+   missing, never that everyone finished.
+6. **Teardown.** In `finally`, the test company recorded as a run resource is deleted. The oracle refuses companies
    that are not `is_test`.
-6. **Finalize.** The judge turns assertion records into findings. The report (Markdown + HTML) is written to
+7. **Finalize.** The judge turns assertion records into findings. The report (Markdown + HTML) is written to
    `evidence/<run_id>/report/`; its PDF (`report.pdf`) is printed only when asked for (`ExportReportPdfUseCase` over the
    `ReportPdfPrinter` port; the app gives `PlaywrightPdfPrinter`, Chromium's own print of `share.html`). Its summary also names what the scenario left unchecked: the campaign's `coverage:`
    lines, recorded as a `SYSTEM` step (`coverage`) when the run starts.

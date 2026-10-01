@@ -71,6 +71,15 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
   from it); an actor whose own action broke leaves its failed checks moot. Only a step the site fails at times is
   `flaky`; one that varies because of agents, surroundings or runs that did not check it is "qeyri-sabit ... (saytın
   xətası deyil)" (`unsteady`), in the report and the panel.
+- **Roll call (2026-10-01).** Every report sets the run's planned testers (`roster`) against who acted and lists every
+  tester × step without a result of its own (`not_reached`, and the runner's `skip` of a tester out since an earlier
+  failure, with why), every step nobody ran (`uncovered`, and a wave plan's FAILED `coverage` gap, failed rows) and an
+  early stop (`abort`); "every agent completed its steps" is printed only when the roll call was closed (`roll_call`)
+  and nobody is missing; a run without a closed roll call (killed, still going, or older) says so instead. A run over
+  the machine's advised capacity says so next to its timings (`capacity`); the customer summary says how many testers
+  did not get to all their steps, how many steps nobody ran and why the run stopped early. In JUnit the uncovered step
+  and a `never_reached` row are failures; `run_aborted`, `wave_not_started` and `failed_earlier` rows of `not_reached`
+  are skipped cases. A `never_reached` record is no finding against the tester.
 
 ## Modules and key types
 

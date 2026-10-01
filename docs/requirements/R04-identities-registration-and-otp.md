@@ -26,9 +26,15 @@ the same identities) and independent of mailboxes a human reads.
 - **Flows as data.** Sign-up, join and login are `TargetProfile.flows` (contract defaults, overridden per site in
   YAML); `RunFunction`s execute them: `register_owner`, `seed_company` (departments and invitations through the test
   API), `register_and_login` (by the identity's `RegistrationMode`).
-- **Mail.** The `Mailbox` port (`features/mail`) with `MailpitMailbox` and `TestApiMailbox`, chosen by
+- **Mail.** The `Mailbox` port (`features/mail`) with `MailpitMailbox`, `TestApiMailbox` and `ImapMailbox`, chosen by
   `PETEK_MAIL_SOURCE`; `AwaitVerificationUseCase` extracts codes and links (also by a site's own link pattern); only
-  mail received after the run start is read and it is marked read after use.
+  mail received after the run start is read and it is marked read after use. Which messages count as received since a
+  moment is the mailbox's to say (an IMAP server keeps arrivals to the second). Scale (2026-10-01): the IMAP inbox
+  serves every waiting tester in shared rounds (one connection, marks and searches batched, bodies cached per UID), so
+  100 testers waiting at once all get their codes. Time spent behind other testers counts toward a tester's wait, but a
+  last look runs after the deadline (bounded, 30 s), so a code that arrived in time is never called `mail_timeout`; an
+  inbox too slow to answer that last look ends as `mail_unavailable` (the surroundings), as does a failing inbox or
+  unreadable mail. A code already taken survives a failed or cut-off mark.
 - **Phone OTP.** From the target's test API (`GET /test/otp/{phone}`), never from a real SMS provider in the MVP.
 - **Secrets.** Passwords travel as `Secret`; the model types `{self.password}` (rule 10).
 

@@ -23,8 +23,16 @@ cannot produce them; thirty humans with thirty devices cannot repeat them every 
   single-thread dispatcher (rule 9), so sessions never share Playwright objects.
 - **Distinct identities.** `features/identity` derives a deterministic registry per run; each agent reads its own
   identity only (rule 7) and proves isolation by reading its own name after login.
-- **Resilience.** An inactivity watchdog marks a stuck agent `blocked` and lets the others continue; a crashed context
-  is recreated from the same identity and saved `storage_state`; `on_fail: continue | abort` is the campaign's choice.
+- **Resilience.** An inactivity watchdog marks a stuck agent `blocked` and lets the others continue; waiting in the
+  shared AI queue or for the provider's answer is never inactivity (2026-10-01), so the number of testers never blocks
+  one; a crashed context is recreated from the same identity and the `storage_state` saved since (the restore record
+  says whether one was loaded); `on_fail: continue | abort` is the campaign's choice.
+- **Nobody left out (2026-10-01).** Every run records its roster and, at its end, a `not_reached` record for every
+  planned tester × step without a result (why: aborted, wave not started, failed earlier, never reached) and an
+  `uncovered` record (FAILED) for a step nobody ran; the report's roll call shows planned against acted. `petek run`
+  and `petek plan` name every step that would start with nobody, wave by wave, before the run; the validator follows
+  how departments are dealt; `{last_id}` of a step many testers emit with a source that does not name the tester is
+  warned about.
 - **No fixed limit.** `features/capacity` recommends a maximum for the machine; `run` warns above it and still starts.
 
 ## Modules and key types
@@ -76,6 +84,17 @@ contention, never shared state); `PER_SESSION` gives every tester its own browse
 - `PlaywrightBrowserEngineTest` (ten sessions on one server, sharding, process-tree shutdown),
   `InMemorySharedRunStateTest` (5 000 concurrent publishers, one winner), `DefaultCampaignValidatorTest` (admin-only
   run functions, one emitting step per event), `DefaultCampaignRunnerTest`, `FlowRunnerTest`, `InactivityWatchdogTest`.
+- **`ScaleProofEndToEndTest`** (`app`, tagged `scale`: `./gradlew :app:scaleTest -Ppetek.scale.testers=30,50,100`,
+  never part of `build` or `e2eTest`): the repository's contract demo with `--testers N` in real Chromium, the
+  production object graph and a deterministic AI against the fake target. For every size: exactly N testers, each with
+  its own name, e-mail and phone, all past their gate; the roster lists all N; no `not_reached`, `uncovered` or `abort`
+  record; the scenario's actors resolved again over the run's testers and every tester × step pair has that tester's
+  own record; every joiner's session shows its own name; every check passed and every employee received the
+  announcement; the report says "Planlanan: N · İşləyən: N · Bütün addımlarını bitirən: N". With the site dropping the
+  announcement for exactly one employee, that tester's finding is the only one, whatever N is.
+- `RunnerLlmQueueTest` (100 `do` actors, 6 AI slots, 15 s per decision, virtual time: nobody blocked),
+  `RunnerRollCallTest`, `RunnerUnfinishedActionTest`, `ImapMailboxTest` and `MailpitMailboxTest` (100 testers waiting
+  at once), `BuildReportUseCaseTest` (the roll call in the report).
 - `./gradlew e2eTest` (root): the panel end to end against the fake target in real Chromium (`:app:e2eTest`,
   `PanelEndToEndTest`), the `e2e` module's browser runs (`:e2e:e2eTest`) and the isolation proof above. Kover keeps
   these out of `build`, so the fast build never opens a browser and the live suite never spends LLM quota.

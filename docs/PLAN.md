@@ -1058,6 +1058,12 @@ nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
   heç vaxt yazmır. Toxunuş yalnız o hesabdan, `Pətək sınaq` işarəsi ilə yazır; panel bunu bir sətirlə deyir.
   `ExplorerAccountTestCheckTest`, `TestCompanyRoleSessionsTest`, `NotesSiteTestEndToEndTest` (draftda `oracle` və
   `direct_url`, qeydi başqasına açan sayt FAILED).
+- [ ] **Tutumdan artıq run-da vaxt yoxlamaları (2026-10-01):** maşının tövsiyə olunan tutumundan çox tester eyni anda
+  işləyəndə run bunu `capacity` qeydində (`over_capacity`) və hesabatda xəbərdarlıq kimi yazır, amma hökmü dəyişmir.
+  Belə run-da gecikmə və "N saniyəyə görünsün" yoxlamaları (`latency_max`, `visible_text within_s`) keçməyəndə
+  saytın xətası yox, "qərarsız" (INCONCLUSIVE, alət boşluğu) sayılsınmı? Tövsiyə: bəli, amma yalnız maşının yükü
+  (yaddaş, load, harness-in gecikməsi) ölçüləndən sonra; indi yalnız say müqayisə olunur. *Vəziyyət:* qeyd və
+  xəbərdarlıq var, hökm dəyişmir.
 - [ ] **Vizual fərqin standart dəyərləri (ADR-0014, 2026-10-01):** (1) dəyişən görünüş standart olaraq yalnız
   göstərilsin (`report`), CI-ni yalnız `--visual fail` yıxsın? (2) səhifə ən çox 4000 CSS px hündürlüyə qədər
   çəkilsin? (3) hər kadr təxminən 0,2–1,5 MB yer tutur; görünüş yalnız açıq istənəndə (draftlarda ziyarətçi
