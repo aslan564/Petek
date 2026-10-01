@@ -130,9 +130,11 @@ class DefaultCampaignValidator(
          * 24.6), but an id read from the tester's page (`dom`, e.g. the first item of a list) or from an oracle path
          * that does not name the tester (`/test/tickets/latest`) can be a colleague's object made at the same moment:
          * the check then tests the colleague's object twice and the tester's own never. Only a source scoped to the
-         * tester is safe: the URL the tester's own write led to (`url_regex`), a `dom` selector or oracle path with a
-         * placeholder naming the tester ([Placeholder.TESTER_SCOPED_SELF_FIELDS]), or the agent's own report. A race
-         * is left out: only its winner emits. An event other steps consume from several emitters is an error already.
+         * tester is safe: the URL the tester's own write led to (`url_regex`), an oracle path with a placeholder naming
+         * the tester ([Placeholder.TESTER_SCOPED_SELF_FIELDS]), which the harness fills in before it asks, or the agent's
+         * own report. A `dom` selector never is: the harness reads it as written, so a placeholder in it is not filled in
+         * and names nobody. A race is left out: only its winner emits. An event other steps consume from several
+         * emitters is an error already.
          */
         private fun sharedIdSourceWarning(
             path: String,
@@ -146,13 +148,21 @@ class DefaultCampaignValidator(
             val source = own ?: campaign.target.idSource(emits.event) ?: return null
             val read = sharedSourceText(source) ?: return null
             val declared = if (own != null) "emits.id_from" else "target_profile.id_sources.${emits.event}"
+            val unfilled =
+                (source as? IdSource.DomAttribute)
+                    ?.let { templates.placeholders(it.selector) }
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { names ->
+                        "; the harness reads a dom selector as written, so ${names.joinToString { "{$it}" }} in it is not " +
+                            "filled in and names nobody"
+                    }.orEmpty()
             return ValidationIssue(
                 campaign.sourceLines.lineOf(if (own != null) "$path.emits.id_from" else "$path.emits") ?: step.line,
                 "step '${step.id}': {last_id} in its checks is the id of each tester's '${emits.event}' object, read from " +
                     "$read ($declared), but up to $emitters testers emit it here, so a tester can read a colleague's object " +
                     "made at the same moment and check it instead of its own; read the id from the tester's own write: " +
-                    "url_regex on the page it lands on, or an oracle path or dom selector naming the tester, e.g. " +
-                    "/test/<objects>/latest?by={self.email}",
+                    "url_regex on the page it lands on, or an oracle path naming the tester, e.g. " +
+                    "/test/<objects>/latest?by={self.email}$unfilled",
             )
         }
 
@@ -165,13 +175,22 @@ class DefaultCampaignValidator(
         /** How [source] reads an id that need not be the tester's own (`dom '<selector>'`), or null when it is scoped to the tester. */
         private fun sharedSourceText(source: IdSource): String? =
             when (source) {
-                is IdSource.DomAttribute -> "dom '${source.selector}' (${source.attribute})".takeUnless { namesTester(source.selector) }
-                is IdSource.OracleField -> "oracle '${source.path}' (${source.field})".takeUnless { namesTester(source.path) }
-                is IdSource.UrlRegex, IdSource.AgentReport -> null
+                is IdSource.DomAttribute -> {
+                    "dom '${source.selector}' (${source.attribute})"
+                }
+
+                is IdSource.OracleField -> {
+                    "oracle '${source.path}' (${source.field})".takeUnless { namesTester(source.path) }
+                }
+
+                is IdSource.UrlRegex, IdSource.AgentReport -> {
+                    null
+                }
             }
 
-        private fun namesTester(template: String): Boolean =
-            templates.placeholders(template).any {
+        /** Whether an oracle [path] names one tester: the harness renders it for each tester before it asks. */
+        private fun namesTester(path: String): Boolean =
+            templates.placeholders(path).any {
                 (Placeholder.parse(it) as? Placeholder.Self)?.field in Placeholder.TESTER_SCOPED_SELF_FIELDS
             }
 

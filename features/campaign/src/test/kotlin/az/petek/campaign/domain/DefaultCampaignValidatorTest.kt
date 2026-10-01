@@ -988,8 +988,9 @@ class DefaultCampaignValidatorTest {
                 "step 'ticket': {last_id} in its checks is the id of each tester's 'ticket_created' object, read from " +
                 "dom '[data-testid=ticket-item]:first-child' (data-id) (emits.id_from), but up to 6 testers emit it here"
             warning.message shouldContain "a tester can read a colleague's object made at the same moment"
-            warning.message shouldContain "url_regex on the page it lands on, or an oracle path or dom selector naming the tester"
+            warning.message shouldContain "url_regex on the page it lands on, or an oracle path naming the tester"
             warning.message shouldContain "?by={self.email}"
+            warning.message shouldNotContain "dom selector naming"
             // The target profile's source for the event counts the same, and so does a department, shared by colleagues.
             val latest = IdSource.OracleField("/test/tickets/latest", "id")
             validator.warnings(campaign(tickets(null), target = profile("ticket_created" to latest))).single().message shouldContain
@@ -999,10 +1000,22 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `a dom selector naming the tester is warned about too, since the harness reads it as written`() {
+            val mine = IdSource.DomAttribute("[data-owner='{self.email}'] [data-testid=ticket-item]", "data-id")
+
+            // ObjectIdReader passes a dom selector to the page unrendered: `{self.email}` there names nobody, so the read
+            // finds no element and the id falls back to the agent's report.
+            val warning = validator.warnings(campaign(tickets(mine))).single()
+
+            warning.message shouldContain "read from dom '[data-owner='{self.email}'] [data-testid=ticket-item]' (data-id)"
+            warning.message shouldContain
+                "the harness reads a dom selector as written, so {self.email} in it is not filled in and names nobody"
+        }
+
+        @Test
         fun `last_id from a source scoped to the tester, one emitter, a race or checks without last_id say nothing`() {
             listOf(
                 IdSource.OracleField("/test/tickets/latest?by={self.email}", "id"),
-                IdSource.DomAttribute("[data-author='{self.agent_id}']:first-child", "data-id"),
                 IdSource.UrlRegex("/tickets/([0-9]+)"),
                 IdSource.AgentReport,
                 null,

@@ -80,8 +80,8 @@ sealed interface Placeholder {
         val CAMPAIGN_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "department", "role", "phone")
 
         /**
-         * `self` fields that tell one tester from every other (each tester's own e-mail, name, agent id and phone), so a
-         * path or selector naming one finds that tester's objects only; a department or role is shared with colleagues.
+         * `self` fields that tell one tester from every other (each tester's own e-mail, name, agent id and phone), so an
+         * oracle path naming one finds that tester's objects only; a department or role is shared with colleagues.
          */
         val TESTER_SCOPED_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "phone")
 
