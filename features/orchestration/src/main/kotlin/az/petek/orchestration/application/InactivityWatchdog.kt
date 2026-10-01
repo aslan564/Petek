@@ -149,13 +149,27 @@ class InactivityWatchdog(
         val waiting = MutableStateFlow(0)
         val answering = MutableStateFlow(0)
 
-        /** Suspends until no call is at the provider; false when one is still there after [aiCallTimeout]. */
+        /** Counts the attempts started, so a retry that starts right after an answer gets a bound of its own. */
+        private val attempts = MutableStateFlow(0L)
+
+        /**
+         * Suspends until no call is at the provider; false when one attempt is still there after [aiCallTimeout]. Each
+         * attempt has its own bound: a retry that begins without a suspension point after the previous answer (its level
+         * never shows 0) starts the bound again instead of sharing the first attempt's.
+         */
         suspend fun answered(): Boolean {
-            if (aiCallTimeout.isInfinite()) {
-                answering.first { it == 0 }
-                return true
+            while (true) {
+                val attempt = attempts.value
+                if (answering.value == 0) return true
+                val ended = combine(answering, attempts) { open, started -> open == 0 || started != attempt }
+                val settled =
+                    if (aiCallTimeout.isInfinite()) {
+                        ended.first { it }
+                    } else {
+                        withTimeoutOrNull(aiCallTimeout) { ended.first { it } } ?: return false
+                    }
+                if (settled && answering.value == 0) return true
             }
-            return withTimeoutOrNull(aiCallTimeout) { answering.first { it == 0 } } != null
         }
 
         override fun slotWaitStarted() {
@@ -167,6 +181,7 @@ class InactivityWatchdog(
         }
 
         override fun callStarted() {
+            attempts.update { it + 1 }
             answering.update { it + 1 }
             progress(agentId)
         }

@@ -17,6 +17,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.browser.domain.BrowserActionException
 import az.petek.core.ids.AgentId
 import az.petek.llm.application.ConcurrencyLimitedLlmClient
+import az.petek.llm.domain.LlmCallObserver
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.testing.ScriptedLlmClient
 import io.kotest.assertions.throwables.shouldThrow
@@ -28,6 +29,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
@@ -320,6 +322,28 @@ class InactivityWatchdogTest {
 
             outcome.failureReason shouldBe FailureReason.LLM_UNAVAILABLE
             currentTime shouldBe 160_000
+        }
+
+    @Test
+    fun `a retry that starts right after an answer gets a bound of its own`() =
+        runTest {
+            val watchdog = InactivityWatchdog(aiCallTimeout = 270.seconds)
+
+            val outcome =
+                watchdog.guard(a01, 120.seconds) {
+                    val calls = checkNotNull(currentCoroutineContext()[LlmCallObserver])
+                    calls.callStarted()
+                    delay(180.seconds)
+                    // The answer did not parse: the retry starts at once, with no suspension point in between.
+                    calls.callEnded()
+                    calls.callStarted()
+                    delay(100.seconds)
+                    calls.callEnded()
+                    done
+                }
+
+            outcome shouldBe done
+            currentTime shouldBe 280_000
         }
 
     @Test
