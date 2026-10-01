@@ -289,4 +289,72 @@ class RunnerRollCallTest {
             // Its own skip says why it sat the step out, so the roll call has nothing to add.
             f.rollCall().shouldBeEmpty()
         }
+
+    @Test
+    fun `a step whose n-th tester is gone because an earlier one failed names that failure`() =
+        runTest {
+            val f = fixture()
+            // IT employees a02 and a04: a02 fails to join, so a04 is the only IT employee left and nobody is the second.
+            f.agents.script = { call, _ ->
+                if (call.scenarioStep == "join" && call.agentId.value == "a02") {
+                    ActionOutcome(ActionStatus.FAILED, "no code", failureReason = FailureReason.MAIL_TIMEOUT)
+                } else {
+                    ok
+                }
+            }
+            val secondInIt = employees("IT", nth = 2)
+            val campaign =
+                campaign(
+                    managers = 0,
+                    employees = 4,
+                    setup = listOf(setupStep("join", employees())),
+                    steps = listOf(step("approve", secondInIt)),
+                )
+
+            f.runner().run(campaign)
+
+            f.system(UNCOVERED_ACTION).single().detail shouldBe
+                "not_covered: no tester matched '${secondInIt.raw}' in the run; nobody ran this step; its testers were out after " +
+                "failing earlier: a02 (mail_timeout)"
+        }
+
+    @Test
+    fun `a tester that fails after a step began without it is not called missing from that step`() =
+        runTest {
+            val f = fixture()
+            // a02 fails to join, so `pick` (the second employee) goes to a04; a03 fails only in `confirm`, after `pick`.
+            f.agents.script = { call, _ ->
+                when {
+                    call.scenarioStep == "join" && call.agentId.value == "a02" -> {
+                        ActionOutcome(ActionStatus.FAILED, "no code", failureReason = FailureReason.REGISTRATION_FAILED)
+                    }
+
+                    call.scenarioStep == "confirm" && call.agentId.value == "a03" -> {
+                        ActionOutcome(ActionStatus.FAILED, "wrong password", failureReason = FailureReason.LOGIN_FAILED)
+                    }
+
+                    else -> {
+                        ok
+                    }
+                }
+            }
+            val campaign =
+                campaign(
+                    managers = 0,
+                    employees = 3,
+                    setup =
+                        listOf(
+                            setupStep("join", employees()),
+                            setupStep("pick", employees(nth = 2)),
+                            setupStep("confirm", employees()),
+                        ),
+                    steps = listOf(step("read", employees())),
+                )
+
+            f.runner().run(campaign)
+
+            f.agents.callsFor("pick").map { it.agentId.value } shouldContainExactly listOf("a04")
+            // Every tester out has its own skip where it was out; nobody is called missing from `pick`.
+            f.rollCall().shouldBeEmpty()
+        }
 }

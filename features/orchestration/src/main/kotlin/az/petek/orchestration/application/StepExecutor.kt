@@ -20,6 +20,7 @@ import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.TextWatch
+import az.petek.campaign.domain.ActorExpression
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.Pacing
@@ -150,7 +151,8 @@ internal class StepExecutor(
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors.merge(step.id, chosen.map { it.agentId }) { before, now -> before + now }
-        run.stepChose(step.id, chosen.map { it.agentId })
+        val out = resolver.resolve(step.actors.anyPlace(), run.waveIdentities()).map { it.agentId }.filter(run::isFailed)
+        run.stepChose(step.id, chosen.map { it.agentId }, out)
         releaseWatches(step.id, keep = chosen.map { it.agentId }.toSet())
         if (chosen.isEmpty()) {
             run.stepHadNoTester(step.id)
@@ -1583,6 +1585,9 @@ internal class StepExecutor(
             if (step.waitFor == null) actorSpecs(step) else actorSpecs(step).filterNot { it.isReceptionCheck() }
 
         private fun AssertionSpec.isReceptionCheck(): Boolean = this is AssertionSpec.VisibleText || this is AssertionSpec.LatencyMax
+
+        /** The same testers by role, department and registration, whatever place `n` names among them. */
+        fun ActorExpression.anyPlace(): ActorExpression = copy(selectors = selectors.map { it.copy(nth = null) })
     }
 }
 

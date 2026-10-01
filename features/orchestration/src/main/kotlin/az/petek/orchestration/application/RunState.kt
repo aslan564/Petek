@@ -199,13 +199,30 @@ internal class RunState(
     /** Who each step started with, per pass: (pass, executed step id) -> the actors chosen then. */
     private val chosen = ConcurrentHashMap<Pair<Int, String>, List<AgentId>>()
 
-    /** [stepId] started in the pass now running with [actors] (none when nobody matched). */
+    /** Who was out when each step started, per pass, with the same key as [chosen]. */
+    private val outAtStart = ConcurrentHashMap<Pair<Int, String>, List<AgentId>>()
+
+    /**
+     * [stepId] started in the pass now running with [actors] (none when nobody matched), while [out] were out after
+     * failing earlier: the testers of its role, department and registration, whatever place `n` names, since a tester
+     * out before it shifts who the n-th one is.
+     */
     fun stepChose(
         stepId: String,
         actors: List<AgentId>,
+        out: List<AgentId> = emptyList(),
     ) {
         chosen[pass to stepId] = actors
+        outAtStart[pass to stepId] = out
     }
+
+    /** The testers out when any execution of the step [baseId] (swap suffix removed) started, in agent order. */
+    fun outOf(baseId: String): List<AgentId> =
+        outAtStart.entries
+            .filter { it.key.second.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX) == baseId }
+            .flatMap { it.value }
+            .distinct()
+            .sorted()
 
     /** The actors [stepId] started with in pass [number]; null when it never started there. */
     fun chosenIn(

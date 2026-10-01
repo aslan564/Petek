@@ -849,6 +849,10 @@ class DefaultCampaignRunner(
      * with when it never began, and the testers out since an earlier failure) that has no final record of its own for
      * it gets a `not_reached` record saying why, so nobody planned is missing from the evidence ([NotReached]). A gap
      * in a run that went on to its end is Pətək's own and counts as a failed step (with no agent).
+     *
+     * Who was out is read when the step began: a step that began skipped its planned testers out by then with a record
+     * of their own, and a tester that failed only later was never planned for it (with `n`, its place went to the next
+     * tester). Only a step that never began names, at the end, the planned testers out by then.
      */
     private suspend fun rollCall(run: RunState) {
         val aborted = run.abortedBecause
@@ -858,7 +862,12 @@ class DefaultCampaignRunner(
                 val chosen = run.chosenIn(pass.number, stepId)
                 val acting =
                     chosen ?: actors.resolve(planned.step.actors, planned.pool.filterNot { run.isFailed(it.agentId) }).map { it.agentId }
-                val failed = actors.resolve(planned.step.actors, planned.pool).map { it.agentId }.filter(run::isFailed)
+                val failed =
+                    if (chosen != null) {
+                        emptyList()
+                    } else {
+                        actors.resolve(planned.step.actors, planned.pool).map { it.agentId }.filter(run::isFailed)
+                    }
                 (acting + failed)
                     .distinct()
                     .sorted()
@@ -906,7 +915,8 @@ class DefaultCampaignRunner(
         for (step in run.campaign.allSteps) {
             val executions = run.executionsOf(step.id)
             if (executions.isEmpty() || executions.any { it.isNotEmpty() }) continue
-            val out = actors.resolve(step.actors, run.identities).filter { run.isFailed(it.agentId) }
+            // Out when it began, by role, department and registration: with `n`, a tester out before shifts the n-th one.
+            val out = run.outOf(step.id)
             val detail =
                 buildString {
                     append("$NOT_COVERED: no tester matched '${step.actors.raw}'")
@@ -914,7 +924,7 @@ class DefaultCampaignRunner(
                     append("; nobody ran this step")
                     if (out.isNotEmpty()) {
                         append("; its testers were out after failing earlier: ")
-                        append(out.joinToString(", ") { "${it.agentId} (${run.failureReason(it.agentId) ?: "failed"})" })
+                        append(out.joinToString(", ") { "${it.value} (${run.failureReason(it) ?: "failed"})" })
                     }
                 }
             val stepId = evidence.system(run, null, UNCOVERED_ACTION, StepStatus.FAILED, detail, step.id, tally = Tally.FAIL)
