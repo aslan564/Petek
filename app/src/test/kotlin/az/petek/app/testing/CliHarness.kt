@@ -99,6 +99,7 @@ class CliHarness(
                             reachability = reachability,
                             ownership = ownership,
                             pdfPrinter = pdfPrinter,
+                            hostResources = hostResources,
                         ),
                     )
                 },
@@ -114,6 +115,7 @@ class CliHarness(
                             reachability = reachability,
                             ownership = ownership,
                             pdfPrinter = pdfPrinter,
+                            hostResources = hostResources,
                         ),
                     )
                 },

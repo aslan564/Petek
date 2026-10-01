@@ -313,8 +313,9 @@ class DefaultCampaignRunner(
     }
 
     /**
-     * The run's roster (`100 testers: a01, a02, ...`) and, when the caller knew this machine's capacity, the run's size
-     * next to it: [live] testers at once (waves keep it below the whole run). Neither changes a verdict.
+     * The run's roster (`100 testers: a01, a02, ...`) and, when this machine's capacity is known (from the caller, else
+     * from [RunnerSettings.capacityAdvice]), the run's size next to it: [live] testers at once (waves keep it below the
+     * whole run). Neither changes a verdict.
      */
     private suspend fun recordRoster(
         run: RunState,
@@ -323,7 +324,7 @@ class DefaultCampaignRunner(
     ) {
         val testers = run.identities.map { it.agentId.value }
         evidence.system(run, null, ROSTER_ACTION, StepStatus.PASSED, "${testers.size} testers: ${testers.joinToString(", ")}")
-        val advice = run.options.capacityAdvice ?: return
+        val advice = run.options.capacityAdvice ?: capacityOfThisMachine(run) ?: return
         val numbers = "$live testers at once (${testers.size} in the run); this machine is advised for up to $advice at once"
         if (live <= advice) {
             evidence.system(run, null, CAPACITY_ACTION, StepStatus.PASSED, "$WITHIN_CAPACITY: $numbers")
@@ -333,6 +334,16 @@ class DefaultCampaignRunner(
             board.message(detail)
         }
     }
+
+    /** [RunnerSettings.capacityAdvice]; a machine that cannot be measured costs only the record, never the run. */
+    private suspend fun capacityOfThisMachine(run: RunState): Int? =
+        try {
+            settings.capacityAdvice()
+        } catch (e: Exception) {
+            rethrowIfCancelled(e)
+            logger.warn { "run ${run.runId}: this machine's capacity is unknown (${e::class.simpleName}: ${e.message})" }
+            null
+        }
 
     // --- 2. browser and agents ------------------------------------------------------------------------------------
 

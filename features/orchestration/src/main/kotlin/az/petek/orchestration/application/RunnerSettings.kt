@@ -49,6 +49,12 @@ data class RunnerSettings(
      * or writes to one, the target itself excepted when the owner allowed it (AGENTS.md rule 8).
      */
     val productionHosts: (URI) -> Set<String> = { emptySet() },
+    /**
+     * How many testers this machine is advised to carry at once (`petek capacity`), asked once at each run's start for
+     * the run's `capacity` record; null when it cannot tell. [az.petek.orchestration.domain.RunOptions.capacityAdvice]
+     * wins when the caller knew it already.
+     */
+    val capacityAdvice: suspend () -> Int? = { null },
 ) {
     init {
         require(mailDomain.isNotBlank()) { "mailDomain must not be blank" }

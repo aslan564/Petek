@@ -22,6 +22,7 @@ import az.petek.app.panel.explorer.RoleSessionSource
 import az.petek.app.panel.explorer.SetupRuns
 import az.petek.browser.domain.BrowserEngine
 import az.petek.capacity.application.RecommendCapacityUseCase
+import az.petek.capacity.domain.HostResourceProbe
 import az.petek.capacity.domain.HostResources
 import az.petek.core.security.Secret
 import az.petek.core.testing.FakeHarnessClock
@@ -109,12 +110,14 @@ internal class PanelHarness(
                             ownership = ownership,
                             // No Chromium in the panel's tests: the "PDF" holds a PDF header and the page it came from.
                             pdfPrinter = { html, pdf -> Files.writeString(pdf, "%PDF-fake " + html.fileName) },
+                            // The same machine the panel advises for, whatever machine the tests run on.
+                            hostResources = HostResourceProbe { MACHINE },
                         ),
                     ),
                 )
             },
             workingDirectory = dir,
-            capacityAdvice = RecommendCapacityUseCase({ HostResources(16L shl 30, 8L shl 30, 8) }),
+            capacityAdvice = RecommendCapacityUseCase({ MACHINE }),
             port = 0,
             roleSessions = roleSessions,
             configurationFile = configurationFile,
@@ -125,6 +128,9 @@ internal class PanelHarness(
     override fun close() = panel.close()
 
     companion object {
+        /** The machine the panel's tests run on, as far as capacity advice goes: roomy enough for any test's testers. */
+        private val MACHINE = HostResources(16L shl 30, 8L shl 30, 8)
+
         /** A valid instruction form for [target]. */
         fun instructions(
             target: String,

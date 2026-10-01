@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -231,6 +232,26 @@ class RunnerRollCallTest {
             }
             summary.outcome shouldBe RunOutcome.PASSED
             fixture().apply { runner().run(campaign(steps = listOf(step("read", employees())))) }.system(CAPACITY_ACTION).shouldBeEmpty()
+        }
+
+    @Test
+    fun `the runner asks its settings for this machine's capacity, and a machine it cannot measure costs only the record`() =
+        runTest {
+            val read = campaign(managers = 0, employees = 2, steps = listOf(step("read", employees())))
+
+            fun settings(advice: suspend () -> Int?) =
+                RunnerSettings(mailDomain = "test.example.test", storageRoot = Path.of("build", "storage"), capacityAdvice = advice)
+            val measured = fixture()
+            measured.runner(settings = settings { 2 }).run(read)
+            val unknown = fixture()
+
+            val summary = unknown.runner(settings = settings { error("no /proc here") }).run(read)
+
+            measured.system(CAPACITY_ACTION).single().detail shouldBe
+                "over_capacity: 3 testers at once (3 in the run); this machine is advised for up to 2 at once, so slow " +
+                "pages and late screens may come from this machine, not from the site"
+            unknown.system(CAPACITY_ACTION).shouldBeEmpty()
+            summary.outcome shouldBe RunOutcome.PASSED
         }
 
     @Test

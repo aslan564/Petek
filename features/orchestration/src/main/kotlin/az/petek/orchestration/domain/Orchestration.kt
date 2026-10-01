@@ -245,7 +245,7 @@ data class RunOptions(
     /**
      * How many testers this machine is advised to carry at once (`petek capacity`), when the caller knows it. Recorded
      * as evidence at the run's start next to the run's own count (`capacity`), so a run over it is never silent; it
-     * changes no verdict. Null: not known, nothing recorded.
+     * changes no verdict. Null: the runner asks its own settings (the app probes this machine), else nothing is recorded.
      */
     val capacityAdvice: Int? = null,
 )
