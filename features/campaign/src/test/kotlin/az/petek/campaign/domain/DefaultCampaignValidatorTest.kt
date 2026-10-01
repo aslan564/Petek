@@ -966,6 +966,61 @@ class DefaultCampaignValidatorTest {
             val fine = IdSource.OracleField("/test/announcements/latest?by={self.email}", "id")
             issues(campaign(announce, target = profile("announcement_created" to fine))).shouldBeEmpty()
         }
+
+        /** The ticket each employee creates, checked through `{last_id}` (Faza 24.6). */
+        private val ownTicket = listOf(AssertionSpec.Oracle("/test/tickets/{last_id}", "created_by", "{self.email}", null))
+
+        private fun tickets(
+            source: IdSource?,
+            actor: String = "employee[*]",
+            assertions: List<AssertionSpec> = ownTicket,
+        ) = step("ticket", actor = actor, emits = "ticket_created", idSource = source, assertions = assertions, line = 40)
+
+        @Test
+        fun `last_id read from the page or from an oracle path that does not name the tester is warned about when many emit`() {
+            val firstItem = IdSource.DomAttribute("[data-testid=ticket-item]:first-child", "data-id")
+            val campaign = campaign(tickets(firstItem))
+
+            issues(campaign).shouldBeEmpty()
+            val warning = validator.warnings(campaign).single()
+            warning.line shouldBe 40
+            warning.message shouldContain
+                "step 'ticket': {last_id} in its checks is the id of each tester's 'ticket_created' object, read from " +
+                "dom '[data-testid=ticket-item]:first-child' (data-id) (emits.id_from), but up to 6 testers emit it here"
+            warning.message shouldContain "a tester can read a colleague's object made at the same moment"
+            warning.message shouldContain "url_regex on the page it lands on, or an oracle path or dom selector naming the tester"
+            warning.message shouldContain "?by={self.email}"
+            // The target profile's source for the event counts the same, and so does a department, shared by colleagues.
+            val latest = IdSource.OracleField("/test/tickets/latest", "id")
+            validator.warnings(campaign(tickets(null), target = profile("ticket_created" to latest))).single().message shouldContain
+                "read from oracle '/test/tickets/latest' (id) (target_profile.id_sources.ticket_created)"
+            val sameDepartment = IdSource.OracleField("/test/tickets/latest?dept={self.department}", "id")
+            validator.warnings(campaign(tickets(sameDepartment))) shouldHaveSize 1
+        }
+
+        @Test
+        fun `last_id from a source scoped to the tester, one emitter, a race or checks without last_id say nothing`() {
+            listOf(
+                IdSource.OracleField("/test/tickets/latest?by={self.email}", "id"),
+                IdSource.DomAttribute("[data-author='{self.agent_id}']:first-child", "data-id"),
+                IdSource.UrlRegex("/tickets/([0-9]+)"),
+                IdSource.AgentReport,
+                null,
+            ).forEach { source -> validator.warnings(campaign(tickets(source))).shouldBeEmpty() }
+            val firstItem = IdSource.DomAttribute("[data-testid=ticket-item]:first-child", "data-id")
+            validator.warnings(campaign(tickets(firstItem, actor = "employee[dept=IT, n=1]"))).shouldBeEmpty()
+            validator
+                .warnings(
+                    campaign(tickets(firstItem, assertions = listOf(AssertionSpec.VisibleText("OK", 5.seconds)))),
+                ).shouldBeEmpty()
+            val race =
+                tickets(
+                    firstItem,
+                    actor = "manager[*]",
+                    assertions = ownTicket + AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/tickets")),
+                ).copy(parallel = true)
+            validator.warnings(campaign(race)).shouldBeEmpty()
+        }
     }
 
     @Test

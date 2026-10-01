@@ -46,6 +46,10 @@ import kotlin.time.Duration
  * - an event other steps wait for or name, emitted by a step up to several testers run, needs one emitter or a race;
  * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
  *
+ * [warnings] (never blocking): a `parallel` step with more actors than `campaign.pacing.max_parallel_actors`, and
+ * `{last_id}` in the checks of a step several testers emit whose id source can read a colleague's object (`dom`, or an
+ * oracle path that does not name the tester).
+ *
  * Issue lines come from [Campaign.sourceLines], falling back to [ScenarioStep.line].
  */
 class DefaultCampaignValidator(
@@ -91,28 +95,85 @@ class DefaultCampaignValidator(
             return issues.toList()
         }
 
+        /** Every step with its YAML path (`setup[0]`, `steps[3]`), in the order the run performs them. */
+        private val located: List<Pair<String, ScenarioStep>> =
+            campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
+                campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
+
+        /** Valid, but likely not what the owner meant (Faza 24.15), step by step: never blocks a run. */
+        fun warnings(): List<ValidationIssue> =
+            located.flatMap { (path, step) -> listOfNotNull(pacingWarning(path, step), sharedIdSourceWarning(path, step)) }
+
         /**
          * A `parallel` step (every race) starts all its actors at the same instant and so ignores
-         * `campaign.pacing.max_parallel_actors` (Faza 24.15): with more actors than the limit, the site may turn the
-         * extra ones away (429) exactly where the race needs every racer.
+         * `campaign.pacing.max_parallel_actors`: with more actors than the limit, the site may turn the extra ones away
+         * (429) exactly where the race needs every racer.
          */
-        fun warnings(): List<ValidationIssue> {
-            val limit = settings.pacing.maxParallelActors ?: return emptyList()
-            val located =
-                campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
-                    campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
-            return located.mapNotNull { (path, step) ->
-                val actors = maxMatches(step.actors)
-                if (!step.parallel || actors <= limit) return@mapNotNull null
-                val what = if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) "race" else "parallel step"
-                ValidationIssue(
-                    campaign.sourceLines.lineOf("$path.parallel") ?: campaign.sourceLines.lineOf(path) ?: step.line,
-                    "$what '${step.id}' starts up to $actors testers at the same instant, more than " +
-                        "campaign.pacing.max_parallel_actors ($limit): a parallel step ignores the limit so its actors start " +
-                        "together, and the site may refuse the extra ones (429); give it fewer actors or raise the limit",
-                )
-            }
+        private fun pacingWarning(
+            path: String,
+            step: ScenarioStep,
+        ): ValidationIssue? {
+            val limit = settings.pacing.maxParallelActors ?: return null
+            val actors = maxMatches(step.actors)
+            if (!step.parallel || actors <= limit) return null
+            val what = if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) "race" else "parallel step"
+            return ValidationIssue(
+                campaign.sourceLines.lineOf("$path.parallel") ?: step.line,
+                "$what '${step.id}' starts up to $actors testers at the same instant, more than " +
+                    "campaign.pacing.max_parallel_actors ($limit): a parallel step ignores the limit so its actors start " +
+                    "together, and the site may refuse the extra ones (429); give it fewer actors or raise the limit",
+            )
         }
+
+        /**
+         * `{last_id}` in the checks of a step that several testers emit is meant to be each tester's own object (Faza
+         * 24.6), but an id read from the tester's page (`dom`, e.g. the first item of a list) or from an oracle path
+         * that does not name the tester (`/test/tickets/latest`) can be a colleague's object made at the same moment:
+         * the check then tests the colleague's object twice and the tester's own never. Only a source scoped to the
+         * tester is safe: the URL the tester's own write led to (`url_regex`), a `dom` selector or oracle path with a
+         * placeholder naming the tester ([Placeholder.TESTER_SCOPED_SELF_FIELDS]), or the agent's own report. A race
+         * is left out: only its winner emits. An event other steps consume from several emitters is an error already.
+         */
+        private fun sharedIdSourceWarning(
+            path: String,
+            step: ScenarioStep,
+        ): ValidationIssue? {
+            val emits = step.emits ?: return null
+            if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) return null
+            val emitters = maxMatches(step.actors)
+            if (emitters < 2 || !usesLastIdInChecks(step)) return null
+            val own = emits.idSource
+            val source = own ?: campaign.target.idSource(emits.event) ?: return null
+            val read = sharedSourceText(source) ?: return null
+            val declared = if (own != null) "emits.id_from" else "target_profile.id_sources.${emits.event}"
+            return ValidationIssue(
+                campaign.sourceLines.lineOf(if (own != null) "$path.emits.id_from" else "$path.emits") ?: step.line,
+                "step '${step.id}': {last_id} in its checks is the id of each tester's '${emits.event}' object, read from " +
+                    "$read ($declared), but up to $emitters testers emit it here, so a tester can read a colleague's object " +
+                    "made at the same moment and check it instead of its own; read the id from the tester's own write: " +
+                    "url_regex on the page it lands on, or an oracle path or dom selector naming the tester, e.g. " +
+                    "/test/<objects>/latest?by={self.email}",
+            )
+        }
+
+        private fun usesLastIdInChecks(step: ScenarioStep): Boolean =
+            step.assertions
+                .flatMap(::assertionTemplates)
+                .flatMap { templates.placeholders(it) }
+                .any { Placeholder.parse(it) == Placeholder.LastId }
+
+        /** How [source] reads an id that need not be the tester's own (`dom '<selector>'`), or null when it is scoped to the tester. */
+        private fun sharedSourceText(source: IdSource): String? =
+            when (source) {
+                is IdSource.DomAttribute -> "dom '${source.selector}' (${source.attribute})".takeUnless { namesTester(source.selector) }
+                is IdSource.OracleField -> "oracle '${source.path}' (${source.field})".takeUnless { namesTester(source.path) }
+                is IdSource.UrlRegex, IdSource.AgentReport -> null
+            }
+
+        private fun namesTester(template: String): Boolean =
+            templates.placeholders(template).any {
+                (Placeholder.parse(it) as? Placeholder.Self)?.field in Placeholder.TESTER_SCOPED_SELF_FIELDS
+            }
 
         private fun report(
             path: String,
@@ -367,9 +428,6 @@ class DefaultCampaignValidator(
             if (campaign.allSteps.isEmpty()) report("steps", "the campaign has no setup or steps")
             val emittedBefore = LinkedHashSet<String>()
             val firstLineOfId = mutableMapOf<String, Int?>()
-            val located =
-                campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
-                    campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
             located.forEach { (path, step) ->
                 StepRules(path, step, emittedBefore.toSet()).check(firstLineOfId)
                 step.emits?.let { emittedBefore += it.event }
