@@ -14,7 +14,10 @@ package az.petek.orchestration.application
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserContextLostException
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.LookRequest
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageTiming
+import az.petek.browser.domain.Viewport
 import az.petek.browser.testing.FakeBrowserSession
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
@@ -28,10 +31,18 @@ class RestoringBrowserSessionTest {
     private val opened = mutableListOf<FakeBrowserSession>()
     private val restored = mutableListOf<String>()
 
+    /** What a session opened after a crash shows as its look. */
+    private var restoredLook: PageLook? = null
+
     private fun session(maxRestores: Int = 2) =
         RestoringBrowserSession(
             initial = LosingContext(first),
-            reopen = { FakeBrowserSession("a07").also { opened += it } },
+            reopen = {
+                FakeBrowserSession("a07").also {
+                    it.pageLook = restoredLook
+                    opened += it
+                }
+            },
             onRestored = { count, reason, url -> restored += "$count|$reason|$url" },
             maxRestores = maxRestores,
         )
@@ -47,7 +58,30 @@ class RestoringBrowserSessionTest {
                 throw BrowserContextLostException("Target crashed", e)
             }
         }
+
+        override suspend fun look(request: LookRequest): PageLook? {
+            try {
+                return fake.look(request)
+            } catch (e: BrowserActionException) {
+                throw BrowserContextLostException("Target crashed", e)
+            }
+        }
     }
+
+    private fun pageLook(path: String) =
+        PageLook(
+            shots = emptyList(),
+            viewport = Viewport(375, 812),
+            pageHeight = 2_310,
+            landedPath = path,
+            status = 200,
+            renderer = "chromium 153.0; Linux amd64; headless",
+            settled = true,
+            unsettled = emptyList(),
+            fonts = emptyList(),
+            anchors = emptyList(),
+            rejectedSelectors = emptyList(),
+        )
 
     @Test
     fun `what the page reports about itself comes from the browser underneath, never the interface's empty default`() =
@@ -56,6 +90,27 @@ class RestoringBrowserSessionTest {
             first.timing = timing
 
             session().pageTiming() shouldBe timing
+            val look = pageLook("/tickets")
+            first.pageLook = look
+            session().look(LookRequest()) shouldBe look
+        }
+
+    @Test
+    fun `a look is made again on the restored session`() =
+        runBlocking<Unit> {
+            val look = pageLook("/tickets/7")
+            restoredLook = look
+            first.lookFailure = BrowserActionException("Target crashed")
+            val session = session()
+            session.navigate("/tickets/7")
+            val request = LookRequest(loads = 1)
+
+            session.look(request) shouldBe look
+
+            first.lookRequests shouldContainExactly listOf(request)
+            opened.single().lookRequests shouldContainExactly listOf(request)
+            opened.single().actions shouldContainExactly listOf("navigate /tickets/7")
+            restored shouldContainExactly listOf("1|Target crashed|/tickets/7")
         }
 
     @Test
