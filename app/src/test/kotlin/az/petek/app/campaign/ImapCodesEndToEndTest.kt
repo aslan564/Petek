@@ -44,6 +44,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.Properties
 
 /**
@@ -101,7 +102,11 @@ class ImapCodesEndToEndTest {
 
             AppContainer(config, AppOverrides(llm = scriptedLlm { done() }, monitor = NoOpMonitorView)).use { container ->
                 val campaign = container.campaigns.execute(file, container.knownRunFunctions)
-                val summary = container.campaignRunner(headless = true).run(campaign, RunOptions())
+                val runner = container.campaignRunner(headless = true)
+                // Started just after a second begins, the owner's code (well under a second later on a warm machine)
+                // arrives within that same second, which the server keeps as the whole second: still found.
+                while (Instant.now().nano / NANOS_PER_MILLI !in START_WINDOW_MS) Thread.sleep(1)
+                val summary = runner.run(campaign, RunOptions())
 
                 val testers = container.identities.findByRun(summary.runId)
                 withClue("$summary\n${testers.map { "${it.agentId} ${it.status}" }}") {
@@ -145,6 +150,8 @@ class ImapCodesEndToEndTest {
         const val DOMAIN = "company.test"
         const val INBOX = "owner@$DOMAIN"
         const val PASSWORD = "imap-password-123"
+        const val NANOS_PER_MILLI = 1_000_000
+        val START_WINDOW_MS = 20..60
 
         /** An owner who signs up and seeds the company, a manager by invitation and an employee by the company code. */
         val CAMPAIGN =

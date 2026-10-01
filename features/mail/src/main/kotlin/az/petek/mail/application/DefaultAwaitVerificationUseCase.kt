@@ -30,7 +30,9 @@ private val logger = KotlinLogging.logger {}
  * Polls [mailbox] until a message satisfying the purpose arrives, then marks exactly that message read.
  *
  * Each poll looks at up to [candidatesPerPoll] of the newest unread messages received since `since` and takes the
- * newest usable one, so an unrelated newer mail (a welcome message after the code) does not hide the code. Messages
+ * newest usable one, so an unrelated newer mail (a welcome message after the code) does not hide the code. Which
+ * messages count as received since `since` is the mailbox's to say ([Mailbox.findRecent]): only it knows how precisely
+ * its server keeps arrivals (an IMAP server to the second), so its answer is never filtered by time again here. Messages
  * that do not satisfy the purpose are left unread: another step may still need them (the invitation link is read
  * after the code in some flows).
  *
@@ -110,7 +112,7 @@ class DefaultAwaitVerificationUseCase(
             val candidates =
                 mailbox
                     .findRecent(to, since, unreadOnly = true, limit = candidatesPerPoll)
-                    .filter { !it.read && !it.receivedAt.isBefore(since) }
+                    .filter { !it.read }
                     .sortedByDescending { it.receivedAt }
             for (message in candidates) {
                 val code = extract(message)

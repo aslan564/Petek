@@ -32,6 +32,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -64,6 +65,33 @@ class DefaultAwaitVerificationUseCaseTest {
             useCase.await(ELI, SINCE, MailPurpose.CODE).code shouldBe "482913"
 
             mailbox.polls shouldBe 1
+            currentTime shouldBe 0
+        }
+
+    @Test
+    fun `a code the mailbox keeps to the second is found when it came in the same second as the wait began`() =
+        runTest {
+            // Like an IMAP server: arrivals to the second, and a search from the start of the wait's second.
+            val seconds =
+                object : Mailbox by mailbox.fake {
+                    override suspend fun findRecent(
+                        to: String,
+                        since: Instant,
+                        unreadOnly: Boolean,
+                        limit: Int,
+                    ): List<MailMessage> =
+                        mailbox.fake
+                            .findRecent(to, since.truncatedTo(ChronoUnit.SECONDS), unreadOnly, limit)
+                            .map { it.copy(receivedAt = it.receivedAt.truncatedTo(ChronoUnit.SECONDS)) }
+                }
+            val waitBegan = SINCE.plusMillis(400)
+            mailbox.fake.deliver(codeMail("m1", "482913", at = SINCE.plusMillis(780)))
+
+            val result =
+                DefaultAwaitVerificationUseCase(seconds, DefaultVerificationExtractor())
+                    .await(ELI, waitBegan, MailPurpose.CODE, timeout = 5.seconds, pollInterval = 1.seconds)
+
+            result.code shouldBe "482913"
             currentTime shouldBe 0
         }
 
