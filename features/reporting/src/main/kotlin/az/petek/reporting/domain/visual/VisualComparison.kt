@@ -169,7 +169,8 @@ enum class BandKind { INSERTED, REMOVED }
  * Rows only one side has. [INSERTED][BandKind.INSERTED]: [y] and [height] in the current capture. [REMOVED][BandKind.REMOVED]:
  * [y] and [height] in the baseline, and [at] the current row where they were. [counted] when at least
  * [VisualThresholds.bandRows] of its rows were compared ([liveRows]) and it is neither the run's own content nor
- * [cutByLimit] (a band at the bottom of a capture that hit its height cap, which is the cap and not the page).
+ * [cutByLimit] (a band at the bottom of its own capture while the other capture hit its height cap, so its rows may be
+ * below that cap rather than missing from that page).
  */
 data class Band(
     val kind: BandKind,

@@ -16,7 +16,8 @@ import java.util.BitSet
 
 /**
  * Two captures as they are compared: cut to the same height when they were taken with different height caps, and
- * whether each one stops above the end of its page (a band at its bottom is then the cap, not the page).
+ * whether each one stops above the end of its page (rows at the other capture's bottom may then be below this one's
+ * cap, not missing from its page).
  */
 class CapturePair(
     val before: Raster,
@@ -87,7 +88,9 @@ class PixelDiffResult internal constructor(
  * Cells of [VisualThresholds.cell] pixels with [VisualThresholds.cellPixels] differing pixels are changed; touching
  * changed cells are regions, counted from [VisualThresholds.regionCells] cells unless the region meets the run's own
  * texts (either side's, the baseline's mapped through the alignment). Bands count from [VisualThresholds.bandRows]
- * compared rows, unless they are the run's own content or the bottom of a capture cut by its height cap.
+ * compared rows, unless they are the run's own content or a cap artifact: rows at the bottom of one capture that the
+ * other capture's height cap may have cut off (an inserted band at the current capture's bottom when the baseline was
+ * capped, a removed band at the baseline's bottom when the current capture was).
  */
 object PixelDiff {
     fun compare(
@@ -145,7 +148,7 @@ object PixelDiff {
             }
         val bands =
             alignment.bands.map { band ->
-                judged(band, before.height, height, width, ignoreBefore, ignoreAfter, runTextBefore, texts, beforeCapped || afterCapped, t)
+                judged(band, before.height, height, width, ignoreBefore, ignoreAfter, runTextBefore, texts, beforeCapped, afterCapped, t)
             }
         return PixelDiffResult(width, height, differing, cells, counted, regions, bands, compared, differingCount)
     }
@@ -278,7 +281,8 @@ object PixelDiff {
         ignoreAfter: PixelMask,
         runTextBefore: List<LookBox>,
         textsAfter: List<LookBox>,
-        capped: Boolean,
+        beforeCapped: Boolean,
+        afterCapped: Boolean,
         t: VisualThresholds,
     ): Band {
         val inserted = band.kind == BandKind.INSERTED
@@ -291,7 +295,13 @@ object PixelDiff {
             } else {
                 runTextBefore.any { meets(own, it) } || textsAfter.any { meets(LookBox(0, band.at - t.cell, width, 2 * t.cell), it) }
             }
-        val cutByLimit = capped && band.y + band.height >= (if (inserted) afterHeight else beforeHeight)
+        // A band's rows may be below the other capture's cap, not missing from the other page.
+        val cutByLimit =
+            if (inserted) {
+                beforeCapped && band.y + band.height >= afterHeight
+            } else {
+                afterCapped && band.y + band.height >= beforeHeight
+            }
         return band.copy(
             liveRows = liveRows,
             runContent = runContent,

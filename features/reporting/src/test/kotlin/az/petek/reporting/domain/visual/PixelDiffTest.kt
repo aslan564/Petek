@@ -20,6 +20,7 @@ import az.petek.reporting.LookTestData.blank
 import az.petek.reporting.LookTestData.inserted
 import az.petek.reporting.LookTestData.page
 import az.petek.reporting.LookTestData.painted
+import az.petek.reporting.LookTestData.removed
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
@@ -41,6 +42,25 @@ class PixelDiffTest {
     ): PixelDiffResult {
         val alignment = RowAlignment.align(before, after, ignoreBefore, ignoreAfter)
         return PixelDiff.compare(before, after, alignment, ignoreBefore, ignoreAfter, runTextBefore, runTextAfter, capped, capped, t)
+    }
+
+    /** Two captures as [CapturePair] cuts them, each side capped only when its page goes on below its capture. */
+    private fun diff(pair: CapturePair): PixelDiffResult {
+        val ignoreBefore = PixelMask.none(pair.before.width, pair.before.height)
+        val ignoreAfter = PixelMask.none(pair.after.width, pair.after.height)
+        val alignment = RowAlignment.align(pair.before, pair.after, ignoreBefore, ignoreAfter)
+        return PixelDiff.compare(
+            pair.before,
+            pair.after,
+            alignment,
+            ignoreBefore,
+            ignoreAfter,
+            emptyList(),
+            emptyList(),
+            pair.beforeCapped,
+            pair.afterCapped,
+            t,
+        )
     }
 
     @Test
@@ -173,5 +193,47 @@ class PixelDiffTest {
 
         result.bands.map { Triple(it.kind, it.counted, it.cutByLimit) } shouldContainExactly
             listOf(Triple(BandKind.INSERTED, true, false), Triple(BandKind.REMOVED, false, true))
+    }
+
+    @Test
+    fun `rows appended past the current capture's cap to a baseline captured whole are a counted band`() {
+        // The baseline page ends at 300 rows; the new release appends 200 rows, of which its 400-row cap keeps 100.
+        val before = page(40, 300)
+        val now = before.inserted(300, page(40, 200, seed = 5))
+        val pair = CapturePair.of(before, 300, 400, now.top(400), 500, 400)
+
+        val result = diff(pair)
+
+        (pair.beforeCapped to pair.afterCapped) shouldBe (false to true)
+        result.bands shouldContainExactly listOf(Band(BandKind.INSERTED, 300, 100, 300, counted = true))
+        result.changed shouldBe true
+    }
+
+    @Test
+    fun `rows removed from the end of a page whose baseline was cut by its cap are a counted band`() {
+        // The baseline page has 500 rows, captured to its 400-row cap; the new release drops its last 200 rows and is
+        // captured whole.
+        val page = page(40, 500)
+        val pair = CapturePair.of(page.top(400), 500, 400, page.top(300), 300, 400)
+
+        val result = diff(pair)
+
+        (pair.beforeCapped to pair.afterCapped) shouldBe (true to false)
+        result.bands shouldContainExactly listOf(Band(BandKind.REMOVED, 300, 100, 300, counted = true))
+        result.changed shouldBe true
+    }
+
+    @Test
+    fun `rows below the baseline's cap are not counted when the current page, captured whole, lost rows above them`() {
+        // The baseline page has 500 rows, captured to its 400-row cap; the new release drops 100 rows near the top, so
+        // its last 100 rows are the ones the baseline's cap cut off.
+        val page = page(40, 500)
+        val pair = CapturePair.of(page.top(400), 500, 400, page.removed(50, 100), 400, 400)
+
+        val result = diff(pair)
+
+        (pair.beforeCapped to pair.afterCapped) shouldBe (true to false)
+        result.bands.map { Triple(it.kind, it.counted, it.cutByLimit) } shouldContainExactly
+            listOf(Triple(BandKind.REMOVED, true, false), Triple(BandKind.INSERTED, false, true))
     }
 }
