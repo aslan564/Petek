@@ -25,6 +25,12 @@ data class VisualProfile(
         /** The most masks a profile may name. */
         const val MAX_MASKS = 50
 
+        /**
+         * How the profile's selector keys meant for masks start (`visual.clock`). A page has no `<visual>` element, so a
+         * mask written so is always a key: one that is not would match nothing.
+         */
+        const val KEY_PREFIX = "visual."
+
         val NONE = VisualProfile()
     }
 }

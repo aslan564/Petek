@@ -23,6 +23,7 @@ import kotlin.time.Duration
  * - `local_storage` keys and `dismiss` selectors are not blank, and `dismiss` selectors are not templates;
  * - `visual.mask` has at most [VisualProfile.MAX_MASKS] selector references, none blank or a template, and each stands
  *   for plain CSS: the page finds masks with `document.querySelectorAll`, never through Playwright ([CssSelectors]);
+ *   one named `visual.<name>` must be a selector key, since as CSS it would match nothing;
  * - flows have a known name ([FlowNames]) and steps; `verify_identity` contains an `assert_identity`;
  * - every selector reference is not blank, and one shaped like a key of a known group (`login.emial`) must be a key;
  * - `goto` is a path key, a `/path` on the target or a template; regular expressions compile; timeouts are positive
@@ -94,6 +95,18 @@ internal class TargetProfileRules(
             val at = "$PROFILE.visual.mask[$index]"
             if (ref.isBlank()) {
                 report(at, "$at: selector must not be blank")
+                return@forEachIndexed
+            }
+            // No page has a <visual> element: as CSS such a mask would match nothing and mask nothing, silently.
+            val prefix = VisualProfile.KEY_PREFIX
+            if (ref.trim().startsWith(prefix) && ref.trim() !in selectorKeys) {
+                val known = selectorKeys.filter { it.startsWith(prefix) }.sorted()
+                val keys = if (known.isEmpty()) "it has no $prefix* keys" else "its $prefix* keys: ${known.joinToString(", ")}"
+                report(
+                    at,
+                    "$at: '$ref' names a selector key, but $PROFILE.selectors has no such key ($keys); as CSS it would " +
+                        "match nothing, so nothing would be masked",
+                )
                 return@forEachIndexed
             }
             checkSelector(ref, at)

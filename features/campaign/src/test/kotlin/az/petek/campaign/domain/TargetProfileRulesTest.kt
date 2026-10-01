@@ -336,6 +336,29 @@ class TargetProfileRulesTest {
     }
 
     @Test
+    fun `a visual mask named like a visual key that the profile does not define is refused`() {
+        // No other visual.* key exists, so the group alone does not tell it apart from CSS; as CSS it would match nothing.
+        val forgotten = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf("visual.clock", ".ticker")))
+
+        single(
+            forgotten,
+            "target_profile.visual.mask[0]: 'visual.clock' names a selector key, but target_profile.selectors has no such key " +
+                "(it has no visual.* keys)",
+        )
+        val misspelt =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.clock" to "[data-testid=\"server-clock\"]"),
+                visual = VisualProfile(listOf("visual.clok", "visual.clock-face")),
+            )
+        messages(misspelt) shouldBe
+            listOf(0, 1).map { i ->
+                val ref = misspelt.visual.mask[i]
+                "target_profile.visual.mask[$i]: '$ref' names a selector key, but target_profile.selectors has no such key " +
+                    "(its visual.* keys: visual.clock); as CSS it would match nothing, so nothing would be masked"
+            }
+    }
+
+    @Test
     fun `a visual mask with a placeholder is refused`() {
         val target = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf(".ticker", "#hi-{self.agent_id}")))
 
