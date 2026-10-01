@@ -148,6 +148,7 @@ internal class StepExecutor(
         recordSkippedFailedActors(step)
         val chosen = resolver.resolve(step.actors, run.activeIdentities())
         run.executedActors.merge(step.id, chosen.map { it.agentId }) { before, now -> before + now }
+        run.stepChose(step.id, chosen.map { it.agentId })
         releaseWatches(step.id, keep = chosen.map { it.agentId }.toSet())
         if (chosen.isEmpty()) {
             run.stepHadNoTester(step.id)
@@ -217,6 +218,7 @@ internal class StepExecutor(
                 val reason = run.failureReason(it.agentId) ?: "failed"
                 val detail = "agent failed earlier ($reason)"
                 evidence.system(run, it.agentId, "skip", StepStatus.SKIPPED, detail, step.id)
+                run.settle(step.id, it.agentId)
                 tasks.update(step.id, it.agentId, TaskState.SKIPPED, detail)
             }
     }
@@ -474,6 +476,7 @@ internal class StepExecutor(
             Tally.FAIL,
             stepId = actor.stepId,
         )
+        run.settle(actor.step.id, actor.agentId)
         evidence.skippedAssertions(
             run,
             actor.stepId,
@@ -504,6 +507,7 @@ internal class StepExecutor(
             Tally.NONE,
             stepId = actor.stepId,
         )
+        run.settle(actor.step.id, actor.agentId)
     }
 
     /**
@@ -612,6 +616,7 @@ internal class StepExecutor(
             stepId = actor.stepId,
             endedAt = performed.endedAt,
         )
+        run.settle(actor.step.id, actor.agentId)
     }
 
     private suspend fun execute(

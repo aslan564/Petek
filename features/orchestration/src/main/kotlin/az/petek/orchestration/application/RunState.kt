@@ -18,6 +18,7 @@ import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.TextWatch
 import az.petek.campaign.domain.Campaign
+import az.petek.campaign.domain.ScenarioStep
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
@@ -180,6 +181,58 @@ internal class RunState(
     /** The agents each started step was run by (step id -> agent ids), as resolved when it started. */
     val executedActors = ConcurrentHashMap<String, List<AgentId>>()
 
+    /**
+     * Every execution of steps the run planned, in order (the roll call at the run's end reads it): the run without
+     * waves, or each wave, registered before anything runs, and the account swap when it begins.
+     */
+    val passes: MutableList<PlannedPass> = CopyOnWriteArrayList()
+
+    private val begunPasses: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /** The passes that began, by [PlannedPass.number]; a wave that never began is told apart in the roll call. */
+    fun passBegan(number: Int) {
+        begunPasses += number
+    }
+
+    fun hasBegun(number: Int): Boolean = number in begunPasses
+
+    /** Who each step started with, per pass: (pass, executed step id) -> the actors chosen then. */
+    private val chosen = ConcurrentHashMap<Pair<Int, String>, List<AgentId>>()
+
+    /** [stepId] started in the pass now running with [actors] (none when nobody matched). */
+    fun stepChose(
+        stepId: String,
+        actors: List<AgentId>,
+    ) {
+        chosen[pass to stepId] = actors
+    }
+
+    /** The actors [stepId] started with in pass [number]; null when it never started there. */
+    fun chosenIn(
+        number: Int,
+        stepId: String,
+    ): List<AgentId>? = chosen[number to stepId]
+
+    /** The actors of every execution of the step [baseId] (swap suffix removed); empty when it never started. */
+    fun executionsOf(baseId: String): List<List<AgentId>> =
+        chosen.entries.filter { it.key.second.removeSuffix(DefaultCampaignRunner.SWAP_SUFFIX) == baseId }.map { it.value }
+
+    private val settled: MutableSet<Triple<Int, String, AgentId>> = ConcurrentHashMap.newKeySet()
+
+    /** [agentId] has the final record of its part in [stepId] in the pass now running (its action, or why it had none). */
+    fun settle(
+        stepId: String,
+        agentId: AgentId,
+    ) {
+        settled += Triple(pass, stepId, agentId)
+    }
+
+    fun isSettled(
+        number: Int,
+        stepId: String,
+        agentId: AgentId,
+    ): Boolean = Triple(number, stepId, agentId) in settled
+
     /** Company ids already registered as run resources. */
     val companies: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
@@ -229,6 +282,25 @@ internal class RunState(
             else -> RunOutcome.PASSED
         }
 }
+
+/**
+ * One execution of steps the run planned: the whole run ([wave] null), one wave of [waves], or the account swap
+ * ([label] `swap`). [number] is the execution's `{pass}` ([RunState.pass] while it runs).
+ */
+internal class PlannedPass(
+    val number: Int,
+    val steps: List<PassStep>,
+    /** 1-based, when the run has waves. */
+    val wave: Int? = null,
+    val waves: Int? = null,
+    val label: String? = wave?.let { "wave $it" },
+)
+
+/** A step of a [PlannedPass] and the testers it resolves its actors against there ([RunState.wave] while it runs). */
+internal class PassStep(
+    val step: ScenarioStep,
+    val pool: List<Identity>,
+)
 
 /** How a recorded step counts in the run summary. */
 internal enum class Tally { PASS, FAIL, NONE }

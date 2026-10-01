@@ -36,9 +36,13 @@ import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
 import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
+import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.NotReached
+import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
@@ -84,14 +88,21 @@ private val logger = KotlinLogging.logger {}
  *    (see [StepExecutor] for what happens inside a step). In a `wait_for` step, `visible_text`/`latency_max` are
  *    checked as soon as the event arrives, before the receiver's own action, so t1 - t0 measures delivery rather
  *    than the agent; the other assertions run after the action;
- * 4. always — also on abort, budget timeout or cancellation — records the observed real-time transports, tears down
- *    the test company (unless `keepData`), closes sessions, stops the browser, finishes the run record and asks the
- *    [RunFinalizer] for the report.
+ * 4. always — also on abort, budget timeout or cancellation — records why the run stopped early and the roll call
+ *    (see "Nobody left out" below), the observed real-time transports, tears down the test company (unless
+ *    `keepData`), closes sessions, stops the browser, finishes the run record and asks the [RunFinalizer] for the
+ *    report.
  *
  * Setup semantics: an actor that fails a setup step is marked FAILED with the failure key and skipped (with a
  * SKIPPED record) in every later step; a successful sign-up/login step marks it ACTIVE
  * ([RunnerSettings.activatingRunFunctions], or any setup `do` step). If the admin fails a setup step nothing else
  * can work, so the run is ABORTED. `on_fail: abort` (step or campaign level) aborts after a failed step.
+ *
+ * Nobody left out: at the start the evidence gets the run's roster (every planned tester, `roster`). The runner plans
+ * every execution of the steps up front (the run, or each wave; the account swap when it begins) and, at the end, gives
+ * every planned tester × step without a final record of its own one `not_reached` record saying why (the run stopped,
+ * its wave never began, it was out since an earlier failure). The action names and their details are in the evidence
+ * domain ([ROSTER_ACTION], [ABORT_ACTION], [NOT_REACHED_ACTION]).
  *
  * Result: PASSED when no step and no assertion failed, FAILED otherwise, ABORTED on abort, budget timeout,
  * cancellation or an infrastructure error (which is recorded, logged and not rethrown; cancellation of the caller
@@ -197,6 +208,8 @@ class DefaultCampaignRunner(
                 planIdentities(run)
                 val waves = Waves.plan(run.campaign, run.identities, actors)
                 val live = waves?.maxLive ?: run.identities.size
+                planPasses(run, waves)
+                recordRoster(run)
                 val proxies = proxies(run)
                 if (settings.proxies.isNotEmpty() && proxies.isEmpty()) {
                     board.message(
@@ -269,6 +282,37 @@ class DefaultCampaignRunner(
         run.identities = plan.identities.sortedBy { it.agentId }
     }
 
+    /**
+     * Every execution of the steps this run will make, with the testers each step resolves its actors against there
+     * (the roll call at the end reads it): the run's single pass, or each wave as [runWaves] runs it.
+     */
+    private fun planPasses(
+        run: RunState,
+        waves: WavePlan?,
+    ) {
+        if (waves == null) {
+            run.passes += PlannedPass(1, run.campaign.allSteps.map { PassStep(it, run.identities) })
+            run.passBegan(1)
+            return
+        }
+        waves.waves.forEachIndexed { index, wave ->
+            val steps =
+                if (index == 0) {
+                    run.campaign.allSteps.map { PassStep(it, waves.live(0)) }
+                } else {
+                    val later = waveSteps(run, wave)
+                    later.setup.map { PassStep(it, wave) } + later.again.map { PassStep(it, waves.live(index)) }
+                }
+            run.passes += PlannedPass(index + 1, steps, wave = index + 1, waves = waves.waves.size)
+        }
+    }
+
+    /** The run's roster (`100 testers: a01, a02, ...`), so a report can set who was planned against who acted. */
+    private suspend fun recordRoster(run: RunState) {
+        val testers = run.identities.map { it.agentId.value }
+        evidence.system(run, null, ROSTER_ACTION, StepStatus.PASSED, "${testers.size} testers: ${testers.joinToString(", ")}")
+    }
+
     // --- 2. browser and agents ------------------------------------------------------------------------------------
 
     /**
@@ -290,6 +334,7 @@ class DefaultCampaignRunner(
         val residents = plan.residents
         for ((index, wave) in plan.waves.withIndex()) {
             if (run.aborted) break
+            run.passBegan(index + 1)
             val live = plan.live(index).map { it.agentId }.toSet()
             // `{pass}`: every wave publishes its own texts; a carried setup event keeps the pass it was written in.
             run.pass = index + 1
@@ -307,10 +352,11 @@ class DefaultCampaignRunner(
             } else {
                 startAgents(run, board, wave, announce = false, firstProxy = residents.size)
                 // The residents set up in the first wave; this wave's testers set up on their own, then everyone acts.
+                val later = waveSteps(run, wave)
                 run.wave = wave.map { it.agentId }.toSet()
-                runSteps(run, board, tasks, run.campaign.setup.filter { step -> actors.resolve(step.actors, wave).isNotEmpty() })
+                runSteps(run, board, tasks, later.setup)
                 run.wave = live
-                val (again, done) = run.campaign.steps.partition { step -> repeats(step, wave, run.campaign) }
+                val done = later.done
                 if (done.isNotEmpty()) {
                     evidence.system(
                         run,
@@ -321,7 +367,7 @@ class DefaultCampaignRunner(
                             "alone, with no event of this wave, so the first wave did it already",
                     )
                 }
-                runSteps(run, board, tasks, again)
+                runSteps(run, board, tasks, later.again)
             }
             if (index < plan.waves.lastIndex) {
                 val leaving = wave.map { it.agentId }.toSet()
@@ -334,6 +380,25 @@ class DefaultCampaignRunner(
                 }
             }
         }
+    }
+
+    /** What a wave after the first runs: [setup] with its own testers, then [again] with everyone live; [done] is not repeated. */
+    private class LaterWave(
+        val setup: List<ScenarioStep>,
+        val again: List<ScenarioStep>,
+        val done: List<ScenarioStep>,
+    )
+
+    /**
+     * The steps of a wave after the first, for its own testers [wave]: the setup steps any of them acts in, and the main
+     * steps that [repeats] (the others the first wave did already).
+     */
+    private fun waveSteps(
+        run: RunState,
+        wave: List<Identity>,
+    ): LaterWave {
+        val (again, done) = run.campaign.steps.partition { step -> repeats(step, wave, run.campaign) }
+        return LaterWave(run.campaign.setup.filter { step -> actors.resolve(step.actors, wave).isNotEmpty() }, again, done)
     }
 
     /**
@@ -389,6 +454,11 @@ class DefaultCampaignRunner(
             return
         }
         val factory = run.factory ?: return
+        // Planned before any account moves, so a swap that stops half-way still accounts for every swapped tester.
+        val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
+        val swap = run.pass + 1
+        run.passes += PlannedPass(swap, again.map { PassStep(it, finished) }, label = "swap")
+        run.passBegan(swap)
         (active - finished.toSet()).forEach {
             evidence.system(run, it.agentId, "swap_accounts", StepStatus.SKIPPED, "${it.agentId} failed a main step and sits out the swap")
         }
@@ -413,10 +483,9 @@ class DefaultCampaignRunner(
             openSite(run, account.agentId)
         }
         board.message("accounts swapped among ${finished.size} testers; the main steps run again")
-        val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
         run.wave = finished.map { it.agentId }.toSet()
         // `{pass}`: the swap writes new texts, so the first pass's, still on the pages, are not taken for them.
-        run.pass += 1
+        run.pass = swap
         try {
             runSteps(run, board, tasks, again)
         } finally {
@@ -681,6 +750,7 @@ class DefaultCampaignRunner(
         run.abortedBecause?.let { reason ->
             safely(run, "abort record") { recordAbort(run, reason, board) }
         }
+        safely(run, "roll call") { rollCall(run) }
         tasks.closeOpen(run.abortedBecause?.let { "run aborted: $it" } ?: "not run")
         safely(run, "network observation") { recordNetworkObservations(run) }
         safely(run, "company registration") {
@@ -719,18 +789,80 @@ class DefaultCampaignRunner(
         return summary
     }
 
+    /**
+     * Why the run stopped and which steps never began: per wave when the run has waves (`wave 4: read, approve`), since
+     * a step that began in the first wave may never have begun in the fourth.
+     */
     private suspend fun recordAbort(
         run: RunState,
         reason: String,
         board: AgentBoard,
     ) {
         val notRun =
-            run.campaign.allSteps
-                .map { it.id }
-                .filterNot { it in run.startedSteps }
-        val detail = "run aborted: $reason; steps not run: ${notRun.joinToString(", ").ifEmpty { "-" }}"
-        evidence.system(run, null, "abort", StepStatus.SKIPPED, detail)
+            if (run.passes.isEmpty()) {
+                // Stopped before the passes were planned (the identities could not be made): nothing began.
+                listOf(run.campaign.allSteps.joinToString(", ") { it.id })
+            } else {
+                run.passes.mapNotNull { pass ->
+                    val steps = pass.steps.map { it.step.id }.filter { run.chosenIn(pass.number, it) == null }
+                    when {
+                        steps.isEmpty() -> null
+                        pass.label == null -> steps.joinToString(", ")
+                        else -> "${pass.label}: ${steps.joinToString(", ")}"
+                    }
+                }
+            }.filter { it.isNotEmpty() }
+        val detail = "run aborted: $reason; steps not run: ${notRun.joinToString("; ").ifEmpty { "-" }}"
+        evidence.system(run, null, ABORT_ACTION, StepStatus.SKIPPED, detail)
         board.message(detail)
+    }
+
+    /**
+     * The roll call: every tester each planned pass had for a step (the actors it started with, or would have started
+     * with when it never began, and the testers out since an earlier failure) that has no final record of its own for
+     * it gets a `not_reached` record saying why, so nobody planned is missing from the evidence ([NotReached]). A gap
+     * in a run that went on to its end is Pətək's own and counts as a failed step (with no agent).
+     */
+    private suspend fun rollCall(run: RunState) {
+        val aborted = run.abortedBecause
+        for (pass in run.passes) {
+            for (planned in pass.steps) {
+                val stepId = planned.step.id
+                val chosen = run.chosenIn(pass.number, stepId)
+                val acting =
+                    chosen ?: actors.resolve(planned.step.actors, planned.pool.filterNot { run.isFailed(it.agentId) }).map { it.agentId }
+                val failed = actors.resolve(planned.step.actors, planned.pool).map { it.agentId }.filter(run::isFailed)
+                (acting + failed)
+                    .distinct()
+                    .sorted()
+                    .filterNot { run.isSettled(pass.number, stepId, it) }
+                    .forEach { agentId ->
+                        val why =
+                            when {
+                                agentId !in acting -> {
+                                    "${NotReached.FAILED_EARLIER}: ${run.failureReason(agentId) ?: "failed"}"
+                                }
+
+                                chosen == null && pass.wave != null && !run.hasBegun(pass.number) -> {
+                                    "${NotReached.WAVE_NOT_STARTED}: wave ${pass.wave} of ${pass.waves} never began; run aborted: $aborted"
+                                }
+
+                                aborted != null -> {
+                                    "${NotReached.RUN_ABORTED}: $aborted"
+                                }
+
+                                else -> {
+                                    "${NotReached.NEVER_REACHED}: the run went on, but $agentId has no record of step '$stepId'"
+                                }
+                            }
+                        evidence.system(run, agentId, NOT_REACHED_ACTION, StepStatus.SKIPPED, why, stepId)
+                        if (aborted == null && agentId in acting) {
+                            logger.warn { "run ${run.runId}: $agentId has no record of step '$stepId' in pass ${pass.number}" }
+                            run.tally.step(Tally.FAIL, null)
+                        }
+                    }
+            }
+        }
     }
 
     /** One record per agent (of [only], when given); reporting reads the comma-separated transports from `detail`. */
