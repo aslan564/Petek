@@ -21,13 +21,19 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.StepContext
+import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.LookRequest
+import az.petek.browser.domain.LookShotKind
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageTiming
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * One execution of a run function: the browser primitives it may use, each recorded as a RUN step
@@ -188,6 +194,42 @@ internal class RunTrace(
         return timing
     }
 
+    /**
+     * Takes a look of the current page ([page], on [device]) for comparing releases (`site_health`'s `look`) and keeps
+     * it: its frames as visual artifacts of this sub-action, then the page look record ([StepEvidence.pageLook]). A
+     * look never fails the step: one the session cannot take, that the browser refuses or that takes longer than
+     * [LOOK_TIMEOUT] is a SKIPPED sub-action saying why, and null is returned.
+     */
+    suspend fun look(
+        page: String,
+        device: String?,
+        request: LookRequest,
+    ): PageLook? {
+        val description = "look at $page" + (device?.let { " ($it)" } ?: "")
+        val started = evidence.now()
+        subActions++
+
+        suspend fun notCaptured(why: String): PageLook? {
+            record(description, started, StepStatus.SKIPPED, withNote("not captured: $why", session.dialogNote()))
+            return null
+        }
+
+        val taken =
+            try {
+                // Wrapped, so a session that cannot take a look (null) is told apart from the time running out (null).
+                withTimeoutOrNull(LOOK_TIMEOUT) { Taken(session.look(request)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BrowserActionException) {
+                return notCaptured(errorDetail(e) ?: e::class.simpleName.orEmpty())
+            } ?: return notCaptured("timed out after $LOOK_TIMEOUT")
+        val look = taken.look ?: return notCaptured("this session cannot take looks")
+        if (look.shots.none { it.kind == LookShotKind.MAIN }) return notCaptured("the browser gave no main frame")
+        record(description, started, StepStatus.PASSED, withNote(LookNotes.of(look, page), session.dialogNote()))
+        lastStepId?.let { evidence.pageLook(runtime, step, it, page, device, look, request.maxHeight) }
+        return look
+    }
+
     /** Unrecorded visibility check, for polling loops that would otherwise flood the evidence. */
     suspend fun isVisible(ref: String): Boolean = session.isSelectorVisible(selector(ref))
 
@@ -238,7 +280,15 @@ internal class RunTrace(
         lastStepId = evidence.record(runtime, step, StepKind.RUN, "$function: $description", null, started, status, detail)
     }
 
-    private companion object {
-        const val MAX_SELECTOR_CHARS = 80
+    /** What [BrowserSession.look][az.petek.browser.domain.BrowserSession.look] gave, null included. */
+    private class Taken(
+        val look: PageLook?,
+    )
+
+    companion object {
+        private const val MAX_SELECTOR_CHARS = 80
+
+        /** The longest a look may take: two loads of a long page settle and are captured well within it. */
+        val LOOK_TIMEOUT = 30.seconds
     }
 }

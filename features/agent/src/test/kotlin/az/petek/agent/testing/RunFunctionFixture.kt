@@ -16,6 +16,7 @@ import az.petek.agent.application.runs.RunFunctionSettings
 import az.petek.agent.application.runs.RunFunctions
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActorShare
+import az.petek.browser.domain.BrowserSession
 import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.TargetProfile
 import az.petek.core.testing.FakeHarnessClock
@@ -45,6 +46,8 @@ class RunFunctionFixture(
     settings: RunFunctionSettings = RunFunctionSettings(),
     target: TargetProfile = TargetProfile.DEFAULT,
     contractSite: Boolean = true,
+    /** The agent's session around the plain [browser] (without [contractSite]), e.g. one that answers some calls itself. */
+    session: (FakeBrowserSession) -> BrowserSession = { it },
 ) {
     val clock = FakeHarnessClock()
     val verification = FakeVerification()
@@ -54,7 +57,7 @@ class RunFunctionFixture(
     val shared = InMemorySharedRunState()
     val evidence = InMemoryEvidence()
     val artifacts = InMemoryArtifactStore()
-    val runtime = AgentTestData.runtime(if (contractSite) site else browser, identity, roster, shared, target = target)
+    val runtime = AgentTestData.runtime(if (contractSite) site else session(browser), identity, roster, shared, target = target)
     val registry =
         RunFunctions.standard(
             oracle = oracleOverride?.invoke(oracle) ?: oracle,
