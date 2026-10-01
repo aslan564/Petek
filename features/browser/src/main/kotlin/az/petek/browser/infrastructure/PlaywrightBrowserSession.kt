@@ -483,11 +483,14 @@ internal class PlaywrightBrowserSession private constructor(
     /**
      * A look of the current page ([LookRequest]), one load at a time ([lookOnce]); the second load opens the page's
      * address again. The look's facts are those read with the first load's final frame ([LookShotKind.MAIN]); it settled
-     * when every load did. Null when the page went to another address during a load.
+     * when every load did. Null when the page went to another address during a load, or the second load did not show
+     * the first one's page (it landed elsewhere, or the site answered it with another status): its frame would pass for
+     * the page drawn again. The page is then left where it went.
      */
     override suspend fun look(request: LookRequest): PageLook? {
         val first = lookOnce(request, reload = false) ?: return null
         val again = if (request.loads > 1) lookOnce(request, reload = true) ?: return null else null
+        if (again != null && !again.showsPageOf(first)) return null
         val main = first.shot(first.final, LookShotKind.MAIN)
         val shots =
             buildList {
@@ -520,7 +523,8 @@ internal class PlaywrightBrowserSession private constructor(
      *    same PNG), at most three: the last is the load's frame, and when the third still differs from the second, the
      *    second is kept as the earlier frame of a page that keeps moving by itself;
      * 3. the page read by `look-read.js` (facts, areas and anchors) with that frame.
-     * The waits between frames run outside the session thread. Null when the page went to another address meanwhile.
+     * The waits between frames run outside the session thread. Null when the page went to another address meanwhile:
+     * after settling, or (second load) since it was opened again.
      */
     private suspend fun lookOnce(
         request: LookRequest,
@@ -528,7 +532,8 @@ internal class PlaywrightBrowserSession private constructor(
     ): LookLoad? {
         val settled =
             perform("settle the page for a look") {
-                if (reload) loadAgain()
+                // A second load that a redirect, or the page itself, takes to another address is no load of this page.
+                val opened = if (reload) withoutQuery(page.url()).also { loadAgain() } else null
                 try {
                     page.waitForLoadState(LoadState.NETWORKIDLE, Page.WaitForLoadStateOptions().setTimeout(NETWORK_IDLE_WAIT_MS))
                 } catch (_: TimeoutError) {
@@ -545,6 +550,8 @@ internal class PlaywrightBrowserSession private constructor(
                         "stepMs" to LOOK_SCROLL_STEP_MS,
                     )
                 val raw = surviveNavigation { page.evaluate(BundledScripts.lookSettle, arguments) } as? Map<*, *> ?: emptyMap<String, Any>()
+                val address = page.url()
+                if (opened != null && withoutQuery(address) != opened) return@perform null
 
                 fun number(key: String) = (raw[key] as? Number)?.toInt() ?: 0
                 LookSettled(
@@ -556,9 +563,9 @@ internal class PlaywrightBrowserSession private constructor(
                         ),
                     pageHeight = number("pageHeight"),
                     viewport = page.viewportSize()?.let { Viewport(it.width, it.height) } ?: Viewport(number("width"), number("height")),
-                    address = page.url(),
+                    address = address,
                 )
-            }
+            } ?: return null
         val options = lookShotOptions(request.maxHeight, settled.viewport, settled.pageHeight)
         val first = perform("take a look") { page.screenshot(options) }
         delay(LOOK_FRAME_GAP)
@@ -716,6 +723,13 @@ internal class PlaywrightBrowserSession private constructor(
         val viewport: Viewport,
         val renderer: String,
     ) {
+        /**
+         * This (second) load showed [first]'s page: it was read on the same path, and the site answered it with the same
+         * status, when the browser reported both.
+         */
+        fun showsPageOf(first: LookLoad): Boolean =
+            facts.path == first.facts.path && (facts.status == null || first.facts.status == null || facts.status == first.facts.status)
+
         /** [png] as a frame of [kind], with this load's areas fitted to its own size. */
         fun shot(
             png: ByteArray,

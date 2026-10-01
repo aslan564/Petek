@@ -1000,6 +1000,23 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `a look whose second load lands on another page gives no look`() =
+        withSession { session ->
+            session.navigate("/look/once/moved")
+
+            session.look(LookRequest(maxHeight = 0, settle = 1.seconds)).shouldBeNull()
+        }
+
+    @Test
+    fun `a look whose second load answers with another status gives no look`() =
+        withSession { session ->
+            // The same page again, but refused: its frame alone would pass for the first load's.
+            session.navigate("/look/once/refused")
+
+            session.look(LookRequest(maxHeight = 0, settle = 1.seconds)).shouldBeNull()
+        }
+
+    @Test
     fun `a look keeps the reloaded frame of a page that changes on every load`() =
         withSession { session ->
             session.navigate("/look/still")

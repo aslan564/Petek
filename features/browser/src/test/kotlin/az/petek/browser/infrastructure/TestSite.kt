@@ -67,6 +67,9 @@ internal class TestSite : AutoCloseable {
     /** How often `/look/random` was asked for: each answer shows another number. */
     private val randomLoads = AtomicInteger()
 
+    /** The `/look/once/{how}` addresses already answered once. */
+    private val answeredOnce = ConcurrentHashMap.newKeySet<String>()
+
     private val server =
         embeddedServer(CIO, host = "127.0.0.1", port = 0) {
             install(SSE)
@@ -180,7 +183,11 @@ internal class TestSite : AutoCloseable {
             }
         }.start(wait = false)
 
-    /** Pages for looks (`BrowserSession.look`): still, moving, masked, tall, lazy, random and redirected ones. */
+    /**
+     * Pages for looks (`BrowserSession.look`): still, moving, masked, tall, lazy, random and redirected ones, and ones
+     * that answer only their first visit (`/look/once/moved`: then a redirect to `/look/still`; `/look/once/refused`:
+     * then the same page with 429).
+     */
     private fun Routing.lookPages() {
         get("/look/still") { call.respondText(LOOK_STILL_PAGE, ContentType.Text.Html) }
         get("/look/clock") { call.respondText(LOOK_CLOCK_PAGE, ContentType.Text.Html) }
@@ -200,6 +207,14 @@ internal class TestSite : AutoCloseable {
             call.respondText(LOOK_RANDOM_PAGE.replace("NUMBER", number.toString()), ContentType.Text.Html)
         }
         get("/look/wandering") { call.respondText(LOOK_WANDERING_PAGE, ContentType.Text.Html) }
+        get("/look/once/{how}") {
+            val how = call.parameters["how"].orEmpty()
+            when {
+                answeredOnce.add(how) -> call.respondText(LOOK_STILL_PAGE, ContentType.Text.Html)
+                how == "moved" -> call.respondRedirect("/look/still")
+                else -> call.respondText(LOOK_STILL_PAGE, ContentType.Text.Html, HttpStatusCode.TooManyRequests)
+            }
+        }
         get("/look/old") { call.respondRedirect("/look/missing") }
         get("/look/missing") { call.respondText(LOOK_MISSING_PAGE, ContentType.Text.Html, HttpStatusCode.NotFound) }
     }
