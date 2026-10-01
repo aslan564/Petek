@@ -37,6 +37,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -461,6 +462,51 @@ class RunCommandTest {
             result.stderr shouldContain
                 "Warning: with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so " +
                 "step 'second_manager' (line 15) is never performed."
+        }
+
+    @Test
+    fun `a run whose testers sign in with the owner's accounts previews them for its warnings and starts`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to "owner-writer-pass"))
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/notes.yaml"),
+                """
+                target:
+                  name: notes
+                  url: ${CliHarness.UNUSED_TARGET}
+                  tenant: none
+                  test_api: {mode: none}
+                  accounts:
+                    - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                """.trimIndent() + "\n",
+            )
+            cli.write(
+                "login.yaml",
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 3
+                  seed: 12
+                  roles: {writer: 2, reader: 1}
+                  registration: {self: 1, login: 1, guest: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 3}
+                setup:
+                  - id: gates
+                    actor: [writer[*], reader]
+                    run: register_and_login
+                steps:
+                  - id: who-am-i
+                    actor: writer[*]
+                    run: verify_identity
+                """,
+            )
+
+            val result = cli.run("run", "login.yaml")
+
+            result.stderr shouldNotContain "Identity registry cannot be built"
+            result.stdout shouldContain "Running 'notes-login' with 3 agents"
         }
 
     @Test

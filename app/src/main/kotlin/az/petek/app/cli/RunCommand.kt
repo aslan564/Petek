@@ -200,14 +200,22 @@ class RunCommand : PetekSubcommand("run") {
         return scaled
     }
 
-    /** The identities a run of [campaign] will plan, generated ahead for the warnings (nothing is stored). */
+    /**
+     * The identities a run of [campaign] will plan, generated ahead for the warnings (nothing is stored): with the
+     * owner's accounts the runner gives its `login` testers, without which such a registry cannot be built at all.
+     */
     private fun previewIdentities(
         container: AppContainer,
         campaign: Campaign,
     ): List<Identity> =
         container.identityGenerator
             .generate(
-                IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
+                IdentitySpecs.of(
+                    campaign.settings,
+                    container.config.mailDomain,
+                    container.config.mailInbox,
+                    container.ownAccountsFor(campaign.settings.target),
+                ),
                 RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
             ).identities
 

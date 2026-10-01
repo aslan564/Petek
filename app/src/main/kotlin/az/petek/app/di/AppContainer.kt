@@ -460,9 +460,10 @@ class AppContainer(
 
     /**
      * The owner's accounts for [site] that `login` testers may take (Faza 18): its profile's accounts with an e-mail and
-     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17).
+     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17). The runner
+     * plans its testers with them, and `petek run` previews the same registry for its warnings.
      */
-    private fun ownAccountsFor(site: URI): List<GivenAccount> =
+    internal fun ownAccountsFor(site: URI): List<GivenAccount> =
         config
             .profileFor(site)
             ?.accounts
