@@ -456,6 +456,9 @@ internal object PanelJson {
             strings("stillFailing", view.stillFailing)
             strings("slower", view.slower)
             strings("notComparable", view.notComparable)
+            strings("looksChanged", view.looksChanged)
+            strings("looksNotComparable", view.looksNotComparable)
+            put("visualGate", view.visualGate)
             put("pageUrl", view.pageUrl)
         }
 

@@ -42,7 +42,7 @@ the same use cases:
 | Approve or freeze a scenario version (the owner decides) | panel → Təsdiqlə / Dondur | `approve_scenario`, `freeze_scenario` |
 | Run a campaign | `petek [--json] run scenarios/<file>.yaml [--testers N] [--repeat N] [--release <site release>] [--ci]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
 | Read the findings with their evidence | `petek [--json] report <run_id>`, `petek --json findings <run_id>` (or `latest`) | `get_findings`, `get_finding_bundle`, `get_evidence`, `get_triage`, `run_triage` |
-| Compare a run with an earlier run or release of its scenario (what broke, got fixed, got slower) | `petek [--json] compare <run_id> [--baseline previous\|<run_id>\|<release>]` (or `latest`) | `compare_runs` |
+| Compare a run with an earlier run or release of its scenario (what broke, got fixed, got slower, which pages look different) | `petek [--json] compare <run_id> [--baseline previous\|<run_id>\|<release>] [--visual report\|fail]` (or `latest`) | `compare_runs` (`visual`) |
 | Remove the test data a run created | `petek [--json] teardown --run <run_id>` | `teardown` |
 
 Writes (tests, exploration with writes, runs, approvals, teardown) need an MCP session started with

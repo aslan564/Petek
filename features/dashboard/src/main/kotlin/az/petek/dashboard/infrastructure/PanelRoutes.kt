@@ -165,7 +165,13 @@ private fun Route.runRoutes(backend: PanelBackend) {
     // Against an earlier run of the scenario (`?baseline=previous|<run id>|<release>`), written beside its report.
     get("/api/runs/{runId}/compare") {
         call.answer {
-            PanelJson.comparison(backend.compare(RunId(call.id("runId")), call.request.queryParameters["baseline"]?.trim()))
+            PanelJson.comparison(
+                backend.compare(
+                    RunId(call.id("runId")),
+                    call.request.queryParameters["baseline"]?.trim(),
+                    call.request.queryParameters["visual"]?.trim(),
+                ),
+            )
         }
     }
     get("/api/stability") {

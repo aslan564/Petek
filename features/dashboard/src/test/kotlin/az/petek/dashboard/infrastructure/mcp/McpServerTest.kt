@@ -199,6 +199,7 @@ class McpServerTest {
                     override suspend fun compare(
                         runId: RunId,
                         baseline: String?,
+                        visual: String?,
                     ): ComparisonView {
                         compared += runId to baseline
                         return ComparisonView(

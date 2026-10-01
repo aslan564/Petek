@@ -70,6 +70,8 @@ import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.reporting.domain.StepChange
+import az.petek.reporting.domain.visual.VisualGate
+import az.petek.reporting.infrastructure.LookLines
 import az.petek.scenarios.application.TriageItem
 import az.petek.scenarios.domain.CodeTriage
 import az.petek.scenarios.domain.EvidenceRefType
@@ -282,7 +284,14 @@ internal class PanelRunsAdapter(
     override suspend fun compare(
         runId: RunId,
         baseline: String?,
+        visual: String?,
     ): ComparisonView {
+        val gate =
+            when {
+                visual.isNullOrBlank() || visual.equals("report", ignoreCase = true) -> VisualGate.REPORT
+                visual.equals("fail", ignoreCase = true) -> VisualGate.FAIL
+                else -> throw PanelRequestException(listOf(FieldProblem("visual", "Görünüş qapısı \"report\" və ya \"fail\" olur.")))
+            }
         val choice =
             when {
                 baseline.isNullOrBlank() ||
@@ -298,7 +307,7 @@ internal class PanelRunsAdapter(
             }
         val comparison =
             try {
-                container.compareRuns.compare(runId, choice).comparison
+                container.compareRuns.compare(runId, choice, gate).comparison
             } catch (e: RunNotFoundException) {
                 throw PanelNotFoundException("Run tapılmadı: ${e.message}")
             } catch (e: ComparisonRefusedException) {
@@ -319,6 +328,9 @@ internal class PanelRunsAdapter(
             notComparable = comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep },
             // The page of this very pair: opening it never compares again, or with another baseline.
             pageUrl = "/runs/${runId.value}/report/compare-${comparison.baseline.runId.value}.html",
+            looksChanged = LookLines.changed(comparison),
+            looksNotComparable = LookLines.notComparable(comparison),
+            visualGate = gate.name.lowercase(),
         )
     }
 

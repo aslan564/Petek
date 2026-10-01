@@ -427,15 +427,25 @@ internal class McpTools(
                 name = "compare_runs",
                 description =
                     "A finished run against an earlier run of its scenario (another release of the site): the steps the site " +
-                        "broke, fixed and still fails, and what it made slower. baseline: 'previous' (default), a run id, or a " +
-                        "release named when the run started.",
+                        "broke, fixed and still fails, what it made slower, and which pages look different on which screen " +
+                        "(where the scenario took page looks). baseline: 'previous' (default), a run id, or a release named when " +
+                        "the run started.",
                 schema = {
                     string("runId", "run id", required = true)
                     string("baseline", "'previous', a run id, or a release name")
+                    string(
+                        "visual",
+                        "'report' (default): a page that looks different is shown, not counted as worse; 'fail': it makes the " +
+                            "comparison worse",
+                    )
                 },
             ) { args ->
                 PanelJson.comparison(
-                    backend.compare(RunId(args.stringArgument("runId")!!), args.stringArgument("baseline", required = false)),
+                    backend.compare(
+                        RunId(args.stringArgument("runId")!!),
+                        args.stringArgument("baseline", required = false),
+                        args.stringArgument("visual", required = false),
+                    ),
                 )
             },
             Tool(

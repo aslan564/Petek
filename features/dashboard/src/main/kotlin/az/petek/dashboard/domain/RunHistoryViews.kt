@@ -148,6 +148,12 @@ data class ComparisonView(
     val slower: List<String>,
     val notComparable: List<String>,
     val pageUrl: String,
+    /** Pages that look different on a screen (docs/adr/0014), one line each. */
+    val looksChanged: List<String> = emptyList(),
+    /** Page looks that could not be compared, with why. */
+    val looksNotComparable: List<String> = emptyList(),
+    /** `report` (a changed look is shown, not worse) or `fail` (it is worse). */
+    val visualGate: String = "report",
 )
 
 /** A run the backend accepted; it goes on in the background and shows up on the live board. */

@@ -17,6 +17,7 @@ import az.petek.dashboard.application.LiveDashboard
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelNotFoundException
+import az.petek.dashboard.domain.PanelRequestException
 import az.petek.dashboard.domain.PanelUnavailableException
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
@@ -48,8 +49,9 @@ import java.nio.file.Path
  * - `GET /report/report.pdf` and `GET /runs/{runId}/report/report.pdf` — the report as a PDF, printed when asked for
  *   ([PanelBackend.reportPdf]) and sent as a download;
  * - `GET /runs/{runId}/report/compare.html` — the run against an earlier run of its scenario (`?baseline=`, by default
- *   the previous one): compared when asked for ([PanelBackend.compare]) and redirected to that pair's own page
- *   (`compare-<baseline run>.html`, served like any report file); why not, when the pair cannot be compared.
+ *   the previous one; `?visual=fail` counts a page that looks different as worse): compared when asked for
+ *   ([PanelBackend.compare]) and redirected to that pair's own page (`compare-<baseline run>.html`, served like any
+ *   report file, its pictures under `visual/`); why not, when the pair cannot be compared.
  */
 internal fun Route.fileRoutes(
     dashboard: LiveDashboard,
@@ -91,7 +93,9 @@ internal fun Route.fileRoutes(
         val runId = call.historyRun() ?: return@get call.notFound()
         val compared =
             try {
-                backend.compare(runId, call.request.queryParameters["baseline"]?.trim())
+                backend.compare(runId, call.request.queryParameters["baseline"]?.trim(), call.request.queryParameters["visual"]?.trim())
+            } catch (e: PanelRequestException) {
+                return@get call.respondText(e.message.orEmpty(), status = HttpStatusCode.BadRequest)
             } catch (e: PanelConflictException) {
                 call.response.header(HttpHeaders.CacheControl, "no-store")
                 return@get call.respondText(e.message.orEmpty(), status = HttpStatusCode.Conflict)

@@ -14,6 +14,7 @@ package az.petek.app.cli
 import az.petek.app.testing.CliHarness
 import az.petek.app.testing.FakeBrowserEngine
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -121,6 +122,25 @@ class CompareCommandTest {
                 it.stderr shouldContain "run_mistyped"
             }
             cli.run("compare", "latest", "--baseline", "run_mistyped").statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+        }
+
+    @Test
+    fun `the visual gate is report or fail, and runs without page looks compare as before`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            val (_, second) = twoReleases(cli)
+
+            cli.run("compare", second, "--visual", "sideways").let {
+                it.statusCode shouldNotBe ExitCodes.OK
+                it.stderr shouldContain "--visual"
+            }
+            cli.run("--json", "compare", second, "--visual", "fail").let { result ->
+                val document = Json.parseToJsonElement(result.stdout.substring(result.stdout.indexOf('{'))).jsonObject
+                document["visualGate"]!!.jsonPrimitive.content shouldBe "fail"
+                document["looks"]!!.jsonArray.size shouldBe 0
+                // The regression comes from the step the site broke, not from a look.
+                result.statusCode shouldBe ExitCodes.FAILURE
+            }
         }
 
     private companion object {

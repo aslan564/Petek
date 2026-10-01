@@ -112,6 +112,7 @@ import az.petek.ownership.infrastructure.InetHostLocality
 import az.petek.ownership.infrastructure.SqliteOwnershipLedger
 import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
+import az.petek.reporting.application.CompareLooks
 import az.petek.reporting.application.CompareRunsUseCase
 import az.petek.reporting.application.ExportReportPdfUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
@@ -123,6 +124,7 @@ import az.petek.reporting.infrastructure.ComparisonHtmlWriter
 import az.petek.reporting.infrastructure.ComparisonMarkdownWriter
 import az.petek.reporting.infrastructure.CustomerSummaryWriter
 import az.petek.reporting.infrastructure.HtmlReportWriter
+import az.petek.reporting.infrastructure.ImageIoRasterCodec
 import az.petek.reporting.infrastructure.JUnitReportWriter
 import az.petek.reporting.infrastructure.LogFileTraceSource
 import az.petek.reporting.infrastructure.MarkdownReportWriter
@@ -432,7 +434,14 @@ class AppContainer(
      * 2026-09-30): `petek compare`, the panel and MCP `compare_runs`; written as `compare-<baseline run>.html` and `.md`.
      */
     val compareRuns: CompareRunsUseCase by lazy {
-        CompareRunsUseCase(runs, evidenceQuery, artifacts, listOf(ComparisonHtmlWriter(), ComparisonMarkdownWriter()))
+        CompareRunsUseCase(
+            runs,
+            evidenceQuery,
+            artifacts,
+            listOf(ComparisonHtmlWriter(), ComparisonMarkdownWriter()),
+            // How the pages look, pixel by pixel with the JDK's own PNG codec (docs/adr/0014).
+            looks = CompareLooks(artifacts, ImageIoRasterCodec()),
+        )
     }
 
     /** What the runner calls after each run: flush LLM usage, then judge and write the report. */

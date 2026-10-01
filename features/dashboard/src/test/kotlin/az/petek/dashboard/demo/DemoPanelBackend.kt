@@ -801,6 +801,7 @@ class DemoPanelBackend(
     override suspend fun compare(
         runId: RunId,
         baseline: String?,
+        visual: String?,
     ): ComparisonView =
         lock.withLock {
             val run = runList.firstOrNull { it.runId == runId } ?: throw PanelNotFoundException("Run tapılmadı: ${runId.value}")

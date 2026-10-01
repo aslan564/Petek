@@ -101,6 +101,7 @@ class UnavailablePanelBackend(
     override suspend fun compare(
         runId: RunId,
         baseline: String?,
+        visual: String?,
     ): ComparisonView = unavailable()
 
     override suspend fun findings(runId: RunId): List<FindingView> = emptyList()

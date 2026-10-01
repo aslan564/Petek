@@ -149,6 +149,9 @@ class PanelHttpTest {
                 it["release"]!!.jsonPrimitive.content shouldBe "v1.4.2"
                 it["pageUrl"]!!.jsonPrimitive.content shouldBe pairPage
             }
+            json(get("/api/runs/${second.value}/compare?visual=fail")).jsonObject["visualGate"]!!.jsonPrimitive.content shouldBe "fail"
+            get("/api/runs/${second.value}/compare?visual=sideways").statusCode() shouldBe 400
+            get("/runs/${second.value}/report/compare.html?visual=sideways").statusCode() shouldBe 400
             // The entry page compares when asked for and sends the browser to that pair's own page.
             get("/runs/${second.value}/report/compare.html?baseline=${runId.value}").let {
                 it.statusCode() shouldBe 302
