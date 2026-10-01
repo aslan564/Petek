@@ -79,6 +79,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
 
@@ -596,20 +597,24 @@ class DefaultCampaignRunner(
                     apiOrigin = api,
                 )
             val stored = storageStatePath(run.runId, agentId)
-            val signedIn = options.copy(storageState = stored.takeIf(Files::isRegularFile))
+
+            // Looked up when the session opens, never before: the tester signs in (and saves its state) after this.
+            fun signedIn() = options.copy(storageState = stored.takeIf(Files::isRegularFile))
+            val restoredWith = AtomicReference<Path?>(null)
             val session =
                 RestoringBrowserSession(
-                    initial = factory.open(if (restoreSession) signedIn else options),
-                    // Same identity, and still signed in when it had signed in: its saved storage state (rule 7).
-                    reopen = { factory.open(signedIn) },
+                    initial = factory.open(if (restoreSession) signedIn() else options),
+                    // Same identity, and still signed in when it has signed in by now: its saved storage state (rule 7).
+                    reopen = { factory.open(signedIn().also { restoredWith.set(it.storageState) }) },
                     onRestored = { count, reason, url ->
                         val back = url?.let { ", back on $it" }.orEmpty()
+                        val state = if (restoredWith.get() != null) STORAGE_STATE_LOADED else NO_STORAGE_STATE
                         evidence.system(
                             run,
                             agentId,
-                            "restore_session",
+                            RESTORE_SESSION,
                             StepStatus.PASSED,
-                            "browser context lost ($reason); restored ($count) with the same identity and its storage state$back",
+                            "browser context lost ($reason); restored ($count) with the same identity, $state$back",
                         )
                     },
                 )
@@ -981,6 +986,19 @@ class DefaultCampaignRunner(
     companion object {
         /** `action` of the SYSTEM step that carries a session's detected real-time transports. */
         const val NETWORK_OBSERVATION = "network_observation"
+
+        /**
+         * `action` of the SYSTEM step that records a tester's browser context restored after a crash. Detail:
+         * `browser context lost (<reason>); restored (<n>) with the same identity, <state>[, back on <url>]`, where
+         * `<state>` is [STORAGE_STATE_LOADED] or [NO_STORAGE_STATE].
+         */
+        const val RESTORE_SESSION = "restore_session"
+
+        /** The restored context was opened with the storage state the tester saved when it signed in. */
+        const val STORAGE_STATE_LOADED = "storage state loaded"
+
+        /** The tester had saved no storage state yet (it had not signed in), so the restored context starts signed out. */
+        const val NO_STORAGE_STATE = "no storage state loaded (none saved yet)"
 
         /** Suffix of the scenario steps run again after the account swap. */
         const val SWAP_SUFFIX = "@swap"
