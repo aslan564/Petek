@@ -75,6 +75,15 @@ const val COVERAGE_ACTION = "scenario_coverage"
 const val ROSTER_ACTION = "roster"
 
 /**
+ * The action of the harness step (agent id null) that records, at a run's start, how many testers this machine is
+ * advised to carry at once (`petek capacity`), when the caller knew it. It never changes a verdict: a run within the
+ * advice is PASSED, one over it SKIPPED (neutral). Detail, with a leading key:
+ * `within_capacity: <live> testers at once (<total> in the run); this machine is advised for up to <advice> at once`, or
+ * `over_capacity: ...` with the same numbers and a note that slow pages and late screens may come from the machine.
+ */
+const val CAPACITY_ACTION = "capacity"
+
+/**
  * The action of the harness step (agent id null, SKIPPED) of a run that stopped early. Detail:
  * `run aborted: <reason>; steps not run: <steps>`, where `<steps>` lists the steps that never began, per wave when the
  * run had waves (`wave 4: read, approve; wave 5: join, read, approve`), `-` when every step began. The reason may itself

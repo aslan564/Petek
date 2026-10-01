@@ -38,6 +38,7 @@ import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
 import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.ArtifactStore
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.NOT_REACHED_ACTION
@@ -99,12 +100,13 @@ private val logger = KotlinLogging.logger {}
  * ([RunnerSettings.activatingRunFunctions], or any setup `do` step). If the admin fails a setup step nothing else
  * can work, so the run is ABORTED. `on_fail: abort` (step or campaign level) aborts after a failed step.
  *
- * Nobody left out: at the start the evidence gets the run's roster (every planned tester, `roster`). The runner plans
- * every execution of the steps up front (the run, or each wave; the account swap when it begins) and, at the end, gives
- * every planned tester × step without a final record of its own one `not_reached` record saying why (the run stopped,
- * its wave never began, it was out since an earlier failure); a step that no tester ran in any execution gets an
- * agent-less `uncovered` record that counts as a failed step, so the run cannot pass with it. The action names and their
- * details are in the evidence domain ([ROSTER_ACTION], [ABORT_ACTION], [NOT_REACHED_ACTION], [UNCOVERED_ACTION]).
+ * Nobody left out: at the start the evidence gets the run's roster (every planned tester, `roster`) and, when the caller
+ * knew it, this machine's capacity next to the run's size (`capacity`, no verdict). The runner plans every execution of
+ * the steps up front (the run, or each wave; the account swap when it begins) and, at the end, gives every planned
+ * tester × step without a final record of its own one `not_reached` record saying why (the run stopped, its wave never
+ * began, it was out since an earlier failure); a step that no tester ran in any execution gets an agent-less `uncovered`
+ * record that counts as a failed step, so the run cannot pass with it. The action names and their details are in the
+ * evidence domain ([ROSTER_ACTION], [CAPACITY_ACTION], [ABORT_ACTION], [NOT_REACHED_ACTION], [UNCOVERED_ACTION]).
  *
  * Result: PASSED when no step and no assertion failed, FAILED otherwise, ABORTED on abort, budget timeout,
  * cancellation or an infrastructure error (which is recorded, logged and not rethrown; cancellation of the caller
@@ -211,7 +213,7 @@ class DefaultCampaignRunner(
                 val waves = Waves.plan(run.campaign, run.identities, actors)
                 val live = waves?.maxLive ?: run.identities.size
                 planPasses(run, waves)
-                recordRoster(run)
+                recordRoster(run, board, live)
                 val proxies = proxies(run)
                 if (settings.proxies.isNotEmpty() && proxies.isEmpty()) {
                     board.message(
@@ -309,10 +311,26 @@ class DefaultCampaignRunner(
         }
     }
 
-    /** The run's roster (`100 testers: a01, a02, ...`), so a report can set who was planned against who acted. */
-    private suspend fun recordRoster(run: RunState) {
+    /**
+     * The run's roster (`100 testers: a01, a02, ...`) and, when the caller knew this machine's capacity, the run's size
+     * next to it: [live] testers at once (waves keep it below the whole run). Neither changes a verdict.
+     */
+    private suspend fun recordRoster(
+        run: RunState,
+        board: AgentBoard,
+        live: Int,
+    ) {
         val testers = run.identities.map { it.agentId.value }
         evidence.system(run, null, ROSTER_ACTION, StepStatus.PASSED, "${testers.size} testers: ${testers.joinToString(", ")}")
+        val advice = run.options.capacityAdvice ?: return
+        val numbers = "$live testers at once (${testers.size} in the run); this machine is advised for up to $advice at once"
+        if (live <= advice) {
+            evidence.system(run, null, CAPACITY_ACTION, StepStatus.PASSED, "$WITHIN_CAPACITY: $numbers")
+        } else {
+            val detail = "$OVER_CAPACITY: $numbers, so slow pages and late screens may come from this machine, not from the site"
+            evidence.system(run, null, CAPACITY_ACTION, StepStatus.SKIPPED, detail)
+            board.message(detail)
+        }
     }
 
     // --- 2. browser and agents ------------------------------------------------------------------------------------
@@ -969,5 +987,9 @@ class DefaultCampaignRunner(
 
         /** A `wait_for` step no receiver could wait for in any wave: its check was never made (Faza 24.7). */
         const val NOT_COVERED = "not_covered"
+
+        /** Leading keys of the `capacity` record's detail (see [CAPACITY_ACTION]). */
+        const val WITHIN_CAPACITY = "within_capacity"
+        const val OVER_CAPACITY = "over_capacity"
     }
 }

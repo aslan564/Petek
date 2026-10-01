@@ -20,6 +20,7 @@ import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.Pacing
 import az.petek.core.model.Role
 import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.NOT_REACHED_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.StepKind
@@ -51,8 +52,8 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Nobody planned is left out of the evidence: the roster at the start, a `not_reached` record for every planned
- * tester × step without a final record of its own at the end (waves included), the abort reason per wave, and a step
- * nobody ran counted against the run.
+ * tester × step without a final record of its own at the end (waves included), the abort reason per wave, the machine's
+ * capacity next to the run's size, and a step nobody ran counted against the run.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RunnerRollCallTest {
@@ -199,6 +200,37 @@ class RunnerRollCallTest {
 
             f.rollCall() shouldContainExactly
                 listOf("a02", "a03").map { Triple("read@swap", it, "run_aborted: time budget of 1 min exceeded") }
+        }
+
+    @Test
+    fun `the machine's capacity is recorded next to the run's size and changes no verdict`() =
+        runTest {
+            val within = fixture()
+            within.runner().run(
+                campaign(managers = 0, employees = 3, steps = listOf(step("read", employees()))),
+                RunOptions(capacityAdvice = 4),
+            )
+            val over = fixture()
+
+            val summary =
+                over.runner().run(
+                    campaign(managers = 0, employees = 4, steps = listOf(step("read", employees()))).inWavesOf(2),
+                    RunOptions(capacityAdvice = 2),
+                )
+
+            within.system(CAPACITY_ACTION).single().let {
+                it.status shouldBe StepStatus.PASSED
+                it.detail shouldBe "within_capacity: 4 testers at once (4 in the run); this machine is advised for up to 4 at once"
+            }
+            // Waves keep three live at once (the admin and a wave of two): still one more than advised.
+            over.system(CAPACITY_ACTION).single().let {
+                it.status shouldBe StepStatus.SKIPPED
+                it.detail shouldBe
+                    "over_capacity: 3 testers at once (5 in the run); this machine is advised for up to 2 at once, so slow " +
+                    "pages and late screens may come from this machine, not from the site"
+            }
+            summary.outcome shouldBe RunOutcome.PASSED
+            fixture().apply { runner().run(campaign(steps = listOf(step("read", employees())))) }.system(CAPACITY_ACTION).shouldBeEmpty()
         }
 
     @Test

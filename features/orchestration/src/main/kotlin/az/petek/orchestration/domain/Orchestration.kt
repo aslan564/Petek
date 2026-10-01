@@ -242,6 +242,12 @@ data class RunOptions(
     val ownSite: Boolean = false,
     /** The site's release this run tests, as the owner names it (`--release`); stored with the run for comparing releases. */
     val release: String? = null,
+    /**
+     * How many testers this machine is advised to carry at once (`petek capacity`), when the caller knows it. Recorded
+     * as evidence at the run's start next to the run's own count (`capacity`), so a run over it is never silent; it
+     * changes no verdict. Null: not known, nothing recorded.
+     */
+    val capacityAdvice: Int? = null,
 )
 
 enum class RunOutcome { PASSED, FAILED, ABORTED }
