@@ -40,8 +40,9 @@ the same use cases:
 | See what the explorer could not decide, answer it | panel → Naməlumlar | `list_unknowns`, `answer_unknown` |
 | Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan` |
 | Approve or freeze a scenario version (the owner decides) | panel → Təsdiqlə / Dondur | `approve_scenario`, `freeze_scenario` |
-| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N] [--ci] [--json]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
+| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N] [--release <site release>] [--ci] [--json]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
 | Read the findings with their evidence | `petek report <run_id> [--json]`, `petek findings <run_id> --json` (or `latest`) | `get_findings`, `get_finding_bundle`, `get_evidence`, `get_triage`, `run_triage` |
+| Compare a run with an earlier run or release of its scenario (what broke, got fixed, got slower) | `petek compare <run_id> [--baseline previous\|<run_id>\|<release>] [--json]` (or `latest`) | `compare_runs` |
 | Remove the test data a run created | `petek teardown --run <run_id> [--json]` | `teardown` |
 
 Writes (tests, exploration with writes, runs, approvals, teardown) need an MCP session started with

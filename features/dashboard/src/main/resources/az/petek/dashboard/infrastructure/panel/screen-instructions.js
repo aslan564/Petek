@@ -236,7 +236,7 @@
 
   async function run(button) {
     clearErrors();
-    const body = { scenarioId: ui.scenario.value || null, testers: form.testers, headful: ui.headful.checked, target: form.target.trim() || null };
+    const body = { scenarioId: ui.scenario.value || null, testers: form.testers, headful: ui.headful.checked, target: form.target.trim() || null, release: ui.release.value.trim() || null };
     const res = await P.busy(button, () => P.api.post('/api/runs', body));
     if (!res.ok) { showProblems(res.problems); P.toast(res.error, 'error'); return; }
     P.toast('Run başladı: ' + res.data.runId, 'ok');
@@ -422,6 +422,8 @@
     ui.jobs = h('div', { class: 'stack', hidden: true });
     ui.scenario = h('select', { class: 'select', attrs: { 'aria-label': 'Ssenari' } });
     ui.headful = h('input', { attrs: { type: 'checkbox' } });
+    // The site's release this run tests: runs of a scenario are compared by it on the Reports screen.
+    ui.release = h('input', { class: 'input', attrs: { type: 'text', maxlength: '64', placeholder: 'məs. v1.4.2', 'aria-label': 'Saytın versiyası' } });
     const testBtn = P.button('Test et', { kind: 'primary block', icon: 'play', on: (e) => testSite(e.currentTarget) });
     const exploreBtn = P.button('Kəşf et', { kind: 'block', icon: 'explorer', on: (e) => explore(e.currentTarget) });
     const generateBtn = P.button('Ssenari yarat', { kind: 'block', icon: 'sparkles', on: (e) => generate(e.currentTarget) });
@@ -435,6 +437,7 @@
       h('div', 'action-block', exploreBtn, h('div', { class: 'help', text: 'Kəşfiyyatçı saytı gəzir, sayt modelini qurur, suallar verir və test ideyaları təklif edir.' })),
       h('div', 'action-block', generateBtn, h('div', { class: 'help', text: 'Son kəşfiyyatın modelindən ssenari layihəsi (YAML) hazırlanır; təsdiqdən sonra run oluna bilər.' })),
       field('scenario', 'Təsdiqlənmiş ssenari', ui.scenario),
+      field('release', 'Saytın versiyası (istəyə bağlı, versiyaları müqayisə üçün)', ui.release),
       h('label', 'switch', ui.headful, h('span', { text: 'Brauzerləri göstər (headful)' })),
       h('div', 'action-block', ui.runBtn, h('div', { class: 'help', text: 'Seçilmiş ssenari yuxarıdakı tester sayı ilə işə düşür; gedişatı "Agentlər" və "Orkestrator" göstərir.' })));
 

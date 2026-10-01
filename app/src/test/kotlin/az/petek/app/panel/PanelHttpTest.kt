@@ -129,6 +129,33 @@ class PanelHttpTest {
                 it.headers().firstValue("Content-Disposition").get() shouldContain "petek-${runId.value}.pdf"
             }
             get("/runs/run_unknown/report/report.pdf").statusCode() shouldBe 404
+            // The first run of the scenario has nothing to be compared with; a second one, of a named release, has.
+            get("/api/runs/${runId.value}/compare").let {
+                it.statusCode() shouldBe 409
+                it.body() shouldContain "əvvəlki, bitmiş run-ı yoxdur"
+            }
+            get("/runs/${runId.value}/report/compare.html").statusCode() shouldBe 409
+            post("/api/runs", """{"scenarioId":"$approved","testers":2,"release":"v 1"}""").statusCode() shouldBe 400
+            val second =
+                RunId(
+                    json(post("/api/runs", """{"scenarioId":"$approved","testers":2,"release":"v1.4.2"}"""))
+                        .jsonObject["runId"]!!
+                        .jsonPrimitive.content,
+                )
+            panel.ended(second)
+            json(get("/api/runs/${second.value}/compare")).jsonObject.let {
+                it["baseline"]!!.jsonPrimitive.content shouldBe runId.value
+                it["release"]!!.jsonPrimitive.content shouldBe "v1.4.2"
+                it["pageUrl"]!!.jsonPrimitive.content shouldBe "/runs/${second.value}/report/compare.html"
+            }
+            get("/runs/${second.value}/report/compare.html").let {
+                it.statusCode() shouldBe 200
+                it.body() shouldContain "Versiyaların müqayisəsi"
+            }
+            json(get("/api/runs")).jsonArray.first().jsonObject.let {
+                it["release"]!!.jsonPrimitive.content shouldBe "v1.4.2"
+                it["compareUrl"]!!.jsonPrimitive.content shouldBe "/runs/${second.value}/report/compare.html"
+            }
             post("/api/runs", """{"scenarioId":"$approved","target":"portal.example"}""").statusCode() shouldBe 400
             post("/api/runs/cancel").body() shouldBe """{"cancelled":false}"""
         }

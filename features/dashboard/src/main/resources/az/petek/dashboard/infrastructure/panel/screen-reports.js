@@ -32,7 +32,7 @@
       h('thead', null, h('tr', null, ['Tarix', 'Kampaniya', 'Nəticə', 'Müddət', 'Addımlar', 'Yoxlamalar', 'Tapıntı', 'Token / xərc', ''].map((t) => h('th', { text: t })))),
       h('tbody', null, runs.map((r) => h('tr', { data: { run: r.runId } },
         td('Tarix', h('div', { class: 'nowrap', text: fmt.date(r.startedAtMs) }), r.repeatGroup ? h('div', { class: 'run-sub nowrap', text: r.repeatGroup + ' · #' + r.repeatIndex }) : null),
-        td('Kampaniya', h('div', { class: 'run-name', text: r.campaignName }), h('div', { class: 'run-sub', text: fmt.host(r.target) + ' · ' + r.testers + ' tester' })),
+        td('Kampaniya', h('div', { class: 'run-name', text: r.campaignName }), h('div', { class: 'run-sub', text: fmt.host(r.target) + ' · ' + r.testers + ' tester' + (r.release ? ' · versiya ' + r.release : '') })),
         td('Nəticə', resultBadge(r.result)),
         td('Müddət', h('span', { class: 'num nowrap', text: r.durationMs === null ? '—' : P.fmt.duration(r.durationMs) })),
         td('Addımlar', h('span', { class: 'num nowrap' }, h('span', { style: { color: 'var(--green)' }, text: '✓ ' + fmt.int(r.stepsPassed) }), '  ', h('span', { style: { color: r.stepsFailed ? 'var(--red)' : 'var(--faint)' }, text: '✗ ' + fmt.int(r.stepsFailed) }))),
@@ -42,6 +42,7 @@
         td('', h('div', 'row-actions',
           r.reportUrl ? h('a', { class: 'btn small', title: 'HTML hesabatı aç', attrs: { href: r.reportUrl, target: '_blank', rel: 'noopener', 'aria-label': 'Hesabatı aç' } }, P.icon('file', 'sm'), h('span', { text: 'Hesabat' })) : null,
           r.pdfUrl ? h('a', { class: 'btn small', title: 'Hesabatı PDF kimi yüklə', attrs: { href: r.pdfUrl, download: '', 'aria-label': 'PDF yüklə' } }, P.icon('download', 'sm'), h('span', { text: 'PDF' })) : null,
+          r.compareUrl ? h('a', { class: 'btn small', title: 'Bu ssenarinin əvvəlki run-ı ilə müqayisə: nə sındı, nə düzəldi, nə yavaşladı', attrs: { href: r.compareUrl, target: '_blank', rel: 'noopener', 'aria-label': 'Əvvəlki run ilə müqayisə et' } }, P.icon('compare', 'sm'), h('span', { text: 'Müqayisə' })) : null,
           r.result !== 'RUNNING'
             ? h('button', { class: 'btn small' + (r.triaged ? '' : ' ghost'), title: r.triaged ? 'Triaja bax' : 'Triaj et', attrs: { type: 'button', 'aria-label': r.triaged ? 'Triaja bax' : 'Triaj et' }, on: { click: () => P.go('ssenariler', { run: r.runId }) } }, P.icon('flag', 'sm'))
             : null))))))));

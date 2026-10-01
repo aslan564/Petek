@@ -94,7 +94,7 @@ campaign you write yourself runs the same way (`petek run scenarios/<campaign>.y
 
 | Area | Today |
 |---|---|
-| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts`, `report`, `findings`, `teardown`, `probe`, `mcp` |
+| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts --release`, `report`, `compare`, `findings`, `teardown`, `probe`, `mcp` |
 | Web panel | Instructions, Explorer, Scenarios (draft → approve → freeze, diff, triage), Orchestrator task matrix, live Agents board with screenshots, Reports and stability |
 | Explorer | Learns a site model (pages, forms, actions, roles, realtime, unknowns) in three phases, asks the owner about unknowns, derives test ideas, drafts a campaign |
 | Triage | Sorts a run's surprises into system bug / model gap / scenario bug and proposes scenario v2 as a reviewable diff |
@@ -354,7 +354,12 @@ latency, cost), `summary.html` (the customer layer: one page of short sentences 
 model, and the evidence tiers, to send around), `junit.xml` (steps as test cases) and `findings.sarif` (findings for code
 scanning). The report as a PDF (`report.pdf`) is printed when you ask for it, by the same Chromium the testers use (no
 extra library): **PDF** on the panel's Reports screen or **PDF yüklə** in `index.html` (the panel prints it on the spot;
-a report opened from the disk has it once `petek report <run|latest> --pdf` printed it). `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
+a report opened from the disk has it once `petek report <run|latest> --pdf` printed it). Releases are compared too:
+name the site's release when a run starts (`petek run --release v1.4.2`, or the panel's "Saytın versiyası"), then
+`petek compare <run|latest>` (or **Müqayisə** on the Reports screen) sets the run against the previous run of its
+scenario, a named run or a release (`--baseline`) and writes `compare.html` and `compare.md`: what the site broke, fixed
+and still fails, and what it made slower (real-time delivery and the deterministic `run` steps; an AI step's time is
+mostly the AI's). Exit code 1 when something got worse, for CI. `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
 templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (and MCP
 `get_finding_bundle`) gives your coding AI each finding with its step, request and response, oracle answer and screenshot
 path, so it can look for the cause in your code.
@@ -370,14 +375,15 @@ over stdio (hand-rolled JSON-RPC, no extra dependency; `initialize`, `ping`, `to
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
 `approve_scenario`, `freeze_scenario`, `run_campaign` (with `wait`), `cancel_run`, `list_runs`, `get_run_status`,
 `get_findings` (A/B/C sources and evidence ids), `get_finding_bundle` (a finding with its step, request, answer and screenshot, for root cause), `get_evidence` (absolute path of a screenshot or capture), `get_triage`,
-`run_triage`, `get_stability`, `teardown`. A session is read-only unless started with `petek mcp --allow-writes`:
+`run_triage`, `get_stability`, `compare_runs` (a run against an earlier run or release of its scenario), `teardown`. A session is
+read-only unless started with `petek mcp --allow-writes`:
 tests, runs, approvals, teardown and exploration with writes are refused otherwise, and the target policy applies as
 everywhere. Every result carries the panel's JSON as text and structured content; a failure is an `isError` result with
 the panel's message. Without a configuration the server still answers the handshake, and every tool tells the host AI
 to ask you which site to test.
 
 `petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `verify`, `test`, `plan`, `run`,
-`report`, `findings`, `teardown`, `capacity`, `probe` and `smoke` (logs stay on stderr; a failure is `{"error": ...}`
+`report`, `compare`, `findings`, `teardown`, `capacity`, `probe` and `smoke` (logs stay on stderr; a failure is `{"error": ...}`
 with the usual exit code), for scripts and CI.
 
 ## Architecture

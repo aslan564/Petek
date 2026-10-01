@@ -944,6 +944,17 @@ nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
   **Vəziyyət:** `PETEK_CORRELATION_HEADER` (default söndürülü: başlıq cross-origin sorğuda CORS preflight yaradır), hər addım öz ID-si ilə; `TraceSource` portu, `LogFileTraceSource` (`PETEK_TRACE_LOG`); OpenTelemetry adapteri ödənişli/sonra.
 - [ ] Regressiya baseline: release-lər arası dondurulmuş ssenari nəticə fərqi (yeni/düzələn/yavaşlayan); vizual
   regressiya (screenshot fərqi); əlçatanlıq və performans ölçüləri (Playwright içindən) ayrıca bölmə.
+  **Vəziyyət (2026-10-01):** nəticə fərqi hazırdır. Run-a saytın versiyası verilir (`petek run --release v1.4.2`,
+  panelin "Saytın versiyası", MCP `run_campaign.release`; `run.release` sütunu); `petek compare <run|latest>
+  [--baseline previous|<run>|<versiya>]`, panelin Hesabatlar ekranında **Müqayisə** və MCP `compare_runs` run-ı
+  ssenarisinin əvvəlki run-ı (öz `--repeat` qrupundan kənar), adlı run və ya versiya ilə tutuşdurur, run-ın hesabatının
+  yanına `compare.html` və `compare.md` yazır (`CompareRunsUseCase`, `RunComparer`). Addım hər run-da sabitlik cədvəli
+  kimi qiymətləndirilir (`StepOutcomes`): yeni sınan, düzələn, hələ də sınıq, əvvəl yoxlanmamış amma indi sınıq;
+  tester və ya mühitin itirdiyi addım "müqayisə olunmur" sayılır, heç vaxt reqressiya deyil. Sürət yalnız saytın
+  təyin etdiyi yerdə: canlı çatdırılma (hadisə adına görə p95) və deterministik `run` addımları (aktorlar üzrə
+  median), 25%-dən çox və ən azı 300 ms; AI addımının vaxtı tutuşdurulmur. Pisləşibsə exit 1, müqayisə olunmursa 2.
+  `RunComparerTest`, `CompareRunsUseCaseTest`, `CompareCommandTest`, `PanelHttpTest`, `McpCommandTest`. Qalan:
+  vizual fərq, sürət və əlçatanlıq ölçüləri (axe-core yeni kitabxanadır, qayda 11).
 - [ ] Production "yalnız oxu" monitorinq rejimi (yazan addım yoxdur, 2–3 agent, cron).
 - [ ] Ödənişli modullar (ayrı repo/modul, Faza 8 portları arxasında): hosted sürü (Redis/NATS ilə çoxmaşınlı
   orkestrasiya), hesabat tarixçəsi/trend və paylaşılan panel, SSO/audit, hesabat hostingi.

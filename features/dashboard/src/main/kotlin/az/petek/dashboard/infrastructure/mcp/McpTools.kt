@@ -334,10 +334,17 @@ internal class McpTools(
                 schema = {
                     string("scenarioId", "an APPROVED or FROZEN scenario version id", required = true)
                     integer("testers", "override the scenario's tester count")
+                    string("release", "the site's release this run tests, e.g. v1.4.2 (compare_runs compares releases)")
                     boolean("wait", "return only when the run has ended")
                 },
             ) { args ->
-                val request = RunRequest(scenarioId = args.stringArgument("scenarioId"), testers = args.intArgument("testers"))
+                val request =
+                    RunRequest(
+                        scenarioId = args.stringArgument("scenarioId"),
+                        testers = args.intArgument("testers"),
+                        release = args.stringArgument("release"),
+                    )
+                request.problems().takeIf { it.isNotEmpty() }?.let { throw PanelRequestException(it) }
                 val started = backend.startRun(request)
                 if (!args.booleanArgument("wait")) return@Tool PanelJson.runStarted(started)
                 waitForRun(started.runId)
@@ -416,6 +423,17 @@ internal class McpTools(
                 description = "Triage a finished run's surprises (one AI question per surprise; may take a while).",
                 schema = { string("runId", "run id", required = true) },
             ) { args -> PanelJson.triage(backend.runTriage(RunId(args.stringArgument("runId")!!))) },
+            Tool(
+                name = "compare_runs",
+                description =
+                    "A finished run against an earlier run of its scenario (another release of the site): the steps the site " +
+                        "broke, fixed and still fails, and what it made slower. baseline: 'previous' (default), a run id, or a " +
+                        "release named when the run started.",
+                schema = {
+                    string("runId", "run id", required = true)
+                    string("baseline", "'previous', a run id, or a release name")
+                },
+            ) { args -> PanelJson.comparison(backend.compare(RunId(args.stringArgument("runId")!!), args.stringArgument("baseline"))) },
             Tool(
                 name = "get_stability",
                 description = "How the steps of a --repeat group behaved across its runs (flaky steps).",

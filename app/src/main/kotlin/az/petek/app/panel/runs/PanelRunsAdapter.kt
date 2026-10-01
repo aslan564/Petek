@@ -32,6 +32,7 @@ import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
 import az.petek.dashboard.domain.BundleEvidenceView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.FieldProblem
 import az.petek.dashboard.domain.FindingBundleView
 import az.petek.dashboard.domain.FindingView
@@ -61,9 +62,12 @@ import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunSummary
+import az.petek.reporting.application.CompareRunsUseCase
+import az.petek.reporting.domain.ComparisonRefusedException
 import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
+import az.petek.reporting.domain.StepChange
 import az.petek.scenarios.application.TriageItem
 import az.petek.scenarios.domain.CodeTriage
 import az.petek.scenarios.domain.EvidenceRefType
@@ -193,7 +197,8 @@ internal class PanelRunsAdapter(
         val campaign = cleared.campaign
         // Told before the run starts: the caller (the page, a host AI over MCP) gets them with the run's id.
         val warnings = warningsFor(campaign, lease.container)
-        val (started, job) = begin(campaign, lease, RunOptions(ownSite = cleared.ownSite), request.headful)
+        val release = request.release?.trim()?.takeIf { it.isNotEmpty() }
+        val (started, job) = begin(campaign, lease, RunOptions(ownSite = cleared.ownSite, release = release), request.headful)
         // A closed browser tab cancels this request, never the run: it goes on and the board shows it.
         val runId = awaitStart(started, job)
         warnings.forEach { board.message("Diqqət: $it") }
@@ -259,6 +264,70 @@ internal class PanelRunsAdapter(
                 .runDirectory(runId)
                 .resolve(REPORT_DIRECTORY)
                 .takeIf { it.resolve(REPORT_FILE).exists() }
+        }
+
+    override suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+    ): ComparisonView {
+        val choice =
+            when {
+                baseline.isNullOrBlank() || baseline.equals(PREVIOUS, ignoreCase = true) -> CompareRunsUseCase.Baseline.Previous
+                RUN_ID.matches(baseline) -> CompareRunsUseCase.Baseline.Run(RunId(baseline))
+                else -> CompareRunsUseCase.Baseline.Release(baseline)
+            }
+        val comparison =
+            try {
+                container.compareRuns.compare(runId, choice).comparison
+            } catch (e: RunNotFoundException) {
+                throw PanelNotFoundException("Run tapılmadı: ${e.message}")
+            } catch (e: ComparisonRefusedException) {
+                throw PanelConflictException(refusal(e, baseline))
+            }
+        return ComparisonView(
+            runId = comparison.current.runId,
+            release = comparison.current.release,
+            baseline = comparison.baseline.runId,
+            baselineRelease = comparison.baseline.release,
+            scenario = comparison.current.campaignName,
+            scenarioChanged = comparison.scenarioChanged,
+            regressed = comparison.regressed,
+            newFailures = comparison.newFailures.map { it.scenarioStep },
+            fixed = comparison.fixed.map { it.scenarioStep },
+            stillFailing = comparison.steps.filter { it.change == StepChange.STILL_FAILING }.map { it.scenarioStep },
+            slower =
+                comparison.slowerSteps.map { "${it.scenarioStep} ${it.beforeMs} ms → ${it.afterMs} ms" } +
+                    comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" },
+            notComparable = comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep },
+            pageUrl = "/runs/${runId.value}/report/compare.html",
+        )
+    }
+
+    /** Why two runs are not compared, said to the owner. */
+    private fun refusal(
+        e: ComparisonRefusedException,
+        baseline: String?,
+    ): String =
+        when (e.reason) {
+            ComparisonRefusedException.Reason.NO_BASELINE -> {
+                if (baseline.isNullOrBlank() || baseline.equals(PREVIOUS, ignoreCase = true)) {
+                    "Müqayisə üçün bu ssenarinin əvvəlki, bitmiş run-ı yoxdur."
+                } else {
+                    "Bu ssenarinin \"$baseline\" versiyasını yoxlayan bitmiş run-ı yoxdur (versiya run başlayanda adlanır)."
+                }
+            }
+
+            ComparisonRefusedException.Reason.OTHER_SCENARIO -> {
+                "Yalnız eyni ssenarinin run-ları müqayisə olunur."
+            }
+
+            ComparisonRefusedException.Reason.NOT_FINISHED -> {
+                "Run hələ bitməyib; bitəndən sonra müqayisə edin."
+            }
+
+            ComparisonRefusedException.Reason.SAME_RUN -> {
+                "Run özü ilə müqayisə olunmur; əvvəlki run-ı və ya versiyanı seçin."
+            }
         }
 
     override suspend fun reportPdf(runId: RunId): Path? {
@@ -657,6 +726,7 @@ internal class PanelRunsAdapter(
             triaged = runId in triaged || container.triageResults.forRun(runId).any { it.verdict != null },
             scenarioId = executed(run, versions)?.id?.value,
             assertionsInconclusive = assertions.count { it.verdict == Verdict.INCONCLUSIVE },
+            release = run.release,
         )
     }
 
@@ -788,6 +858,12 @@ internal class PanelRunsAdapter(
     private companion object {
         /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
         const val MANUAL_MAIL_TESTERS = 3
+
+        /** A comparison's default baseline: the scenario's previous run. */
+        const val PREVIOUS = "previous"
+
+        /** How a run id looks, to tell it from a release name. */
+        val RUN_ID = Regex("run_[A-Za-z0-9_-]+")
 
         /** The newest runs the history shows; each summary reads its run's evidence, so the list stays bounded. */
         const val HISTORY_LIMIT = 100

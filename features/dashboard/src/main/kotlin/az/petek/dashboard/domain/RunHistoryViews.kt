@@ -44,6 +44,8 @@ data class RunSummaryView(
     val scenarioId: String?,
     /** Checks whose evidence could not decide them (Faza 24.12). */
     val assertionsInconclusive: Int = 0,
+    /** The site's release the run tested, as the owner named it; runs of a scenario are compared by it. */
+    val release: String? = null,
 ) {
     /** Not PASSED only because checks could not be decided: nothing failed (`petek test` exits with 3). */
     val undecidedOnly: Boolean
@@ -89,6 +91,8 @@ data class RunRequest(
      * it were `PETEK_TARGET`, still subject to the backend's target policy.
      */
     val target: String? = null,
+    /** The site's release this run tests (e.g. `v1.4.2`), for comparing releases; null or blank: not named. */
+    val release: String? = null,
 ) {
     fun problems(): List<FieldProblem> =
         buildList {
@@ -100,6 +104,9 @@ data class RunRequest(
             }
             if (!target.isNullOrBlank() && !isWebUrl(target.trim())) {
                 add(FieldProblem(PanelInstructions.TARGET, "Hədəf http:// və ya https:// ilə başlayan tam ünvan olmalıdır."))
+            }
+            if (!release.isNullOrBlank() && !RELEASE.matches(release.trim())) {
+                add(FieldProblem(RELEASE_FIELD, "Versiya adı 1–$MAX_RELEASE simvoldur: hərf, rəqəm və . _ - + kimi işarələr, boşluqsuz."))
             }
         }
 
@@ -115,8 +122,32 @@ data class RunRequest(
 
     companion object {
         const val SCENARIO = "scenario"
+        const val RELEASE_FIELD = "release"
+        const val MAX_RELEASE = 64
+        private val RELEASE = Regex("[\\p{L}\\p{N}._+\\-]{1,$MAX_RELEASE}")
     }
 }
+
+/**
+ * A run against an earlier run of its scenario (the regression baseline, Faza 14): what the site broke, fixed and made
+ * slower, by step and real-time event id; [pageUrl] is the written comparison page.
+ */
+data class ComparisonView(
+    val runId: RunId,
+    val release: String?,
+    val baseline: RunId,
+    val baselineRelease: String?,
+    val scenario: String,
+    val scenarioChanged: Boolean,
+    val regressed: Boolean,
+    val newFailures: List<String>,
+    val fixed: List<String>,
+    val stillFailing: List<String>,
+    /** `join 1000 ms → 1400 ms`, `announcement_created p95 700 ms → 2100 ms`. */
+    val slower: List<String>,
+    val notComparable: List<String>,
+    val pageUrl: String,
+)
 
 /** A run the backend accepted; it goes on in the background and shows up on the live board. */
 data class RunStartView(

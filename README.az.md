@@ -93,7 +93,7 @@ run olunur; özünüzün yazdığı kampaniya da eyni cür işləyir (`petek run
 
 | Sahə | Bu gün |
 |---|---|
-| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts`, `report`, `findings`, `teardown`, `probe`, `mcp` |
+| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts --release`, `report`, `compare`, `findings`, `teardown`, `probe`, `mcp` |
 | Veb panel | Təlimat, Kəşfiyyat, Ssenarilər (draft → təsdiq → dondurma, diff, triaj), Orkestrator tapşırıq matrisi, canlı Agentlər lövhəsi, Hesabatlar və stabillik |
 | Kəşfiyyatçı | Sayt modelini üç fazada öyrənir (səhifələr, formalar, əməliyyatlar, rollar, realtime, naməlumlar), sahibə sual verir, test ideyaları çıxarır, kampaniya layihəsi yazır |
 | Triaj | Run-ın sürprizlərini sistem bug / model boşluğu / ssenari xətası kimi ayırır və ssenari v2-ni diff kimi təklif edir |
@@ -352,7 +352,12 @@ baxmalıdır*), `share.html` (screenshot-lar içində tək fayl; AI provayderi, 
 üçün), `junit.xml` (addımlar test kimi) və `findings.sarif` (tapıntılar code scanning üçün). Hesabatın PDF-i
 (`report.pdf`) istədiyiniz anda testerlərin işlətdiyi eyni Chromium ilə çap olunur (əlavə kitabxana yoxdur): panelin
 Hesabatlar ekranında **PDF** və ya `index.html`-də **PDF yüklə** (panel onu həmin anda çap edir; diskdən açılan
-hesabatda isə `petek report <run|latest> --pdf` çap etdikdən sonra açılır). `petek run --ci` JUnit və
+hesabatda isə `petek report <run|latest> --pdf` çap etdikdən sonra açılır). Versiyalar da müqayisə olunur: run
+başlayanda saytın versiyasını adlandırın (`petek run --release v1.4.2` və ya paneldə "Saytın versiyası"), sonra
+`petek compare <run|latest>` (və ya Hesabatlar ekranında **Müqayisə**) run-ı ssenarinin əvvəlki run-ı, adlı run və ya
+versiya (`--baseline`) ilə tutuşdurur və `compare.html`, `compare.md` yazır: sayt nəyi sındırıb, nəyi düzəldib, nə hələ də
+sınıqdır və nəyi yavaşladıb (canlı çatdırılma və deterministik `run` addımları; AI addımının vaxtı əsasən AI-ın özünündür).
+Nəsə pisləşibsə çıxış kodu 1-dir (CI üçün). `petek run --ci` JUnit və
 SARIF yollarını çap edir, Markdown hesabatı GitHub job summary-yə əlavə edir; şablonlar: `docs/ci/github-actions.yml`,
 `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (və MCP `get_finding_bundle`) kodlaşdıran AI-nıza hər
 tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu ilə verir ki, səbəbi kodunuzda axtarsın.
@@ -368,13 +373,14 @@ Protocol serveridir (əl ilə yazılmış JSON-RPC, əlavə kitabxana yoxdur; `i
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
 `approve_scenario`, `freeze_scenario`, `run_campaign` (`wait` ilə), `cancel_run`, `list_runs`, `get_run_status`,
 `get_findings` (A/B/C mənbələri və sübut id-ləri), `get_finding_bundle` (kök səbəb üçün tapıntı addımı, sorğusu, cavabı və screenshot-u ilə), `get_evidence` (screenshot və ya capture-un tam yolu), `get_triage`,
-`run_triage`, `get_stability`, `teardown`. Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: test, run,
+`run_triage`, `get_stability`, `compare_runs` (run-ı ssenarisinin əvvəlki run-ı və ya versiyası ilə müqayisə), `teardown`.
+Sessiya `petek mcp --allow-writes` ilə başlamayıbsa yalnız oxudur: test, run,
 təsdiq, teardown və yazma ilə kəşfiyyat rədd edilir; hədəf siyasəti hər yerdəki kimi tətbiq olunur. Hər nəticə panelin
 JSON-unu mətn və strukturlu məzmun kimi daşıyır; uğursuzluq panelin mesajı ilə `isError` nəticəsidir. Konfiqurasiya
 yoxdursa server yenə əl sıxışmasına cavab verir, hər alət isə ev sahibi AI-yə hansı saytın test ediləcəyini sizdən
 soruşmağı deyir.
 
-`petek --json <əmr>` `doctor`, `init`, `verify`, `test`, `plan`, `run`, `report`, `findings`, `teardown`, `capacity`,
+`petek --json <əmr>` `doctor`, `init`, `verify`, `test`, `plan`, `run`, `report`, `compare`, `findings`, `teardown`, `capacity`,
 `probe` və `smoke` üçün stdout-a bir JSON sənəd çap edir (loglar stderr-də qalır; uğursuzluq adi çıxış kodu ilə
 `{"error": ...}`), skriptlər və CI üçün.
 

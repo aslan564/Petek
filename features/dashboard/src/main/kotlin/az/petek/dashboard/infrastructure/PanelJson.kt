@@ -17,6 +17,7 @@ import az.petek.dashboard.domain.AiCheckView
 import az.petek.dashboard.domain.AiChoice
 import az.petek.dashboard.domain.AiOptionsView
 import az.petek.dashboard.domain.CapacityView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.EventView
 import az.petek.dashboard.domain.ExplorationView
@@ -432,11 +433,31 @@ internal object PanelJson {
                     put("repeatIndex", it.repeatIndex)
                     put("reportUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/" else null)
                     put("pdfUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/report.pdf" else null)
+                    // Against the scenario's previous run, written when asked for (the regression baseline, Faza 14).
+                    put("compareUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/compare.html" else null)
+                    put("release", it.release)
                     put("triaged", it.triaged)
                     put("scenarioId", it.scenarioId)
                 }
             },
         )
+
+    fun comparison(view: ComparisonView): JsonObject =
+        buildJsonObject {
+            put("runId", view.runId.value)
+            put("release", view.release)
+            put("baseline", view.baseline.value)
+            put("baselineRelease", view.baselineRelease)
+            put("scenario", view.scenario)
+            put("scenarioChanged", view.scenarioChanged)
+            put("regressed", view.regressed)
+            strings("newFailures", view.newFailures)
+            strings("fixed", view.fixed)
+            strings("stillFailing", view.stillFailing)
+            strings("slower", view.slower)
+            strings("notComparable", view.notComparable)
+            put("pageUrl", view.pageUrl)
+        }
 
     fun stability(view: StabilityView?): JsonElement =
         view?.let {
@@ -499,6 +520,7 @@ internal object PanelJson {
             testers = root["testers"]?.takeUnless { it is JsonNull }?.let { root.int("testers") },
             headful = root.boolean("headful"),
             target = root.optionalString("target"),
+            release = root.optionalString("release"),
         )
     }
 

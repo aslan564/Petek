@@ -14,6 +14,7 @@ package az.petek.dashboard.application
 import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
 import az.petek.dashboard.domain.CapacityView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.ExplorationView
 import az.petek.dashboard.domain.FindingView
@@ -96,6 +97,11 @@ class UnavailablePanelBackend(
     override suspend fun reportDirectory(runId: RunId): Path? = null
 
     override suspend fun reportPdf(runId: RunId): Path? = null
+
+    override suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+    ): ComparisonView = unavailable()
 
     override suspend fun findings(runId: RunId): List<FindingView> = emptyList()
 

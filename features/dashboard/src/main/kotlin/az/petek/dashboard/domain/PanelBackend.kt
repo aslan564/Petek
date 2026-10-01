@@ -185,6 +185,16 @@ interface PanelRuns {
     suspend fun reportPdf(runId: RunId): Path?
 
     /**
+     * [runId] against an earlier run of its scenario (the regression baseline, Faza 14): [baseline] is `previous` (or
+     * null), a run id, or a release name; the comparison page is written beside the run's report. A pair that cannot be
+     * compared is a [PanelConflictException] saying why; an unknown run a [PanelNotFoundException].
+     */
+    suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+    ): ComparisonView
+
+    /**
      * The judged findings of a run with their three sources and evidence artifacts (which [PanelExplorer.explorationArtifact]
      * then resolves); empty for a run without findings or an unknown run.
      */

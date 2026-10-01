@@ -162,6 +162,12 @@ private fun Route.runRoutes(backend: PanelBackend) {
     post("/api/runs/cancel") { call.answer { cancelled(backend.cancelRun()) } }
     get("/api/runs/{runId}/triage") { call.answer { PanelJson.triage(backend.triage(RunId(call.id("runId")))) } }
     post("/api/runs/{runId}/triage") { call.answer { PanelJson.triage(backend.runTriage(RunId(call.id("runId")))) } }
+    // Against an earlier run of the scenario (`?baseline=previous|<run id>|<release>`), written beside its report.
+    get("/api/runs/{runId}/compare") {
+        call.answer {
+            PanelJson.comparison(backend.compare(RunId(call.id("runId")), call.request.queryParameters["baseline"]?.trim()))
+        }
+    }
     get("/api/stability") {
         call.answer {
             val group = call.request.queryParameters["group"]?.takeIf(ID::matches) ?: throw invalid("group", "Təkrar qrupu seçin.")
