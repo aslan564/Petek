@@ -15,6 +15,7 @@ import az.petek.core.error.PetekException
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
@@ -27,9 +28,11 @@ import java.time.Duration
  * - Each step is judged in each run as the stability table judges it ([StepOutcomes]). Only what the site did is a
  *   change: a step a tester's agent or the surroundings lost in either run, or that either run never decided, is
  *   [StepChange.NOT_COMPARABLE], never a regression.
- * - Speed is compared only where the site sets it: the delivery of real-time events (t1 − t0, per event name) and the
- *   deterministic `run` steps (per actor from the step's first to its last run record, the median over actors). An AI
- *   step's time is mostly the AI thinking, so it is not compared.
+ * - Speed is compared only where the site sets it: the delivery of real-time events (t1 − t0, per event name), the
+ *   deterministic `run` steps (per actor from the step's first to its last run record, the median over actors) and the
+ *   pages' own timing as the browser measured it (`site_health`'s `perf`: load and largest contentful paint, the
+ *   median over testers per page and screen; a layout shift that grew past 0.1 counts too). An AI step's time is
+ *   mostly the AI thinking, so it is not compared.
  * - [scenarioChanged]: the two runs came from different campaign files (another hash). Steps are still matched by their
  *   ids; a step found in only one of them is then [StepChange.ADDED] or [StepChange.REMOVED].
  */
@@ -40,14 +43,19 @@ data class RunComparison(
     val steps: List<StepComparison>,
     val deliveries: List<DeliveryComparison>,
     val thresholds: SpeedThresholds,
+    val pages: List<PageComparison> = emptyList(),
 ) {
     val newFailures: List<StepComparison> get() = steps.filter { it.change == StepChange.NEW_FAILURE }
     val fixed: List<StepComparison> get() = steps.filter { it.change == StepChange.FIXED }
     val slowerSteps: List<StepComparison> get() = steps.filter { it.speed == SpeedChange.SLOWER }
     val slowerDeliveries: List<DeliveryComparison> get() = deliveries.filter { it.speed == SpeedChange.SLOWER }
 
+    /** Pages that became usable later, or jumped more while loading. */
+    val worsePages: List<PageComparison> get() = pages.filter { it.speed == SpeedChange.SLOWER || it.shiftGrew }
+
     /** The later run is worse: a step the site passed before fails now, or something the site sets got slower. */
-    val regressed: Boolean get() = newFailures.isNotEmpty() || slowerSteps.isNotEmpty() || slowerDeliveries.isNotEmpty()
+    val regressed: Boolean
+        get() = newFailures.isNotEmpty() || slowerSteps.isNotEmpty() || slowerDeliveries.isNotEmpty() || worsePages.isNotEmpty()
 }
 
 /** How one step's result changed from the baseline to the current run. */
@@ -99,6 +107,25 @@ data class DeliveryComparison(
 )
 
 /**
+ * One page on one screen in both runs, as the browser timed it (medians over the testers that timed it): when it loaded
+ * and when its main content showed (largest contentful paint), and how much it jumped while loading (layout shift).
+ * [speed] is SLOWER when either time got slower ([SpeedThresholds]) and FASTER when one got faster and none slower;
+ * [shiftGrew] when the shift passed 0.1 (the line under which a page counts as steady) and grew by 0.05 or more.
+ */
+data class PageComparison(
+    val page: String,
+    val device: String?,
+    val beforeLoadMs: Long?,
+    val afterLoadMs: Long?,
+    val beforePaintMs: Long?,
+    val afterPaintMs: Long?,
+    val beforeShift: Double?,
+    val afterShift: Double?,
+    val speed: SpeedChange? = null,
+    val shiftGrew: Boolean = false,
+)
+
+/**
  * When a time counts as changed: by more than [ratio] of the smaller one and by at least [atLeast], so noise of a few
  * milliseconds on a fast step is never a regression.
  */
@@ -129,6 +156,7 @@ data class ComparedEvidence(
     val assertions: List<AssertionRecord>,
     val events: List<EventRecord>,
     val receipts: List<EventReceipt>,
+    val pageTimings: List<PageTimingRecord> = emptyList(),
 )
 
 /** Two runs that cannot be compared, and why ([reason], which callers say in their own words). */
@@ -190,8 +218,59 @@ class RunComparer(
                 val speed = if (beforeMs != null && afterMs != null) thresholds.change(beforeMs, afterMs) else null
                 StepComparison(step, change, beforeMs, afterMs, speed)
             }
-        return RunComparison(baseline.run, current.run, scenarioChanged, steps, deliveries(baseline, current), thresholds)
+        return RunComparison(
+            baseline.run,
+            current.run,
+            scenarioChanged,
+            steps,
+            deliveries(baseline, current),
+            thresholds,
+            pages(baseline.pageTimings, current.pageTimings),
+        )
     }
+
+    /** Per page and screen both runs timed, the medians over their testers (see [PageComparison]). */
+    private fun pages(
+        before: List<PageTimingRecord>,
+        after: List<PageTimingRecord>,
+    ): List<PageComparison> {
+        val earlier = before.groupBy { it.page to it.device }
+        return after.groupBy { it.page to it.device }.filterKeys { it in earlier }.map { (key, now) ->
+            val then = earlier.getValue(key)
+            val beforeLoad = medianOf(then.mapNotNull { it.loadMs })
+            val afterLoad = medianOf(now.mapNotNull { it.loadMs })
+            val beforePaint = medianOf(then.mapNotNull { it.largestPaintMs })
+            val afterPaint = medianOf(now.mapNotNull { it.largestPaintMs })
+            val beforeShift =
+                then
+                    .mapNotNull { it.layoutShift }
+                    .takeIf { it.isNotEmpty() }
+                    ?.sorted()
+                    ?.let { it[(it.size - 1) / 2] }
+            val afterShift =
+                now
+                    .mapNotNull { it.layoutShift }
+                    .takeIf { it.isNotEmpty() }
+                    ?.sorted()
+                    ?.let { it[(it.size - 1) / 2] }
+            val changes =
+                listOfNotNull(
+                    if (beforeLoad != null && afterLoad != null) thresholds.change(beforeLoad, afterLoad) else null,
+                    if (beforePaint != null && afterPaint != null) thresholds.change(beforePaint, afterPaint) else null,
+                )
+            val speed =
+                when {
+                    SpeedChange.SLOWER in changes -> SpeedChange.SLOWER
+                    SpeedChange.FASTER in changes -> SpeedChange.FASTER
+                    else -> null
+                }
+            val shiftGrew =
+                beforeShift != null && afterShift != null && afterShift > STEADY_SHIFT && afterShift - beforeShift >= SHIFT_GROWTH
+            PageComparison(key.first, key.second, beforeLoad, afterLoad, beforePaint, afterPaint, beforeShift, afterShift, speed, shiftGrew)
+        }
+    }
+
+    private fun medianOf(values: List<Long>): Long? = values.takeIf { it.isNotEmpty() }?.let(::median)
 
     /** How a step stood in one run. */
     private enum class State { PASSED, SITE_FAILED, UNDECIDED }
@@ -273,5 +352,11 @@ class RunComparer(
     private companion object {
         const val MEDIAN = 50
         const val P95 = 95
+
+        /** A page whose cumulative layout shift stays under this counts as steady. */
+        const val STEADY_SHIFT = 0.1
+
+        /** How much the shift must grow to count as worse. */
+        const val SHIFT_GROWTH = 0.05
     }
 }

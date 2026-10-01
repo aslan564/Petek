@@ -18,6 +18,7 @@ import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
 import org.jetbrains.exposed.v1.core.coalesce
@@ -168,6 +169,25 @@ internal class SqliteEvidenceRecorder(
                 it[cacheReadTokens] = record.cacheReadTokens
                 it[costUsd] = record.costUsd
                 it[calls] = record.calls
+            }
+        }
+    }
+
+    override suspend fun pageTiming(record: PageTimingRecord) {
+        db.write {
+            PageTimingTable.insert {
+                it[runId] = record.runId
+                it[stepId] = record.stepId
+                it[agentId] = record.agentId
+                it[scenarioStep] = record.scenarioStep
+                it[page] = record.page
+                it[device] = record.device
+                it[ttfbMs] = record.ttfbMs
+                it[domContentLoadedMs] = record.domContentLoadedMs
+                it[loadMs] = record.loadMs
+                it[largestPaintMs] = record.largestPaintMs
+                it[layoutShift] = record.layoutShift
+                it[recordedAt] = record.recordedAt
             }
         }
     }

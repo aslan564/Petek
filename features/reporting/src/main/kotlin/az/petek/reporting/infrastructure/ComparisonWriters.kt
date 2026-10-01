@@ -13,6 +13,7 @@ package az.petek.reporting.infrastructure
 
 import az.petek.evidence.domain.RunRecord
 import az.petek.reporting.domain.ComparisonWriter
+import az.petek.reporting.domain.PageComparison
 import az.petek.reporting.domain.RunComparison
 import az.petek.reporting.domain.SpeedChange
 import az.petek.reporting.domain.StepChange
@@ -54,8 +55,9 @@ internal object ComparisonText {
         "İki run fərqli ssenari faylından gəlib (heş fərqlidir): addımlar id-ləri ilə tutuşdurulur, yalnız birində olan " +
             "addım \"yeni addım\" və ya \"çıxarılıb\" sayılır."
     const val NOT_TIMED =
-        "Sürət yalnız saytın özünün təyin etdiyi yerdə tutuşdurulur: canlı çatdırılma (t1 − t0) və deterministik `run` " +
-            "addımları. AI addımının müddəti əsasən AI-ın düşünmə vaxtıdır, ona görə tutuşdurulmur."
+        "Sürət yalnız saytın özünün təyin etdiyi yerdə tutuşdurulur: canlı çatdırılma (t1 − t0), deterministik `run` " +
+            "addımları və brauzerin ölçdüyü səhifə vaxtları (yüklənmə, LCP, CLS; `site_health`-in `perf`-i). AI addımının " +
+            "müddəti əsasən AI-ın düşünmə vaxtıdır, ona görə tutuşdurulmur."
 
     fun change(value: StepChange): String =
         when (value) {
@@ -86,6 +88,24 @@ internal object ComparisonText {
             )
         return "${record.runId.value} (${parts.joinToString(", ")})"
     }
+
+    /** `/elanlar (phone)`. */
+    fun page(page: PageComparison): String = page.page + (page.device?.let { " ($it)" } ?: "")
+
+    /** `900 ms → 1,4 san`, or a dash where a run did not time it. */
+    fun times(
+        before: Long?,
+        after: Long?,
+    ): String = "${before?.let(ReportFormat::duration) ?: ReportFormat.NONE} → ${after?.let(ReportFormat::duration) ?: ReportFormat.NONE}"
+
+    fun shift(
+        before: Double?,
+        after: Double?,
+    ): String = "${ReportFormat.shift(before)} → ${ReportFormat.shift(after)}"
+
+    /** What got worse on a page: slower, jumpier, or both. */
+    fun pageVerdict(page: PageComparison): String =
+        listOfNotNull(speed(page.speed).ifEmpty { null }, "daha çox sürüşür".takeIf { page.shiftGrew }).joinToString(", ")
 
     fun thresholds(comparison: RunComparison): String =
         "Dəyişmiş sayılan vaxt: ${ReportFormat.percent(comparison.thresholds.ratio)}-dən çox və ən azı " +
@@ -134,6 +154,7 @@ class ComparisonHtmlWriter : ComparisonWriter {
                             summary(comparison)
                             steps(comparison)
                             deliveries(comparison)
+                            pages(comparison)
                         }
                         footer {
                             a(href = "index.html") { +"İndiki run-ın hesabatı" }
@@ -158,11 +179,8 @@ class ComparisonHtmlWriter : ComparisonWriter {
                 tile("Yeni sınan", comparison.newFailures.size, if (comparison.newFailures.isEmpty()) null else "bad")
                 tile("Düzələn", comparison.fixed.size, if (comparison.fixed.isEmpty()) null else "ok")
                 tile("Hələ də sınıq", comparison.steps.count { it.change == StepChange.STILL_FAILING }, null)
-                tile(
-                    "Yavaşlayan",
-                    comparison.slowerSteps.size + comparison.slowerDeliveries.size,
-                    if (comparison.slowerSteps.isEmpty() && comparison.slowerDeliveries.isEmpty()) null else "bad",
-                )
+                val slower = comparison.slowerSteps.size + comparison.slowerDeliveries.size + comparison.worsePages.size
+                tile("Yavaşlayan", slower, if (slower == 0) null else "bad")
             }
             if (comparison.newFailures.isNotEmpty()) {
                 p { +"Yeni sınan addımlar:" }
@@ -243,6 +261,37 @@ class ComparisonHtmlWriter : ComparisonWriter {
         }
     }
 
+    private fun FlowContent.pages(comparison: RunComparison) {
+        if (comparison.pages.isEmpty()) return
+        section {
+            h2 { +"Səhifələrin sürəti (${comparison.pages.size})" }
+            div("scroll") {
+                table {
+                    thead {
+                        tr {
+                            th { +"Səhifə" }
+                            th(classes = "num") { +"Yüklənmə əvvəl → indi" }
+                            th(classes = "num") { +"Əsas məzmun (LCP) əvvəl → indi" }
+                            th(classes = "num") { +"Sürüşmə (CLS) əvvəl → indi" }
+                            th { +"Dəyişiklik" }
+                        }
+                    }
+                    tbody {
+                        comparison.pages.forEach { page ->
+                            tr {
+                                td { +ComparisonText.page(page) }
+                                td("num") { +ComparisonText.times(page.beforeLoadMs, page.afterLoadMs) }
+                                td("num") { +ComparisonText.times(page.beforePaintMs, page.afterPaintMs) }
+                                td("num") { +ComparisonText.shift(page.beforeShift, page.afterShift) }
+                                td { +ComparisonText.pageVerdict(page) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun tone(change: StepChange): String =
         when (change) {
             StepChange.NEW_FAILURE, StepChange.STILL_FAILING, StepChange.FAILING -> "bad"
@@ -270,7 +319,7 @@ class ComparisonMarkdownWriter : ComparisonWriter {
             appendLine("- Nəticə: **${if (comparison.regressed) ComparisonText.WORSE else ComparisonText.NOT_WORSE}**")
             appendLine(
                 "- Yeni sınan: ${comparison.newFailures.size} · Düzələn: ${comparison.fixed.size} · Yavaşlayan: " +
-                    "${comparison.slowerSteps.size + comparison.slowerDeliveries.size}",
+                    "${comparison.slowerSteps.size + comparison.slowerDeliveries.size + comparison.worsePages.size}",
             )
             if (comparison.scenarioChanged) appendLine("- ${ComparisonText.SCENARIO_CHANGED}")
             appendLine()
@@ -295,6 +344,20 @@ class ComparisonMarkdownWriter : ComparisonWriter {
                     appendLine(
                         "| ${cell(delivery.event)} | ${delivery.beforeP50Ms} ms → ${delivery.afterP50Ms} ms | " +
                             "${delivery.beforeP95Ms} ms → ${delivery.afterP95Ms} ms | ${ComparisonText.speed(delivery.speed)} |",
+                    )
+                }
+            }
+            if (comparison.pages.isNotEmpty()) {
+                appendLine()
+                appendLine("## Səhifələrin sürəti")
+                appendLine()
+                appendLine("| Səhifə | Yüklənmə əvvəl → indi | LCP əvvəl → indi | CLS əvvəl → indi | Dəyişiklik |")
+                appendLine("|---|---:|---:|---:|---|")
+                comparison.pages.forEach { page ->
+                    appendLine(
+                        "| ${cell(ComparisonText.page(page))} | ${ComparisonText.times(page.beforeLoadMs, page.afterLoadMs)} | " +
+                            "${ComparisonText.times(page.beforePaintMs, page.afterPaintMs)} | " +
+                            "${ComparisonText.shift(page.beforeShift, page.afterShift)} | ${ComparisonText.pageVerdict(page)} |",
                     )
                 }
             }

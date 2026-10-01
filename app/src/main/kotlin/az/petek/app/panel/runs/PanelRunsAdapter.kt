@@ -297,7 +297,11 @@ internal class PanelRunsAdapter(
             stillFailing = comparison.steps.filter { it.change == StepChange.STILL_FAILING }.map { it.scenarioStep },
             slower =
                 comparison.slowerSteps.map { "${it.scenarioStep} ${it.beforeMs} ms → ${it.afterMs} ms" } +
-                    comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" },
+                    comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" } +
+                    comparison.worsePages.map { page ->
+                        page.page + (page.device?.let { " ($it)" } ?: "") + ": yüklənmə ${page.beforeLoadMs} → ${page.afterLoadMs} ms, " +
+                            "LCP ${page.beforePaintMs} → ${page.afterPaintMs} ms, CLS ${page.beforeShift} → ${page.afterShift}"
+                    },
             notComparable = comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep },
             pageUrl = "/runs/${runId.value}/report/compare.html",
         )

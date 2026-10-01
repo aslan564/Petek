@@ -227,6 +227,19 @@ data class PageHealth(
 }
 
 /**
+ * How fast the current page became usable, as the browser itself timed it (Navigation Timing and paint entries, read by
+ * code): milliseconds from the start of the navigation to its first byte, DOM ready, load and largest contentful paint,
+ * and the cumulative layout shift while it loaded (unitless). Null where the browser reported nothing.
+ */
+data class PageTiming(
+    val ttfbMs: Long?,
+    val domContentLoadedMs: Long?,
+    val loadMs: Long?,
+    val largestPaintMs: Long?,
+    val layoutShift: Double?,
+)
+
+/**
  * The current page as a visitor sees it, for checks that only read (Faza 19, the showcase cards): its title, main
  * headings, description and language, its images, its visible links with their absolute address, and the in-page
  * anchors (`#id`) that name no element. Texts are redacted like everything else the session reads.
@@ -446,6 +459,9 @@ interface BrowserSession {
 
     /** What a visitor can check on the current page without acting on it ([PageFacts]); null when the session cannot read it. */
     suspend fun pageFacts(): PageFacts? = null
+
+    /** How fast the current page became usable, as the browser timed it ([PageTiming]); null when the session cannot read it. */
+    suspend fun pageTiming(): PageTiming? = null
 
     suspend fun close()
 }

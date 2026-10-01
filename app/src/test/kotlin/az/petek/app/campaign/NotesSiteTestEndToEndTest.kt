@@ -109,10 +109,18 @@ class NotesSiteTestEndToEndTest {
                     assertions.filter { it.verdict == Verdict.FAILED }.size shouldBe 0
                     assertions.filter { it.scenarioStep == "note-submit-happy" && it.verdict == Verdict.PASSED }.shouldNotBeEmpty()
                 }
+                // The drafted page checks timed every public page on each screen with the browser's own clock.
+                store
+                    .pageTimings(runId)
+                    .filter { it.page == "/" && it.loadMs != null }
+                    .map { it.device }
+                    .toSet() shouldBe
+                    setOf("phone", "tablet", "desktop")
             }
             // The testers wrote their notes on the site, each with the draft's own marker.
             site.allNotes.filter { "Pətək yoxlaması" in it.title }.shouldNotBeEmpty()
             Files.exists(Path.of(out.getValue("report").jsonPrimitive.content)) shouldBe true
+            Files.readString(Path.of(out.getValue("report").jsonPrimitive.content)) shouldContain "Səhifə sürəti"
             // The report prints as a PDF with Chromium's own print (Faza 12); a copy goes to build/notes-test/.
             val pdf = pdf(runId)
             String(Files.readAllBytes(pdf), 0, PDF_MAGIC.length, Charsets.US_ASCII) shouldBe PDF_MAGIC

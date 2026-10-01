@@ -21,6 +21,7 @@ import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -97,6 +98,30 @@ internal class SqliteEvidenceQuery(
                 .where { UsageTable.runId eq runId }
                 .orderBy(UsageTable.seq to SortOrder.ASC)
                 .map { it.toUsageRecord() }
+        }
+
+    override suspend fun pageTimings(runId: RunId): List<PageTimingRecord> =
+        db.read {
+            PageTimingTable
+                .selectAll()
+                .where { PageTimingTable.runId eq runId }
+                .orderBy(PageTimingTable.seq to SortOrder.ASC)
+                .map {
+                    PageTimingRecord(
+                        runId = it[PageTimingTable.runId],
+                        stepId = it[PageTimingTable.stepId],
+                        agentId = it[PageTimingTable.agentId],
+                        scenarioStep = it[PageTimingTable.scenarioStep],
+                        page = it[PageTimingTable.page],
+                        device = it[PageTimingTable.device],
+                        ttfbMs = it[PageTimingTable.ttfbMs],
+                        domContentLoadedMs = it[PageTimingTable.domContentLoadedMs],
+                        loadMs = it[PageTimingTable.loadMs],
+                        largestPaintMs = it[PageTimingTable.largestPaintMs],
+                        layoutShift = it[PageTimingTable.layoutShift],
+                        recordedAt = it[PageTimingTable.recordedAt],
+                    )
+                }
         }
 }
 

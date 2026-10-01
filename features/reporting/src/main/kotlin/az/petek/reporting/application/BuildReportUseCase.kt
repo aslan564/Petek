@@ -32,6 +32,7 @@ import az.petek.reporting.domain.ExpectedOutcomes
 import az.petek.reporting.domain.FailedAgentRow
 import az.petek.reporting.domain.FailureKeys
 import az.petek.reporting.domain.LatencyStatistics
+import az.petek.reporting.domain.PageSpeedRow
 import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportSummary
@@ -84,6 +85,7 @@ class BuildReportUseCase(
                     .filter { it.kind == StepKind.SYSTEM && it.action == COVERAGE_ACTION }
                     .flatMap { it.detail.orEmpty().lines() }
                     .filter { it.isNotBlank() },
+            pageSpeed = PageSpeedRow.of(query.pageTimings(runId)),
         )
     }
 

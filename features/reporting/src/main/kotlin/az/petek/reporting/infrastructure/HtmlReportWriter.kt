@@ -91,6 +91,7 @@ class HtmlReportWriter : ReportWriter {
                             findings(model)
                             steps(model)
                             latency(model)
+                            pageSpeed(model)
                             stability(model)
                             failedAgents(model)
                             usage(model)
@@ -277,6 +278,28 @@ class HtmlReportWriter : ReportWriter {
                                 td(if (ms == null) "num bad-text" else "num") { +(ms?.let { "$it ms" } ?: "çatmadı") }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /** How fast each page became usable per screen (`site_health`'s `perf`); shown only when the run timed pages. */
+    private fun FlowContent.pageSpeed(model: ReportModel) {
+        if (model.pageSpeed.isEmpty()) return
+        section {
+            h2 { +ReportFormat.PAGE_SPEED_TITLE }
+            p("muted") { +ReportFormat.PAGE_SPEED_NOTE }
+            dataTable(ReportFormat.PAGE_SPEED_COLUMNS, numeric = setOf(1, 2, 3, 4, 5, 6)) {
+                model.pageSpeed.forEach { row ->
+                    tr {
+                        td { +(row.page + (row.device?.let { " ($it)" } ?: "")) }
+                        td("num") { +row.testers.toString() }
+                        td("num") { +ReportFormat.latency(row.ttfbMs) }
+                        td("num") { +ReportFormat.latency(row.domContentLoadedMs) }
+                        td("num") { +ReportFormat.latency(row.loadMs) }
+                        td("num") { +ReportFormat.latency(row.largestPaintMs) }
+                        td("num") { +ReportFormat.shift(row.layoutShift) }
                     }
                 }
             }

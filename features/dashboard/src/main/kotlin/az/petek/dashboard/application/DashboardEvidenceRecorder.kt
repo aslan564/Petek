@@ -18,6 +18,7 @@ import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
 
@@ -66,4 +67,6 @@ class DashboardEvidenceRecorder(
     }
 
     override suspend fun usage(record: UsageRecord) = delegate.usage(record)
+
+    override suspend fun pageTiming(record: PageTimingRecord) = delegate.pageTiming(record)
 }

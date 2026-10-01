@@ -22,6 +22,9 @@ internal object BundledScripts {
     /** Page function returning what a visitor can check without acting ([az.petek.browser.domain.PageFacts]). */
     val pageFacts: String = load("page-facts.js")
 
+    /** Page function returning how fast the current page became usable ([az.petek.browser.domain.PageTiming]). */
+    val pageTiming: String = load("page-timing.js")
+
     /** Page function returning `page.content()`-equivalent HTML with secret input values blanked. */
     val domSnapshot: String = load("dom-snapshot.js")
 

@@ -21,6 +21,7 @@ import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
@@ -299,6 +300,12 @@ class FakeBrowserSession(
     var facts: PageFacts? = null
 
     override suspend fun pageFacts(): PageFacts? = pageFactsByUrl[url] ?: facts
+
+    /** What [pageTiming] reports for the current page, by URL, else [timing]; null plays a session that cannot read it. */
+    val pageTimingByUrl = ConcurrentHashMap<String, PageTiming>()
+    var timing: PageTiming? = null
+
+    override suspend fun pageTiming(): PageTiming? = pageTimingByUrl[url] ?: timing
 
     override suspend fun close() {
         closed = true

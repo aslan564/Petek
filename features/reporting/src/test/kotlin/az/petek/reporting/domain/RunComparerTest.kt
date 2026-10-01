@@ -11,14 +11,18 @@
 
 package az.petek.reporting.domain
 
+import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
+import az.petek.core.ids.StepId
 import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceSource
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
+import az.petek.reporting.ReportTestData.START
 import az.petek.reporting.ReportTestData.assertion
 import az.petek.reporting.ReportTestData.event
 import az.petek.reporting.ReportTestData.receipt
@@ -133,6 +137,57 @@ class RunComparerTest {
         noise.slowerSteps.shouldBeEmpty()
         faster.steps.single { it.scenarioStep == "join" }.speed shouldBe SpeedChange.FASTER
         faster.regressed shouldBe false
+    }
+
+    @Test
+    fun `a page that loads later or shows its main content later on a screen is slower, one that jumps more is worse`() {
+        fun timed(
+            runId: RunId,
+            agent: String,
+            page: String,
+            load: Long,
+            paint: Long?,
+            shift: Double,
+            device: String? = "phone",
+        ) = PageTimingRecord(runId, StepId("stp_$agent"), AgentId(agent), "public-pages", page, device, 100, 300, load, paint, shift, START)
+
+        val comparison =
+            RunComparer().compare(
+                evidence(before).copy(
+                    pageTimings =
+                        listOf(
+                            timed(before, "a01", "/", 900, 1_000, 0.01),
+                            timed(before, "a02", "/", 1_100, 1_200, 0.01),
+                            timed(before, "a01", "/about", 600, null, 0.02),
+                            timed(before, "a01", "/news", 800, 900, 0.05),
+                            timed(before, "a01", "/", 900, 1_000, 0.0, device = "desktop"),
+                        ),
+                ),
+                evidence(after).copy(
+                    pageTimings =
+                        listOf(
+                            timed(after, "a01", "/", 900, 2_400, 0.01),
+                            timed(after, "a02", "/", 1_000, 2_600, 0.01),
+                            timed(after, "a01", "/about", 620, null, 0.02),
+                            timed(after, "a01", "/news", 800, 900, 0.3),
+                            timed(after, "a01", "/", 1_000, 1_000, 0.0, device = "desktop"),
+                        ),
+                ),
+            )
+
+        comparison.pages.associate { (it.page to it.device) to (it.speed to it.shiftGrew) } shouldBe
+            mapOf(
+                ("/" to "phone") to (SpeedChange.SLOWER to false),
+                ("/about" to "phone") to (null to false),
+                ("/news" to "phone") to (null to true),
+                ("/" to "desktop") to (null to false),
+            )
+        comparison.pages.first().let {
+            it.beforePaintMs shouldBe 1_000
+            it.afterPaintMs shouldBe 2_400
+        }
+        comparison.worsePages.map { it.page } shouldContainExactly listOf("/", "/news")
+        comparison.regressed shouldBe true
     }
 
     @Test

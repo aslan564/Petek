@@ -14,6 +14,7 @@ package az.petek.orchestration.application
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserContextLostException
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.PageTiming
 import az.petek.browser.testing.FakeBrowserSession
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
@@ -47,6 +48,15 @@ class RestoringBrowserSessionTest {
             }
         }
     }
+
+    @Test
+    fun `what the page reports about itself comes from the browser underneath, never the interface's empty default`() =
+        runBlocking<Unit> {
+            val timing = PageTiming(90, 300, 900, 1_200, 0.02)
+            first.timing = timing
+
+            session().pageTiming() shouldBe timing
+        }
 
     @Test
     fun `a lost context is replaced, the page opened again and the call made once more`() =

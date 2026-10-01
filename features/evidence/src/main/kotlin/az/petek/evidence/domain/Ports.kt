@@ -31,6 +31,8 @@ interface EvidenceRecorder {
     suspend fun finding(record: FindingRecord)
 
     suspend fun usage(record: UsageRecord)
+
+    suspend fun pageTiming(record: PageTimingRecord)
 }
 
 /** Read side, used by the judge and the report. Results are ordered by time. */
@@ -48,6 +50,9 @@ interface EvidenceQuery {
     suspend fun findings(runId: RunId): List<FindingRecord>
 
     suspend fun usage(runId: RunId): List<UsageRecord>
+
+    /** The pages' own timings the run recorded, in recording order. */
+    suspend fun pageTimings(runId: RunId): List<PageTimingRecord>
 }
 
 interface RunRepository {

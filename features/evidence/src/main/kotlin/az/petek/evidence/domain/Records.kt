@@ -111,6 +111,32 @@ data class EventReceipt(
     val latencyMs: Long?,
 )
 
+/**
+ * How fast one page became usable for one tester, as the browser itself timed it (Navigation Timing and paint entries,
+ * read by code, never told by the AI; AGENTS.md rules 1 and 2): `site_health`'s `perf` check records one per page and
+ * screen. Milliseconds from the start of the navigation; null where the browser did not report it (e.g. no largest
+ * contentful paint on an empty page). Releases are compared by them (the regression baseline, Faza 14).
+ */
+data class PageTimingRecord(
+    val runId: RunId,
+    val stepId: StepId,
+    val agentId: AgentId,
+    val scenarioStep: String,
+    /** The page's path on the target, as the step asked for it (`/announcements`). */
+    val page: String,
+    /** `phone`, `tablet` or `desktop` when the step chose a screen; null: the session's own. */
+    val device: String?,
+    /** Time to the first byte of the page's answer. */
+    val ttfbMs: Long?,
+    val domContentLoadedMs: Long?,
+    val loadMs: Long?,
+    /** Largest contentful paint: when the page's main content showed. */
+    val largestPaintMs: Long?,
+    /** Cumulative layout shift: how much the page jumped while it loaded (unitless; under 0.1 is good). */
+    val layoutShift: Double?,
+    val recordedAt: Instant,
+)
+
 /** Kind of a stored artifact; [extension] is the file extension it is written with, so viewers open it right. */
 enum class ArtifactType(
     val extension: String,

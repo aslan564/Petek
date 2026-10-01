@@ -33,7 +33,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * - `back`: after following the page's first link, the back button returns to the page;
  * - `mobile`: at `width` (default 375) × 812 the page is not wider than the screen;
  * - `session`: with the cookies gone (an expired session) the page no longer shows the signed-in user; the tester then
- *   signs in again with the `login` flow. Visitors and signed-out testers skip it.
+ *   signs in again with the `login` flow. Visitors and signed-out testers skip it;
+ * - `perf`: how fast the page became usable, as the browser timed it (first byte, DOM ready, load, largest contentful
+ *   paint, layout shift), is recorded per page and screen ([az.petek.evidence.domain.PageTimingRecord]). It never fails
+ *   the step: `petek compare` sets it against an earlier release (the regression baseline, Faza 14).
  *
  * With `share: work` the step's testers split the pages and devices between them (each job a page on a phone, tablet
  * or desktop), with `share: pages` the pages, and with `share: links` each checks every page but asks about only its
@@ -80,6 +83,8 @@ internal class SiteHealthRunFunction(
                     val since = now()
                     val before = problems.size
                     open(ref)
+                    // Read before the other checks: following a link and coming back would time that return instead.
+                    if ("perf" in checks) timing(path, job.device?.key)
                     val links =
                         if ("links" in checks ||
                             "back" in checks
@@ -193,7 +198,7 @@ internal class SiteHealthRunFunction(
             ?: url.substringBefore('?')
 
     companion object {
-        val ALL_CHECKS: List<String> = listOf("links", "console", "slow", "back", "mobile", "session")
+        val ALL_CHECKS: List<String> = listOf("links", "console", "slow", "back", "mobile", "session", "perf")
         const val DEFAULT_SLOW_MS = 3_000L
         const val DEFAULT_WIDTH = 375
         const val DEFAULT_MAX_LINKS = 30

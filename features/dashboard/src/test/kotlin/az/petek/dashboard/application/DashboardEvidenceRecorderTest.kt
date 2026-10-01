@@ -29,6 +29,7 @@ import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
 import az.petek.evidence.domain.Verdict
@@ -136,6 +137,8 @@ class DashboardEvidenceRecorderTest {
         override suspend fun finding(record: FindingRecord) = refuse()
 
         override suspend fun usage(record: UsageRecord) = refuse()
+
+        override suspend fun pageTiming(record: PageTimingRecord) = refuse()
 
         private fun refuse(): Nothing = throw IOException("disk full")
     }

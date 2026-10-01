@@ -13,6 +13,7 @@ package az.petek.agent.application
 
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.StepContext
+import az.petek.browser.domain.PageTiming
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessClock
@@ -20,6 +21,7 @@ import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
@@ -73,6 +75,36 @@ internal class StepEvidence(
             ),
         )
         return stepId
+    }
+
+    /**
+     * Records how fast [page] became usable for [runtime]'s tester on [device], as the browser timed it ([timing]), with
+     * the sub-action [stepId] that read it.
+     */
+    suspend fun pageTiming(
+        runtime: AgentRuntime,
+        step: StepContext,
+        stepId: StepId,
+        page: String,
+        device: String?,
+        timing: PageTiming,
+    ) {
+        recorder.pageTiming(
+            PageTimingRecord(
+                runId = runtime.runId,
+                stepId = stepId,
+                agentId = runtime.identity.agentId,
+                scenarioStep = step.scenarioStep,
+                page = page,
+                device = device,
+                ttfbMs = timing.ttfbMs,
+                domContentLoadedMs = timing.domContentLoadedMs,
+                loadMs = timing.loadMs,
+                largestPaintMs = timing.largestPaintMs,
+                layoutShift = timing.layoutShift,
+                recordedAt = clock.now().wall,
+            ),
+        )
     }
 
     /**

@@ -20,6 +20,7 @@ import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
@@ -193,6 +194,8 @@ internal class RestoringBrowserSession(
     ): Viewport? = guarded { it.resizeViewport(width, height) }
 
     override suspend fun pageFacts(): PageFacts? = guarded { it.pageFacts() }
+
+    override suspend fun pageTiming(): PageTiming? = guarded { it.pageTiming() }
 
     override suspend fun close() = current.close()
 

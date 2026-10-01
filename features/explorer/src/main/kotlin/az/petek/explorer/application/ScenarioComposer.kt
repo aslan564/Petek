@@ -182,7 +182,13 @@ internal class ScenarioComposer(
     private fun siteChecks(ideas: List<TestIdea>): List<Pair<TestIdea, Outcome>> {
         if (ideas.isEmpty()) return emptyList()
         val patterns = ideas.map { it.pattern }.toSet()
-        val health = patterns.mapNotNull { HEALTH_CHECKS[it] }.filter { it != SESSION }.sortedBy { CHECK_ORDER.indexOf(it) }
+        // Where requests are timed, the pages are too: `perf` records how fast each became usable, for comparing releases.
+        val health =
+            patterns
+                .mapNotNull { HEALTH_CHECKS[it] }
+                .filter { it != SESSION }
+                .flatMap { if (it == SLOW) listOf(it, PERF) else listOf(it) }
+                .sortedBy { CHECK_ORDER.indexOf(it) }
         val content = patterns.mapNotNull { PAGE_CHECKS[it] }.sortedBy { CHECK_ORDER.indexOf(it) }
         val signIn = settings.tenant == Tenant.COMPANY || settings.team.roles.any { it != ScenarioSettings.VISITOR }
         val stepsOf = mutableMapOf<String, MutableList<String>>()
@@ -716,6 +722,10 @@ internal class ScenarioComposer(
         /** The most pages one group of site-wide checks visits. */
         const val MAX_SITE_PAGES = 20
         const val SESSION = "session"
+        const val SLOW = "slow"
+
+        /** `site_health`'s page timing: never fails a step, compared between releases (Faza 14). */
+        const val PERF = "perf"
         const val LISTS = "lists"
         const val SHARE = "share"
         const val SHARE_WORK = "work"
@@ -727,7 +737,7 @@ internal class ScenarioComposer(
             mapOf(
                 TestPattern.BROKEN_LINKS to "links",
                 TestPattern.CONSOLE_ERRORS to "console",
-                TestPattern.SLOW_ENDPOINTS to "slow",
+                TestPattern.SLOW_ENDPOINTS to SLOW,
                 TestPattern.BACK_BUTTON to "back",
                 TestPattern.MOBILE_VIEWPORT to "mobile",
                 TestPattern.SESSION_EXPIRY to SESSION,
@@ -747,7 +757,22 @@ internal class ScenarioComposer(
 
         /** The order checks are written in, so a draft reads the same whatever the ideas' order. */
         val CHECK_ORDER =
-            listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound", "mirrors", LISTS)
+            listOf(
+                "console",
+                SLOW,
+                PERF,
+                "links",
+                "back",
+                "mobile",
+                SESSION,
+                "anchors",
+                "images",
+                "alt",
+                "meta",
+                "outbound",
+                "mirrors",
+                LISTS,
+            )
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
     }

@@ -25,6 +25,7 @@ import az.petek.evidence.domain.EvidenceSource.ORACLE
 import az.petek.evidence.domain.EvidenceSource.RECEIVER
 import az.petek.evidence.domain.EvidenceSource.SENDER
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict.FAILED
@@ -204,6 +205,41 @@ class BuildReportUseCaseTest {
                 listOf("The explorer never saw the site as manager.", "BOUNDARY of 'Göndər' was not written: no rules.")
             model.summary.stepsPassed shouldBe 1
             model.summary.stepsFailed shouldBe 0
+        }
+
+    @Test
+    fun `the pages' own timing comes back per page and screen as the median over the testers that timed it`() =
+        runTest {
+            evidence.create(run())
+
+            fun timed(
+                agent: String,
+                page: String,
+                load: Long,
+                device: String? = "phone",
+            ) = PageTimingRecord(
+                RUN_ID,
+                StepId("stp_$agent"),
+                AgentId(agent),
+                "public-pages",
+                page,
+                device,
+                90,
+                300,
+                load,
+                1_000,
+                0.02,
+                START,
+            )
+            listOf(timed("a01", "/", 900), timed("a02", "/", 1_300), timed("a03", "/", 1_100), timed("a01", "/", 700, "desktop"))
+                .forEach { evidence.pageTiming(it) }
+
+            val rows = useCase.build(RUN_ID).pageSpeed
+
+            rows.map { listOf(it.page, it.device, it.testers, it.loadMs) } shouldBe
+                listOf(listOf("/", "phone", 3, 1_100L), listOf("/", "desktop", 1, 700L))
+            rows.first().largestPaintMs shouldBe 1_000
+            rows.first().layoutShift shouldBe 0.02
         }
 
     @Test

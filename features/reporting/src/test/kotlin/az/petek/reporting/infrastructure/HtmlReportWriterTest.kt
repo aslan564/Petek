@@ -11,6 +11,7 @@
 
 package az.petek.reporting.infrastructure
 
+import az.petek.reporting.domain.PageSpeedRow
 import az.petek.reporting.domain.StepRow
 import io.kotest.matchers.paths.shouldExist
 import io.kotest.matchers.shouldBe
@@ -68,6 +69,21 @@ class HtmlReportWriterTest {
         html shouldContain "@media print"
         html shouldContain ".no-print { display: none; }"
         writer.render(SampleReport.model(), pdfLink = false) shouldNotContain "report.pdf"
+    }
+
+    @Test
+    fun `the pages' own timing gets its section only when the run timed pages`() {
+        val timed =
+            SampleReport.model().copy(
+                pageSpeed = listOf(PageSpeedRow("/elanlar", "phone", 3, 90, 300, 1_100, 1_400, 0.02)),
+            )
+
+        writer.render(timed).let {
+            it shouldContain "<h2>Səhifə sürəti</h2>"
+            it shouldContain "/elanlar (phone)"
+            it shouldContain "1400 ms"
+        }
+        writer.render(SampleReport.model()) shouldNotContain "Səhifə sürəti"
     }
 
     @Test

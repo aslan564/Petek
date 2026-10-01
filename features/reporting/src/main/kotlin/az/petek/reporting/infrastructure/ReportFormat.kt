@@ -60,6 +60,13 @@ internal object ReportFormat {
     /** How the reports head what the run's scenario left unchecked (its `coverage:` lines, 2026-09-30). */
     const val COVERAGE_TITLE = "Bu ssenarinin yoxlamadıqları"
 
+    /** The section of the pages' own timing (`site_health`'s `perf`). */
+    const val PAGE_SPEED_TITLE = "Səhifə sürəti"
+    const val PAGE_SPEED_NOTE =
+        "Brauzerin özünün ölçdüyü vaxtlar, səhifə və ekran üzrə testerlərin medianı: ilk bayt, DOM hazır, yüklənmə, əsas " +
+            "məzmunun görünməsi (LCP) və yüklənərkən sürüşmə (CLS; 0,10-dan aşağı sabit sayılır). Versiyalar petek compare ilə tutuşdurulur."
+    val PAGE_SPEED_COLUMNS = listOf("Səhifə", "Tester", "İlk bayt", "DOM hazır", "Yüklənmə", "LCP", "CLS")
+
     /** The header link that downloads the report as a PDF. */
     const val PDF_DOWNLOAD = "PDF yüklə"
 
@@ -161,6 +168,9 @@ internal object ReportFormat {
     }
 
     fun latency(ms: Long?): String = ms?.let { "$it ms" } ?: NONE
+
+    /** A cumulative layout shift as the report writes numbers: two decimals, a decimal comma (`0,02`). */
+    fun shift(value: Double?): String = value?.let { String.format(Locale.ROOT, "%.2f", it).replace('.', ',') } ?: NONE
 
     /** `5 000 000`: grouped so token counts stay readable. */
     fun count(value: Long): String = String.format(Locale.ROOT, "%,d", value).replace(',', ' ')

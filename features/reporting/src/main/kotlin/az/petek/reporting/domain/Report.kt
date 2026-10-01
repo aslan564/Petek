@@ -16,6 +16,7 @@ import az.petek.core.ids.WorkspaceId
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
@@ -126,6 +127,41 @@ data class StabilityRow(
     val undecided: Int get() = (runs - passed - siteFailures - agentFailures - environmentFailures).coerceAtLeast(0)
 }
 
+/**
+ * One page on one screen as the run's testers timed it ([PageTimingRecord]): how many timed it
+ * and the median of each measure; null where no tester's browser reported it.
+ */
+data class PageSpeedRow(
+    val page: String,
+    val device: String?,
+    val testers: Int,
+    val ttfbMs: Long?,
+    val domContentLoadedMs: Long?,
+    val loadMs: Long?,
+    val largestPaintMs: Long?,
+    val layoutShift: Double?,
+) {
+    companion object {
+        /** Rows in the order the pages were first timed, each screen of a page together. */
+        fun of(records: List<PageTimingRecord>): List<PageSpeedRow> =
+            records.groupBy { it.page to it.device }.map { (key, own) ->
+                fun median(values: List<Long>) = LatencyStatistics.nearestRank(values, MEDIAN)
+                PageSpeedRow(
+                    page = key.first,
+                    device = key.second,
+                    testers = own.map { it.agentId }.toSet().size,
+                    ttfbMs = median(own.mapNotNull { it.ttfbMs }),
+                    domContentLoadedMs = median(own.mapNotNull { it.domContentLoadedMs }),
+                    loadMs = median(own.mapNotNull { it.loadMs }),
+                    largestPaintMs = median(own.mapNotNull { it.largestPaintMs }),
+                    layoutShift = own.mapNotNull { it.layoutShift }.sorted().let { shifts -> shifts.getOrNull((shifts.size - 1) / 2) },
+                )
+            }
+
+        private const val MEDIAN = 50
+    }
+}
+
 data class FailedAgentRow(
     val agentId: String,
     val name: String,
@@ -169,6 +205,8 @@ data class ReportModel(
     val usage: List<UsageRecord> = emptyList(),
     /** What the run's scenario left unchecked (its `coverage:` lines), which the summary names (2026-09-30). */
     val coverage: List<String> = emptyList(),
+    /** How fast each page became usable, per screen, as the testers' browsers timed it (`site_health`'s `perf`). */
+    val pageSpeed: List<PageSpeedRow> = emptyList(),
 ) {
     /** The workspace the run belongs to (ADR-0011); `local` on the owner's machine. */
     val workspaceId: WorkspaceId get() = run.workspaceId

@@ -11,7 +11,7 @@ təklifdir (az asılılıqlı olan əvvəl); sahib dəyişə bilər.
 
 | # | İş | Nə verir | Nə gözləyir |
 |---|----|----------|-------------|
-| 1 | **Versiyalar arası müqayisə** (regressiya baseline) | Nəticə fərqi hazırdır (2026-10-01: `petek compare`, panelin **Müqayisə**-si, MCP `compare_runs`, `--release`). Qalan: screenshot fərqi (vizual regressiya) və səhifə sürəti ölçüləri Playwright-ın içindən. | Yeni kitabxana yoxdur (şəkil fərqi JDK ilə). Əlçatanlıq ölçüsü (axe-core) yeni kitabxanadır: qayda 11, sahibin təsdiqi. |
+| 1 | **Versiyalar arası müqayisə** (regressiya baseline) | Nəticə fərqi və səhifə sürəti hazırdır (2026-10-01: `petek compare`, panelin **Müqayisə**-si, MCP `compare_runs`, `--release`, `site_health`-in `perf`-i və hesabatın "Səhifə sürəti" bölməsi). Qalan: screenshot fərqi (vizual regressiya). | Yeni kitabxana yoxdur (şəkil fərqi JDK ilə). Əlçatanlıq ölçüsü (axe-core) yeni kitabxanadır: qayda 11, sahibin təsdiqi. |
 | 2 | **Canlı saytın "yalnız oxu" müşahidəsi** | 2–3 ziyarətçi agent cədvəllə (cron) canlı sayta baxır, heç nə yazmır; pisləşmə olanda xəbər verir. | Yeni kitabxana yoxdur (ziyarətçi run artıq var). Canlı host `PETEK_ALLOW_PRODUCTION` ilə açıq icazə istəyir (qayda 8). |
 | 3 | **API adapteri** (brauzersiz test) | Saytın API-sini brauzersiz, eyni sübut və hesabat qaydası ilə yoxlamaq. | Yeni kitabxana yoxdur (Ktor client). |
 | 4 | **LLM hakim** (yalnız `LLM_JUDGED`) | Kodun qərar verə bilmədiyi yerdə (məs. mətnin mənası) AI-ın rəyi, ən zəif sübut səviyyəsi kimi. | Qayda 2 ilə sərhəd: kodun hökmünü heç vaxt dəyişmir, yalnız ayrıca işarəli rəy əlavə edir. |

@@ -953,8 +953,16 @@ nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
   tester və ya mühitin itirdiyi addım "müqayisə olunmur" sayılır, heç vaxt reqressiya deyil. Sürət yalnız saytın
   təyin etdiyi yerdə: canlı çatdırılma (hadisə adına görə p95) və deterministik `run` addımları (aktorlar üzrə
   median), 25%-dən çox və ən azı 300 ms; AI addımının vaxtı tutuşdurulmur. Pisləşibsə exit 1, müqayisə olunmursa 2.
-  `RunComparerTest`, `CompareRunsUseCaseTest`, `CompareCommandTest`, `PanelHttpTest`, `McpCommandTest`. Qalan:
-  vizual fərq, sürət və əlçatanlıq ölçüləri (axe-core yeni kitabxanadır, qayda 11).
+  `RunComparerTest`, `CompareRunsUseCaseTest`, `CompareCommandTest`, `PanelHttpTest`, `McpCommandTest`.
+  **Səhifə sürəti (2026-10-01):** `site_health`-in `perf` yoxlaması brauzerin özünün ölçdüyü vaxtları (ilk bayt, DOM
+  hazır, yüklənmə, LCP, CLS; `BrowserSession.pageTiming`, Navigation Timing və bufer-dəki paint/layout-shift
+  qeydləri) səhifə və ekran üzrə `page_timing` cədvəlinə yazır, addımı heç vaxt yıxmır; draftlar sorğu sürətini
+  yoxladıqları yerdə səhifələri də ölçür. Hesabatda "Səhifə sürəti" bölməsi (testerlərin medianı), `petek compare`
+  isə səhifə və ekran üzrə yüklənmə və LCP-ni tutuşdurur (25%-dən çox və ən azı 300 ms), CLS 0,10-u keçib 0,05
+  artanda da pisləşmə sayılır. `PlaywrightBrowserSessionTest` (real Chromium), `BlindCheckRunFunctionsTest`,
+  `RunComparerTest`, `BuildReportUseCaseTest`, `HtmlReportWriterTest`, `RestoringBrowserSessionTest`,
+  `NotesSiteTestEndToEndTest` (real run hər ekran üçün yazır). Qalan: vizual fərq və əlçatanlıq ölçüsü (axe-core
+  yeni kitabxanadır, qayda 11).
 - [ ] Production "yalnız oxu" monitorinq rejimi (yazan addım yoxdur, 2–3 agent, cron).
 - [ ] Ödənişli modullar (ayrı repo/modul, Faza 8 portları arxasında): hosted sürü (Redis/NATS ilə çoxmaşınlı
   orkestrasiya), hesabat tarixçəsi/trend və paylaşılan panel, SSO/audit, hesabat hostingi.

@@ -31,6 +31,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -723,6 +724,20 @@ class PlaywrightBrowserSessionTest {
                 it shouldContain "leyla signed in with"
                 it shouldNotContain TokenApp.TOKEN
             }
+        }
+
+    @Test
+    fun `the page's own timing is read from the browser, its first byte, DOM ready, load, largest paint and no layout shift`() =
+        withSession { session ->
+            session.navigate("/")
+
+            val timing = session.pageTiming().shouldNotBeNull()
+
+            val firstByte = timing.ttfbMs.shouldNotBeNull()
+            timing.loadMs.shouldNotBeNull() shouldBeGreaterThanOrEqual firstByte
+            timing.domContentLoadedMs.shouldNotBeNull()
+            timing.largestPaintMs.shouldNotBeNull()
+            timing.layoutShift shouldBe 0.0
         }
 
     @Test

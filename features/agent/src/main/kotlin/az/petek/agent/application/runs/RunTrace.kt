@@ -21,6 +21,7 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.StepContext
+import az.petek.browser.domain.PageTiming
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.StepKind
@@ -173,6 +174,19 @@ internal class RunTrace(
     suspend fun readText(ref: String): String? = lookup("read ${describe(ref)}") { session.readText(selector(ref)) }
 
     suspend fun saveStorageState() = act("save storage state") { session.saveStorageState(runtime.storageStatePath) }
+
+    /**
+     * Reads how fast the current page ([page], on [device]) became usable, as the browser timed it, and records it as the
+     * page's timing (`site_health`'s `perf`); null when the session cannot read it.
+     */
+    suspend fun timing(
+        page: String,
+        device: String?,
+    ): PageTiming? {
+        val timing = act("read the timing of $page") { session.pageTiming() } ?: return null
+        lastStepId?.let { evidence.pageTiming(runtime, step, it, page, device, timing) }
+        return timing
+    }
 
     /** Unrecorded visibility check, for polling loops that would otherwise flood the evidence. */
     suspend fun isVisible(ref: String): Boolean = session.isSelectorVisible(selector(ref))

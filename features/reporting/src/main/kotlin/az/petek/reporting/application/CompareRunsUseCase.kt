@@ -151,6 +151,7 @@ class CompareRunsUseCase(
             query.assertions(run.runId),
             query.events(run.runId),
             query.receipts(run.runId),
+            query.pageTimings(run.runId),
         )
 
     private fun refused(

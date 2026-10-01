@@ -20,6 +20,7 @@ import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
@@ -437,6 +438,22 @@ internal class PlaywrightBrowserSession private constructor(
             surviveNavigation {
                 (page.evaluate(BundledScripts.pageFacts) as? Map<*, *>)?.let {
                     PageFactsReading.of(it) { text -> SecretRedactor.redactText(text, masked()) }
+                }
+            }
+        }
+
+    override suspend fun pageTiming(): PageTiming? =
+        perform("read the page's timing") {
+            surviveNavigation {
+                (page.evaluate(BundledScripts.pageTiming) as? Map<*, *>)?.let { raw ->
+                    fun long(key: String) = (raw[key] as? Number)?.toLong()
+                    PageTiming(
+                        long("ttfb"),
+                        long("domContentLoaded"),
+                        long("load"),
+                        long("largestPaint"),
+                        (raw["layoutShift"] as? Number)?.toDouble(),
+                    )
                 }
             }
         }

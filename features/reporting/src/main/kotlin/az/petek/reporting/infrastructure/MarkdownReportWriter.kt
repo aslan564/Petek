@@ -38,6 +38,7 @@ class MarkdownReportWriter : ReportWriter {
             findings(model)
             steps(model)
             latency(model)
+            pageSpeed(model)
             stability(model)
             failedAgents(model)
             usage(model)
@@ -164,6 +165,27 @@ class MarkdownReportWriter : ReportWriter {
             val perReceiver = stats.perReceiverMs.entries.joinToString(", ") { (agent, ms) -> "${md(agent)} ${ReportFormat.latency(ms)}" }
             line("- **${md(stats.event)}**: $perReceiver")
         }
+        line()
+    }
+
+    private fun StringBuilder.pageSpeed(model: ReportModel) {
+        if (model.pageSpeed.isEmpty()) return
+        section(ReportFormat.PAGE_SPEED_TITLE)
+        paragraph(ReportFormat.PAGE_SPEED_NOTE)
+        table(
+            ReportFormat.PAGE_SPEED_COLUMNS,
+            model.pageSpeed.map { row ->
+                listOf(
+                    md(row.page + (row.device?.let { " ($it)" } ?: "")),
+                    row.testers.toString(),
+                    ReportFormat.latency(row.ttfbMs),
+                    ReportFormat.latency(row.domContentLoadedMs),
+                    ReportFormat.latency(row.loadMs),
+                    ReportFormat.latency(row.largestPaintMs),
+                    ReportFormat.shift(row.layoutShift),
+                )
+            },
+        )
         line()
     }
 

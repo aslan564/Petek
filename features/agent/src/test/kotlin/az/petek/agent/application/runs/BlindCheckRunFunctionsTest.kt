@@ -17,6 +17,7 @@ import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.RunFunctionFixture
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.PageHealth
+import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.SlowResponse
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
@@ -40,6 +41,35 @@ class BlindCheckRunFunctionsTest {
 
             outcome.status shouldBe ActionStatus.SUCCEEDED
             outcome.summary shouldContain "nothing wrong"
+        }
+
+    @Test
+    fun `perf records how fast each page became usable on each screen, and never fails the step`() =
+        runTest {
+            browser.pageTimingByUrl["/"] = PageTiming(120, 480, 900, 1_400, 0.02)
+            browser.pageTimingByUrl["/about"] = PageTiming(90, 300, 600, null, 0.0)
+
+            val outcome =
+                fixture.run(
+                    "site_health",
+                    mapOf(
+                        "checks" to "perf",
+                        "pages" to "/,/about",
+                        "share" to "work",
+                        "devices" to "phone",
+                    ),
+                )
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            fixture.evidence.pageTimingList.map { listOf(it.page, it.device, it.loadMs, it.largestPaintMs) } shouldBe
+                listOf(listOf("/", "phone", 900L, 1_400L), listOf("/about", "phone", 600L, null))
+            fixture.evidence.pageTimingList.first().let {
+                it.scenarioStep shouldBe "setup-site_health"
+                it.layoutShift shouldBe 0.02
+                fixture.evidence.stepList
+                    .single { step -> step.stepId == it.stepId }
+                    .action shouldContain "read the timing of /"
+            }
         }
 
     @Test

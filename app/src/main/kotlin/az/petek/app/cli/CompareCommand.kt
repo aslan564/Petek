@@ -82,7 +82,11 @@ class CompareCommand : PetekSubcommand("compare") {
         line(
             "Slower",
             comparison.slowerSteps.map { "${it.scenarioStep} ${it.beforeMs} ms → ${it.afterMs} ms" } +
-                comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" },
+                comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" } +
+                comparison.worsePages.map { page ->
+                    page.page + (page.device?.let { " ($it)" } ?: "") + " load ${page.beforeLoadMs} ms → ${page.afterLoadMs} ms, " +
+                        "LCP ${page.beforePaintMs} ms → ${page.afterPaintMs} ms, CLS ${page.beforeShift} → ${page.afterShift}"
+                },
         )
         line("Not comparable", comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep })
         result.files.forEach { echo("Written: $it") }
@@ -128,6 +132,24 @@ class CompareCommand : PetekSubcommand("compare") {
                             put("afterP50Ms", delivery.afterP50Ms)
                             put("afterP95Ms", delivery.afterP95Ms)
                             put("speed", delivery.speed?.name)
+                        },
+                    )
+                }
+            }
+            putJsonArray("pages") {
+                comparison.pages.forEach { page ->
+                    add(
+                        buildJsonObject {
+                            put("page", page.page)
+                            put("device", page.device)
+                            put("beforeLoadMs", page.beforeLoadMs)
+                            put("afterLoadMs", page.afterLoadMs)
+                            put("beforeLargestPaintMs", page.beforePaintMs)
+                            put("afterLargestPaintMs", page.afterPaintMs)
+                            put("beforeLayoutShift", page.beforeShift)
+                            put("afterLayoutShift", page.afterShift)
+                            put("speed", page.speed?.name)
+                            put("layoutShiftGrew", page.shiftGrew)
                         },
                     )
                 }

@@ -18,6 +18,7 @@ import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
 
@@ -56,6 +57,8 @@ class ProgressTrackingRecorder(
     override suspend fun finding(record: FindingRecord) = delegate.finding(record)
 
     override suspend fun usage(record: UsageRecord) = delegate.usage(record)
+
+    override suspend fun pageTiming(record: PageTimingRecord) = delegate.pageTiming(record)
 
     /** The first path segment that is an agent id, whatever its number of digits (`a07`, `a120`, `a1000`). */
     private fun ownerOf(record: ArtifactRecord): AgentId? =

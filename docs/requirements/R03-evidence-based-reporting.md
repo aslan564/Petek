@@ -39,7 +39,8 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
   (`ExportReportPdfUseCase`, `PlaywrightPdfPrinter`; 2026-09-30); a run is compared with an earlier run or release of
   its scenario (`petek compare`, the panel's Müqayisə, MCP `compare_runs`; `compare.html`, `compare.md`): only what the
   site did is a change, a step a lost tester left undecided is not comparable, and speed is compared only where the
-  site sets it (`RunComparer`, 2026-10-01); a finding without
+  site sets it (`RunComparer`, 2026-10-01): real-time delivery, the deterministic `run` steps and the pages' own timing
+  (`site_health`'s `perf`, which the report's "Səhifə sürəti" shows per page and screen); a finding without
   evidence of its own links its step's last screenshot, which `site_health`
   takes on the first page that went wrong; the plain summary names a problem several testers saw once, with how
   many saw it (2026-09-27). A finding whose step has no check of the sender's own shows as A what the sender did,

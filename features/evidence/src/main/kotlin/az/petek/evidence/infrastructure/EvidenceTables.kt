@@ -231,6 +231,29 @@ internal object UsageTable : Table("usage") {
     }
 }
 
+/** One row per page a tester timed (`site_health`'s `perf`); added later, so older databases get it empty (`createMissing`). */
+internal object PageTimingTable : Table("page_timing") {
+    val seq = long("seq").autoIncrement()
+    val runId = runIdColumn()
+    val stepId = stepIdColumn()
+    val agentId = agentIdColumn("agent_id")
+    val scenarioStep = text("scenario_step")
+    val page = text("page")
+    val device = text("device").nullable()
+    val ttfbMs = long("ttfb_ms").nullable()
+    val domContentLoadedMs = long("dom_content_loaded_ms").nullable()
+    val loadMs = long("load_ms").nullable()
+    val largestPaintMs = long("largest_paint_ms").nullable()
+    val layoutShift = double("layout_shift").nullable()
+    val recordedAt = instant("recorded_at")
+
+    override val primaryKey = PrimaryKey(seq)
+
+    init {
+        index(false, runId, page)
+    }
+}
+
 /** Every table of the evidence store, in creation order. */
 internal val evidenceTables: Array<Table> =
     arrayOf(
@@ -243,4 +266,5 @@ internal val evidenceTables: Array<Table> =
         AssertionTable,
         FindingTable,
         UsageTable,
+        PageTimingTable,
     )
