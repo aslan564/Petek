@@ -106,7 +106,14 @@ internal class SiteHealthRunFunction(
                     if ("perf" in checks) timing(path, job.device?.key)
                     // After the timing (a reload would time itself) and before any link is followed: the page as it opened.
                     if (lookRequest != null && job.lookRound < PageShare.MAX_LOOKS_PER_JOB) {
-                        if (look(path, job.device?.key, lookRequest) != null) looks++ else looksMissed++
+                        val opened = pathOf(currentUrl())
+                        if (look(path, job.device?.key, lookRequest) != null) {
+                            looks++
+                        } else {
+                            looksMissed++
+                            // A look the page left (a redirect on its reload) leaves the browser elsewhere: back to the page.
+                            if (!samePath(pathOf(currentUrl()), opened)) open(ref)
+                        }
                     }
                     val links =
                         if ("links" in checks ||

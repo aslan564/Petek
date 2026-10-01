@@ -226,7 +226,7 @@ internal class RunTrace(
             } catch (e: BrowserActionException) {
                 return notCaptured(errorDetail(e) ?: e::class.simpleName.orEmpty())
             } ?: return notCaptured("timed out after $timeout")
-        val look = taken.look ?: return notCaptured("this session cannot take looks")
+        val look = taken.look ?: return notCaptured(NO_LOOK)
         if (look.shots.none { it.kind == LookShotKind.MAIN }) return notCaptured("the browser gave no main frame")
         val stepId = record(description, started, StepStatus.PASSED, withNote(LookNotes.of(look, page), session.dialogNote()))
         evidence.pageLook(runtime, step, stepId, page, device, look, request.maxHeight)?.let { problem ->
@@ -294,6 +294,10 @@ internal class RunTrace(
     )
 
     companion object {
+        /** Why the session gave no look: it cannot take one, or the page went elsewhere or answered otherwise meanwhile. */
+        const val NO_LOOK =
+            "this session cannot take looks, or the page did not stay the same during the look (another address or answer)"
+
         private const val MAX_SELECTOR_CHARS = 80
 
         /** The least time a look is given, whatever it asks for: a default look's two loads take well under it. */

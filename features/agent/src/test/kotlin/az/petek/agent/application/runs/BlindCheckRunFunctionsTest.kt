@@ -48,6 +48,7 @@ import az.petek.evidence.domain.StepStatus
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.collections.shouldNotContain
@@ -267,7 +268,7 @@ class BlindCheckRunFunctionsTest {
             outcome.summary shouldContain "Kept 0 look(s); 1 could not be taken or kept."
             val look = fixture.steps.single { it.action == "site_health: look at /" }
             look.status shouldBe StepStatus.SKIPPED
-            look.detail shouldBe "not captured: this session cannot take looks"
+            look.detail shouldBe "not captured: ${RunTrace.NO_LOOK}"
             fixture.evidence.pageLookList.shouldBeEmpty()
             fixture.artifactsOf(ArtifactType.VISUAL).shouldBeEmpty()
 
@@ -277,6 +278,28 @@ class BlindCheckRunFunctionsTest {
                 it.status shouldBe StepStatus.SKIPPED
                 it.detail shouldBe "not captured: Target page, context or browser has been closed"
             }
+        }
+
+    @Test
+    fun `a look the page left gives none, and the checks after it run on the page again`() =
+        runTest {
+            val fixture =
+                RunFunctionFixture(AgentTestData.itEmployee, contractSite = false, session = { browser ->
+                    object : BrowserSession by browser {
+                        override suspend fun look(request: LookRequest): PageLook? {
+                            // The reload was redirected: the real session gives no look and stays where it landed.
+                            browser.navigate("/login")
+                            return null
+                        }
+                    }
+                })
+
+            val outcome = fixture.run("site_health", mapOf("checks" to "look,mobile", "pages" to "/"))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            fixture.browser.actions.filter { it.startsWith("navigate") } shouldContainExactly
+                listOf("navigate /", "navigate /login", "navigate /")
+            fixture.browser.currentUrl() shouldBe "/"
         }
 
     @Test
