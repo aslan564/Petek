@@ -1017,6 +1017,23 @@ class PlaywrightBrowserSessionTest {
         }
 
     @Test
+    fun `a page that goes to another one while it settles is drawn as a look of that page draws it`() =
+        withSession { session ->
+            session.navigate("/look/still")
+            val direct = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+            // The jump comes while the look settles the page: its field loses the focus.
+            session.navigate("/look/jump")
+
+            val look = session.look(LookRequest(maxHeight = 0, loads = 1, settle = 1.seconds)).shouldNotBeNull()
+
+            look.landedPath shouldBe "/look/still"
+            look.shots
+                .single()
+                .png
+                .contentEquals(direct.shots.single().png) shouldBe true
+        }
+
+    @Test
     fun `a look keeps the reloaded frame of a page that changes on every load`() =
         withSession { session ->
             session.navigate("/look/still")

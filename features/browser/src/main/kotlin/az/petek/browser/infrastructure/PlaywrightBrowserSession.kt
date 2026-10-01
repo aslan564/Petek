@@ -517,8 +517,9 @@ internal class PlaywrightBrowserSession private constructor(
     /**
      * One load of a look:
      * 1. (second load: the page's address opened again, [loadAgain]) the network idle for a moment (bounded: a page that
-     *    polls never is), the pointer parked in the corner, the page drawn as a full-page frame draws it
-     *    ([drawAsBeyondTheScreen]), and brought to rest by `look-settle.js`;
+     *    polls never is), the pointer parked in the corner, the page brought to rest by `look-settle.js`, and then drawn
+     *    as a full-page frame draws it ([drawAsBeyondTheScreen]): after settling, so a document the page went to while
+     *    it settled is drawn so too;
      * 2. frames [LOOK_FRAME_GAP] apart until two in a row are the same bytes (Chromium encodes the same pixels to the
      *    same PNG), at most three: the last is the load's frame, and when the third still differs from the second, the
      *    second is kept as the earlier frame of a page that keeps moving by itself;
@@ -540,7 +541,6 @@ internal class PlaywrightBrowserSession private constructor(
                     // A page that polls never goes idle; the settle script's quiet window tells whether it calmed down.
                 }
                 page.mouse().move(0.0, 0.0)
-                drawAsBeyondTheScreen()
                 val arguments =
                     mapOf(
                         "settleMs" to request.settle.inWholeMilliseconds.toDouble(),
@@ -550,8 +550,12 @@ internal class PlaywrightBrowserSession private constructor(
                         "stepMs" to LOOK_SCROLL_STEP_MS,
                     )
                 val raw = surviveNavigation { page.evaluate(BundledScripts.lookSettle, arguments) } as? Map<*, *> ?: emptyMap<String, Any>()
+                // Taken before the drawing below: a document the page goes to from here on is not drawn so, and is found
+                // at another address when the look is read.
                 val address = page.url()
                 if (opened != null && withoutQuery(address) != opened) return@perform null
+                // Only the raster changes, not the layout, so what the settle script measured holds.
+                drawAsBeyondTheScreen()
 
                 fun number(key: String) = (raw[key] as? Number)?.toInt() ?: 0
                 LookSettled(
@@ -595,10 +599,11 @@ internal class PlaywrightBrowserSession private constructor(
     }
 
     /**
-     * Chromium draws a document differently once a frame beyond the screen was taken of it (on macOS, with another system
-     * font), and keeps drawing it so until another document loads: a full-page frame of a page taller than the screen would
-     * differ from the frame of one that fits it, or of the first screen only. A one-pixel capture beyond the screen first
-     * draws every look's frames the same way. Its picture is not kept. Session thread only.
+     * Chromium draws a document differently once a frame beyond the screen was taken of it (on macOS, its text: the
+     * layout stays as it was), and keeps drawing it so until another document loads: a full-page frame of a page taller
+     * than the screen would differ from the frame of one that fits it, or of the first screen only. A one-pixel capture
+     * beyond the screen of the document about to be framed draws every look's frames the same way. Its picture is not
+     * kept. Session thread only.
      */
     private fun drawAsBeyondTheScreen() {
         val devtools = handles.context.newCDPSession(page)

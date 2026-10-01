@@ -207,6 +207,7 @@ internal class TestSite : AutoCloseable {
             call.respondText(LOOK_RANDOM_PAGE.replace("NUMBER", number.toString()), ContentType.Text.Html)
         }
         get("/look/wandering") { call.respondText(LOOK_WANDERING_PAGE, ContentType.Text.Html) }
+        get("/look/jump") { call.respondText(LOOK_JUMP_PAGE, ContentType.Text.Html) }
         get("/look/once/{how}") {
             val how = call.parameters["how"].orEmpty()
             when {
@@ -361,6 +362,15 @@ internal class TestSite : AutoCloseable {
               var slide = 0;
               setInterval(function () { slide += 1; history.pushState(null, '', '/look/wandering/' + slide); }, 200);
             </script>
+            </body></html>
+            """.trimIndent()
+
+        /** Goes to `/look/still` as soon as its field, focused as the page opens, loses the focus. */
+        val LOOK_JUMP_PAGE =
+            """
+            <!doctype html>
+            <html><head><title>Keçid</title></head><body>
+            <input id="field" autofocus onblur="location.href = '/look/still'">
             </body></html>
             """.trimIndent()
 
