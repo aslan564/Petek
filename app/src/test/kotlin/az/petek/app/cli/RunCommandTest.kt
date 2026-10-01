@@ -24,7 +24,9 @@ import az.petek.capacity.domain.HostResources
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.testing.FakeHarnessClock
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.RunResult
+import az.petek.evidence.domain.StepStatus
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
 import az.petek.ownership.domain.OwnershipMethod
@@ -37,6 +39,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -371,6 +374,26 @@ class RunCommandTest {
 
             result.statusCode shouldBe 0
             result.stderr shouldContain "4 testers live at once is more than this machine is advised to carry"
+            // The run's own evidence says it too, so its report can tell slow screens of this machine from the site's.
+            val run = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
+            val capacity = cli.evidence { it.evidence.steps(run.runId) }.single { it.action == CAPACITY_ACTION }
+            capacity.status shouldBe StepStatus.SKIPPED
+            capacity.detail.shouldNotBeNull() shouldStartWith "over_capacity: 4 testers at once (4 in the run); this machine is advised"
+            run.result shouldBe RunResult.PASSED
+        }
+
+    @Test
+    fun `a run within this machine's advice records that next to its size`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            cli.run("run", "tiny.yaml").statusCode shouldBe 0
+
+            val run = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
+            val capacity = cli.evidence { it.evidence.steps(run.runId) }.single { it.action == CAPACITY_ACTION }
+            capacity.status shouldBe StepStatus.PASSED
+            capacity.detail.shouldNotBeNull() shouldStartWith "within_capacity: 4 testers at once (4 in the run)"
         }
 
     @Test
@@ -441,7 +464,7 @@ class RunCommandTest {
 
             val result = cli.run("run", "depts.yaml", "--testers", "3")
 
-            result.statusCode shouldBe 0
+            result.statusCode shouldBe 1
             result.stderr shouldContain "Warning: with --testers 3 no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
         }
 

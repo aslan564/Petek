@@ -335,11 +335,12 @@ class CompositionMatrixTest {
                     campaign(managers = 0, employees = 2, setup = listOf(setupStep("join", employees())), steps = listOf(itOnly)),
                 )
 
-                // Nobody left to try: nothing is judged, neither refused nor accepted.
+                // Nobody left to try: nothing is judged, neither refused nor accepted; its checks are shown as not evaluated.
                 f.agents.callsFor("forbidden").shouldBeEmpty()
                 f.evidence.assertionList
                     .filter { it.scenarioStep == "forbidden" }
-                    .shouldBeEmpty()
+                    .map { it.verdict to it.note }
+                    .toSet() shouldBe setOf(Verdict.SKIPPED to "not evaluated: nobody ran the step")
                 f.forbiddenAccepted().shouldBeEmpty()
             }
     }

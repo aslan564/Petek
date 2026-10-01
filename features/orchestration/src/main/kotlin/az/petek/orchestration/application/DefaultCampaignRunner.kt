@@ -36,14 +36,18 @@ import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTags
 import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
+import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.ArtifactStore
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.identity.application.PlanIdentitiesUseCase
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityRegistryGenerator
@@ -73,6 +77,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
 
@@ -84,14 +89,23 @@ private val logger = KotlinLogging.logger {}
  *    (see [StepExecutor] for what happens inside a step). In a `wait_for` step, `visible_text`/`latency_max` are
  *    checked as soon as the event arrives, before the receiver's own action, so t1 - t0 measures delivery rather
  *    than the agent; the other assertions run after the action;
- * 4. always — also on abort, budget timeout or cancellation — records the observed real-time transports, tears down
- *    the test company (unless `keepData`), closes sessions, stops the browser, finishes the run record and asks the
- *    [RunFinalizer] for the report.
+ * 4. always — also on abort, budget timeout or cancellation — records why the run stopped early, the roll call and the
+ *    steps nobody ran (see "Nobody left out" below), the observed real-time transports, tears down the test company
+ *    (unless `keepData`), closes sessions, stops the browser, finishes the run record and asks the [RunFinalizer] for
+ *    the report.
  *
  * Setup semantics: an actor that fails a setup step is marked FAILED with the failure key and skipped (with a
  * SKIPPED record) in every later step; a successful sign-up/login step marks it ACTIVE
  * ([RunnerSettings.activatingRunFunctions], or any setup `do` step). If the admin fails a setup step nothing else
  * can work, so the run is ABORTED. `on_fail: abort` (step or campaign level) aborts after a failed step.
+ *
+ * Nobody left out: at the start the evidence gets the run's roster (every planned tester, `roster`) and, when the caller
+ * knew it, this machine's capacity next to the run's size (`capacity`, no verdict). The runner plans every execution of
+ * the steps up front (the run, or each wave; the account swap when it begins) and, at the end, gives every planned
+ * tester × step without a final record of its own one `not_reached` record saying why (the run stopped, its wave never
+ * began, it was out since an earlier failure); a step that no tester ran in any execution gets an agent-less `uncovered`
+ * record that counts as a failed step, so the run cannot pass with it. The action names and their details are in the
+ * evidence domain ([ROSTER_ACTION], [CAPACITY_ACTION], [ABORT_ACTION], [NOT_REACHED_ACTION], [UNCOVERED_ACTION]).
  *
  * Result: PASSED when no step and no assertion failed, FAILED otherwise, ABORTED on abort, budget timeout,
  * cancellation or an infrastructure error (which is recorded, logged and not rethrown; cancellation of the caller
@@ -106,8 +120,10 @@ private val logger = KotlinLogging.logger {}
  * Wiring: every browser call an agent makes counts as progress for [watchdog] (the runner hands each agent a
  * progress-reporting view of its session). Wrap the recorder given to the agent loop and run functions in a
  * [ProgressTrackingRecorder] reporting to the same [watchdog] as well, so that recorded evidence also counts (e.g. a
- * run function that waits for an e-mail but records its sub-steps). The run's [EventBus] comes from [busFactory]
- * (one per run); [sharedStateFactory] creates the run's [SharedRunState].
+ * run function that waits for an e-mail but records its sub-steps). Waiting for one of the AI slots the testers share
+ * never counts as inactivity, however many testers queue for them, and neither does a slow answer the provider's own
+ * timeout allows (see [InactivityWatchdog]). The run's [EventBus] comes from [busFactory] (one per run);
+ * [sharedStateFactory] creates the run's [SharedRunState].
  */
 class DefaultCampaignRunner(
     identityGenerator: IdentityRegistryGenerator,
@@ -137,6 +153,7 @@ class DefaultCampaignRunner(
     private val objectIds = ObjectIdReader(oracle, fields, renderer)
     private val teardown = OracleTeardownUseCase(runs, oracle)
     private val identityPlanner = PlanIdentitiesUseCase(identityGenerator, identities)
+    private val rollCall = RollCall(actors, evidence)
 
     override suspend fun run(
         campaign: Campaign,
@@ -196,6 +213,8 @@ class DefaultCampaignRunner(
                 planIdentities(run)
                 val waves = Waves.plan(run.campaign, run.identities, actors)
                 val live = waves?.maxLive ?: run.identities.size
+                planPasses(run, waves)
+                recordRoster(run, board, live)
                 val proxies = proxies(run)
                 if (settings.proxies.isNotEmpty() && proxies.isEmpty()) {
                     board.message(
@@ -268,6 +287,64 @@ class DefaultCampaignRunner(
         run.identities = plan.identities.sortedBy { it.agentId }
     }
 
+    /**
+     * Every execution of the steps this run will make, with the testers each step resolves its actors against there
+     * (the roll call at the end reads it): the run's single pass, or each wave as [runWaves] runs it.
+     */
+    private fun planPasses(
+        run: RunState,
+        waves: WavePlan?,
+    ) {
+        if (waves == null) {
+            run.passes += PlannedPass(1, run.campaign.allSteps.map { PassStep(it, run.identities) })
+            run.passBegan(1)
+            return
+        }
+        waves.waves.forEachIndexed { index, wave ->
+            val steps =
+                if (index == 0) {
+                    run.campaign.allSteps.map { PassStep(it, waves.live(0)) }
+                } else {
+                    val later = waveSteps(run, wave)
+                    later.setup.map { PassStep(it, wave) } + later.again.map { PassStep(it, waves.live(index)) }
+                }
+            run.passes += PlannedPass(index + 1, steps, wave = index + 1, waves = waves.waves.size)
+        }
+    }
+
+    /**
+     * The run's roster (`100 testers: a01, a02, ...`) and, when this machine's capacity is known (from the caller, else
+     * from [RunnerSettings.capacityAdvice]), the run's size next to it: [live] testers at once (waves keep it below the
+     * whole run). Neither changes a verdict.
+     */
+    private suspend fun recordRoster(
+        run: RunState,
+        board: AgentBoard,
+        live: Int,
+    ) {
+        val testers = run.identities.map { it.agentId.value }
+        evidence.system(run, null, ROSTER_ACTION, StepStatus.PASSED, "${testers.size} testers: ${testers.joinToString(", ")}")
+        val advice = run.options.capacityAdvice ?: capacityOfThisMachine(run) ?: return
+        val numbers = "$live testers at once (${testers.size} in the run); this machine is advised for up to $advice at once"
+        if (live <= advice) {
+            evidence.system(run, null, CAPACITY_ACTION, StepStatus.PASSED, "$WITHIN_CAPACITY: $numbers")
+        } else {
+            val detail = "$OVER_CAPACITY: $numbers, so slow pages and late screens may come from this machine, not from the site"
+            evidence.system(run, null, CAPACITY_ACTION, StepStatus.SKIPPED, detail)
+            board.message(detail)
+        }
+    }
+
+    /** [RunnerSettings.capacityAdvice]; a machine that cannot be measured costs only the record, never the run. */
+    private suspend fun capacityOfThisMachine(run: RunState): Int? =
+        try {
+            settings.capacityAdvice()
+        } catch (e: Exception) {
+            rethrowIfCancelled(e)
+            logger.warn { "run ${run.runId}: this machine's capacity is unknown (${e::class.simpleName}: ${e.message})" }
+            null
+        }
+
     // --- 2. browser and agents ------------------------------------------------------------------------------------
 
     /**
@@ -289,6 +366,7 @@ class DefaultCampaignRunner(
         val residents = plan.residents
         for ((index, wave) in plan.waves.withIndex()) {
             if (run.aborted) break
+            run.passBegan(index + 1)
             val live = plan.live(index).map { it.agentId }.toSet()
             // `{pass}`: every wave publishes its own texts; a carried setup event keeps the pass it was written in.
             run.pass = index + 1
@@ -306,10 +384,11 @@ class DefaultCampaignRunner(
             } else {
                 startAgents(run, board, wave, announce = false, firstProxy = residents.size)
                 // The residents set up in the first wave; this wave's testers set up on their own, then everyone acts.
+                val later = waveSteps(run, wave)
                 run.wave = wave.map { it.agentId }.toSet()
-                runSteps(run, board, tasks, run.campaign.setup.filter { step -> actors.resolve(step.actors, wave).isNotEmpty() })
+                runSteps(run, board, tasks, later.setup)
                 run.wave = live
-                val (again, done) = run.campaign.steps.partition { step -> repeats(step, wave, run.campaign) }
+                val done = later.done
                 if (done.isNotEmpty()) {
                     evidence.system(
                         run,
@@ -320,7 +399,7 @@ class DefaultCampaignRunner(
                             "alone, with no event of this wave, so the first wave did it already",
                     )
                 }
-                runSteps(run, board, tasks, again)
+                runSteps(run, board, tasks, later.again)
             }
             if (index < plan.waves.lastIndex) {
                 val leaving = wave.map { it.agentId }.toSet()
@@ -333,6 +412,25 @@ class DefaultCampaignRunner(
                 }
             }
         }
+    }
+
+    /** What a wave after the first runs: [setup] with its own testers, then [again] with everyone live; [done] is not repeated. */
+    private class LaterWave(
+        val setup: List<ScenarioStep>,
+        val again: List<ScenarioStep>,
+        val done: List<ScenarioStep>,
+    )
+
+    /**
+     * The steps of a wave after the first, for its own testers [wave]: the setup steps any of them acts in, and the main
+     * steps that [repeats] (the others the first wave did already).
+     */
+    private fun waveSteps(
+        run: RunState,
+        wave: List<Identity>,
+    ): LaterWave {
+        val (again, done) = run.campaign.steps.partition { step -> repeats(step, wave, run.campaign) }
+        return LaterWave(run.campaign.setup.filter { step -> actors.resolve(step.actors, wave).isNotEmpty() }, again, done)
     }
 
     /**
@@ -388,6 +486,11 @@ class DefaultCampaignRunner(
             return
         }
         val factory = run.factory ?: return
+        // Planned before any account moves, so a swap that stops half-way still accounts for every swapped tester.
+        val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
+        val swap = run.pass + 1
+        run.passes += PlannedPass(swap, again.map { PassStep(it, finished) }, label = "swap")
+        run.passBegan(swap)
         (active - finished.toSet()).forEach {
             evidence.system(run, it.agentId, "swap_accounts", StepStatus.SKIPPED, "${it.agentId} failed a main step and sits out the swap")
         }
@@ -412,10 +515,9 @@ class DefaultCampaignRunner(
             openSite(run, account.agentId)
         }
         board.message("accounts swapped among ${finished.size} testers; the main steps run again")
-        val again = run.campaign.steps.map { it.copy(id = it.id + SWAP_SUFFIX) }
         run.wave = finished.map { it.agentId }.toSet()
         // `{pass}`: the swap writes new texts, so the first pass's, still on the pages, are not taken for them.
-        run.pass += 1
+        run.pass = swap
         try {
             runSteps(run, board, tasks, again)
         } finally {
@@ -506,20 +608,24 @@ class DefaultCampaignRunner(
                     apiOrigin = api,
                 )
             val stored = storageStatePath(run.runId, agentId)
-            val signedIn = options.copy(storageState = stored.takeIf(Files::isRegularFile))
+
+            // Looked up when the session opens, never before: the tester signs in (and saves its state) after this.
+            fun signedIn() = options.copy(storageState = stored.takeIf(Files::isRegularFile))
+            val restoredWith = AtomicReference<Path?>(null)
             val session =
                 RestoringBrowserSession(
-                    initial = factory.open(if (restoreSession) signedIn else options),
-                    // Same identity, and still signed in when it had signed in: its saved storage state (rule 7).
-                    reopen = { factory.open(signedIn) },
+                    initial = factory.open(if (restoreSession) signedIn() else options),
+                    // Same identity, and still signed in when it has signed in by now: its saved storage state (rule 7).
+                    reopen = { factory.open(signedIn().also { restoredWith.set(it.storageState) }) },
                     onRestored = { count, reason, url ->
                         val back = url?.let { ", back on $it" }.orEmpty()
+                        val state = if (restoredWith.get() != null) STORAGE_STATE_LOADED else NO_STORAGE_STATE
                         evidence.system(
                             run,
                             agentId,
-                            "restore_session",
+                            RESTORE_SESSION,
                             StepStatus.PASSED,
-                            "browser context lost ($reason); restored ($count) with the same identity and its storage state$back",
+                            "browser context lost ($reason); restored ($count) with the same identity, $state$back",
                         )
                     },
                 )
@@ -680,6 +786,8 @@ class DefaultCampaignRunner(
         run.abortedBecause?.let { reason ->
             safely(run, "abort record") { recordAbort(run, reason, board) }
         }
+        safely(run, "roll call") { rollCall.call(run) }
+        safely(run, "steps nobody ran") { recordUncovered(run, board) }
         tasks.closeOpen(run.abortedBecause?.let { "run aborted: $it" } ?: "not run")
         safely(run, "network observation") { recordNetworkObservations(run) }
         safely(run, "company registration") {
@@ -718,18 +826,64 @@ class DefaultCampaignRunner(
         return summary
     }
 
+    /**
+     * Why the run stopped and which steps never began: per wave when the run has waves (`wave 4: read, approve`), since
+     * a step that began in the first wave may never have begun in the fourth.
+     */
     private suspend fun recordAbort(
         run: RunState,
         reason: String,
         board: AgentBoard,
     ) {
         val notRun =
-            run.campaign.allSteps
-                .map { it.id }
-                .filterNot { it in run.startedSteps }
-        val detail = "run aborted: $reason; steps not run: ${notRun.joinToString(", ").ifEmpty { "-" }}"
-        evidence.system(run, null, "abort", StepStatus.SKIPPED, detail)
+            if (run.passes.isEmpty()) {
+                // Stopped before the passes were planned (the identities could not be made): nothing began.
+                listOf(run.campaign.allSteps.joinToString(", ") { it.id })
+            } else {
+                run.passes.mapNotNull { pass ->
+                    val steps = pass.steps.map { it.step.id }.filter { run.chosenIn(pass.number, it) == null }
+                    when {
+                        steps.isEmpty() -> null
+                        pass.label == null -> steps.joinToString(", ")
+                        else -> "${pass.label}: ${steps.joinToString(", ")}"
+                    }
+                }
+            }.filter { it.isNotEmpty() }
+        val detail = "run aborted: $reason; steps not run: ${notRun.joinToString("; ").ifEmpty { "-" }}"
+        evidence.system(run, null, ABORT_ACTION, StepStatus.SKIPPED, detail)
         board.message(detail)
+    }
+
+    /**
+     * A step that resolved to nobody in every execution it had (each wave, the run without waves, the swap) was done by
+     * nobody: an agent-less `uncovered` record that counts as a failed step, its checks recorded as not evaluated. FAILED,
+     * not inconclusive: no check ran at all, as with a wave's `not_covered` receivers (Faza 24.7), and the scenario or
+     * the run's testers must change for it to be done; the `not_covered` key keeps it off the site and the testers.
+     */
+    private suspend fun recordUncovered(
+        run: RunState,
+        board: AgentBoard,
+    ) {
+        val waves = run.passes.count { it.wave != null }
+        for (step in run.campaign.allSteps) {
+            val executions = run.executionsOf(step.id)
+            if (executions.isEmpty() || executions.any { it.isNotEmpty() }) continue
+            // Out when it began, by role, department and registration: with `n`, a tester out before shifts the n-th one.
+            val out = run.outOf(step.id)
+            val detail =
+                buildString {
+                    append("$NOT_COVERED: no tester matched '${step.actors.raw}'")
+                    append(if (waves > 0) " in any wave it ran in (${executions.size} of $waves)" else " in the run")
+                    append("; nobody ran this step")
+                    if (out.isNotEmpty()) {
+                        append("; its testers were out after failing earlier: ")
+                        append(out.joinToString(", ") { "${it.value} (${run.failureReason(it) ?: "failed"})" })
+                    }
+                }
+            val stepId = evidence.system(run, null, UNCOVERED_ACTION, StepStatus.FAILED, detail, step.id, tally = Tally.FAIL)
+            evidence.skippedAssertions(run, stepId, step.id, null, step.assertions, "not evaluated: nobody ran the step")
+            board.message("step '${step.id}' was run by nobody: $detail")
+        }
     }
 
     /** One record per agent (of [only], when given); reporting reads the comma-separated transports from `detail`. */
@@ -797,10 +951,27 @@ class DefaultCampaignRunner(
         /** `action` of the SYSTEM step that carries a session's detected real-time transports. */
         const val NETWORK_OBSERVATION = "network_observation"
 
+        /**
+         * `action` of the SYSTEM step that records a tester's browser context restored after a crash. Detail:
+         * `browser context lost (<reason>); restored (<n>) with the same identity, <state>[, back on <url>]`, where
+         * `<state>` is [STORAGE_STATE_LOADED] or [NO_STORAGE_STATE].
+         */
+        const val RESTORE_SESSION = "restore_session"
+
+        /** The restored context was opened with the storage state the tester saved when it signed in. */
+        const val STORAGE_STATE_LOADED = "storage state loaded"
+
+        /** The tester had saved no storage state yet (it had not signed in), so the restored context starts signed out. */
+        const val NO_STORAGE_STATE = "no storage state loaded (none saved yet)"
+
         /** Suffix of the scenario steps run again after the account swap. */
         const val SWAP_SUFFIX = "@swap"
 
         /** A `wait_for` step no receiver could wait for in any wave: its check was never made (Faza 24.7). */
         const val NOT_COVERED = "not_covered"
+
+        /** Leading keys of the `capacity` record's detail (see [CAPACITY_ACTION]). */
+        const val WITHIN_CAPACITY = "within_capacity"
+        const val OVER_CAPACITY = "over_capacity"
     }
 }

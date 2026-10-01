@@ -40,6 +40,9 @@ import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.DefaultTemplateRenderer
 import az.petek.campaign.domain.TemplateRenderer
 import az.petek.campaign.infrastructure.YamlCampaignSource
+import az.petek.capacity.application.RecommendCapacityUseCase
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.infrastructure.SystemHostResourceProbe
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.UuidV7IdGenerator
 import az.petek.core.model.Role
@@ -330,6 +333,13 @@ class AppContainer(
     fun browserConfig(headless: Boolean = config.browserHeadless): BrowserEngineConfig =
         BrowserEngineConfig(headless = headless, topology = config.browserTopology, ignoreTlsErrors = config.browserIgnoreTlsErrors)
 
+    /** This machine's memory and cores: every run records its size next to the capacity they advise (`capacity`). */
+    private val hostResources: HostResourceProbe by lazy { overrides.hostResources ?: SystemHostResourceProbe() }
+
+    /** How many testers this machine is advised to carry at once with [browserConfig]'s browsers (`petek capacity`). */
+    private suspend fun capacityAdvice(headless: Boolean): Int =
+        RecommendCapacityUseCase(hostResources).execute(contextsPerBrowser = browserConfig(headless).contextsPerBrowser).maxTesters
+
     /**
      * The look at the site under test before a run or an exploration opens a browser (rule 12): the site that was
      * given must answer, otherwise nothing is tested and the reason is reported.
@@ -353,7 +363,8 @@ class AppContainer(
 
     // --- agents, verification, orchestration, reporting ---------------------------------------------------------
 
-    private val watchdog = InactivityWatchdog()
+    /** A slow AI answer is the provider's to bound, never the inactivity timeout's (see [InactivityWatchdog]). */
+    private val watchdog = InactivityWatchdog(aiCallTimeout = LlmProviders.AGENT_CALL_GUARD)
 
     /** Evidence recorded by agents also proves they are alive (see [InactivityWatchdog]). */
     private val agentRecorder: EvidenceRecorder by lazy { ProgressTrackingRecorder(recorder, watchdog::progress) }
@@ -522,6 +533,8 @@ class AppContainer(
                                 ?.productionHosts
                                 .orEmpty()
                     },
+                    // Every run, from the CLI, the panel or MCP, says how its size stands to this machine's capacity.
+                    capacityAdvice = { capacityAdvice(headless) },
                 ),
             sharedStateFactory = ::InMemorySharedRunState,
             watchdog = watchdog,

@@ -21,6 +21,7 @@ import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
+import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.testing.FakeBrowserSession
@@ -328,16 +329,22 @@ class FakeBrowserEngine(
     @Volatile
     var configure: (FakeBrowserSession) -> Unit = {}
 
+    /** What the factory hands out for each new session (e.g. one that loses its context); the fake itself by default. */
+    @Volatile
+    var wrap: (FakeBrowserSession) -> BrowserSession = { it }
+
     override suspend fun start(config: BrowserEngineConfig): BrowserSessionFactory {
         starts.incrementAndGet()
         if (failStart) throw BrowserActionException("chromium could not start")
         return BrowserSessionFactory { options ->
             if (options.label in failOpenFor) throw openError(options.label)
             opened += options
-            FakeBrowserSession(options.label, clock).also {
-                configure(it)
-                sessions[options.label] = it
-            }
+            val fake =
+                FakeBrowserSession(options.label, clock).also {
+                    configure(it)
+                    sessions[options.label] = it
+                }
+            wrap(fake)
         }
     }
 

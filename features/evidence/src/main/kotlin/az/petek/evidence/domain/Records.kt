@@ -69,6 +69,64 @@ enum class StepKind { DO, RUN, WAIT, EMIT, ASSERT, SYSTEM }
 const val COVERAGE_ACTION = "scenario_coverage"
 
 /**
+ * The action of the harness step (agent id null, PASSED) that lists, at a run's start, every tester the run planned,
+ * so a report can set who was planned against who acted. Detail: `<count> testers: a01, a02, a03` (agent ids in order).
+ */
+const val ROSTER_ACTION = "roster"
+
+/**
+ * The action of the harness step (agent id null) that records, at a run's start, how many testers this machine is
+ * advised to carry at once (`petek capacity`), when the caller knew it. It never changes a verdict: a run within the
+ * advice is PASSED, one over it SKIPPED (neutral). Detail, with a leading key:
+ * `within_capacity: <live> testers at once (<total> in the run); this machine is advised for up to <advice> at once`, or
+ * `over_capacity: ...` with the same numbers and a note that slow pages and late screens may come from the machine.
+ */
+const val CAPACITY_ACTION = "capacity"
+
+/**
+ * The action of the harness step (agent id null, SKIPPED) of a run that stopped early. Detail:
+ * `run aborted: <reason>; steps not run: <steps>`, where `<steps>` lists the steps that never began, per wave when the
+ * run had waves (`wave 4: read, approve; wave 5: join, read, approve`), `-` when every step began. The reason may itself
+ * contain `; `: read it up to the last `; steps not run: `.
+ */
+const val ABORT_ACTION = "abort"
+
+/**
+ * The roll call at a run's end (passed, failed or aborted, with waves or without): every tester the run planned for a
+ * step that has no final record of its own for it gets one harness step with this action, its agent id and the
+ * scenario step, the detail saying why with a leading key from [NotReached]. So no planned tester × step is missing from
+ * the evidence, whatever stopped it. SKIPPED, except [NotReached.NEVER_REACHED], which is FAILED.
+ */
+const val NOT_REACHED_ACTION = "not_reached"
+
+/** Leading keys of a [NOT_REACHED_ACTION] record's detail (`<key>: <why>`). */
+object NotReached {
+    /** `run_aborted: <the run's abort reason>`: the run stopped before the tester finished or reached the step. */
+    const val RUN_ABORTED = "run_aborted"
+
+    /** `wave_not_started: wave <n> of <waves> never began; run aborted: <reason>`: the tester's wave never began. */
+    const val WAVE_NOT_STARTED = "wave_not_started"
+
+    /** `failed_earlier: <failure key>`: the tester was out of the run since an earlier failure (setup, its browser). */
+    const val FAILED_EARLIER = "failed_earlier"
+
+    /**
+     * `never_reached: ...`: the run went on, yet the tester never got to the step. A gap of Pətək itself, never of the
+     * site or the tester: its record is FAILED and it is counted as a failed step (with no agent, so the tester is not
+     * among the run's failed agents), so such a run is not PASSED.
+     */
+    const val NEVER_REACHED = "never_reached"
+}
+
+/**
+ * The action of the harness step (agent id null, FAILED, counted as a failed step) for a scenario step that no tester
+ * ran in any pass of the run (every wave, or the run without waves, resolved it to nobody), so a run never passes with
+ * a step nobody did. Detail: `not_covered: no tester matched '<actors>' ...`; `not_covered` is the key the reports
+ * already file under the run's surroundings (a check the run could not make), never under the site or a tester.
+ */
+const val UNCOVERED_ACTION = "uncovered"
+
+/**
  * How a page look's sub-action is named after its function (`site_health: look at /pricing (phone)`). Its time is mostly
  * Pətək's own waiting for the page to settle, so a step's speed never counts it (the regression baseline, Faza 14).
  */
