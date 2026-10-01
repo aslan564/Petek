@@ -14,22 +14,29 @@ package az.petek.orchestration.application
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.FailureReason
+import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.Pacing
+import az.petek.core.model.Role
 import az.petek.evidence.domain.ABORT_ACTION
 import az.petek.evidence.domain.NOT_REACHED_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
+import az.petek.evidence.domain.Verdict
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.testing.RunnerFixture
 import az.petek.orchestration.testing.VirtualClock
+import az.petek.orchestration.testing.actors
 import az.petek.orchestration.testing.admin
 import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
 import az.petek.orchestration.testing.everyoneButAdmin
+import az.petek.orchestration.testing.managers
+import az.petek.orchestration.testing.selector
 import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -44,7 +51,8 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Nobody planned is left out of the evidence: the roster at the start, a `not_reached` record for every planned
- * tester × step without a final record of its own at the end (waves included), the abort reason per wave.
+ * tester × step without a final record of its own at the end (waves included), the abort reason per wave, and a step
+ * nobody ran counted against the run.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RunnerRollCallTest {
@@ -191,5 +199,62 @@ class RunnerRollCallTest {
 
             f.rollCall() shouldContainExactly
                 listOf("a02", "a03").map { Triple("read@swap", it, "run_aborted: time budget of 1 min exceeded") }
+        }
+
+    @Test
+    fun `a step no wave has a tester for is done by nobody, so the run cannot pass`() =
+        runTest {
+            val f = fixture()
+            // Two managers dealt one to each wave: 'the second manager' is nobody in every wave.
+            val secondManager = actors(selector(Role.MANAGER, nth = 2))
+            val waved =
+                campaign(
+                    managers = 2,
+                    employees = 2,
+                    steps =
+                        listOf(
+                            step("read", employees()),
+                            step("approve", secondManager, assertions = listOf(AssertionSpec.Count("#approved", 1))),
+                        ),
+                ).inWavesOf(2)
+
+            val summary = f.runner().run(waved)
+
+            val uncovered = f.system(UNCOVERED_ACTION).single()
+            uncovered.agentId shouldBe null
+            uncovered.scenarioStep shouldBe "approve"
+            uncovered.status shouldBe StepStatus.FAILED
+            uncovered.detail shouldBe
+                "not_covered: no tester matched '${secondManager.raw}' in any wave it ran in (1 of 2); nobody ran this step"
+            f.evidence.assertionList
+                .filter { it.scenarioStep == "approve" }
+                .map { it.verdict to it.stepId } shouldContainExactly listOf(Verdict.SKIPPED to uncovered.stepId)
+            f.steps("read", StepKind.DO).map { it.status }.toSet() shouldBe setOf(StepStatus.PASSED)
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.stepsFailed shouldBe 1
+            summary.failedAgents shouldBe 0
+        }
+
+    @Test
+    fun `a step nobody ran says which of its testers were out after failing earlier`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                if (call.scenarioStep == "join" && call.agentId.value == "a02") {
+                    ActionOutcome(ActionStatus.FAILED, "no code", failureReason = FailureReason.REGISTRATION_FAILED)
+                } else {
+                    ok
+                }
+            }
+            val campaign =
+                campaign(managers = 1, setup = listOf(setupStep("join", everyoneButAdmin())), steps = listOf(step("approve", managers())))
+
+            f.runner().run(campaign)
+
+            f.system(UNCOVERED_ACTION).single().detail shouldBe
+                "not_covered: no tester matched '${managers().raw}' in the run; nobody ran this step; its testers were out after " +
+                "failing earlier: a02 (registration_failed)"
+            // Its own skip says why it sat the step out, so the roll call has nothing to add.
+            f.rollCall().shouldBeEmpty()
         }
 }

@@ -109,6 +109,14 @@ object NotReached {
 }
 
 /**
+ * The action of the harness step (agent id null, FAILED, counted as a failed step) for a scenario step that no tester
+ * ran in any pass of the run (every wave, or the run without waves, resolved it to nobody), so a run never passes with
+ * a step nobody did. Detail: `not_covered: no tester matched '<actors>' ...`; `not_covered` is the key the reports
+ * already file under the run's surroundings (a check the run could not make), never under the site or a tester.
+ */
+const val UNCOVERED_ACTION = "uncovered"
+
+/**
  * How a page look's sub-action is named after its function (`site_health: look at /pricing (phone)`). Its time is mostly
  * Pətək's own waiting for the page to settle, so a step's speed never counts it (the regression baseline, Faza 14).
  */

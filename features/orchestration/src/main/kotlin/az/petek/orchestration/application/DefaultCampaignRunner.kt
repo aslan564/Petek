@@ -48,6 +48,7 @@ import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.identity.application.PlanIdentitiesUseCase
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityRegistryGenerator
@@ -88,10 +89,10 @@ private val logger = KotlinLogging.logger {}
  *    (see [StepExecutor] for what happens inside a step). In a `wait_for` step, `visible_text`/`latency_max` are
  *    checked as soon as the event arrives, before the receiver's own action, so t1 - t0 measures delivery rather
  *    than the agent; the other assertions run after the action;
- * 4. always — also on abort, budget timeout or cancellation — records why the run stopped early and the roll call
- *    (see "Nobody left out" below), the observed real-time transports, tears down the test company (unless
- *    `keepData`), closes sessions, stops the browser, finishes the run record and asks the [RunFinalizer] for the
- *    report.
+ * 4. always — also on abort, budget timeout or cancellation — records why the run stopped early, the roll call and the
+ *    steps nobody ran (see "Nobody left out" below), the observed real-time transports, tears down the test company
+ *    (unless `keepData`), closes sessions, stops the browser, finishes the run record and asks the [RunFinalizer] for
+ *    the report.
  *
  * Setup semantics: an actor that fails a setup step is marked FAILED with the failure key and skipped (with a
  * SKIPPED record) in every later step; a successful sign-up/login step marks it ACTIVE
@@ -101,8 +102,9 @@ private val logger = KotlinLogging.logger {}
  * Nobody left out: at the start the evidence gets the run's roster (every planned tester, `roster`). The runner plans
  * every execution of the steps up front (the run, or each wave; the account swap when it begins) and, at the end, gives
  * every planned tester × step without a final record of its own one `not_reached` record saying why (the run stopped,
- * its wave never began, it was out since an earlier failure). The action names and their details are in the evidence
- * domain ([ROSTER_ACTION], [ABORT_ACTION], [NOT_REACHED_ACTION]).
+ * its wave never began, it was out since an earlier failure); a step that no tester ran in any execution gets an
+ * agent-less `uncovered` record that counts as a failed step, so the run cannot pass with it. The action names and their
+ * details are in the evidence domain ([ROSTER_ACTION], [ABORT_ACTION], [NOT_REACHED_ACTION], [UNCOVERED_ACTION]).
  *
  * Result: PASSED when no step and no assertion failed, FAILED otherwise, ABORTED on abort, budget timeout,
  * cancellation or an infrastructure error (which is recorded, logged and not rethrown; cancellation of the caller
@@ -751,6 +753,7 @@ class DefaultCampaignRunner(
             safely(run, "abort record") { recordAbort(run, reason, board) }
         }
         safely(run, "roll call") { rollCall(run) }
+        safely(run, "steps nobody ran") { recordUncovered(run, board) }
         tasks.closeOpen(run.abortedBecause?.let { "run aborted: $it" } ?: "not run")
         safely(run, "network observation") { recordNetworkObservations(run) }
         safely(run, "company registration") {
@@ -862,6 +865,37 @@ class DefaultCampaignRunner(
                         }
                     }
             }
+        }
+    }
+
+    /**
+     * A step that resolved to nobody in every execution it had (each wave, the run without waves, the swap) was done by
+     * nobody: an agent-less `uncovered` record that counts as a failed step, its checks recorded as not evaluated. FAILED,
+     * not inconclusive: no check ran at all, as with a wave's `not_covered` receivers (Faza 24.7), and the scenario or
+     * the run's testers must change for it to be done; the `not_covered` key keeps it off the site and the testers.
+     */
+    private suspend fun recordUncovered(
+        run: RunState,
+        board: AgentBoard,
+    ) {
+        val waves = run.passes.count { it.wave != null }
+        for (step in run.campaign.allSteps) {
+            val executions = run.executionsOf(step.id)
+            if (executions.isEmpty() || executions.any { it.isNotEmpty() }) continue
+            val out = actors.resolve(step.actors, run.identities).filter { run.isFailed(it.agentId) }
+            val detail =
+                buildString {
+                    append("$NOT_COVERED: no tester matched '${step.actors.raw}'")
+                    append(if (waves > 0) " in any wave it ran in (${executions.size} of $waves)" else " in the run")
+                    append("; nobody ran this step")
+                    if (out.isNotEmpty()) {
+                        append("; its testers were out after failing earlier: ")
+                        append(out.joinToString(", ") { "${it.agentId} (${run.failureReason(it.agentId) ?: "failed"})" })
+                    }
+                }
+            val stepId = evidence.system(run, null, UNCOVERED_ACTION, StepStatus.FAILED, detail, step.id, tally = Tally.FAIL)
+            evidence.skippedAssertions(run, stepId, step.id, null, step.assertions, "not evaluated: nobody ran the step")
+            board.message("step '${step.id}' was run by nobody: $detail")
         }
     }
 
