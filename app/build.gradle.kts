@@ -303,12 +303,32 @@ tasks.register<Test>("e2eTest") {
     inputs.file(rootDir.resolve("scenarios/contract-demo.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
+// The owner's guarantee at any size (2026-10-01): the contract demo with N testers in real Chromium, every tester × step
+// accounted for and every finding reported (tag "scale", heavy, never part of build or e2eTest):
+// ./gradlew :app:scaleTest -Ppetek.scale.testers=30,50,100
+tasks.register<Test>("scaleTest") {
+    description = "Every tester of an N-tester run gets to every step and every finding is reported (real Chromium)."
+    group = "verification"
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("scale") }
+    maxHeapSize = "6g"
+    systemProperty("petek.scale.testers", providers.gradleProperty("petek.scale.testers").getOrElse("30,50,100"))
+    inputs.property("petek.scale.testers", providers.gradleProperty("petek.scale.testers").getOrElse("30,50,100"))
+    inputs.file(rootDir.resolve("scenarios/contract-demo.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
+    testLogging { events("passed", "failed") }
+}
+
 // Kover instruments every Test task and its verification (part of `check`) runs them all; without this `build` would
 // start Chromium for the panel end-to-end test.
 kover {
     currentProject {
         instrumentation {
             disabledForTestTasks.add("e2eTest")
+            disabledForTestTasks.add("scaleTest")
         }
     }
 }
