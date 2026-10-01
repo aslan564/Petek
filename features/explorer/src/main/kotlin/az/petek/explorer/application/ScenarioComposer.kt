@@ -185,6 +185,11 @@ internal class ScenarioComposer(
      * page could show, and no other step has visited links yet. On a site without sign-in the site's own group runs in
      * the main steps after the scenario's writes, so its looks would show them. Pages only a role sees get no look (they
      * show what the run wrote), and a draft names no masks and no `look_*` arguments: those are the owner's to add.
+     *
+     * A look loads each page twice and scrolls through it, so every later visit of the tester's browser finds its
+     * scripts, styles, fonts and images cached. What times a page's load ([FIRST_VISIT_CHECKS]: slow requests, the
+     * page's timing) is therefore checked in the look's own step, which reads it on the first visit before the look
+     * loads the page again; the visitor's pages step checks the rest.
      */
     private fun siteChecks(ideas: List<TestIdea>): List<Pair<TestIdea, Outcome>> {
         if (ideas.isEmpty()) return emptyList()
@@ -225,10 +230,17 @@ internal class ScenarioComposer(
         }
 
         val public = pagesSeenBy { ScenarioSettings.VISITOR.key in it.reachableBy }
+        val firstVisit = health.filter { it in FIRST_VISIT_CHECKS }
+        val look = Slugs.firstFree(if (signIn) "public-look" else "site-look") { it !in stepIds }
+        val lookChecks = (firstVisit + LOOK).sortedBy { CHECK_ORDER.indexOf(it) }
+        beforeSignIn +=
+            checkStep(look, StepPhase.SETUP, everybody(), settings.setup.siteHealth, lookChecks, public.ifEmpty { listOf("home") })
+        firstVisit.forEach { stepsOf.getOrPut(it) { mutableListOf() } += look }
+        val visitorHealth = health - firstVisit.toSet()
         if (!signIn) {
-            group("site", StepPhase.MAIN, everybody(), public.ifEmpty { listOf("home") }, health)
+            group("site", StepPhase.MAIN, everybody(), public.ifEmpty { listOf("home") }, visitorHealth)
         } else {
-            group("public", StepPhase.SETUP, everybody(), public.ifEmpty { listOf("home") }, health)
+            group("public", StepPhase.SETUP, everybody(), public.ifEmpty { listOf("home") }, visitorHealth)
             val session = if (TestPattern.SESSION_EXPIRY in patterns) listOf(SESSION) else emptyList()
             settings.team.roles.filter { it != ScenarioSettings.VISITOR }.forEach { role ->
                 val own = pagesSeenBy { role.key in it.reachableBy && ScenarioSettings.VISITOR.key !in it.reachableBy }
@@ -237,11 +249,6 @@ internal class ScenarioComposer(
                 group(role.key, StepPhase.MAIN, everyone(role), own.ifEmpty { listOf("home") }, checks)
             }
         }
-        val look = Slugs.firstFree(if (signIn) "public-look" else "site-look") { it !in stepIds }
-        beforeSignIn.add(
-            0,
-            checkStep(look, StepPhase.SETUP, everybody(), settings.setup.siteHealth, listOf(LOOK), public.ifEmpty { listOf("home") }),
-        )
         return ideas.map { idea ->
             val check = HEALTH_CHECKS[idea.pattern] ?: PAGE_CHECKS[idea.pattern]
             val ids = check?.let { stepsOf[it] }.orEmpty()
@@ -741,6 +748,10 @@ internal class ScenarioComposer(
 
         /** `site_health`'s look of a page on a screen: never fails a step, compared between releases (Faza 14). */
         const val LOOK = "look"
+
+        /** The `site_health` checks that time a page's load, read on the first visit: a look leaves the page cached. */
+        val FIRST_VISIT_CHECKS = setOf(SLOW, PERF)
+
         const val LISTS = "lists"
         const val SHARE = "share"
         const val SHARE_WORK = "work"

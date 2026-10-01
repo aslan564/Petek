@@ -140,7 +140,9 @@ class GenerateScenarioUseCaseTest {
             args["share"] shouldBe "work"
             args["devices"] shouldBe "phone,tablet,desktop"
         }
-        (campaign.step("site-pages").action as StepAction.Run).args["checks"] shouldBe "console,slow,perf,links,back,mobile"
+        // The pages are timed on their first visit, in the setup look step, before the look leaves them cached.
+        (campaign.setup.first().action as StepAction.Run).args["checks"] shouldBe "slow,perf,look"
+        (campaign.step("site-pages").action as StepAction.Run).args["checks"] shouldBe "console,links,back,mobile"
         (campaign.step("site-content").action as StepAction.Run).args["checks"] shouldBe "anchors,images,alt,meta,outbound,mirrors"
         composed.skipped.shouldBeEmpty()
     }
@@ -170,7 +172,7 @@ class GenerateScenarioUseCaseTest {
             StepAction.Run(
                 "site_health",
                 mapOf(
-                    "checks" to "look",
+                    "checks" to "slow,perf,look",
                     "pages" to "/login",
                     "share" to "work",
                     "devices" to "phone,tablet,desktop",
@@ -200,9 +202,32 @@ class GenerateScenarioUseCaseTest {
         look.id shouldBe "site-look"
         look.actors.raw shouldBe "anonymous[*]"
         (look.action as StepAction.Run).args shouldBe
-            mapOf("checks" to "look", "pages" to "/,/about", "share" to "work", "devices" to "phone,tablet,desktop")
+            mapOf("checks" to "slow,perf,look", "pages" to "/,/about", "share" to "work", "devices" to "phone,tablet,desktop")
         campaign.steps.none { (it.action as StepAction.Run).args["checks"]!!.contains("look") } shouldBe true
         validator.validate(campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `the visitor's pages are timed on their first visit, in the look step, since a look leaves them cached`() {
+        fun checks(step: ScenarioStep) = (step.action as StepAction.Run).args["checks"].orEmpty().split(',')
+
+        val composed = useCase().compose(Models.portal(), request(maxIdeas = 50))
+
+        // A look loads each page twice and scrolls through it: timed afterwards, the pages would load from the cache.
+        val setup = composed.campaign.setup
+        setup.first().id shouldBe "public-look"
+        checks(setup.first()) shouldContainExactly listOf("slow", "perf", "look")
+        setup.drop(1).forEach { step ->
+            checks(step) shouldNotContain "perf"
+            checks(step) shouldNotContain "slow"
+        }
+        checks(setup.single { it.id == "public-pages" }) shouldContain "console"
+        composed.covered
+            .single { it.idea.pattern == TestPattern.SLOW_ENDPOINTS }
+            .stepIds
+            .first() shouldBe "public-look"
+        // Pages only a role sees get no look, so they are still timed with the role's other checks.
+        checks(composed.campaign.step("admin-pages")) shouldContain "perf"
     }
 
     @Test
@@ -344,7 +369,7 @@ class GenerateScenarioUseCaseTest {
         skipped.getValue("ticket-submit" to TestPattern.BOUNDARY) shouldContain "input rules"
         skipped.getValue("login-submit" to TestPattern.BOUNDARY) shouldContain "setup run functions"
         composed.covered.flatMap { it.stepIds }.toSet() shouldBe
-            (composed.campaign.steps.map { it.id } + listOf("public-pages", "public-content")).toSet()
+            (composed.campaign.steps.map { it.id } + listOf("public-look", "public-pages", "public-content")).toSet()
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 
