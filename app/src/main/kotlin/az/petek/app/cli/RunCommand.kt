@@ -12,6 +12,7 @@
 package az.petek.app.cli
 
 import az.petek.app.campaign.CampaignScaler
+import az.petek.app.campaign.CoverageWarnings
 import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
@@ -134,8 +135,10 @@ class RunCommand : PetekSubcommand("run") {
             if (swapAccounts && campaign.settings.waveSize != null) {
                 echo("Warning: --swap-accounts is not done in a campaign with campaign.wave_size; the run says so too.", err = true)
             }
-            warnAboutWaves(container, campaign)
-            warnAboutCapacity(container, campaign)
+            val identities = previewIdentities(container, campaign)
+            // Steps nobody would perform, waits and races the waves break: said on every run, scaled or not.
+            CoverageWarnings.of(campaign, identities, testers = agents).forEach { echo("Warning: $it", err = true) }
+            warnAboutCapacity(campaign, identities, container)
             // Every tester's code typed by hand is for the explorer's few sessions, not for a swarm (R07).
             if (config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
                 echo(
@@ -194,13 +197,6 @@ class RunCommand : PetekSubcommand("run") {
         if (issues.isNotEmpty()) {
             throw CampaignValidationException(issues + ValidationIssue(null, "--testers $agents does not fit this campaign"))
         }
-        CampaignScaler.uncoveredSteps(scaled, previewIdentities(container, scaled), DefaultActorResolver()).forEach { step ->
-            echo(
-                "Warning: with --testers $agents no tester matches '${step.actors.raw}', so step '${step.id}' (line ${step.line}) " +
-                    "will be skipped.",
-                err = true,
-            )
-        }
         return scaled
     }
 
@@ -220,11 +216,11 @@ class RunCommand : PetekSubcommand("run") {
      * advice only, never a limit (the owner's decision, 2026-09-25).
      */
     private suspend fun warnAboutCapacity(
-        container: AppContainer,
         campaign: Campaign,
+        identities: List<Identity>,
+        container: AppContainer,
     ) {
-        val live =
-            Waves.plan(campaign, previewIdentities(container, campaign), DefaultActorResolver())?.maxLive ?: campaign.settings.testers
+        val live = Waves.plan(campaign, identities, DefaultActorResolver())?.maxLive ?: campaign.settings.testers
         val advice =
             RecommendCapacityUseCase(
                 session.runtime.hostResources,
@@ -233,35 +229,6 @@ class RunCommand : PetekSubcommand("run") {
             echo(
                 "Warning: $live testers live at once is more than this machine is advised to carry (${advice.maxTesters}, " +
                     "limited by ${advice.limitingFactor.name.lowercase()}); the run goes on, but may slow down (petek capacity).",
-                err = true,
-            )
-        }
-    }
-
-    /**
-     * What `campaign.wave_size` does to the steps, said before the run starts: a race left with one racer in a wave fails
-     * there; receivers in a wave without the tester that emits their event are skipped there.
-     */
-    private fun warnAboutWaves(
-        container: AppContainer,
-        campaign: Campaign,
-    ) {
-        val size = campaign.settings.waveSize ?: return
-        val identities = previewIdentities(container, campaign)
-        CampaignScaler.waitsWithoutEmitter(campaign, identities, DefaultActorResolver()).forEach { gap ->
-            val never = if (gap.covered) "" else "; no wave holds both, so it is never checked (not_covered)"
-            echo(
-                "Warning: with campaign.wave_size $size, step '${gap.step.id}' (line ${gap.step.line}) waits for " +
-                    "'${gap.step.waitFor?.event}' in wave ${gap.waves.joinToString()}, which has no tester of step " +
-                    "'${gap.emitter.id}' that emits it; its receivers there are skipped$never.",
-                err = true,
-            )
-        }
-        CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
-            echo(
-                "Warning: with campaign.wave_size $size, race step '${split.step.id}' (line ${split.step.line}) has a single " +
-                    "racer in wave ${split.waves.joinToString()}, where it never passes (inconclusive): a race needs at least 2 " +
-                    "racers in the same wave.",
                 err = true,
             )
         }

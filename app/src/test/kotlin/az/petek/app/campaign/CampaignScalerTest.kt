@@ -21,10 +21,12 @@ import az.petek.core.model.Role
 import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
 import az.petek.identity.domain.HmacPasswordDeriver
+import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.DefaultActorResolver
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeSameInstanceAs
@@ -239,6 +241,120 @@ class CampaignScalerTest {
 
         CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver()).map { it.id } shouldContainExactly
             listOf("finance_only")
+    }
+
+    /**
+     * 50 testers of the shape the drafts write, 1 admin, 4 managers and 45 employees over five departments, in waves of
+     * [waveSize]. With waves of 10 the admin is in every wave, a02..a05 (IT, HR, Satış, Maliyyə) are dealt one to each
+     * of waves 1-4 and wave 5 has no manager at all.
+     */
+    private fun fiftyInWaves(
+        waveSize: Int?,
+        extraSteps: String = "",
+    ): Campaign {
+        val file =
+            dir.resolve("fifty.yaml").also {
+                Files.writeString(
+                    it,
+                    """
+                    campaign:
+                      name: fifty
+                      testers: 50
+                      seed: 42
+                      ${waveSize?.let { size -> "wave_size: $size" }.orEmpty()}
+                      roles: {admin: 1, manager: 4, employee: 45}
+                      departments: [IT, HR, Satış, Maliyyə, Əməliyyat]
+                      registration: {invite: 25, company_code: 24}
+                      budget: {max_steps_per_agent: 60, max_minutes: 40}
+                    setup:
+                      - id: owner_signup
+                        actor: admin
+                        do: "Sign up"
+                      - id: managers_join
+                        actor: manager[*]
+                        do: "Join"
+                    steps:
+                      - id: second_manager
+                        actor: manager[n=2]
+                        do: "Open the direct link as the second manager"
+                      - id: it_post
+                        actor: manager[IT]
+                        do: "Post"
+                        emits: posted
+                      - id: managers_look
+                        actor: manager[*]
+                        do: "Look"
+                      - id: read
+                        actor: employee[*]
+                        wait_for: posted
+                      - id: announce
+                        actor: admin
+                        do: "Announce"
+                        emits: announced
+                    """.trimIndent() + extraSteps,
+                )
+            }
+        return YamlCampaignSource(URI("https://staging.portal.test")).load(file)
+    }
+
+    private fun identitiesOf(campaign: Campaign): List<Identity> =
+        DefaultIdentityRegistryGenerator(AzerbaijaniNameCatalog, HmacPasswordDeriver("secret".toByteArray()))
+            .generate(IdentitySpecs.of(campaign.settings, "test.portal.example"), RunTags.forPlan(campaign.sourceHash, 42))
+            .identities
+
+    @Test
+    fun `a step is resolved wave by wave, so one whose actor no wave holds is found although the registry has one`() {
+        val campaign = fiftyInWaves(waveSize = 10)
+        val identities = identitiesOf(campaign)
+
+        val gaps = CampaignScaler.stepsWithoutActors(campaign, identities, DefaultActorResolver())
+
+        // `manager[n=2]` is a03 in the registry, but every wave holds one manager: it starts in wave 1 only (no later
+        // wave has an actor for it, and it neither emits nor waits) and is never performed. The IT manager's post is
+        // started again in every wave for its receivers, and only wave 1 has the IT manager. A setup step and a main
+        // step that later waves start only for their own testers (`manager[*]`) are not skipped in wave 5.
+        gaps.map { Triple(it.step.id, it.waves, it.covered) } shouldContainExactly
+            listOf(Triple("second_manager", listOf(1), false), Triple("it_post", listOf(2, 3, 4, 5), true))
+        CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver()).map { it.id } shouldContainExactly
+            listOf("second_manager")
+    }
+
+    @Test
+    fun `without waves a step is resolved against every tester of the run`() {
+        val campaign = fiftyInWaves(waveSize = null)
+
+        CampaignScaler.stepsWithoutActors(campaign, identitiesOf(campaign), DefaultActorResolver()).shouldBeEmpty()
+    }
+
+    @Test
+    fun `the warnings name every step nobody performs, wave by wave, and what made it so`() {
+        val campaign = fiftyInWaves(waveSize = 10)
+
+        fun line(id: String) = campaign.allSteps.single { it.id == id }.line
+
+        val warnings = CoverageWarnings.of(campaign, identitiesOf(campaign))
+
+        warnings.take(2) shouldContainExactly
+            listOf(
+                "with campaign.wave_size 10 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so step " +
+                    "'second_manager' (line ${line("second_manager")}) is never performed.",
+                "with campaign.wave_size 10 no tester matches 'manager[IT]' in wave 2, 3, 4, 5, so step 'it_post' " +
+                    "(line ${line("it_post")}) is skipped there; other waves perform it.",
+            )
+        warnings[2] shouldContain "step 'read' (line ${line("read")}) waits for 'posted' in wave 2, 3, 4, 5"
+        warnings shouldHaveSize 3
+        CoverageWarnings.of(campaign, identitiesOf(campaign), testers = 50).first() shouldContain
+            "with --testers 50 and campaign.wave_size 10 no tester matches 'manager[n=2]'"
+        // Without waves: the nine IT employees are there (the validator counts them), but the invitations are shared
+        // out over the departments, so fewer than nine of them are invited; only the registry shows it.
+        val alone = "\n  - id: alone\n    actor: employee[dept=IT, reg=invite, n=9]\n    do: \"Only the ninth invited IT employee\""
+        val withoutWaves = fiftyInWaves(waveSize = null, extraSteps = alone)
+        DefaultCampaignValidator().validate(withoutWaves, emptySet()).shouldBeEmpty()
+        CoverageWarnings.of(withoutWaves, identitiesOf(withoutWaves)) shouldContainExactly
+            listOf(
+                "no tester matches 'employee[dept=IT, reg=invite, n=9]', so step 'alone' " +
+                    "(line ${withoutWaves.allSteps.last().line}) will be skipped: nobody performs it.",
+            )
     }
 
     @Test

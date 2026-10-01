@@ -449,6 +449,21 @@ class RunCommandTest {
         }
 
     @Test
+    fun `every run says which steps nobody would perform, wave by wave, without --testers too`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("second.yaml", SECOND_MANAGER_IN_WAVES)
+
+            val result = cli.run("run", "second.yaml")
+
+            // Waves of two: a02 (manager) and a04 in wave 1, a03 (manager) and a05 in wave 2, the admin in both. The
+            // second manager of a wave never exists, and the step starts in wave 1 only.
+            result.stderr shouldContain
+                "Warning: with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so " +
+                "step 'second_manager' (line 15) is never performed."
+        }
+
+    @Test
     fun `a race that the waves leave with one racer is announced before the run`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
@@ -609,6 +624,28 @@ class RunCommandTest {
               - id: health
                 actor: visitor[n=1]
                 run: {function: site_health, args: {checks: "console,mobile", pages: "/"}}
+            """.trimIndent()
+
+        /** Five testers in waves of two: one manager in each wave, so `manager[n=2]` matches nobody in any of them. */
+        val SECOND_MANAGER_IN_WAVES =
+            """
+            campaign:
+              name: second
+              testers: 5
+              seed: 3
+              wave_size: 2
+              roles: {admin: 1, manager: 2, employee: 2}
+              departments: [IT, HR]
+              registration: {invite: 3, company_code: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up"
+            steps:
+              - id: second_manager
+                actor: manager[n=2]
+                do: "Open the page as the second manager"
             """.trimIndent()
     }
 }

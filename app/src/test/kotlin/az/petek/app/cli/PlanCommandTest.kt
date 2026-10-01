@@ -105,6 +105,42 @@ class PlanCommandTest {
         }
 
     @Test
+    fun `plan says which steps nobody would perform, wave by wave, as run does`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write(
+                "waves.yaml",
+                """
+                campaign:
+                  name: plan-waves
+                  testers: 5
+                  seed: 3
+                  wave_size: 2
+                  roles: {admin: 1, manager: 2, employee: 2}
+                  departments: [IT, HR]
+                  registration: {invite: 3, company_code: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                steps:
+                  - id: second_manager
+                    actor: manager[n=2]
+                    do: "Open the page as the second manager"
+                """,
+            )
+
+            val result = cli.run("plan", "waves.yaml")
+            val answer = cli.run("--json", "plan", "waves.yaml")
+
+            // One manager in each wave of two: the second manager of a wave never exists.
+            val warning =
+                "with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so step " +
+                    "'second_manager' (line 11) is never performed."
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "Warning: $warning"
+            result.stdout shouldContain "5 identities"
+            answer.stdout shouldContain warning
+        }
+
+    @Test
     fun `passwords are never printed`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
