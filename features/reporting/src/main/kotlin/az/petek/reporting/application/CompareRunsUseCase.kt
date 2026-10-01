@@ -13,6 +13,7 @@ package az.petek.reporting.application
 
 import az.petek.core.ids.RunId
 import az.petek.evidence.domain.ArtifactStore
+import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
@@ -24,6 +25,8 @@ import az.petek.reporting.domain.ComparisonWriter
 import az.petek.reporting.domain.RunComparer
 import az.petek.reporting.domain.RunComparison
 import az.petek.reporting.domain.RunNotFoundException
+import az.petek.reporting.domain.StepChange
+import az.petek.reporting.domain.visual.VisualGate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +39,10 @@ import java.nio.file.Path
  * one asked for ([Baseline]): a named run, the latest run of a named release, or by default the latest earlier run of the
  * same scenario outside the run's own `--repeat` group. Only finished runs of one scenario (by name) are compared; any
  * other pair is a [ComparisonRefusedException] saying why.
+ *
+ * With [looks], the pages' looks (`site_health`'s `look`, docs/adr/0014) are compared too, each side with its repeat
+ * siblings of the same scenario file as samples, and their pictures are derived under `report/visual/<baseline run>/`
+ * ([Result.visualDirectory]). The [VisualGate] decides whether a changed look makes the comparison worse.
  */
 class CompareRunsUseCase(
     private val runs: RunRepository,
@@ -44,6 +51,7 @@ class CompareRunsUseCase(
     private val writers: List<ComparisonWriter> = emptyList(),
     private val comparer: RunComparer = RunComparer(),
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val looks: CompareLooks? = null,
 ) {
     /** Which run the current one is compared with. */
     sealed interface Baseline {
@@ -60,16 +68,18 @@ class CompareRunsUseCase(
         ) : Baseline
     }
 
-    /** A comparison and where its files were written. */
+    /** A comparison and where its files were written; [visualDirectory] holds the looks' pictures, when any were compared. */
     data class Result(
         val comparison: RunComparison,
         val files: List<Path>,
+        val visualDirectory: Path? = null,
     )
 
-    /** [current] against [baseline], written beside [current]'s report. */
+    /** [current] against [baseline], written beside [current]'s report; [visual] decides whether a changed look is worse. */
     suspend fun compare(
         current: RunId,
         baseline: Baseline = Baseline.Previous,
+        visual: VisualGate = VisualGate.REPORT,
     ): Result {
         val now = runs.find(current) ?: throw RunNotFoundException(current)
         if (now.result ==
@@ -78,14 +88,59 @@ class CompareRunsUseCase(
             throw refused(Reason.NOT_FINISHED, "Run ${now.runId} has not finished yet; compare it once it has.")
         }
         val base = baselineOf(now, baseline)
-        val comparison = comparer.compare(evidence(base), evidence(now))
+        var comparison = comparer.compare(evidence(base), evidence(now)).copy(visualGate = visual)
         val directory = ReportLayout.directory(artifacts, now.runId)
+        var visualDirectory: Path? = null
+        if (looks != null) {
+            val compared = lookInputs(base, now, comparison)?.let { looks.compare(it, directory) }.orEmpty()
+            if (compared.isNotEmpty()) {
+                comparison = comparison.copy(looks = compared, visualThresholds = looks.thresholds)
+                visualDirectory = ReportLayout.visualDirectory(artifacts, now.runId, base.runId)
+            }
+        }
+        val written = comparison
         val files =
             withContext(io) {
                 Files.createDirectories(directory)
-                writers.map { it.write(comparison, directory) }
+                writers.map { it.write(written, directory) }
             }
-        return Result(comparison, files)
+        return Result(comparison, files, visualDirectory)
+    }
+
+    /** Both runs' looks with their repeat siblings', or null when neither compared run looked at any page. */
+    private suspend fun lookInputs(
+        base: RunRecord,
+        now: RunRecord,
+        comparison: RunComparison,
+    ): CompareLooks.Inputs? {
+        val before = lookRun(base)
+        val after = lookRun(now)
+        if (before.looks.isEmpty() && after.looks.isEmpty()) return null
+        return CompareLooks.Inputs(
+            baseline = listOf(before) + siblings(base, now).map { lookRun(it) },
+            current = listOf(after) + siblings(now, base).map { lookRun(it) },
+            added = comparison.steps.filter { it.change == StepChange.ADDED }.mapTo(HashSet()) { it.scenarioStep },
+            removed = comparison.steps.filter { it.change == StepChange.REMOVED }.mapTo(HashSet()) { it.scenarioStep },
+        )
+    }
+
+    /** The finished runs of [run]'s repeat group from the same scenario file, oldest first, never [other]. */
+    private suspend fun siblings(
+        run: RunRecord,
+        other: RunRecord,
+    ): List<RunRecord> =
+        run.repeatGroup
+            ?.let { runs.byRepeatGroup(it) }
+            .orEmpty()
+            .filter {
+                it.runId != run.runId && it.runId != other.runId && it.result != RunResult.RUNNING && it.campaignHash == run.campaignHash
+            }.sortedBy { it.startedAt }
+
+    /** A run's looks and the frames they name (a run without looks reads no artifacts). */
+    private suspend fun lookRun(run: RunRecord): CompareLooks.LookRun {
+        val looks = query.pageLooks(run.runId)
+        val frames = if (looks.isEmpty()) emptyList() else query.artifacts(run.runId).filter { it.type == ArtifactType.VISUAL }
+        return CompareLooks.LookRun(run, looks, frames)
     }
 
     private suspend fun baselineOf(
