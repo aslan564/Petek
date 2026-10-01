@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = KotlinLogging.logger {}
 
@@ -80,7 +81,21 @@ internal class PanelTestFlowAdapter(
             synchronized(lock) {
                 val started = TestFlowView(instructions.target.trim(), TestStage.EXPLORING, clock.now().wall)
                 view = started
-                job = scope.launch { proceed(instructions, exploration) }
+                val entered = AtomicBoolean(false)
+                job =
+                    scope
+                        .launch {
+                            entered.set(true)
+                            proceed(instructions, exploration)
+                        }.also { launched ->
+                            // A test stopped before its body ran never reaches proceed's own clean-up: stop it here.
+                            launched.invokeOnCompletion {
+                                if (!entered.get()) {
+                                    exploration.job.cancel()
+                                    stop(STOPPED_NOTE)
+                                }
+                            }
+                        }
                 started
             }
         }
@@ -138,7 +153,7 @@ internal class PanelTestFlowAdapter(
                 if (exploration.job.isActive) exploration.job.cancel()
                 continuing?.job?.cancel()
                 run?.cancel()
-                stop("Test dayandırıldı.")
+                stop(STOPPED_NOTE)
             }
             throw e
         } catch (e: PanelException) {
@@ -251,4 +266,8 @@ internal class PanelTestFlowAdapter(
         synchronized(lock) {
             view = view?.let(change)
         }
+
+    private companion object {
+        const val STOPPED_NOTE = "Test dayandırıldı."
+    }
 }

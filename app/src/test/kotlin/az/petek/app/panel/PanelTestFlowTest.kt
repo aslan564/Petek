@@ -201,6 +201,24 @@ class PanelTestFlowTest {
         }
 
     @Test
+    fun `a test stopped at once, before it got going, is stopped with its exploration every time`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            repeat(AT_ONCE) {
+                panel.llm.explorerGate = CompletableDeferred()
+                panel.backend.startTest(panel.form())
+                panel.backend.cancelTest() shouldBe true
+
+                panel.ended().let {
+                    it.stage shouldBe TestStage.STOPPED
+                    it.note shouldBe "Test dayandırıldı."
+                }
+                panel.exploration { it.status != ExplorationStatus.RUNNING }.status shouldBe ExplorationStatus.CANCELLED
+            }
+            panel.backend.runs().shouldBeEmpty()
+        }
+
+    @Test
     fun `a test stopped while its run goes stops that run, which still ends with a report`() =
         runBlocking<Unit> {
             // The first tester's browser opens only when the test lets it: the run has started, its steps have not.
@@ -236,5 +254,8 @@ class PanelTestFlowTest {
     private companion object {
         val POLL = 50.milliseconds
         const val GATE_SECONDS = 20L
+
+        /** Enough tries that a test stopped before its body ran shows up, if it is ever left going. */
+        const val AT_ONCE = 15
     }
 }
