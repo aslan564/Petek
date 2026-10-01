@@ -17,24 +17,34 @@ import az.petek.reporting.domain.PageComparison
 import az.petek.reporting.domain.RunComparison
 import az.petek.reporting.domain.SpeedChange
 import az.petek.reporting.domain.StepChange
+import az.petek.reporting.domain.visual.LookChange
+import az.petek.reporting.domain.visual.LookComparison
+import az.petek.reporting.domain.visual.VisualGate
 import kotlinx.html.FlowContent
 import kotlinx.html.a
 import kotlinx.html.body
+import kotlinx.html.details
 import kotlinx.html.div
+import kotlinx.html.figcaption
+import kotlinx.html.figure
 import kotlinx.html.footer
 import kotlinx.html.h1
 import kotlinx.html.h2
 import kotlinx.html.head
 import kotlinx.html.header
 import kotlinx.html.html
+import kotlinx.html.id
+import kotlinx.html.img
 import kotlinx.html.li
 import kotlinx.html.main
 import kotlinx.html.meta
 import kotlinx.html.p
+import kotlinx.html.pre
 import kotlinx.html.section
 import kotlinx.html.span
 import kotlinx.html.stream.appendHTML
 import kotlinx.html.style
+import kotlinx.html.summary
 import kotlinx.html.table
 import kotlinx.html.tbody
 import kotlinx.html.td
@@ -155,6 +165,7 @@ class ComparisonHtmlWriter : ComparisonWriter {
                             steps(comparison)
                             deliveries(comparison)
                             pages(comparison)
+                            looks(comparison)
                         }
                         footer {
                             a(href = "index.html") { +"İndiki run-ın hesabatı" }
@@ -171,9 +182,7 @@ class ComparisonHtmlWriter : ComparisonWriter {
             h2 { +"Xülasə" }
             p {
                 +"Nəticə: "
-                span("pill ${if (comparison.regressed) "bad" else "ok"}") {
-                    +(if (comparison.regressed) ComparisonText.WORSE else ComparisonText.NOT_WORSE)
-                }
+                span("pill ${LookText.verdictTone(comparison)}") { +LookText.verdict(comparison) }
             }
             div("tiles") {
                 tile("Yeni sınan", comparison.newFailures.size, if (comparison.newFailures.isEmpty()) null else "bad")
@@ -181,6 +190,13 @@ class ComparisonHtmlWriter : ComparisonWriter {
                 tile("Hələ də sınıq", comparison.steps.count { it.change == StepChange.STILL_FAILING }, null)
                 val slower = comparison.slowerSteps.size + comparison.slowerDeliveries.size + comparison.worsePages.size
                 tile("Yavaşlayan", slower, if (slower == 0) null else "bad")
+                if (comparison.looks.isNotEmpty()) {
+                    val changed = comparison.changedLooks.size
+                    val tone = if (comparison.visualGate == VisualGate.FAIL) "bad" else "warn"
+                    tile(LookText.CHANGED_TILE, changed, if (changed == 0) null else tone)
+                    val incomparable = comparison.incomparableLooks.size
+                    tile(LookText.INCOMPARABLE_TILE, incomparable, if (incomparable == 0) null else "muted")
+                }
             }
             if (comparison.newFailures.isNotEmpty()) {
                 p { +"Yeni sınan addımlar:" }
@@ -292,6 +308,128 @@ class ComparisonHtmlWriter : ComparisonWriter {
         }
     }
 
+    /**
+     * The pages' looks (docs/adr/0014): the method and gate, each changed look with its crops (before, now, difference),
+     * the whole pages, what was not compared, mask suggestions and where each side's capture came from; then every look
+     * in a table and the difference picture's legend.
+     */
+    private fun FlowContent.looks(comparison: RunComparison) {
+        if (comparison.looks.isEmpty()) return
+        section {
+            id = "gorunus"
+            h2 { +"${LookText.TITLE} (${comparison.looks.size})" }
+            p("muted") { +LookText.method(comparison) }
+            comparison.changedLooks.forEach { changedLook(comparison, it) }
+            div("scroll") {
+                table {
+                    thead {
+                        tr {
+                            th { +"Addım" }
+                            th { +"Səhifə" }
+                            th { +"Ekran" }
+                            th { +"Nəticə" }
+                            th(classes = "num") { +"Dəyişən %" }
+                            th(classes = "num") { +"Tutuşdurulmayan %" }
+                            th(classes = "num") { +"Nümunə" }
+                        }
+                    }
+                    tbody {
+                        comparison.looks.forEach { look ->
+                            tr {
+                                td { +look.key.scenarioStep }
+                                td { +look.key.page }
+                                td { +LookText.device(look.key.device) }
+                                td("detail") {
+                                    val pill = "pill ${LookText.tone(look, comparison.visualGate)}"
+                                    if (look.change == LookChange.CHANGED) {
+                                        a(href = "#${anchor(look)}") { span(pill) { +LookText.change(look) } }
+                                    } else {
+                                        span(pill) { +LookText.change(look) }
+                                    }
+                                    LookText.reason(look)?.let { +" $it" }
+                                }
+                                td("num") { +(if (look.comparedPixels > 0) LookText.share(look.changedShare) else ReportFormat.NONE) }
+                                td("num") { +(if (look.capturedPixels > 0) LookText.share(look.ignoredShare) else ReportFormat.NONE) }
+                                td("num") { +LookText.samples(look) }
+                            }
+                        }
+                    }
+                }
+            }
+            p("legend muted") {
+                LookText.LEGEND.forEach { (swatch, text) ->
+                    span("item") {
+                        span("sw $swatch") {}
+                        +text
+                    }
+                }
+            }
+            p("muted") { +LookText.PICTURES }
+        }
+    }
+
+    private fun FlowContent.changedLook(
+        comparison: RunComparison,
+        look: LookComparison,
+    ) {
+        details("look ${LookText.tone(look, comparison.visualGate)}") {
+            attributes["open"] = "open"
+            id = anchor(look)
+            summary { +"${LookText.title(look)} — ${LookText.summary(look)}" }
+            val facts = LookText.facts(look)
+            if (facts.isNotEmpty()) ul { facts.forEach { li { +it } } }
+            look.files?.crops?.forEach { crop ->
+                p("cap") { +LookText.crop(crop.number, crop.box.width, crop.box.height, crop.box.x, crop.box.y) }
+                div("looks") {
+                    picture(crop.before, "Əvvəl")
+                    picture(crop.after, "İndi")
+                    picture(crop.diff, "Fərq")
+                }
+            }
+            p {
+                +"Bütün səhifə: "
+                link(look.files?.before, "əvvəl")
+                +" · "
+                link(look.files?.after, "indi")
+                +" · "
+                link(look.files?.overlay, "fərq")
+            }
+            LookText.ignored(look)?.let { p("muted") { +"Tutuşdurulmayan: $it" } }
+            if (look.suggestions.isNotEmpty()) {
+                p { +LookText.SUGGESTIONS }
+                pre("mask") { +LookText.suggestionsYaml(look) }
+            }
+            look.before?.let { p("muted prov") { +"Əvvəl: ${LookText.provenance(it)}" } }
+            look.after?.let { p("muted prov") { +"İndi: ${LookText.provenance(it)}" } }
+            p("muted") { link("${visualDirectory(comparison)}/visual.json", LookText.CALCULATION) }
+        }
+    }
+
+    /** A linked lazy picture with its caption, or the caption alone when the link is not a safe relative path. */
+    private fun FlowContent.picture(
+        link: String,
+        caption: String,
+    ) {
+        figure {
+            ReportFormat.safeLink(link)?.let { safe ->
+                a(href = safe) { img(alt = caption, src = safe) { attributes["loading"] = "lazy" } }
+            }
+            figcaption { +caption }
+        }
+    }
+
+    private fun FlowContent.link(
+        link: String?,
+        text: String,
+    ) {
+        val safe = ReportFormat.safeLink(link)
+        if (safe == null) +text else a(href = safe) { +text }
+    }
+
+    private fun anchor(look: LookComparison): String = "look-" + look.index.toString().padStart(3, '0')
+
+    private fun visualDirectory(comparison: RunComparison): String = "visual/${comparison.baseline.runId.value}"
+
     private fun tone(change: StepChange): String =
         when (change) {
             StepChange.NEW_FAILURE, StepChange.STILL_FAILING, StepChange.FAILING -> "bad"
@@ -316,10 +454,11 @@ class ComparisonMarkdownWriter : ComparisonWriter {
             appendLine()
             appendLine("- Əvvəlki: ${cell(ComparisonText.run(comparison.baseline))}")
             appendLine("- İndiki: ${cell(ComparisonText.run(comparison.current))}")
-            appendLine("- Nəticə: **${if (comparison.regressed) ComparisonText.WORSE else ComparisonText.NOT_WORSE}**")
+            appendLine("- Nəticə: **${LookText.verdict(comparison)}**")
             appendLine(
                 "- Yeni sınan: ${comparison.newFailures.size} · Düzələn: ${comparison.fixed.size} · Yavaşlayan: " +
-                    "${comparison.slowerSteps.size + comparison.slowerDeliveries.size + comparison.worsePages.size}",
+                    "${comparison.slowerSteps.size + comparison.slowerDeliveries.size + comparison.worsePages.size}" +
+                    if (comparison.looks.isEmpty()) "" else " · ${LookText.CHANGED_TILE}: ${comparison.changedLooks.size}",
             )
             if (comparison.scenarioChanged) appendLine("- ${ComparisonText.SCENARIO_CHANGED}")
             appendLine()
@@ -361,9 +500,46 @@ class ComparisonMarkdownWriter : ComparisonWriter {
                     )
                 }
             }
+            looks(comparison)
             appendLine()
             appendLine("${ComparisonText.NOT_TIMED} ${ComparisonText.thresholds(comparison)}")
         }
+
+    /** Every look in a table with links to its difference picture, then each changed look's picture. */
+    private fun StringBuilder.looks(comparison: RunComparison) {
+        if (comparison.looks.isEmpty()) return
+        appendLine()
+        appendLine("## ${LookText.TITLE}")
+        appendLine()
+        appendLine(LookText.method(comparison))
+        appendLine()
+        appendLine("| Addım | Səhifə | Ekran | Nəticə | Fərq |")
+        appendLine("|---|---|---|---|---|")
+        comparison.looks.forEach { look ->
+            val result = listOfNotNull(LookText.change(look), LookText.reason(look)).joinToString(": ")
+            val difference =
+                if (look.change == LookChange.CHANGED) {
+                    val overlay = ReportFormat.safeLink(look.files?.overlay)
+                    LookText.summary(look).substringAfter(": ") + (overlay?.let { " · [fərq](${destination(it)})" } ?: "")
+                } else {
+                    ReportFormat.NONE
+                }
+            appendLine(
+                "| ${cell(look.key.scenarioStep)} | ${cell(look.key.page)} | ${cell(LookText.device(look.key.device))} | " +
+                    "${cell(result)} | ${cell(difference)} |",
+            )
+        }
+        comparison.changedLooks.forEach { look ->
+            val overlay = ReportFormat.safeLink(look.files?.overlay) ?: return@forEach
+            appendLine()
+            appendLine("**${cell(LookText.title(look))}** — ${cell(LookText.summary(look))}")
+            appendLine()
+            appendLine("![fərq](${destination(overlay)})")
+        }
+    }
+
+    /** A link destination inside Markdown: spaces and parentheses escaped so the link cannot end early. */
+    private fun destination(link: String): String = link.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
 
     /** Text inside a Markdown table or line: pipes escaped, line breaks flattened. */
     private fun cell(text: String): String = text.replace("|", "\\|").replace('\n', ' ')
