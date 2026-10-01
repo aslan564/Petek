@@ -325,6 +325,80 @@ class TargetProfileRulesTest {
     }
 
     @Test
+    fun `visual masks of plain CSS and of selector keys that stand for plain CSS are valid`() {
+        val target =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.clock" to "[data-testid=\"server-clock\"]"),
+                visual = VisualProfile(listOf("visual.clock", ".news-ticker", "session.user_name", "header time")),
+            )
+
+        messages(target).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a visual mask named like a visual key that the profile does not define is refused`() {
+        // No other visual.* key exists, so the group alone does not tell it apart from CSS; as CSS it would match nothing.
+        val forgotten = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf("visual.clock", ".ticker")))
+
+        single(
+            forgotten,
+            "target_profile.visual.mask[0]: 'visual.clock' names a selector key, but target_profile.selectors has no such key " +
+                "(it has no visual.* keys)",
+        )
+        val misspelt =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.clock" to "[data-testid=\"server-clock\"]"),
+                visual = VisualProfile(listOf("visual.clok", "visual.clock-face")),
+            )
+        messages(misspelt) shouldBe
+            listOf(0, 1).map { i ->
+                val ref = misspelt.visual.mask[i]
+                "target_profile.visual.mask[$i]: '$ref' names a selector key, but target_profile.selectors has no such key " +
+                    "(its visual.* keys: visual.clock); as CSS it would match nothing, so nothing would be masked"
+            }
+    }
+
+    @Test
+    fun `a visual mask with a placeholder is refused`() {
+        val target = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf(".ticker", "#hi-{self.agent_id}")))
+
+        single(target, "target_profile.visual.mask[1]: masks are looked for on the page as written; they cannot use placeholders")
+    }
+
+    @Test
+    fun `a blank visual mask is refused`() {
+        val target = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf(" ", ".ticker")))
+
+        messages(target) shouldBe listOf("target_profile.visual.mask[0]: selector must not be blank")
+    }
+
+    @Test
+    fun `a Playwright-only visual mask is refused with its path`() {
+        val target =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.banner" to "div.banner >> nth=0"),
+                visual = VisualProfile(listOf("role=button[name=\"Qəbul edirəm\"]", ".ok", "visual.banner", "li:has-text(\"Bu gün\")")),
+            )
+
+        val all = issues(target, sourceLines = SourceLines(mapOf("target_profile.visual.mask[2]" to 41)))
+
+        all.map { it.message.substringBefore(':') } shouldBe
+            listOf("target_profile.visual.mask[0]", "target_profile.visual.mask[2]", "target_profile.visual.mask[3]")
+        all[0].message shouldContain "uses 'role=', which only Playwright understands"
+        all[1].message shouldContain "'visual.banner' (div.banner >> nth=0) uses '>>'"
+        all[1].line shouldBe 41
+        all[2].message shouldContain "uses ':has-text('"
+    }
+
+    @Test
+    fun `more than 50 visual masks are refused`() {
+        val fifty = (1..VisualProfile.MAX_MASKS).map { ".part-$it" }
+
+        messages(TargetProfile.DEFAULT.copy(visual = VisualProfile(fifty))).shouldBeEmpty()
+        single(TargetProfile.DEFAULT.copy(visual = VisualProfile(fifty + ".one-more")), "names 51 selectors; at most 50")
+    }
+
+    @Test
     fun `pacing needs a non-negative stagger and at least one parallel actor`() {
         issues(TargetProfile.DEFAULT, Pacing(1500.milliseconds, 3)).shouldBeEmpty()
         issues(TargetProfile.DEFAULT, Pacing((-1).milliseconds, 0)) shouldHaveSize 2

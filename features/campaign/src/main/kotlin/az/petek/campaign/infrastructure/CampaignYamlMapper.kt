@@ -32,6 +32,7 @@ import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.Tenant
+import az.petek.campaign.domain.VisualProfile
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.campaign.domain.expandApiPrefix
 import az.petek.core.model.Role
@@ -256,6 +257,9 @@ internal class CampaignYamlMapper(
                 localStorage = textMap(fields, "local_storage"),
                 dismiss = fields.textList("dismiss").orEmpty(),
                 apiPrefix = fields.text("api_prefix")?.trim() ?: TargetProfile.DEFAULT_API_PREFIX,
+                visual =
+                    fields.map("visual", VISUAL_KEYS)?.let { visual -> VisualProfile(mask = visual.textList("mask").orEmpty()) }
+                        ?: VisualProfile.NONE,
             )
 
         private fun textMap(
@@ -647,7 +651,9 @@ internal class CampaignYamlMapper(
         val REGISTRATION_KEYS = linkedSetOf("invite", "company_code")
         val BUDGET_KEYS = linkedSetOf("max_steps_per_agent", "max_minutes")
         val PACING_KEYS = linkedSetOf("start_stagger_ms", "max_parallel_actors")
-        val TARGET_PROFILE_KEYS = linkedSetOf("paths", "selectors", "id_sources", "flows", "local_storage", "dismiss", "api_prefix")
+        val TARGET_PROFILE_KEYS =
+            linkedSetOf("paths", "selectors", "id_sources", "flows", "local_storage", "dismiss", "api_prefix", "visual")
+        val VISUAL_KEYS = linkedSetOf("mask")
         val ID_SOURCE_KEYS = linkedSetOf("url_regex", "oracle", "dom", "agent")
         val ORACLE_ID_KEYS = linkedSetOf("path", "field")
         val DOM_ID_KEYS = linkedSetOf("selector", "attribute")

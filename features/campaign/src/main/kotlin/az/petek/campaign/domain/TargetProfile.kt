@@ -39,6 +39,8 @@ data class TargetProfile(
     val dismiss: List<String> = emptyList(),
     /** Path prefix of the target's regular API; `{api}` in campaign paths stands for it (expanded when loaded). */
     val apiPrefix: String = DEFAULT_API_PREFIX,
+    /** How the site's looks are compared between releases: the parts never compared ([VisualProfile.mask]). */
+    val visual: VisualProfile = VisualProfile.NONE,
 ) {
     fun path(key: String): String = paths[key] ?: DEFAULT_PATHS[key] ?: error("Unknown target path key '$key'")
 

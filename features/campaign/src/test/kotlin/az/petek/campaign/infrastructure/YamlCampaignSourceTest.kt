@@ -24,6 +24,7 @@ import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.ValidationIssue
+import az.petek.campaign.domain.VisualProfile
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
@@ -105,6 +106,29 @@ class YamlCampaignSourceTest {
         load(withSteps(steps)).coverage shouldBe emptyList()
         issue(withSteps(steps) + coverage("x".repeat(Campaign.MAX_COVERAGE_CHARS + 1)), "'coverage' lines are 1 to")
         issue(withSteps(steps) + coverage("two\\nlines"), "'coverage' lines are 1 to")
+    }
+
+    @Test
+    fun `target_profile visual mask is read as selector references`() {
+        val yaml =
+            withSteps(
+                """
+                target_profile:
+                  selectors:
+                    visual.clock: '[data-testid="server-clock"]'
+                  visual:
+                    mask:
+                      - visual.clock
+                      - '.news-ticker'
+                steps: []
+                """,
+            )
+
+        val target = load(yaml).target
+
+        target.visual shouldBe VisualProfile(listOf("visual.clock", ".news-ticker"))
+        target.resolveSelector(target.visual.mask.first()) shouldBe "[data-testid=\"server-clock\"]"
+        load(withSteps("steps: []")).target.visual shouldBe VisualProfile.NONE
     }
 
     @Nested
@@ -470,6 +494,26 @@ class YamlCampaignSourceTest {
                 withSteps("steps:\n  - actor: admin\n    assert:\n      - count: {selector: li, equals: 1, within_s: 3}"),
                 "unknown key 'within_s' in 'steps[0].assert[0].count'",
             ).line shouldBe 11
+        }
+
+        @Test
+        fun `an unknown key under target_profile visual is a problem with its line`() {
+            val yaml =
+                withSteps(
+                    """
+                    target_profile:
+                      visual:
+                        mask: ['.ticker']
+                        ignore: ['.clock']
+                    steps: []
+                    """,
+                )
+
+            val issue = issue(yaml, "unknown key 'ignore'")
+
+            issue.line shouldBe 11
+            issue.message shouldContain "unknown key 'ignore' in 'target_profile.visual' (allowed: mask)"
+            issue(withSteps("target_profile:\n  visual: ['.ticker']\nsteps: []"), "'target_profile.visual' must be a map").line shouldBe 9
         }
 
         @Test

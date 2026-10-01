@@ -16,6 +16,7 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.StepContext
+import az.petek.browser.domain.SlowResponse
 import az.petek.campaign.domain.FlowNames
 import az.petek.core.model.RegistrationMode
 import az.petek.evidence.domain.StepStatus
@@ -25,7 +26,7 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * `site_health`: blind checks that need no knowledge of the site (docs/PLAN.md Faza 13), decided by code from what the
  * browser saw. For every page of `pages` (path keys or `/paths`, comma-separated; default `home`) it runs the `checks`
- * asked (comma-separated; default all):
+ * asked (comma-separated; default: all but `look`):
  *
  * - `links`: every link of the page that stays on the site answers below 400 (up to `max_links`, default 30);
  * - `console`: no `console.error` or uncaught exception, and no request to the site failed (4xx/5xx or no answer);
@@ -36,14 +37,21 @@ import kotlin.time.Duration.Companion.milliseconds
  *   signs in again with the `login` flow. Visitors and signed-out testers skip it;
  * - `perf`: how fast the page became usable, as the browser timed it (first byte, DOM ready, load, largest contentful
  *   paint, layout shift), is recorded per page and screen ([az.petek.evidence.domain.PageTimingRecord]). It never fails
- *   the step: `petek compare` sets it against an earlier release (the regression baseline, Faza 14).
+ *   the step: `petek compare` sets it against an earlier release (the regression baseline, Faza 14);
+ * - `look`: how the page looks on the job's screen, taken by code for comparing releases (docs/adr/0014): settled, at
+ *   the top, down to `look_max_height`, loaded `look_loads` times ([LookRequests]), kept as visual frames and a
+ *   [az.petek.evidence.domain.PageLookRecord]. The owner's `target_profile.visual.mask`, the step's `look_mask` and the
+ *   run's own texts ([RunTexts]) are not compared. Only asked for by name, and it never fails the step: a look the
+ *   browser cannot take, or whose frames cannot be kept, is a skipped sub-action. At most [PageShare.MAX_LOOKS_PER_JOB]
+ *   testers look at one page on one screen.
  *
  * With `share: work` the step's testers split the pages and devices between them (each job a page on a phone, tablet
  * or desktop), with `share: pages` the pages, and with `share: links` each checks every page but asks about only its
  * share of the links ([PageShare]).
  *
- * Every problem is listed in the outcome (`unhealthy_page`); the browser ends on the first page that went wrong, so
- * the step's screenshot shows it. A clean site passes.
+ * Every problem is listed in the outcome (`unhealthy_page`), each once per job: a look's reload repeats the page's own
+ * console errors and requests. The browser ends on the first page that went wrong, so the step's screenshot shows it.
+ * A clean site passes.
  */
 internal class SiteHealthRunFunction(
     private val engine: RunEngine,
@@ -57,7 +65,7 @@ internal class SiteHealthRunFunction(
         step: StepContext,
     ): ActionOutcome =
         engine.execute(name, runtime, step) {
-            val checks = list(args["checks"]).ifEmpty { ALL_CHECKS }.toSet()
+            val checks = list(args["checks"]).ifEmpty { DEFAULT_CHECKS }.toSet()
             val unknown = checks - ALL_CHECKS.toSet()
             if (unknown.isNotEmpty()) {
                 throw RunFailure(
@@ -66,6 +74,15 @@ internal class SiteHealthRunFunction(
                 )
             }
             PageShare.problem(args)?.let { throw RunFailure(FailureReason.MISSING_PREREQUISITE, "site_health: $it") }
+            val lookRequest =
+                if (LOOK in checks) {
+                    LookRequests.problem(runtime.target, args)?.let {
+                        throw RunFailure(FailureReason.MISSING_PREREQUISITE, "site_health: $it")
+                    }
+                    LookRequests.of(runtime, args)
+                } else {
+                    null
+                }
             val jobs = PageShare.jobs(list(args["pages"]).ifEmpty { listOf("home") }, args, step.share)
             val slow = (args["slow_ms"]?.toLongOrNull() ?: DEFAULT_SLOW_MS).milliseconds
             val width = args["width"]?.toIntOrNull() ?: DEFAULT_WIDTH
@@ -74,6 +91,8 @@ internal class SiteHealthRunFunction(
             val session = runtime.session
             val screens = Screens(this)
             var firstFailing: PageShare.Job? = null
+            var looks = 0
+            var looksMissed = 0
             try {
                 for (job in jobs) {
                     screens.show(job.device)
@@ -85,6 +104,10 @@ internal class SiteHealthRunFunction(
                     open(ref)
                     // Read before the other checks: following a link and coming back would time that return instead.
                     if ("perf" in checks) timing(path, job.device?.key)
+                    // After the timing (a reload would time itself) and before any link is followed: the page as it opened.
+                    if (lookRequest != null && job.lookRound < PageShare.MAX_LOOKS_PER_JOB) {
+                        if (look(path, job.device?.key, lookRequest) != null) looks++ else looksMissed++
+                    }
                     val links =
                         if ("links" in checks ||
                             "back" in checks
@@ -108,16 +131,28 @@ internal class SiteHealthRunFunction(
                     }
                     if ("mobile" in checks) checkWidth(job, path, where, width, problems)
                     val health = act("read what the page reported") { session.health(since, slow) }
+                    // Once each: a look's reload repeats what the first load reported.
                     if ("console" in checks) {
-                        health.consoleErrors.forEach { problems += "$where: console error: $it" }
-                        health.failedRequests.forEach { problems += "$where: request failed: $it" }
+                        health.consoleErrors.distinct().forEach { problems += "$where: console error: $it" }
+                        health.failedRequests.distinct().forEach { problems += "$where: request failed: $it" }
                     }
-                    if ("slow" in checks) health.slowResponses.forEach { problems += "$where: ${it.describe()}" }
+                    if ("slow" in checks) {
+                        health.slowResponses
+                            .groupBy { it.method to it.path }
+                            .map { (_, same) -> same.maxBy(SlowResponse::millis) }
+                            .forEach { problems += "$where: ${it.describe()}" }
+                    }
                     if (problems.size > before && firstFailing == null) firstFailing = job
                 }
                 if ("session" in checks) checkSessionExpiry(jobs.first().page, problems)
+                val looked =
+                    when {
+                        lookRequest == null -> ""
+                        looksMissed == 0 -> " Kept $looks look(s)."
+                        else -> " Kept $looks look(s); $looksMissed could not be taken or kept."
+                    }
                 if (problems.isEmpty()) {
-                    succeeded("Checked ${jobs.size} page(s) for ${checks.sorted().joinToString()}: nothing wrong.")
+                    succeeded("Checked ${jobs.size} page(s) for ${checks.sorted().joinToString()}: nothing wrong.$looked")
                 } else {
                     // The step's evidence is the page the browser ends on: the first page that went wrong, on its screen.
                     firstFailing?.takeIf { it != jobs.last() }?.let { job ->
@@ -198,7 +233,11 @@ internal class SiteHealthRunFunction(
             ?: url.substringBefore('?')
 
     companion object {
-        val ALL_CHECKS: List<String> = listOf("links", "console", "slow", "back", "mobile", "session", "perf")
+        const val LOOK = "look"
+        val ALL_CHECKS: List<String> = listOf("links", "console", "slow", "back", "mobile", "session", "perf", LOOK)
+
+        /** The checks of a step that names none: a look is taken only when asked for. */
+        val DEFAULT_CHECKS: List<String> = ALL_CHECKS - LOOK
         const val DEFAULT_SLOW_MS = 3_000L
         const val DEFAULT_WIDTH = 375
         const val DEFAULT_MAX_LINKS = 30
