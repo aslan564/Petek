@@ -49,6 +49,9 @@ interface Mailbox {
      * Reading them has no side effect on their read state (only [markRead] changes it). This lets a reader skip a newer
      * unrelated message (a welcome mail right after the code) and still reach the usable one below it.
      * The default only sees [findLatest]; adapters that can list the inbox override it.
+     *
+     * Throws [MailboxException] when the inbox cannot be read, and [UnreadableMailException] (carrying the messages that
+     * could be read) when some of these messages are there but cannot be read.
      */
     suspend fun findRecent(
         to: String,
@@ -65,10 +68,20 @@ interface Mailbox {
  * The inbox could not be read: unreachable, timed out or answered something unexpected. Distinct from
  * [MailTimeoutException] ("reachable, but the target sent nothing"), which is a finding about the target.
  */
-class MailboxException(
+open class MailboxException(
     message: String,
     cause: Throwable? = null,
 ) : PetekException(message, cause)
+
+/**
+ * Mail to the tester is in the inbox, but some of it cannot be read (a broken MIME part, a charset this JVM does not
+ * know): [readable] is the rest of the answer, by the same rules. The site did send that mail, so a wait that finds
+ * nothing usable in [readable] ends as an inbox failure (`mail_unavailable`), never as "no e-mail sent".
+ */
+class UnreadableMailException(
+    message: String,
+    val readable: List<MailMessage>,
+) : MailboxException(message)
 
 /** Pulls a 4–8 digit code and/or a confirmation/invite link out of a message. Pure. */
 interface VerificationExtractor {
