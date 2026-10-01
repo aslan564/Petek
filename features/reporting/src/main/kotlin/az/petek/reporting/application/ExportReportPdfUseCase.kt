@@ -21,12 +21,15 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 
 /**
  * A run's report as a PDF (`report/report.pdf`, Faza 12; the owner's decision of 2026-09-30), made when it is asked for
  * (the panel's "PDF yüklə", `petek report --pdf`), not with every run: [printer] prints the report's single-file page
  * ([source], `share.html`, whose screenshots are inside it), and prints it again only when that page was written
- * since. One print at a time, so two downloads of the same report never print it twice at once.
+ * since. The PDF carries the modification time the page had when its print began, and is fresh only while the page still
+ * has that time: a page written again during a print (by another process) is printed again at the next export. One
+ * print at a time in this process, so two downloads of the same report never print it twice at once.
  */
 class ExportReportPdfUseCase(
     private val artifacts: ArtifactStore,
@@ -43,20 +46,31 @@ class ExportReportPdfUseCase(
             val html = directory.resolve(source)
             val pdf = directory.resolve(ReportLayout.PDF)
             val state = withContext(io) { stateOf(html, pdf) }
-            if (state == State.NO_REPORT) return@withLock null
-            if (state == State.STALE) printer.print(html, pdf)
+            if (state == State.NoReport) return@withLock null
+            if (state is State.Stale) {
+                printer.print(html, pdf)
+                withContext(io) { Files.setLastModifiedTime(pdf, state.page) }
+            }
             pdf
         }
 
     private fun stateOf(
         html: Path,
         pdf: Path,
-    ): State =
-        when {
-            !Files.isRegularFile(html) -> State.NO_REPORT
-            Files.isRegularFile(pdf) && Files.getLastModifiedTime(pdf) >= Files.getLastModifiedTime(html) -> State.FRESH
-            else -> State.STALE
-        }
+    ): State {
+        if (!Files.isRegularFile(html)) return State.NoReport
+        val page = Files.getLastModifiedTime(html)
+        return if (Files.isRegularFile(pdf) && Files.getLastModifiedTime(pdf) == page) State.Fresh else State.Stale(page)
+    }
 
-    private enum class State { NO_REPORT, FRESH, STALE }
+    private sealed interface State {
+        data object NoReport : State
+
+        data object Fresh : State
+
+        /** To be printed; [page] is the page's modification time the PDF will carry. */
+        data class Stale(
+            val page: FileTime,
+        ) : State
+    }
 }

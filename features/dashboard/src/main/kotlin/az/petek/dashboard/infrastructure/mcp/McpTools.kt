@@ -342,7 +342,7 @@ internal class McpTools(
                     RunRequest(
                         scenarioId = args.stringArgument("scenarioId"),
                         testers = args.intArgument("testers"),
-                        release = args.stringArgument("release"),
+                        release = args.stringArgument("release", required = false),
                     )
                 request.problems().takeIf { it.isNotEmpty() }?.let { throw PanelRequestException(it) }
                 val started = backend.startRun(request)
@@ -433,7 +433,11 @@ internal class McpTools(
                     string("runId", "run id", required = true)
                     string("baseline", "'previous', a run id, or a release name")
                 },
-            ) { args -> PanelJson.comparison(backend.compare(RunId(args.stringArgument("runId")!!), args.stringArgument("baseline"))) },
+            ) { args ->
+                PanelJson.comparison(
+                    backend.compare(RunId(args.stringArgument("runId")!!), args.stringArgument("baseline", required = false)),
+                )
+            },
             Tool(
                 name = "get_stability",
                 description = "How the steps of a --repeat group behaved across its runs (flaky steps).",

@@ -378,7 +378,13 @@ internal class PlaywrightBrowserSession private constructor(
             // the URI parser cannot read gets none; Playwright then says what is wrong with it.
             val own = runCatching { options.baseUrl.resolve(path.trim()) }.getOrNull()?.let(credentials::headersFor).orEmpty()
             own.forEach { (name, value) -> request.setHeader(name, value) }
-            val response = handles.context.request().fetch(path, request)
+            val response =
+                try {
+                    handles.context.request().fetch(path, request)
+                } catch (e: PlaywrightException) {
+                    // The call's log names every header it sent: never let the page's own token or the cookies out.
+                    throw PlaywrightFailures.describe("${method.uppercase()} $path", e, null, masked() + own.values, keepCause = false)
+                }
             try {
                 HttpProbeResult(response.status(), SecretRedactor.redactText(response.text(), masked()), own.keys)
             } finally {

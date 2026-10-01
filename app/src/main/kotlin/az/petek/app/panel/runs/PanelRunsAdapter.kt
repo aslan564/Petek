@@ -22,6 +22,7 @@ import az.petek.app.panel.explorer.SetupRun
 import az.petek.app.panel.explorer.SetupRuns
 import az.petek.app.panel.scenarios.PanelScenariosAdapter
 import az.petek.app.runs.RunLockBusyException
+import az.petek.app.runs.SlowerLines
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.VisitorRun
@@ -52,6 +53,7 @@ import az.petek.dashboard.domain.TriageCategory
 import az.petek.dashboard.domain.TriageVerdictView
 import az.petek.dashboard.domain.TriageView
 import az.petek.evidence.domain.ArtifactRecord
+import az.petek.evidence.domain.ReleaseNames
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
@@ -145,6 +147,17 @@ internal class PanelRunsAdapter(
     ) {
         /** Returns once the run ended (torn down and reported), also when it was stopped. */
         suspend fun join() = job.join()
+
+        /**
+         * The runner's own summary once the run ended: its outcome and why, by the same tally `petek run` exits by.
+         * Null when the run was stopped or broke.
+         */
+        suspend fun summary(): RunSummary? =
+            try {
+                job.await()
+            } catch (e: CancellationException) {
+                if (currentCoroutineContext().isActive) null else throw e
+            }
 
         /** Stops the run as "Dayandır" does: its teardown and report still happen. */
         fun cancel() = job.cancel()
@@ -272,8 +285,15 @@ internal class PanelRunsAdapter(
     ): ComparisonView {
         val choice =
             when {
-                baseline.isNullOrBlank() || baseline.equals(PREVIOUS, ignoreCase = true) -> CompareRunsUseCase.Baseline.Previous
-                RUN_ID.matches(baseline) -> CompareRunsUseCase.Baseline.Run(RunId(baseline))
+                baseline.isNullOrBlank() ||
+                    baseline.equals(
+                        ReleaseNames.PREVIOUS,
+                        ignoreCase = true,
+                    )
+                -> CompareRunsUseCase.Baseline.Previous
+
+                ReleaseNames.RUN_ID.matches(baseline) -> CompareRunsUseCase.Baseline.Run(RunId(baseline))
+
                 else -> CompareRunsUseCase.Baseline.Release(baseline)
             }
         val comparison =
@@ -295,15 +315,10 @@ internal class PanelRunsAdapter(
             newFailures = comparison.newFailures.map { it.scenarioStep },
             fixed = comparison.fixed.map { it.scenarioStep },
             stillFailing = comparison.steps.filter { it.change == StepChange.STILL_FAILING }.map { it.scenarioStep },
-            slower =
-                comparison.slowerSteps.map { "${it.scenarioStep} ${it.beforeMs} ms → ${it.afterMs} ms" } +
-                    comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" } +
-                    comparison.worsePages.map { page ->
-                        page.page + (page.device?.let { " ($it)" } ?: "") + ": yüklənmə ${page.beforeLoadMs} → ${page.afterLoadMs} ms, " +
-                            "LCP ${page.beforePaintMs} → ${page.afterPaintMs} ms, CLS ${page.beforeShift} → ${page.afterShift}"
-                    },
+            slower = SlowerLines.PANEL.of(comparison),
             notComparable = comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep },
-            pageUrl = "/runs/${runId.value}/report/compare.html",
+            // The page of this very pair: opening it never compares again, or with another baseline.
+            pageUrl = "/runs/${runId.value}/report/compare-${comparison.baseline.runId.value}.html",
         )
     }
 
@@ -314,7 +329,7 @@ internal class PanelRunsAdapter(
     ): String =
         when (e.reason) {
             ComparisonRefusedException.Reason.NO_BASELINE -> {
-                if (baseline.isNullOrBlank() || baseline.equals(PREVIOUS, ignoreCase = true)) {
+                if (baseline.isNullOrBlank() || baseline.equals(ReleaseNames.PREVIOUS, ignoreCase = true)) {
                     "Müqayisə üçün bu ssenarinin əvvəlki, bitmiş run-ı yoxdur."
                 } else {
                     "Bu ssenarinin \"$baseline\" versiyasını yoxlayan bitmiş run-ı yoxdur (versiya run başlayanda adlanır)."
@@ -862,12 +877,6 @@ internal class PanelRunsAdapter(
     private companion object {
         /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
         const val MANUAL_MAIL_TESTERS = 3
-
-        /** A comparison's default baseline: the scenario's previous run. */
-        const val PREVIOUS = "previous"
-
-        /** How a run id looks, to tell it from a release name. */
-        val RUN_ID = Regex("run_[A-Za-z0-9_-]+")
 
         /** The newest runs the history shows; each summary reads its run's evidence, so the list stays bounded. */
         const val HISTORY_LIMIT = 100

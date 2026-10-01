@@ -357,10 +357,10 @@ extra library): **PDF** on the panel's Reports screen or **PDF yüklə** in `ind
 a report opened from the disk has it once `petek report <run|latest> --pdf` printed it). Releases are compared too:
 name the site's release when a run starts (`petek run --release v1.4.2`, or the panel's "Saytın versiyası"), then
 `petek compare <run|latest>` (or **Müqayisə** on the Reports screen) sets the run against the previous run of its
-scenario, a named run or a release (`--baseline`) and writes `compare.html` and `compare.md`: what the site broke, fixed
+scenario, a named run or a release (`--baseline`) and writes `compare-<baseline run>.html` and `.md`: what the site broke, fixed
 and still fails, and what it made slower (real-time delivery and the deterministic `run` steps; an AI step's time is
 mostly the AI's). Exit code 1 when something got worse, for CI. `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
-templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (and MCP
+templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek --json findings <run|latest>` (and MCP
 `get_finding_bundle`) gives your coding AI each finding with its step, request and response, oracle answer and screenshot
 path, so it can look for the cause in your code.
 

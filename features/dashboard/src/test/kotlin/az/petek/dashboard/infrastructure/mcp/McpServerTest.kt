@@ -15,8 +15,11 @@ import az.petek.core.ids.RunId
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.dashboard.demo.DemoPanelBackend
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.PanelBackend
 import az.petek.dashboard.domain.PanelInstructions
+import az.petek.dashboard.domain.RunRequest
+import az.petek.dashboard.domain.RunStartView
 import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TestStage
 import az.petek.dashboard.testing.TempDirArtifactStore
@@ -178,6 +181,58 @@ class McpServerTest {
                 "Changes state"
             tools.single { it["name"]!!.jsonPrimitive.content == "test_site" }["description"]!!.jsonPrimitive.content shouldContain
                 "Changes state"
+        }
+
+    @Test
+    fun `run_campaign without a release and compare_runs without a baseline reach the backend with none`() =
+        runBlocking<Unit> {
+            val demo = backend()
+            val asked = mutableListOf<RunRequest>()
+            val compared = mutableListOf<Pair<RunId, String?>>()
+            val backend =
+                object : PanelBackend by demo {
+                    override suspend fun startRun(request: RunRequest): RunStartView {
+                        asked += request
+                        return RunStartView(RunId("run_new"), request.scenarioId, 3)
+                    }
+
+                    override suspend fun compare(
+                        runId: RunId,
+                        baseline: String?,
+                    ): ComparisonView {
+                        compared += runId to baseline
+                        return ComparisonView(
+                            runId,
+                            null,
+                            RunId("run_old"),
+                            null,
+                            "tiny",
+                            false,
+                            false,
+                            emptyList(),
+                            emptyList(),
+                            emptyList(),
+                            emptyList(),
+                            emptyList(),
+                            "/runs/${runId.value}/report/compare.html",
+                        )
+                    }
+                }
+
+            val answers =
+                exchange(
+                    call(1, "run_campaign", """{"scenarioId":"scn_1"}"""),
+                    call(2, "compare_runs", """{"runId":"run_new"}"""),
+                    call(3, "run_campaign", """{"scenarioId":"scn_1","release":"v 1"}"""),
+                    allowWrites = true,
+                    backend = backend,
+                )
+
+            answers["1"]!!.result()["isError"]!!.jsonPrimitive.boolean shouldBe false
+            asked.map { it.release } shouldBe listOf(null)
+            compared shouldBe listOf(RunId("run_new") to null)
+            answers["2"]!!.text() shouldContain "run_old"
+            answers["3"]!!.result()["isError"]!!.jsonPrimitive.boolean shouldBe true
         }
 
     @Test

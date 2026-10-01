@@ -76,6 +76,29 @@ class ExportReportPdfUseCaseTest {
         }
 
     @Test
+    fun `a page written again while it is being printed is printed again at the next export`() =
+        runBlocking<Unit> {
+            val html = page()
+            Files.setLastModifiedTime(html, FileTime.from(Instant.parse("2026-09-30T10:00:00Z")))
+            val rewriting =
+                ReportPdfPrinter { source, pdf ->
+                    printed += source.fileName.toString() to pdf.fileName.toString()
+                    Files.writeString(pdf, "%PDF-1.7 " + Files.readString(source))
+                    // Another process writes the report again while this print is still going.
+                    Files.writeString(source, "<html>yeni hesabat</html>")
+                    Files.setLastModifiedTime(source, FileTime.from(Instant.parse("2026-09-30T10:00:05Z")))
+                }
+            val export = ExportReportPdfUseCase(InMemoryArtifactStore(dir), rewriting, SHARE)
+
+            val pdf = export.export(run)!!
+            Files.getLastModifiedTime(pdf) shouldBe FileTime.from(Instant.parse("2026-09-30T10:00:00Z"))
+            export().export(run)
+
+            Files.readString(pdf) shouldBe "%PDF-1.7 <html>yeni hesabat</html>"
+            printed.size shouldBe 2
+        }
+
+    @Test
     fun `a run without a written report has no PDF and nothing is printed`() =
         runBlocking<Unit> {
             export().export(run).shouldBeNull()

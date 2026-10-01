@@ -126,8 +126,13 @@ internal class PanelTestFlowAdapter(
             // finds goes to the next run's scenario, never to this run.
             continuing = goOn(instructions, ExplorationId(explorationId))
             launched.join()
+            val outcome = launched.summary()
             val extended = continuing?.let { extend(it, ExplorationId(explorationId)) }
-            ended(runs.summary(launched.view.runId), listOfNotNull(scouted, extended).joinToString(" ").ifEmpty { null })
+            ended(
+                runs.summary(launched.view.runId),
+                undecided = outcome?.undecidedOnly == true,
+                scouted = listOfNotNull(scouted, extended).joinToString(" ").ifEmpty { null },
+            )
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
                 if (exploration.job.isActive) exploration.job.cancel()
@@ -196,9 +201,13 @@ internal class PanelTestFlowAdapter(
             ExplorationStatus.FAILED, ExplorationStatus.RUNNING -> message ?: "Kəşfiyyat alınmadı; ssenari yazılmadı."
         }
 
-    /** The test's end by its run: FINISHED with the run's result, STOPPED when the run did not end on its own. */
+    /**
+     * The test's end by its run: FINISHED with the run's result, STOPPED when the run did not end on its own. Whether it
+     * failed only for undecided checks ([undecided]) is the runner's own verdict, so `petek test` exits as `petek run`.
+     */
     private fun ended(
         run: RunSummaryView?,
+        undecided: Boolean,
         scouted: String?,
     ) {
         val (stage, said) =
@@ -209,7 +218,7 @@ internal class PanelTestFlowAdapter(
 
                 RunResult.FAILED -> {
                     TestStage.FINISHED to
-                        if (run.undecidedOnly) {
+                        if (undecided) {
                             "Test bitdi: run keçmədi, çünki ${run.assertionsInconclusive} yoxlamanın sübutu qərar üçün yetmədi; " +
                                 "heç nə uğursuz olmadı. Nəyin çatmadığı hesabatın \"alət boşluğu\" rəfindədir."
                         } else {
@@ -231,7 +240,7 @@ internal class PanelTestFlowAdapter(
                 stage = stage,
                 result = run?.result,
                 note = listOfNotNull(scouted, said).joinToString(" "),
-                undecided = run?.undecidedOnly == true,
+                undecided = undecided && run?.result == RunResult.FAILED,
             )
         }
     }

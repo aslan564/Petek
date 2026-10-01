@@ -4,7 +4,8 @@
 # masked) and, for the tester agents' AI, whatever your project uses (R09, .env.example): PETEK_LLM_PROVIDER,
 # PETEK_LLM_MODEL, PETEK_LLM_BASE_URL and PETEK_LLM_API_KEY (masked). Pətək picks no AI vendor for you.
 #
-# Exit codes: 0 every run PASSED, 1 a run FAILED (findings in the report), 2 nothing could start. The JUnit XML shows
+# Exit codes: 0 every run PASSED, 1 a run FAILED (findings in the report), 2 nothing could start, 3 a run did not pass
+# only because some checks could not be decided (nothing failed; the report names them). The JUnit XML shows
 # the steps in the merge request's test report; the HTML reports and the SARIF file stay as artifacts.
 petek:
   stage: test

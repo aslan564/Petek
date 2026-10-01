@@ -63,9 +63,10 @@ enum class StepKind { DO, RUN, WAIT, EMIT, ASSERT, SYSTEM }
 
 /**
  * The action of the harness step that records a campaign's `coverage:` lines at a run's start, one line each, so the
- * run's report names what its scenario left unchecked (the owner's decision of 2026-09-30).
+ * run's report names what its scenario left unchecked (the owner's decision of 2026-09-30). Not `coverage`: that is the
+ * runner's record of which receivers of a wave could wait for an event.
  */
-const val COVERAGE_ACTION = "coverage"
+const val COVERAGE_ACTION = "scenario_coverage"
 
 enum class StepStatus { PASSED, FAILED, SKIPPED, BLOCKED, ERROR }
 

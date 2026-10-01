@@ -143,12 +143,18 @@ class PanelHttpTest {
                         .jsonPrimitive.content,
                 )
             panel.ended(second)
+            val pairPage = "/runs/${second.value}/report/compare-${runId.value}.html"
             json(get("/api/runs/${second.value}/compare")).jsonObject.let {
                 it["baseline"]!!.jsonPrimitive.content shouldBe runId.value
                 it["release"]!!.jsonPrimitive.content shouldBe "v1.4.2"
-                it["pageUrl"]!!.jsonPrimitive.content shouldBe "/runs/${second.value}/report/compare.html"
+                it["pageUrl"]!!.jsonPrimitive.content shouldBe pairPage
             }
-            get("/runs/${second.value}/report/compare.html").let {
+            // The entry page compares when asked for and sends the browser to that pair's own page.
+            get("/runs/${second.value}/report/compare.html?baseline=${runId.value}").let {
+                it.statusCode() shouldBe 302
+                it.headers().firstValue("Location").get() shouldBe pairPage
+            }
+            get(pairPage).let {
                 it.statusCode() shouldBe 200
                 it.body() shouldContain "Versiyaların müqayisəsi"
             }

@@ -355,11 +355,11 @@ Hesabatlar ekranında **PDF** və ya `index.html`-də **PDF yüklə** (panel onu
 hesabatda isə `petek report <run|latest> --pdf` çap etdikdən sonra açılır). Versiyalar da müqayisə olunur: run
 başlayanda saytın versiyasını adlandırın (`petek run --release v1.4.2` və ya paneldə "Saytın versiyası"), sonra
 `petek compare <run|latest>` (və ya Hesabatlar ekranında **Müqayisə**) run-ı ssenarinin əvvəlki run-ı, adlı run və ya
-versiya (`--baseline`) ilə tutuşdurur və `compare.html`, `compare.md` yazır: sayt nəyi sındırıb, nəyi düzəldib, nə hələ də
+versiya (`--baseline`) ilə tutuşdurur və `compare-<baseline run>.html`, `.md` yazır: sayt nəyi sındırıb, nəyi düzəldib, nə hələ də
 sınıqdır və nəyi yavaşladıb (canlı çatdırılma və deterministik `run` addımları; AI addımının vaxtı əsasən AI-ın özünündür).
 Nəsə pisləşibsə çıxış kodu 1-dir (CI üçün). `petek run --ci` JUnit və
 SARIF yollarını çap edir, Markdown hesabatı GitHub job summary-yə əlavə edir; şablonlar: `docs/ci/github-actions.yml`,
-`docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (və MCP `get_finding_bundle`) kodlaşdıran AI-nıza hər
+`docs/ci/gitlab-ci.yml`. `petek --json findings <run|latest>` (və MCP `get_finding_bundle`) kodlaşdıran AI-nıza hər
 tapıntını addımı, sorğu və cavabı, oracle cavabı və screenshot yolu ilə verir ki, səbəbi kodunuzda axtarsın.
 
 ## MCP serveri və `--json`

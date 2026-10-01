@@ -948,7 +948,7 @@ nəyi gözlədiyi `docs/TECH_DEBT.md`-dədir.
   panelin "Saytın versiyası", MCP `run_campaign.release`; `run.release` sütunu); `petek compare <run|latest>
   [--baseline previous|<run>|<versiya>]`, panelin Hesabatlar ekranında **Müqayisə** və MCP `compare_runs` run-ı
   ssenarisinin əvvəlki run-ı (öz `--repeat` qrupundan kənar), adlı run və ya versiya ilə tutuşdurur, run-ın hesabatının
-  yanına `compare.html` və `compare.md` yazır (`CompareRunsUseCase`, `RunComparer`). Addım hər run-da sabitlik cədvəli
+  yanına hər cüt üçün ayrıca `compare-<baseline run>.html` və `.md` yazır (`CompareRunsUseCase`, `RunComparer`). Addım hər run-da sabitlik cədvəli
   kimi qiymətləndirilir (`StepOutcomes`): yeni sınan, düzələn, hələ də sınıq, əvvəl yoxlanmamış amma indi sınıq;
   tester və ya mühitin itirdiyi addım "müqayisə olunmur" sayılır, heç vaxt reqressiya deyil. Sürət yalnız saytın
   təyin etdiyi yerdə: canlı çatdırılma (hadisə adına görə p95) və deterministik `run` addımları (aktorlar üzrə

@@ -820,7 +820,7 @@ class DemoPanelBackend(
                 stillFailing = emptyList(),
                 slower = emptyList(),
                 notComparable = emptyList(),
-                pageUrl = "/runs/${runId.value}/report/compare.html",
+                pageUrl = "/runs/${runId.value}/report/compare-${earlier.runId.value}.html",
             )
         }
 

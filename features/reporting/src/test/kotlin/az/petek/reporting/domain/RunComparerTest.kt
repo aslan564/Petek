@@ -83,6 +83,39 @@ class RunComparerTest {
     }
 
     @Test
+    fun `a race the site lets two racers win in the new release is a regression, not a lost agent`() {
+        fun raced(
+            runId: RunId,
+            winners: Int,
+        ): ComparedEvidence {
+            val verdict = if (winners == 1) Verdict.PASSED else Verdict.FAILED
+            val status = if (winners == 1) StepStatus.PASSED else StepStatus.FAILED
+            return evidence(
+                runId,
+                listOf(
+                    step("approve", "a02", stepId = "stp_approve_a02", runId = runId),
+                    step("approve", "a03", stepId = "stp_approve_a03", runId = runId),
+                    step(
+                        "approve",
+                        null,
+                        status,
+                        StepKind.SYSTEM,
+                        detail = "only_one_succeeds: ${verdict.name} ($winners succeeded)",
+                        action = "verify_group only_one_succeeds",
+                        runId = runId,
+                    ),
+                ),
+                listOf(assertion("approve", null, EvidenceSource.HARNESS, verdict, type = "only_one_succeeds", runId = runId)),
+            )
+        }
+
+        val comparison = RunComparer().compare(raced(before, winners = 1), raced(after, winners = 2))
+
+        comparison.steps.single().change shouldBe StepChange.NEW_FAILURE
+        comparison.regressed shouldBe true
+    }
+
+    @Test
     fun `what a lost tester or the surroundings did is never a change of the site`() {
         val lost = step("read", "a02", StepStatus.ERROR, detail = "llm_failed: the AI provider did not answer", runId = after)
         val comparison =
@@ -135,6 +168,17 @@ class RunComparerTest {
         slower.steps.single { it.scenarioStep == "look" }.speed shouldBe null
         slower.regressed shouldBe true
         noise.slowerSteps.shouldBeEmpty()
+        // A step that failed at once before and passes in its normal time now is fixed, never slower.
+        val fixed =
+            RunComparer().compare(
+                evidence(before, timed(before, 200), listOf(siteFailed(before, "join"))),
+                evidence(after, timed(after, 1_500)),
+            )
+        fixed.steps.single { it.scenarioStep == "join" }.let {
+            it.change shouldBe StepChange.FIXED
+            it.speed shouldBe null
+        }
+        fixed.regressed shouldBe false
         faster.steps.single { it.scenarioStep == "join" }.speed shouldBe SpeedChange.FASTER
         faster.regressed shouldBe false
     }

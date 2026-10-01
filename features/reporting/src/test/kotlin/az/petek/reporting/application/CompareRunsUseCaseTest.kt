@@ -82,7 +82,7 @@ class CompareRunsUseCaseTest {
                 mapOf("join" to StepChange.UNCHANGED, "read" to StepChange.NEW_FAILURE)
             result.comparison.regressed shouldBe true
             result.files.map { dir.relativize(it).toString() } shouldContainExactly
-                listOf("run_3/report/compare.html", "run_3/report/compare.md")
+                listOf("run_3/report/compare-run_2.html", "run_3/report/compare-run_2.md")
             Files.readString(result.files[0]).let {
                 it shouldContain "Versiyaların müqayisəsi: portal-core"
                 it shouldContain "run_2 (versiya v1.4.1"
@@ -99,8 +99,14 @@ class CompareRunsUseCaseTest {
             recorded("run_2", 10, passes = true, release = "v1.4.1")
             val current = recorded("run_3", 20, passes = true, release = "v1.4.2")
 
-            val byRelease = useCase().compare(current, Baseline.Release("v1.4.0")).comparison
-            val byRun = useCase().compare(current, Baseline.Run(RunId("run_2"))).comparison
+            val byReleaseResult = useCase().compare(current, Baseline.Release("v1.4.0"))
+            val byRunResult = useCase().compare(current, Baseline.Run(RunId("run_2")))
+            val byRelease = byReleaseResult.comparison
+            val byRun = byRunResult.comparison
+
+            // Each pair keeps its own page: comparing with another baseline never overwrites the first one.
+            Files.readString(byReleaseResult.files[0]) shouldContain "run_1 (versiya v1.4.0"
+            Files.readString(byRunResult.files[0]) shouldContain "run_2 (versiya v1.4.1"
 
             byRelease.baseline.runId shouldBe RunId("run_1")
             byRelease.fixed.map { it.scenarioStep } shouldContainExactly listOf("read")

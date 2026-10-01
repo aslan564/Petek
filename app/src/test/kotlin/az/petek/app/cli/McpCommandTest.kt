@@ -221,7 +221,7 @@ class McpCommandTest {
         }
 
     private companion object {
-        /** The MCP server's tools (ARCHITECTURE: 29); a new one must be described in the skill pack and the READMEs. */
+        /** The MCP server's tools (ARCHITECTURE: 30); a new one must be described in the skill pack and the READMEs. */
         const val TOOLS = 30
     }
 }

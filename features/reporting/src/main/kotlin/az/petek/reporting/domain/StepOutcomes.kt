@@ -13,6 +13,7 @@ package az.petek.reporting.domain
 
 import az.petek.core.ids.AgentId
 import az.petek.evidence.domain.AssertionRecord
+import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
@@ -28,6 +29,9 @@ import az.petek.evidence.domain.Verdict
  * (a failed check, a defect code saw, [FailureCause.SITE]) before the surroundings ([FailureCause.ENVIRONMENT]) before
  * the tester's agent ([FailureCause.AGENT]). An actor whose own action broke for its agent or the surroundings leaves
  * its failed checks moot: they only show that the action was not done.
+ *
+ * The harness's own record of a group check (`verify_group …`, no actor) only mirrors that check's assertions, which
+ * carry the verdict; it is left out, or a race the site let two racers win would read as a lost agent.
  */
 object StepOutcomes {
     /** The steps a run passed and, for the ones it failed, whom the failure is on. */
@@ -37,9 +41,10 @@ object StepOutcomes {
     )
 
     fun of(
-        steps: List<StepRecord>,
+        records: List<StepRecord>,
         assertions: List<AssertionRecord>,
     ): Outcome {
+        val steps = records.filterNot { it.kind == StepKind.SYSTEM && it.agentId == null && it.action.startsWith(GROUP_CHECK) }
         val expected = ExpectedOutcomes(steps)
         val failingSteps = steps.filter(expected::isFailure)
         val failedChecks = assertions.filter { it.verdict == Verdict.FAILED }
@@ -84,6 +89,9 @@ object StepOutcomes {
             else -> FailureCause.AGENT
         }
     }
+
+    /** How the harness names its record of a group check (`StepExecutor.verifyGroup`). */
+    private const val GROUP_CHECK = "verify_group "
 
     /** Gravest first: what the site did outweighs the surroundings, which outweigh a lost agent. */
     private val GRAVITY = listOf(FailureCause.SITE, FailureCause.ENVIRONMENT, FailureCause.AGENT)

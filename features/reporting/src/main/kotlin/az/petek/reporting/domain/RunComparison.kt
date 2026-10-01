@@ -29,7 +29,8 @@ import java.time.Duration
  *   change: a step a tester's agent or the surroundings lost in either run, or that either run never decided, is
  *   [StepChange.NOT_COMPARABLE], never a regression.
  * - Speed is compared only where the site sets it: the delivery of real-time events (t1 − t0, per event name), the
- *   deterministic `run` steps (per actor from the step's first to its last run record, the median over actors) and the
+ *   deterministic `run` steps the site passed in both runs (per actor from the step's first to its last run record,
+ *   the median over actors; a fixed or undecided step takes a time of its own, never a regression) and the
  *   pages' own timing as the browser measured it (`site_health`'s `perf`: load and largest contentful paint, the
  *   median over testers per page and screen; a layout shift that grew past 0.1 counts too). An AI step's time is
  *   mostly the AI thinking, so it is not compared.
@@ -179,9 +180,13 @@ class ComparisonRefusedException(
     }
 }
 
-/** Writes one format of a [RunComparison] into a report directory (the current run's) and returns the written file. */
+/**
+ * Writes one format of a [RunComparison] into a report directory (the current run's) and returns the written file: one
+ * file per pair of runs ([fileName]), so comparisons with different baselines never overwrite one another.
+ */
 interface ComparisonWriter {
-    val fileName: String
+    /** The file of [comparison]: `compare-<baseline run id>.<extension>`. */
+    fun fileName(comparison: RunComparison): String
 
     fun write(
         comparison: RunComparison,
@@ -215,7 +220,15 @@ class RunComparer(
                     }
                 val beforeMs = beforeTimes[step]
                 val afterMs = afterTimes[step]
-                val speed = if (beforeMs != null && afterMs != null) thresholds.change(beforeMs, afterMs) else null
+                // Only a step the site passed both times has comparable times: a fix or a lost tester takes its own time.
+                val speed =
+                    if (change == StepChange.UNCHANGED && beforeMs != null &&
+                        afterMs != null
+                    ) {
+                        thresholds.change(beforeMs, afterMs)
+                    } else {
+                        null
+                    }
                 StepComparison(step, change, beforeMs, afterMs, speed)
             }
         return RunComparison(

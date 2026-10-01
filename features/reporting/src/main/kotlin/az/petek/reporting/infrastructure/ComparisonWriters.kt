@@ -116,17 +116,17 @@ internal object ComparisonText {
 }
 
 /**
- * The comparison as one self-contained page beside the current run's report (`report/compare.html`): the verdict, what
+ * The comparison as one self-contained page beside the current run's report (`report/compare-<baseline run>.html`): the verdict, what
  * broke, what got fixed, every step and every kind of real-time event before and after. The report's own stylesheet;
  * all data goes through kotlinx.html escaping.
  */
 class ComparisonHtmlWriter : ComparisonWriter {
-    override val fileName: String = "compare.html"
+    override fun fileName(comparison: RunComparison): String = "compare-${comparison.baseline.runId.value}.html"
 
     override fun write(
         comparison: RunComparison,
         directory: Path,
-    ): Path = ReportFormat.writeFile(directory, fileName, render(comparison))
+    ): Path = ReportFormat.writeFile(directory, fileName(comparison), render(comparison))
 
     fun render(comparison: RunComparison): String =
         buildString {
@@ -301,14 +301,14 @@ class ComparisonHtmlWriter : ComparisonWriter {
         }
 }
 
-/** The comparison as Markdown beside the current run's report (`report/compare.md`), for a CI job summary or a PR. */
+/** The comparison as Markdown beside the current run's report (`report/compare-<baseline run>.md`), for a CI job summary or a PR. */
 class ComparisonMarkdownWriter : ComparisonWriter {
-    override val fileName: String = "compare.md"
+    override fun fileName(comparison: RunComparison): String = "compare-${comparison.baseline.runId.value}.md"
 
     override fun write(
         comparison: RunComparison,
         directory: Path,
-    ): Path = ReportFormat.writeFile(directory, fileName, render(comparison))
+    ): Path = ReportFormat.writeFile(directory, fileName(comparison), render(comparison))
 
     fun render(comparison: RunComparison): String =
         buildString {

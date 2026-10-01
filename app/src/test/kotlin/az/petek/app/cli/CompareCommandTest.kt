@@ -68,7 +68,7 @@ class CompareCommandTest {
                 cli.evidenceDir
                     .resolve(second)
                     .resolve("report")
-                    .resolve("compare.html")
+                    .resolve("compare-$first.html")
             result.stdout shouldContain "Written: $page"
             Files.readString(page) shouldContain "yeni sınıb"
         }
@@ -103,6 +103,24 @@ class CompareCommandTest {
 
             result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
             result.stderr shouldContain "No earlier finished run of 'greet'"
+        }
+
+    @Test
+    fun `an unknown run or an empty store compares nothing and exits with 2, never as a regression`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+
+            cli.run("compare", "latest").let {
+                it.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+                it.stderr shouldContain "No run is recorded"
+            }
+            cli.write("greet.yaml", GREETING)
+            cli.run("run", "greet.yaml").statusCode
+            cli.run("compare", "run_mistyped").let {
+                it.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+                it.stderr shouldContain "run_mistyped"
+            }
+            cli.run("compare", "latest", "--baseline", "run_mistyped").statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
         }
 
     private companion object {

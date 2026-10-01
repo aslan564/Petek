@@ -127,6 +127,7 @@ import az.petek.reporting.infrastructure.JUnitReportWriter
 import az.petek.reporting.infrastructure.LogFileTraceSource
 import az.petek.reporting.infrastructure.MarkdownReportWriter
 import az.petek.reporting.infrastructure.SarifReportWriter
+import az.petek.reporting.infrastructure.SelfContainedPdfPrinter
 import az.petek.reporting.infrastructure.ShareableHtmlReportWriter
 import az.petek.scenarios.application.ScenarioCatalog
 import az.petek.scenarios.application.TriageOptions
@@ -418,16 +419,17 @@ class AppContainer(
 
     /**
      * The report as a PDF (Faza 12; the owner's decision of 2026-09-30), printed when asked for (the panel's
-     * "PDF yüklə", `petek report --pdf`) from the single-file `share.html` by Chromium's own print; no new library.
+     * "PDF yüklə", `petek report --pdf`) from the single-file `share.html`, with every screenshot inside it, by
+     * Chromium's own print; no new library.
      */
     val reportPdf: ExportReportPdfUseCase by lazy {
         val printer = overrides.pdfPrinter ?: PlaywrightPdfPrinter()
-        ExportReportPdfUseCase(artifacts, { html, pdf -> printer.print(html, pdf) }, SHARE_REPORT)
+        ExportReportPdfUseCase(artifacts, SelfContainedPdfPrinter { html, pdf -> printer.print(html, pdf) }, SHARE_REPORT)
     }
 
     /**
      * A run against an earlier run of the same scenario (the regression baseline, Faza 14; the owner put it first on
-     * 2026-09-30): `petek compare`, the panel and MCP `compare_runs`; written as `compare.html` and `compare.md`.
+     * 2026-09-30): `petek compare`, the panel and MCP `compare_runs`; written as `compare-<baseline run>.html` and `.md`.
      */
     val compareRuns: CompareRunsUseCase by lazy {
         CompareRunsUseCase(runs, evidenceQuery, artifacts, listOf(ComparisonHtmlWriter(), ComparisonMarkdownWriter()))

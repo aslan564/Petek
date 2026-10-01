@@ -124,4 +124,15 @@ class PanelInstructionsTest {
                 listOf(PanelInstructions.TARGET)
         }
     }
+
+    @Test
+    fun `a release name is a short word that a comparison baseline cannot mistake for a run or the previous run`() {
+        listOf("v1.4.2", "2026.10-rc+1", "buraxılış-7").forEach { release ->
+            RunRequest(scenarioId = "scn_1", release = release).problems().shouldBeEmpty()
+        }
+        listOf("v 1", "previous", "Previous", "run_7", "x".repeat(65)).forEach { release ->
+            RunRequest(scenarioId = "scn_1", release = release).problems().map { it.field } shouldContainExactly
+                listOf(RunRequest.RELEASE_FIELD)
+        }
+    }
 }

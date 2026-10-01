@@ -57,15 +57,29 @@ class SqliteDatabase private constructor(
     suspend fun <T> read(block: JdbcTransaction.() -> T): T = withContext(Dispatchers.IO) { transaction(database) { block() } }
 
     /**
-     * Creates missing tables and indexes and adds columns a newer Pətək declares to tables an older one created
-     * (idempotent). Called once per repository at start-up. An added column must be nullable or have a default, as
-     * SQLite's `ALTER TABLE ... ADD COLUMN` requires.
+     * Creates missing tables and indexes and adds columns and indexes a newer Pətək declares to tables an older one
+     * created (idempotent). Called once per repository at start-up. An added column must be nullable or have a default,
+     * as SQLite's `ALTER TABLE ... ADD COLUMN` requires. A unique index declared later is not added to an existing
+     * table: rows an older version wrote may break it, so that takes a migration of its own.
      */
     fun createMissing(vararg tables: Table) {
         setUp {
             SchemaUtils.create(*tables)
-            tables.forEach { table -> addMissingColumns(table) }
+            tables.forEach { table ->
+                addMissingColumns(table)
+                addMissingIndexes(table)
+            }
         }
+    }
+
+    private fun JdbcTransaction.addMissingIndexes(table: Table) {
+        val existing = mutableSetOf<String>()
+        exec("PRAGMA index_list(\"${table.tableName}\")") { rows ->
+            while (rows.next()) existing += rows.getString("name").lowercase()
+        }
+        table.indices
+            .filter { !it.unique && it.indexName.lowercase() !in existing }
+            .forEach { index -> index.createStatement().forEach { exec(it) } }
     }
 
     private fun JdbcTransaction.addMissingColumns(table: Table) {

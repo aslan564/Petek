@@ -12,6 +12,7 @@
 package az.petek.dashboard.domain
 
 import az.petek.core.ids.RunId
+import az.petek.evidence.domain.ReleaseNames
 import az.petek.evidence.domain.RunResult
 import java.net.URI
 import java.net.URISyntaxException
@@ -46,11 +47,7 @@ data class RunSummaryView(
     val assertionsInconclusive: Int = 0,
     /** The site's release the run tested, as the owner named it; runs of a scenario are compared by it. */
     val release: String? = null,
-) {
-    /** Not PASSED only because checks could not be decided: nothing failed (`petek test` exits with 3). */
-    val undecidedOnly: Boolean
-        get() = result == RunResult.FAILED && stepsFailed == 0 && assertionsFailed == 0 && assertionsInconclusive > 0
-}
+)
 
 /** How the steps of a `--repeat` group behaved across its runs. */
 data class StabilityView(
@@ -105,8 +102,14 @@ data class RunRequest(
             if (!target.isNullOrBlank() && !isWebUrl(target.trim())) {
                 add(FieldProblem(PanelInstructions.TARGET, "Hədəf http:// və ya https:// ilə başlayan tam ünvan olmalıdır."))
             }
-            if (!release.isNullOrBlank() && !RELEASE.matches(release.trim())) {
-                add(FieldProblem(RELEASE_FIELD, "Versiya adı 1–$MAX_RELEASE simvoldur: hərf, rəqəm və . _ - + kimi işarələr, boşluqsuz."))
+            if (!release.isNullOrBlank() && !ReleaseNames.isValid(release.trim())) {
+                add(
+                    FieldProblem(
+                        RELEASE_FIELD,
+                        "Versiya adı 1–${ReleaseNames.MAX} simvoldur: hərf, rəqəm və . _ - + kimi işarələr, boşluqsuz; " +
+                            "\"${ReleaseNames.PREVIOUS}\" və run id-si kimi (run_…) ad müqayisədə başqa şey deməkdir.",
+                    ),
+                )
             }
         }
 
@@ -123,8 +126,6 @@ data class RunRequest(
     companion object {
         const val SCENARIO = "scenario"
         const val RELEASE_FIELD = "release"
-        const val MAX_RELEASE = 64
-        private val RELEASE = Regex("[\\p{L}\\p{N}._+\\-]{1,$MAX_RELEASE}")
     }
 }
 

@@ -32,7 +32,7 @@ import java.nio.file.Path
 
 /**
  * Compares a run with a baseline run of the same scenario (docs/PLAN.md Faza 14, the regression baseline) and writes
- * the comparison beside the run's report (`report/compare.html`, `report/compare.md`, [writers]). The baseline is the
+ * the comparison beside the run's report (`report/compare-<baseline run>.html` and `.md`, [writers]). The baseline is the
  * one asked for ([Baseline]): a named run, the latest run of a named release, or by default the latest earlier run of the
  * same scenario outside the run's own `--repeat` group. Only finished runs of one scenario (by name) are compared; any
  * other pair is a [ComparisonRefusedException] saying why.
@@ -99,7 +99,7 @@ class CompareRunsUseCase(
                 }
 
                 Baseline.Previous -> {
-                    earlier(now).firstOrNull { now.repeatGroup == null || it.repeatGroup != now.repeatGroup }
+                    runs.latestFinished(now.campaignName, now.runId, startedBefore = now.startedAt, outsideGroup = now.repeatGroup)
                         ?: throw refused(
                             Reason.NO_BASELINE,
                             "No earlier finished run of '${now.campaignName}' to compare ${now.runId} with.",
@@ -107,7 +107,7 @@ class CompareRunsUseCase(
                 }
 
                 is Baseline.Release -> {
-                    earlier(now, before = false).firstOrNull { it.release == baseline.label }
+                    runs.latestFinished(now.campaignName, now.runId, release = baseline.label)
                         ?: throw refused(
                             Reason.NO_BASELINE,
                             "No finished run of '${now.campaignName}' tested release '${baseline.label}' (petek run --release).",
@@ -134,16 +134,6 @@ class CompareRunsUseCase(
         return chosen
     }
 
-    /** The finished runs of [now]'s scenario other than [now], newest first; with [before], only those started before it. */
-    private suspend fun earlier(
-        now: RunRecord,
-        before: Boolean = true,
-    ): List<RunRecord> =
-        runs
-            .byCampaign(now.campaignName, CANDIDATES)
-            .filter { it.runId != now.runId && it.result != RunResult.RUNNING }
-            .filter { !before || it.startedAt < now.startedAt }
-
     private suspend fun evidence(run: RunRecord): ComparedEvidence =
         ComparedEvidence(
             run,
@@ -158,9 +148,4 @@ class CompareRunsUseCase(
         reason: Reason,
         message: String,
     ) = ComparisonRefusedException(reason, message)
-
-    private companion object {
-        /** How far back a baseline is looked for: the scenario's last runs. */
-        const val CANDIDATES = 500
-    }
 }

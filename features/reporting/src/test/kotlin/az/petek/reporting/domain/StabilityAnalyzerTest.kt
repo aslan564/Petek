@@ -153,6 +153,38 @@ class StabilityAnalyzerTest {
     }
 
     @Test
+    fun `a race the site let two racers win in one run is flaky, as the site's failure, not an agent's`() {
+        fun raced(
+            index: Int,
+            winners: Int,
+        ): RepeatRunEvidence {
+            val verdict = if (winners == 1) Verdict.PASSED else Verdict.FAILED
+            return evidence(
+                index,
+                listOf(
+                    step("approve", "a02"),
+                    step(
+                        "approve",
+                        null,
+                        if (winners == 1) StepStatus.PASSED else StepStatus.FAILED,
+                        StepKind.SYSTEM,
+                        detail = "only_one_succeeds: ${verdict.name} ($winners succeeded)",
+                        action = "verify_group only_one_succeeds",
+                    ),
+                ),
+                listOf(assertion("approve", null, EvidenceSource.HARNESS, verdict, type = "only_one_succeeds")),
+            )
+        }
+
+        val row = analyzer.analyze(listOf(raced(1, 1), raced(2, 2), raced(3, 1))).single()
+
+        row.passed shouldBe 2
+        row.siteFailures shouldBe 1
+        row.agentFailures shouldBe 0
+        row.flaky shouldBe true
+    }
+
+    @Test
     fun `a failed errored or blocked step record fails the step in that run`() {
         val runs =
             listOf(

@@ -49,12 +49,12 @@ class PlaywrightPdfPrinter internal constructor(
         html: Path,
         pdf: Path,
     ) {
-        val document =
+        val (document, partial) =
             withContext(Dispatchers.IO) {
                 driver.installChromium()
-                Files.readString(html)
+                // A name of its own for each print: two processes printing one report never share the partial file.
+                Files.readString(html) to Files.createTempFile(pdf.toAbsolutePath().parent, ".${pdf.fileName}.", ".part")
             }
-        val partial = pdf.resolveSibling("${pdf.fileName}.part")
         val thread = ConfinedThread("pdf-printer")
         try {
             thread.runToCompletion { printOn(document, partial) }

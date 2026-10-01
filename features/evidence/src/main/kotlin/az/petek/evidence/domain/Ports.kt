@@ -77,13 +77,17 @@ interface RunRepository {
     suspend fun byRepeatGroup(group: String): List<RunRecord>
 
     /**
-     * The [limit] most recent runs of the campaign named [campaignName], newest first (as [list]): the runs a regression
-     * baseline is chosen from. [limit] must be positive.
+     * The newest finished run (as [list] orders them) of the campaign named [campaignName] other than [except]: the
+     * regression baseline, however many runs the scenario has had since. With [release], only a run that tested it; with
+     * [startedBefore], only one started before it; with [outsideGroup], none of that `--repeat` group.
      */
-    suspend fun byCampaign(
+    suspend fun latestFinished(
         campaignName: String,
-        limit: Int,
-    ): List<RunRecord>
+        except: RunId,
+        release: String? = null,
+        startedBefore: Instant? = null,
+        outsideGroup: String? = null,
+    ): RunRecord?
 
     suspend fun addResource(resource: RunResource)
 

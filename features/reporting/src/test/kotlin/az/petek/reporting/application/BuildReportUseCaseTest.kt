@@ -198,6 +198,10 @@ class BuildReportUseCaseTest {
                     action = COVERAGE_ACTION,
                 ),
             )
+            // The runner's own record of a wave's receivers is another thing, never a line of the scenario's coverage.
+            evidence.step(
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "2 of 5 receivers could wait", action = "coverage"),
+            )
 
             val model = useCase.build(RUN_ID)
 

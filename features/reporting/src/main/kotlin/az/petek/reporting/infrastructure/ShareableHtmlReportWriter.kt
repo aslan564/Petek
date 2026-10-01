@@ -14,9 +14,7 @@ package az.petek.reporting.infrastructure
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportWriter
-import java.nio.file.Files
 import java.nio.file.Path
-import java.util.Base64
 
 /**
  * The HTML report as one file to send around (`report/share.html`, Faza 12): the page of [HtmlReportWriter] with every
@@ -44,12 +42,7 @@ class ShareableHtmlReportWriter(
     ): String {
         // Sent around on its own, so it offers no PDF beside it.
         val page = base.render(model, pdfLink = false)
-        val withImages =
-            IMAGE.replace(page) { match ->
-                val link = match.groupValues[2]
-                val data = embed(directory, link)
-                if (data == null) match.value else match.groupValues[1] + data + "\""
-            }
+        val withImages = ReportImages.embed(page, directory, maxImageBytes)
         return withImages.replaceFirst("<ul class=\"meta\">", "<ul class=\"meta\">" + header(model))
     }
 
@@ -64,23 +57,5 @@ class ShareableHtmlReportWriter(
         return "<li>${escape("AI: $ai")}</li><li>${escape("Sübut səviyyələri: $tiers")}</li>"
     }
 
-    /** A `data:` URI for the image [link] (relative to [directory]) when it stays inside the run and is small enough. */
-    private fun embed(
-        directory: Path,
-        link: String,
-    ): String? {
-        val extension = link.substringAfterLast('.', "").lowercase()
-        val mime = MIME[extension] ?: return null
-        val runDirectory = directory.toAbsolutePath().normalize().parent ?: return null
-        val file = directory.resolve(link).toAbsolutePath().normalize()
-        if (!file.startsWith(runDirectory) || !Files.isRegularFile(file) || Files.size(file) > maxImageBytes) return null
-        return "data:$mime;base64," + Base64.getEncoder().encodeToString(Files.readAllBytes(file))
-    }
-
     private fun escape(text: String): String = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    private companion object {
-        val IMAGE = Regex("(<img[^>]*?src=\")([^\"]+)\"")
-        val MIME = mapOf("png" to "image/png", "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "gif" to "image/gif", "webp" to "image/webp")
-    }
 }

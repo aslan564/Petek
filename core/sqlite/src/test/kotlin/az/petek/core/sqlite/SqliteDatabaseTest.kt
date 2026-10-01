@@ -12,6 +12,7 @@
 package az.petek.core.sqlite
 
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -145,6 +146,16 @@ class SqliteDatabaseTest {
         override val primaryKey = PrimaryKey(id)
     }
 
+    private object ItemsIndexed : Table("items") {
+        val id = integer("id")
+        val name = varchar("name", 64)
+        override val primaryKey = PrimaryKey(id)
+
+        init {
+            index(false, name)
+        }
+    }
+
     private object ItemsWithRequiredColumn : Table("items") {
         val id = integer("id")
         val required = text("required")
@@ -171,6 +182,26 @@ class SqliteDatabaseTest {
             row[ItemsV2.name] shouldBe "old"
             row[ItemsV2.workspace] shouldBe "local"
             row[ItemsV2.note] shouldBe null
+        }
+    }
+
+    @Test
+    fun `an index a newer version declares is added to a table an older one created`(
+        @TempDir dir: Path,
+    ) = runBlocking<Unit> {
+        SqliteDatabase.open(dir.resolve("petek.db")).use { db ->
+            db.createMissing(Items)
+
+            db.createMissing(ItemsIndexed)
+            db.createMissing(ItemsIndexed)
+
+            val indexes = mutableListOf<String>()
+            val declared =
+                db.read {
+                    exec("PRAGMA index_list(\"items\")") { rows -> while (rows.next()) indexes += rows.getString("name") }
+                    ItemsIndexed.indices.single().indexName
+                }
+            indexes shouldContain declared
         }
     }
 

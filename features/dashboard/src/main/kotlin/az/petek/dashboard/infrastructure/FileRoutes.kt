@@ -48,7 +48,8 @@ import java.nio.file.Path
  * - `GET /report/report.pdf` and `GET /runs/{runId}/report/report.pdf` — the report as a PDF, printed when asked for
  *   ([PanelBackend.reportPdf]) and sent as a download;
  * - `GET /runs/{runId}/report/compare.html` — the run against an earlier run of its scenario (`?baseline=`, by default
- *   the previous one), written when asked for ([PanelBackend.compare]); why not, when the pair cannot be compared.
+ *   the previous one): compared when asked for ([PanelBackend.compare]) and redirected to that pair's own page
+ *   (`compare-<baseline run>.html`, served like any report file); why not, when the pair cannot be compared.
  */
 internal fun Route.fileRoutes(
     dashboard: LiveDashboard,
@@ -88,21 +89,17 @@ internal fun Route.fileRoutes(
     }
     get("/runs/{runId}/report/$COMPARE_FILE") {
         val runId = call.historyRun() ?: return@get call.notFound()
-        val refusal =
+        val compared =
             try {
                 backend.compare(runId, call.request.queryParameters["baseline"]?.trim())
-                null
             } catch (e: PanelConflictException) {
-                HttpStatusCode.Conflict to e.message.orEmpty()
+                call.response.header(HttpHeaders.CacheControl, "no-store")
+                return@get call.respondText(e.message.orEmpty(), status = HttpStatusCode.Conflict)
             } catch (e: PanelNotFoundException) {
-                HttpStatusCode.NotFound to e.message.orEmpty()
+                return@get call.notFound(e.message.orEmpty())
             }
-        if (refusal != null) {
-            call.response.header(HttpHeaders.CacheControl, "no-store")
-            return@get call.respondText(refusal.second, status = refusal.first)
-        }
-        val root = backend.reportDirectory(runId) ?: return@get call.notFound("Bu run üçün hesabat yoxdur.")
-        call.respondReportFile(root, listOf(COMPARE_FILE))
+        call.response.header(HttpHeaders.CacheControl, "no-store")
+        call.respondRedirect(compared.pageUrl)
     }
     get("/runs/{runId}/report/{path...}") {
         val root = call.historyRun()?.let { backend.reportDirectory(it) }
@@ -141,7 +138,7 @@ private fun ApplicationCall.historyRun(): RunId? = parameters["runId"]?.takeIf(P
 /** The report printed as a PDF beside it (`report/report.pdf`), the name the HTML report links it by. */
 private const val PDF_FILE = "report.pdf"
 
-/** The comparison with an earlier run of the scenario, written beside the report. */
+/** Compares the run with an earlier one when asked for, then sends the browser to that pair's own page. */
 private const val COMPARE_FILE = "compare.html"
 
 /** [runId]'s report as a PDF download, printed now when needed; why not, when it cannot be printed. */

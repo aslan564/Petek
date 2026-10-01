@@ -11,12 +11,15 @@
 
 package az.petek.app.cli
 
+import az.petek.app.runs.SlowerLines
 import az.petek.core.error.PetekException
 import az.petek.core.ids.RunId
+import az.petek.evidence.domain.ReleaseNames
 import az.petek.evidence.domain.RunRecord
 import az.petek.reporting.application.CompareRunsUseCase
 import az.petek.reporting.application.CompareRunsUseCase.Baseline
 import az.petek.reporting.domain.ComparisonRefusedException
+import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StepChange
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
@@ -33,27 +36,31 @@ import kotlinx.serialization.json.putJsonObject
  * `petek compare <run_id|latest> [--baseline previous|<run_id>|<release>]`: a finished run against a baseline run of the
  * same scenario (the regression baseline, docs/PLAN.md Faza 14): what broke, what got fixed, what the site made slower.
  * The baseline is the latest earlier run of the scenario, a named run, or the latest run of a release named with
- * `petek run --release`. Writes `report/compare.html` and `report/compare.md` beside the run's report. Exit code 0 when
- * nothing got worse, 1 when something did, 2 when the runs cannot be compared. Nothing touches the target.
+ * `petek run --release`. Writes `report/compare-<baseline run>.html` and `.md` beside the run's report. Exit code 0 when
+ * nothing got worse, 1 when something did, 2 when nothing was compared (the runs cannot be compared, or a run is not
+ * recorded), so a CI job never reads a typo as a regression. Nothing touches the target.
  */
 class CompareCommand : PetekSubcommand("compare") {
     private val run by argument("run_id", help = "the run to compare, e.g. run_0192…, or 'latest'")
     private val baseline by option(
         "--baseline",
         help = "what to compare with: 'previous' (default), a run id, or a release named with petek run --release",
-    ).default(PREVIOUS)
+    ).default(ReleaseNames.PREVIOUS)
 
     override fun help(context: Context): String =
         "Compare a run with an earlier run of the same scenario (another release): new failures, fixes, slower steps."
 
     override fun exitCodeFor(error: Exception): Int =
-        if (error is ComparisonRefusedException) ExitCodes.CONFIG_OR_ABORTED else super.exitCodeFor(error)
+        when (error) {
+            is ComparisonRefusedException, is RunNotFoundException, is NoRunRecordedException -> ExitCodes.CONFIG_OR_ABORTED
+            else -> super.exitCodeFor(error)
+        }
 
     override suspend fun execute(): Int =
         withContainer { container ->
             val runId =
                 if (run.equals(ReportCommand.LATEST, ignoreCase = true)) {
-                    container.runs.latest()?.runId ?: throw PetekException("No run is recorded in ${container.config.dbPath} yet")
+                    container.runs.latest()?.runId ?: throw NoRunRecordedException("No run is recorded in ${container.config.dbPath} yet")
                 } else {
                     RunId(run.trim())
                 }
@@ -65,8 +72,8 @@ class CompareCommand : PetekSubcommand("compare") {
     private fun choice(text: String): Baseline {
         val value = text.trim()
         return when {
-            value.equals(PREVIOUS, ignoreCase = true) -> Baseline.Previous
-            RUN_ID.matches(value) -> Baseline.Run(RunId(value))
+            value.equals(ReleaseNames.PREVIOUS, ignoreCase = true) -> Baseline.Previous
+            ReleaseNames.RUN_ID.matches(value) -> Baseline.Run(RunId(value))
             else -> Baseline.Release(value)
         }
     }
@@ -79,15 +86,7 @@ class CompareCommand : PetekSubcommand("compare") {
         line("New failures", comparison.steps.filter { it.change == StepChange.NEW_FAILURE }.map { it.scenarioStep })
         line("Fixed", comparison.fixed.map { it.scenarioStep })
         line("Still failing", comparison.steps.filter { it.change == StepChange.STILL_FAILING }.map { it.scenarioStep })
-        line(
-            "Slower",
-            comparison.slowerSteps.map { "${it.scenarioStep} ${it.beforeMs} ms → ${it.afterMs} ms" } +
-                comparison.slowerDeliveries.map { "${it.event} p95 ${it.beforeP95Ms} ms → ${it.afterP95Ms} ms" } +
-                comparison.worsePages.map { page ->
-                    page.page + (page.device?.let { " ($it)" } ?: "") + " load ${page.beforeLoadMs} ms → ${page.afterLoadMs} ms, " +
-                        "LCP ${page.beforePaintMs} ms → ${page.afterPaintMs} ms, CLS ${page.beforeShift} → ${page.afterShift}"
-                },
-        )
+        line("Slower", SlowerLines.CLI.of(comparison))
         line("Not comparable", comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep })
         result.files.forEach { echo("Written: $it") }
     }
@@ -162,8 +161,7 @@ class CompareCommand : PetekSubcommand("compare") {
         }
     }
 
-    private companion object {
-        const val PREVIOUS = "previous"
-        val RUN_ID = Regex("run_[A-Za-z0-9_-]+")
-    }
+    private class NoRunRecordedException(
+        message: String,
+    ) : PetekException(message)
 }

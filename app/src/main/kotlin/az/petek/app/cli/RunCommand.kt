@@ -23,6 +23,7 @@ import az.petek.campaign.domain.VisitorRun
 import az.petek.campaign.domain.apiOriginInUse
 import az.petek.capacity.application.RecommendCapacityUseCase
 import az.petek.core.ids.RunTags
+import az.petek.evidence.domain.ReleaseNames
 import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.RunOptions
@@ -33,6 +34,7 @@ import az.petek.ownership.domain.OwnershipRequiredException
 import az.petek.ownership.domain.OwnershipStatus
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.check
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -63,7 +65,9 @@ class RunCommand : PetekSubcommand("run") {
     private val release by option(
         "--release",
         help = "the site's release this run tests, e.g. v1.4.2; petek compare --baseline <release> compares with it",
-    )
+    ).check(
+        "a release is 1-${ReleaseNames.MAX} letters, digits and . _ - +, and neither '${ReleaseNames.PREVIOUS}' nor a run id (run_...)",
+    ) { ReleaseNames.isValid(it.trim()) }
     private val headful by option("--headful", help = "show the browser windows").flag()
     private val swapAccounts by option(
         "--swap-accounts",

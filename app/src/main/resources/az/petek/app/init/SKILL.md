@@ -34,20 +34,21 @@ the same use cases:
 
 | Goal | CLI | MCP tool |
 |---|---|---|
-| Check readiness | `petek doctor [--json]`, `petek probe --url <url>` | `list_targets`, `get_capacity` |
-| Test the site in one go, the main path: explore, draft only from what was found, approve, run | `petek test [--testers N] [--instructions <text>] [--json]`, `petek panel` → Test et | `test_site` (`wait: true` to block until it ends), `get_test`, `cancel_test` |
+| Check readiness | `petek [--json] doctor`, `petek probe --url <url>` | `list_targets`, `get_capacity` |
+| Test the site in one go, the main path: explore, draft only from what was found, approve, run | `petek [--json] test [--testers N] [--instructions <text>]`, `petek panel` → Test et | `test_site` (`wait: true` to block until it ends), `get_test`, `cancel_test` |
 | Explore the site (read-only unless writes are allowed) | `petek panel` → Kəşf et | `explore_site` (`wait: true` to block until it ends), `get_exploration`, `cancel_exploration`, `compare_explorations` |
 | See what the explorer could not decide, answer it | panel → Naməlumlar | `list_unknowns`, `answer_unknown` |
 | Turn the exploration into a scenario draft | panel → Ssenari yarat | `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan` |
 | Approve or freeze a scenario version (the owner decides) | panel → Təsdiqlə / Dondur | `approve_scenario`, `freeze_scenario` |
-| Run a campaign | `petek run scenarios/<file>.yaml [--testers N] [--repeat N] [--release <site release>] [--ci] [--json]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
-| Read the findings with their evidence | `petek report <run_id> [--json]`, `petek findings <run_id> --json` (or `latest`) | `get_findings`, `get_finding_bundle`, `get_evidence`, `get_triage`, `run_triage` |
-| Compare a run with an earlier run or release of its scenario (what broke, got fixed, got slower) | `petek compare <run_id> [--baseline previous\|<run_id>\|<release>] [--json]` (or `latest`) | `compare_runs` |
-| Remove the test data a run created | `petek teardown --run <run_id> [--json]` | `teardown` |
+| Run a campaign | `petek [--json] run scenarios/<file>.yaml [--testers N] [--repeat N] [--release <site release>] [--ci]` | `run_campaign` (`wait: true`), `cancel_run`, `list_runs`, `get_run_status`, `get_stability` |
+| Read the findings with their evidence | `petek [--json] report <run_id>`, `petek --json findings <run_id>` (or `latest`) | `get_findings`, `get_finding_bundle`, `get_evidence`, `get_triage`, `run_triage` |
+| Compare a run with an earlier run or release of its scenario (what broke, got fixed, got slower) | `petek [--json] compare <run_id> [--baseline previous\|<run_id>\|<release>]` (or `latest`) | `compare_runs` |
+| Remove the test data a run created | `petek [--json] teardown --run <run_id>` | `teardown` |
 
 Writes (tests, exploration with writes, runs, approvals, teardown) need an MCP session started with
 `petek mcp --allow-writes` (the owner's permission); production hosts are refused unless `PETEK_ALLOW_PRODUCTION=true`
-in `.env`. `--json` makes a CLI command print one JSON document on stdout. Ask the owner before `test_site`: it approves
+in `.env`. `--json`, given before the command (`petek --json compare latest`), makes a CLI command print one JSON
+document on stdout. Ask the owner before `test_site`: it approves
 the draft for them and runs it; use the step-by-step tools when they want to read the draft first.
 
 ## Roles
@@ -65,7 +66,7 @@ are evaluated by Pətək's code.
 Classify each surprise as a system bug, a model gap (the tester misunderstood) or a scenario bug, and propose the
 scenario v2 where the scenario was wrong. Do not overrule an oracle answer with a screenshot.
 
-**Root cause.** For a system bug, take the finding's bundle (`get_finding_bundle` or `petek findings <run> --json`:
+**Root cause.** For a system bug, take the finding's bundle (`get_finding_bundle` or `petek --json findings <run>`:
 step, request and response, oracle answer, screenshot path, the A/B/C comparison — what the sender did, what receivers
 saw, what the target's API says — and the evidence tier) and locate the cause in this repository's source. A finding
 judged only by a model (`LLM_JUDGED`) needs its screenshot checked first. Propose the fix as a change for the owner to review; do not apply it without their approval.

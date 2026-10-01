@@ -19,12 +19,17 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * One run at a time over one evidence store, whatever starts it: the panel (and `petek test`, MCP and the explorer's
  * session setups through it) or `petek run`, in this process or another (the owner's decision of 2026-09-30). A run
  * holds the operating system's lock on [file] (`<evidence>/run.lock`) while it goes, and the file says who holds it;
  * the lock goes with its process, so a run that crashed leaves none behind.
+ *
+ * A lock this process holds is answered from memory ([held]) without touching the file: the operating system's file
+ * locks belong to the process, and closing any other descriptor of the file, even one opened only to read who holds
+ * it, would release the running run's lock and let another process start over the same evidence.
  */
 class RunLock(
     private val file: Path,
@@ -32,32 +37,47 @@ class RunLock(
 ) {
     /** Takes the lock for [holder] (what starts the run); fails with [RunLockBusyException] naming who holds it. */
     fun acquire(holder: String): AutoCloseable {
-        file.toAbsolutePath().parent?.let(Files::createDirectories)
-        val channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
-        val lock =
-            try {
-                channel.tryLock()
-            } catch (_: OverlappingFileLockException) {
-                // Held by this very process through another channel: as busy as when another process holds it.
-                null
+        val directory = Files.createDirectories(file.toAbsolutePath().parent)
+        val key = directory.toRealPath().resolve(file.fileName)
+        val text = "$holder, pid ${ProcessHandle.current().pid()}, since ${now()}"
+        held.putIfAbsent(key, text)?.let { throw RunLockBusyException(it) }
+        try {
+            val channel = FileChannel.open(key, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
+            val lock =
+                try {
+                    channel.tryLock()
+                } catch (e: OverlappingFileLockException) {
+                    channel.close()
+                    throw RunLockBusyException("another run of this process")
+                }
+            if (lock == null) {
+                channel.close()
+                // Held by another process: reading the file cannot drop a lock of this one, which holds none on it.
+                throw RunLockBusyException(runCatching { Files.readString(key).trim() }.getOrDefault("").ifEmpty { "another process" })
             }
-        if (lock == null) {
-            val who = runCatching { Files.readString(file).trim() }.getOrDefault("").ifEmpty { "another process" }
-            channel.close()
-            throw RunLockBusyException(who)
-        }
-        channel.truncate(0)
-        channel.write(ByteBuffer.wrap("$holder, pid ${ProcessHandle.current().pid()}, since ${now()}".toByteArray()), 0)
-        return AutoCloseable {
-            runCatching { channel.truncate(0) }
-            lock.release()
-            channel.close()
+            channel.truncate(0)
+            channel.write(ByteBuffer.wrap(text.toByteArray()), 0)
+            return AutoCloseable {
+                try {
+                    runCatching { channel.truncate(0) }
+                    lock.release()
+                    channel.close()
+                } finally {
+                    held.remove(key, text)
+                }
+            }
+        } catch (e: Throwable) {
+            held.remove(key, text)
+            throw e
         }
     }
 
     companion object {
         /** The lock's file in an evidence directory. */
         const val FILE_NAME = "run.lock"
+
+        /** The locks this process holds, by the lock file's real path, with who holds each. */
+        private val held = ConcurrentHashMap<Path, String>()
     }
 }
 
