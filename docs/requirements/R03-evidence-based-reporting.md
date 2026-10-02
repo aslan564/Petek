@@ -97,7 +97,9 @@ fault, not the tool's. Evidence is also the product's sales material (Faza 12).
 
 - The report's "steps passed" counts every recorded action (each agent turn and flow sub-action: 315 for a 10-tester
   demo run), the CLI summary counts the orchestrator's tasks (33). Both are correct and both are called steps; one
-  name for each, and the table grouped by task, when the panel and the report are reworked (Faza 12).
+  name for each, and the table grouped by task, when the panel and the report are reworked (Faza 12). The panel's run
+  list and its test's end note already count as the report does (one definition, `StepTable`), so a run failed only by
+  a step nobody ran shows that failed step there too.
 - Evidence tiers (`ORACLE_CONFIRMED`, `UI_NETWORK`, `LLM_JUDGED`) on every finding — Faza 10 (ADR-0010).
 - Single-file HTML with inline screenshots and PDF export for sharing — Faza 12.
 - Regression baselines between releases — Faza 14.

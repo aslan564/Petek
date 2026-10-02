@@ -134,8 +134,10 @@ sequenceDiagram
    aborted or cancelled), every planned tester × step without a result of its own gets a `not_reached` record saying
    why (`run_aborted`, `wave_not_started`, `failed_earlier`, `never_reached`); a tester left out of a step that began
    without it (out since its gate or browser failed) keeps the runner's `skip` record, which the report reads the same
-   way. A step no tester ran in any pass gets an `uncovered` record (FAILED, `not_covered`, so the run cannot pass), an
-   early stop an `abort` record (steps not run per wave), and the closed roll call a `roll_call` record. A crashed
+   way. A step no tester ran in any pass gets an `uncovered` record (FAILED, `not_covered`, so the run cannot pass),
+   unless a pass the run stopped before (a wave that never began) would have given it to someone: that pass's
+   `not_reached` records name those testers instead. An early stop gets an `abort` record (steps not run per wave), and
+   the closed roll call a `roll_call` record. A crashed
    browser context is restored with the storage state saved since. The report's "Testerlərin yoxlaması" sets the
    planned testers against who acted and lists who did not get to which step and why; it says nobody is missing only
    when the roll call was closed, so a process killed before its end leaves a report that says the roll call is

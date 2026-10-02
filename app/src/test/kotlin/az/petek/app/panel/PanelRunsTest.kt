@@ -238,6 +238,50 @@ class PanelRunsTest {
             panel.ended(started.runId).run.outcome shouldNotBe RunOutcome.PASSED
         }
 
+    /** Two employees in waves of one: every wave has a first employee, none a second, so `second_look` is done by nobody. */
+    private val secondEmployee =
+        """
+        campaign:
+          name: second
+          testers: 3
+          seed: 7
+          wave_size: 1
+          roles: {admin: 1, manager: 0, employee: 2}
+          departments: [IT]
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        setup:
+          - id: signup
+            actor: admin
+            do: "Sign up and create the company"
+        steps:
+          - id: look
+            actor: employee[*]
+            do: "Look at the home page"
+          - id: second_look
+            actor: employee[n=2]
+            do: "Look at the home page as the second employee"
+        """.trimIndent() + "\n"
+
+    @Test
+    fun `a run failed only by a step nobody performs shows that failed step in the run list, as the report counts it`() =
+        runBlocking<Unit> {
+            val panel = PanelHarness(dir, site = PanelWaits.site(), scenarios = mapOf("second.yaml" to secondEmployee)).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            started.warnings.single { "run keçməyəcək" in it } shouldContain "second_look"
+            panel.ended(started.runId).run.outcome shouldBe RunOutcome.FAILED
+            val history = panel.backend.runs().single()
+            history.result shouldBe RunResult.FAILED
+            // Every action of the testers passed; the step nobody performs is the run's one failed step.
+            history.stepsFailed shouldBe 1
+            val report = panel.backend.reportDirectory(started.runId).shouldNotBeNull()
+            val markdown = withContext(Dispatchers.IO) { Files.readString(report.resolve("report.md")) }
+            markdown shouldContain "| Keçən addımlar | ${history.stepsPassed} |"
+            markdown shouldContain "| Keçməyən addımlar | 1 |"
+        }
+
     @Test
     fun `a draft, an unknown scenario or an impossible tester count does not run`() =
         runBlocking<Unit> {

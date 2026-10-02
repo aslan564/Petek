@@ -11,8 +11,10 @@
 
 package az.petek.reporting.infrastructure
 
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
 import az.petek.reporting.domain.FailureKeys
@@ -225,10 +227,10 @@ internal object ReportFormat {
     /** Why a planned tester did not get to a step, by the roll call's key, in the owner's words. */
     fun notReached(key: String): String =
         when (key) {
-            "run_aborted" -> "run dayandırıldı"
-            "wave_not_started" -> "testerin dalğası başlamadı"
-            "failed_earlier" -> "tester əvvəlki addımda düşdü"
-            "never_reached" -> "run davam etdi, amma tester bu addıma çatmadı (Pətəkin öz boşluğu)"
+            NotReached.RUN_ABORTED -> "run dayandırıldı"
+            NotReached.WAVE_NOT_STARTED -> "testerin dalğası başlamadı"
+            NotReached.FAILED_EARLIER -> "tester əvvəlki addımda düşdü"
+            NotReached.NEVER_REACHED -> "run davam etdi, amma tester bu addıma çatmadı (Pətəkin öz boşluğu)"
             else -> key
         }
 
@@ -253,16 +255,13 @@ internal object ReportFormat {
 
     /** The over-capacity record as a warning: how many ran at once against the machine's advice. */
     fun overCapacity(detail: String): String {
-        val numbers = OVER_CAPACITY_NUMBERS.find(detail)
+        val numbers = CapacityDetail.numbers(detail)
         val head =
             if (numbers == null) {
                 "Bu maşın üçün tövsiyə olunandan çox tester eyni anda işlədi"
             } else {
-                val (live, total, advice) = numbers.destructured
-                "Eyni anda $live tester işlədi (run-da $total), bu maşın isə ən çox $advice üçün tövsiyə olunur"
+                "Eyni anda ${numbers.live} tester işlədi (run-da ${numbers.total}), bu maşın isə ən çox ${numbers.advice} üçün tövsiyə olunur"
             }
         return "$head: gec görünən ekranlar və yavaş səhifələr saytdan yox, maşından ola bilər."
     }
-
-    private val OVER_CAPACITY_NUMBERS = Regex("""(\d+) testers at once \((\d+) in the run\); this machine is advised for up to (\d+)""")
 }

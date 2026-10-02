@@ -73,10 +73,21 @@ internal class RollCall(
         val waveNeverBegan = !began && pass.wave != null && !run.hasBegun(pass.number)
         val why =
             when {
-                !acting -> "${NotReached.FAILED_EARLIER}: ${run.failureReason(agentId) ?: "failed"}"
-                waveNeverBegan -> "${NotReached.WAVE_NOT_STARTED}: wave ${pass.wave} of ${pass.waves} never began; run aborted: $aborted"
-                aborted != null -> "${NotReached.RUN_ABORTED}: $aborted"
-                else -> "${NotReached.NEVER_REACHED}: the run went on, but $agentId has no record of step '$stepId'"
+                !acting -> {
+                    NotReached.detail(NotReached.FAILED_EARLIER, run.failureReason(agentId) ?: "failed")
+                }
+
+                waveNeverBegan -> {
+                    NotReached.detail(NotReached.WAVE_NOT_STARTED, "wave ${pass.wave} of ${pass.waves} never began; run aborted: $aborted")
+                }
+
+                aborted != null -> {
+                    NotReached.detail(NotReached.RUN_ABORTED, aborted)
+                }
+
+                else -> {
+                    NotReached.detail(NotReached.NEVER_REACHED, "the run went on, but $agentId has no record of step '$stepId'")
+                }
             }
         if (aborted != null || !acting) {
             evidence.system(run, agentId, NOT_REACHED_ACTION, StepStatus.SKIPPED, why, stepId)

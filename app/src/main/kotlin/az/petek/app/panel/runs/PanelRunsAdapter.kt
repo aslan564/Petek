@@ -54,8 +54,6 @@ import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ReleaseNames
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunResult
-import az.petek.evidence.domain.StepKind
-import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.identity.domain.Identity
 import az.petek.llm.domain.LlmProviderKey
@@ -69,6 +67,7 @@ import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.reporting.domain.StepChange
+import az.petek.reporting.domain.StepTable
 import az.petek.reporting.domain.visual.VisualGate
 import az.petek.reporting.infrastructure.LookLines
 import az.petek.scenarios.application.TriageItem
@@ -751,7 +750,8 @@ internal class PanelRunsAdapter(
     ): RunSummaryView {
         val runId = run.runId
         val query = container.evidenceQuery
-        val steps = query.steps(runId).filter { it.kind == StepKind.DO || it.kind == StepKind.RUN }
+        // Counted as the report counts them, so the run list, the test's end note and the report agree.
+        val steps = StepTable.counts(query.steps(runId))
         val assertions = query.assertions(runId)
         val usage = query.usage(runId)
         return RunSummaryView(
@@ -763,11 +763,8 @@ internal class PanelRunsAdapter(
             durationMs = run.endedAt?.let { it.toEpochMilli() - run.startedAt.toEpochMilli() },
             result = run.result,
             testers = container.identities.findByRun(runId).size,
-            stepsPassed = steps.count { it.status == StepStatus.PASSED },
-            stepsFailed =
-                steps.count {
-                    it.status == StepStatus.FAILED || it.status == StepStatus.ERROR || it.status == StepStatus.BLOCKED
-                },
+            stepsPassed = steps.passed,
+            stepsFailed = steps.failed,
             assertionsPassed = assertions.count { it.verdict == Verdict.PASSED },
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             findings = query.findings(runId).size,

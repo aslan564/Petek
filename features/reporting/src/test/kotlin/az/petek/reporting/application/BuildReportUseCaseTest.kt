@@ -17,26 +17,34 @@ import az.petek.core.ids.CorrelationId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.StepId
 import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.AbortDetail
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.EvidenceSource.HARNESS
 import az.petek.evidence.domain.EvidenceSource.ORACLE
 import az.petek.evidence.domain.EvidenceSource.RECEIVER
 import az.petek.evidence.domain.EvidenceSource.SENDER
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.NOT_COVERED
 import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
+import az.petek.evidence.domain.RosterDetail
+import az.petek.evidence.domain.SKIP_ACTION
+import az.petek.evidence.domain.SkipDetail
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.evidence.domain.Verdict.FAILED
 import az.petek.evidence.domain.Verdict.PASSED
 import az.petek.evidence.domain.Verdict.SKIPPED
+import az.petek.evidence.domain.WAVE_COVERAGE_ACTION
 import az.petek.evidence.testing.InMemoryArtifactStore
 import az.petek.evidence.testing.InMemoryEvidence
 import az.petek.reporting.ReportTestData.RUN_ID
@@ -371,6 +379,93 @@ class BuildReportUseCaseTest {
             call.complete shouldBe false
             model.steps.map { Triple(it.scenarioStep, it.agentId, it.status) } shouldContainAll
                 listOf(Triple("late", null, "FAILED"), Triple("read", "a02", "SKIPPED"), Triple("read", "a03", "SKIPPED"))
+        }
+
+    /**
+     * The runner writes these records with the evidence domain's helpers (its tests read them back with the same
+     * helpers), so the report must read what those helpers write: a rename on either side fails one of the two.
+     */
+    @Test
+    fun `the roll call reads the runner's records as the evidence domain's helpers write them`() =
+        runTest {
+            evidence.create(run())
+            listOf(
+                step(
+                    "harness",
+                    null,
+                    StepStatus.PASSED,
+                    StepKind.SYSTEM,
+                    detail = RosterDetail.of(listOf("a01", "a02", "a03")),
+                    action = ROSTER_ACTION,
+                ),
+                step(
+                    "harness",
+                    null,
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = CapacityDetail.over(CapacityDetail.Numbers(live = 3, total = 3, advice = 2)),
+                    action = CAPACITY_ACTION,
+                    stepId = "cap",
+                ),
+                step("join", "a01", StepStatus.PASSED, StepKind.RUN, stepId = "j1"),
+                step("join", "a02", StepStatus.FAILED, StepKind.RUN, detail = "mail_timeout: no e-mail", stepId = "j2"),
+                step("read", "a01", StepStatus.PASSED, StepKind.DO, stepId = "r1"),
+                step(
+                    "read",
+                    "a02",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = SkipDetail.failedEarlier("mail_timeout"),
+                    action = SKIP_ACTION,
+                    stepId = "s2",
+                ),
+                step(
+                    "read",
+                    "a03",
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = NotReached.detail(NotReached.RUN_ABORTED, "the owner stopped it; at once"),
+                    action = NOT_REACHED_ACTION,
+                    stepId = "nr3",
+                ),
+                step(
+                    "late",
+                    null,
+                    StepStatus.FAILED,
+                    StepKind.SYSTEM,
+                    detail = "$NOT_COVERED: 0 of 2 receivers could wait",
+                    action = WAVE_COVERAGE_ACTION,
+                    stepId = "cov",
+                ),
+                step(
+                    "harness",
+                    null,
+                    StepStatus.SKIPPED,
+                    StepKind.SYSTEM,
+                    detail = AbortDetail.of("the owner stopped it; at once", listOf("wave 2: read, late")),
+                    action = ABORT_ACTION,
+                    stepId = "abort",
+                ),
+                step("harness", null, StepStatus.PASSED, StepKind.SYSTEM, detail = "done", action = ROLL_CALL_ACTION, stepId = "rc"),
+            ).forEach { evidence.step(it) }
+
+            val model = useCase.build(RUN_ID)
+            val call = model.rollCall
+
+            call.planned shouldContainExactly listOf("a01", "a02", "a03")
+            call.notReached.map { Triple(it.agentId, it.scenarioStep, it.key + ":" + it.reason) } shouldContainExactly
+                listOf(
+                    Triple("a02", "read", "${NotReached.FAILED_EARLIER}:mail_timeout"),
+                    Triple("a03", "read", "${NotReached.RUN_ABORTED}:the owner stopped it; at once"),
+                )
+            call.uncovered.map { it.scenarioStep to it.reason } shouldContainExactly listOf("late" to "0 of 2 receivers could wait")
+            call.abortReason shouldBe "the owner stopped it; at once"
+            call.overCapacity.shouldNotBeNull()
+            call.complete shouldBe false
+            // The tester left out since its failure is a row, never a passed or a failed one; the wave's gap fails.
+            model.summary.stepsFailed shouldBe 2
+            model.steps.map { Triple(it.scenarioStep, it.agentId, it.status) } shouldContainAll
+                listOf(Triple("late", null, "FAILED"), Triple("read", "a02", "SKIPPED"))
         }
 
     @Test

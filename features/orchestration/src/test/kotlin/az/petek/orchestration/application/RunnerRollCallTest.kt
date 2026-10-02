@@ -20,10 +20,16 @@ import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.Pacing
 import az.petek.core.model.Role
 import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.AbortDetail
 import az.petek.evidence.domain.CAPACITY_ACTION
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
+import az.petek.evidence.domain.RosterDetail
+import az.petek.evidence.domain.SKIP_ACTION
+import az.petek.evidence.domain.SkipDetail
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.UNCOVERED_ACTION
@@ -170,6 +176,59 @@ class RunnerRollCallTest {
                 "run aborted: step 'announce' failed and on_fail is abort; steps not run: read"
         }
 
+    /**
+     * The report reads these records with the evidence domain's helpers (its tests write them with the same helpers),
+     * so the runner must write what those helpers read: a rename on either side fails one of the two. The tests above
+     * pin the stored text itself, which older evidence still has.
+     */
+    @Test
+    fun `the runner writes its roll call records as the evidence domain's helpers read them`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                when {
+                    call.scenarioStep == "join" && call.agentId.value == "a05" -> {
+                        ActionOutcome(ActionStatus.FAILED, "no code", failureReason = FailureReason.REGISTRATION_FAILED)
+                    }
+
+                    call.scenarioStep == "announce" -> {
+                        ActionOutcome(ActionStatus.FAILED, "the form was refused")
+                    }
+
+                    else -> {
+                        ok
+                    }
+                }
+            }
+            val campaign =
+                campaign(
+                    setup = listOf(setupStep("join", everyoneButAdmin())),
+                    steps =
+                        listOf(
+                            step("read", employees()),
+                            step("announce", admin(), onFail = OnFail.ABORT),
+                            step("approve", managers()),
+                        ),
+                )
+
+            f.runner().run(campaign, RunOptions(capacityAdvice = 2))
+
+            RosterDetail.agentIds(f.system(ROSTER_ACTION).single().detail) shouldContainExactly (1..7).map { "a0$it" }
+            val capacity = f.system(CAPACITY_ACTION).single().detail
+            CapacityDetail.isOver(capacity) shouldBe true
+            CapacityDetail.numbers(capacity.orEmpty()) shouldBe CapacityDetail.Numbers(live = 7, total = 7, advice = 2)
+            // a05 failed to join, so `read` began without it: the report reads that as a tester out since its failure.
+            f
+                .system(SKIP_ACTION)
+                .filter { it.agentId != null }
+                .map { Triple(it.scenarioStep, it.agentId!!.value, SkipDetail.failedEarlierReason(it.detail)) } shouldContainExactly
+                listOf(Triple("read", "a05", "registration_failed"))
+            AbortDetail.reason(f.system(ABORT_ACTION).single().detail) shouldBe "step 'announce' failed and on_fail is abort"
+            f.system(NOT_REACHED_ACTION).map { Triple(it.scenarioStep, it.agentId!!.value, NotReached.key(it.detail)) } shouldContainExactly
+                listOf("a02", "a03").map { Triple("approve", it, NotReached.RUN_ABORTED) }
+            NotReached.why(f.system(NOT_REACHED_ACTION).first().detail) shouldBe "step 'announce' failed and on_fail is abort"
+        }
+
     @Test
     fun `actors still waiting for their turn when the budget ends are accounted for`() =
         runTest {
@@ -289,6 +348,48 @@ class RunnerRollCallTest {
             summary.outcome shouldBe RunOutcome.FAILED
             summary.stepsFailed shouldBe 1
             summary.failedAgents shouldBe 0
+        }
+
+    @Test
+    fun `a step only a wave the run never began has a tester for is left to the roll call, not called done by nobody`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { _, _ ->
+                delay(50.seconds)
+                ok
+            }
+            // Three managers dealt one to each wave (a02 IT | a03 HR | a04 Sales); `read` takes 50 s, the budget 1 min:
+            // it runs out during wave 2's `read`, so wave 3, the only one with the Sales manager, never begins.
+            val waved =
+                campaign(
+                    managers = 3,
+                    employees = 0,
+                    departments = listOf("IT", "HR", "Sales"),
+                    steps =
+                        listOf(
+                            step("read", managers()),
+                            step("approve", managers("Sales"), assertions = listOf(AssertionSpec.Count("#approved", 1))),
+                            step("audit", managers("Finance"), assertions = listOf(AssertionSpec.Count("#audited", 1))),
+                        ),
+                    maxMinutes = 1,
+                ).inWavesOf(1)
+
+            val summary = f.runner().run(waved)
+
+            summary.outcome shouldBe RunOutcome.ABORTED
+            val budget = "time budget of 1 min exceeded"
+            f.system(ABORT_ACTION).single().detail shouldBe "run aborted: $budget; steps not run: wave 3: read, approve"
+            // Wave 1 began `approve` with nobody, but wave 3 would have given it to a04: the abort, not the scenario, cut it.
+            f.rollCall() shouldContainExactly
+                listOf(
+                    Triple("read", "a03", "run_aborted: $budget"),
+                    Triple("read", "a04", "wave_not_started: wave 3 of 3 never began; run aborted: $budget"),
+                    Triple("approve", "a04", "wave_not_started: wave 3 of 3 never began; run aborted: $budget"),
+                )
+            // `audit` matches nobody in any wave, began or not: still a step nobody ran, its check not evaluated. `approve`'s
+            // check is not written off as "nobody ran the step": the abort, not a missing tester, kept it from running.
+            f.system(UNCOVERED_ACTION).map { it.scenarioStep } shouldContainExactly listOf("audit")
+            f.evidence.assertionList.map { it.scenarioStep to it.verdict } shouldContainExactly listOf("audit" to Verdict.SKIPPED)
         }
 
     @Test

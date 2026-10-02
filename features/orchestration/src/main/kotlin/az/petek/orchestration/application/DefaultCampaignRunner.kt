@@ -37,18 +37,23 @@ import az.petek.core.ids.RunTags
 import az.petek.core.model.RegistrationMode
 import az.petek.core.time.HarnessClock
 import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.AbortDetail
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.NOT_COVERED
 import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
+import az.petek.evidence.domain.RosterDetail
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.UNCOVERED_ACTION
+import az.petek.evidence.domain.WAVE_COVERAGE_ACTION
 import az.petek.identity.application.PlanIdentitiesUseCase
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityRegistryGenerator
@@ -266,9 +271,9 @@ class DefaultCampaignRunner(
                 "$waited of ${waited + skipped} receivers could wait for the event of '$stepId'; $skipped had no tester of " +
                     "the step that emits it beside them (in their wave, or left in the run)"
             if (waited > 0) {
-                evidence.system(run, null, "coverage", StepStatus.PASSED, detail, stepId)
+                evidence.system(run, null, WAVE_COVERAGE_ACTION, StepStatus.PASSED, detail, stepId)
             } else {
-                evidence.system(run, null, "coverage", StepStatus.FAILED, "$NOT_COVERED: $detail", stepId, tally = Tally.FAIL)
+                evidence.system(run, null, WAVE_COVERAGE_ACTION, StepStatus.FAILED, "$NOT_COVERED: $detail", stepId, tally = Tally.FAIL)
             }
         }
     }
@@ -324,13 +329,13 @@ class DefaultCampaignRunner(
         live: Int,
     ) {
         val testers = run.identities.map { it.agentId.value }
-        evidence.system(run, null, ROSTER_ACTION, StepStatus.PASSED, "${testers.size} testers: ${testers.joinToString(", ")}")
+        evidence.system(run, null, ROSTER_ACTION, StepStatus.PASSED, RosterDetail.of(testers))
         val advice = run.options.capacityAdvice ?: capacityOfThisMachine(run) ?: return
-        val numbers = "$live testers at once (${testers.size} in the run); this machine is advised for up to $advice at once"
+        val numbers = CapacityDetail.Numbers(live = live, total = testers.size, advice = advice)
         if (live <= advice) {
-            evidence.system(run, null, CAPACITY_ACTION, StepStatus.PASSED, "$WITHIN_CAPACITY: $numbers")
+            evidence.system(run, null, CAPACITY_ACTION, StepStatus.PASSED, CapacityDetail.within(numbers))
         } else {
-            val detail = "$OVER_CAPACITY: $numbers, so slow pages and late screens may come from this machine, not from the site"
+            val detail = CapacityDetail.over(numbers)
             evidence.system(run, null, CAPACITY_ACTION, StepStatus.SKIPPED, detail)
             board.message(detail)
         }
@@ -858,7 +863,7 @@ class DefaultCampaignRunner(
                     }
                 }
             }.filter { it.isNotEmpty() }
-        val detail = "run aborted: $reason; steps not run: ${notRun.joinToString("; ").ifEmpty { "-" }}"
+        val detail = AbortDetail.of(reason, notRun)
         evidence.system(run, null, ABORT_ACTION, StepStatus.SKIPPED, detail)
         board.message(detail)
     }
@@ -868,6 +873,10 @@ class DefaultCampaignRunner(
      * nobody: an agent-less `uncovered` record that counts as a failed step, its checks recorded as not evaluated. FAILED,
      * not inconclusive: no check ran at all, as with a wave's `not_covered` receivers (Faza 24.7), and the scenario or
      * the run's testers must change for it to be done; the `not_covered` key keeps it off the site and the testers.
+     *
+     * Only a step every planned pass of which began it and chose nobody, or would have chosen nobody: when the run
+     * stopped before a pass (a wave that never began, the rest of a wave) that gives the step to someone, nothing about
+     * the scenario or the testers is wrong, and the roll call's `not_reached` records name those testers instead.
      */
     private suspend fun recordUncovered(
         run: RunState,
@@ -876,7 +885,7 @@ class DefaultCampaignRunner(
         val waves = run.passes.count { it.wave != null }
         for (step in run.campaign.allSteps) {
             val executions = run.executionsOf(step.id)
-            if (executions.isEmpty() || executions.any { it.isNotEmpty() }) continue
+            if (executions.isEmpty() || executions.any { it.isNotEmpty() } || cutOffFromSomeone(run, step.id)) continue
             // Out when it began, by role, department and registration: with `n`, a tester out before shifts the n-th one.
             val out = run.outOf(step.id)
             val detail =
@@ -894,6 +903,22 @@ class DefaultCampaignRunner(
             board.message("step '${step.id}' was run by nobody: $detail")
         }
     }
+
+    /**
+     * Whether a planned pass that never began the step [baseId] (the run stopped first) would have given it to a tester
+     * still in the run, the way the roll call resolves it.
+     */
+    private fun cutOffFromSomeone(
+        run: RunState,
+        baseId: String,
+    ): Boolean =
+        run.passes.any { pass ->
+            pass.steps.any { planned ->
+                planned.step.id.removeSuffix(SWAP_SUFFIX) == baseId &&
+                    run.chosenIn(pass.number, planned.step.id) == null &&
+                    actors.resolve(planned.step.actors, planned.pool.filterNot { run.isFailed(it.agentId) }).isNotEmpty()
+            }
+        }
 
     /** One record per agent (of [only], when given); reporting reads the comma-separated transports from `detail`. */
     private suspend fun recordNetworkObservations(
@@ -975,12 +1000,5 @@ class DefaultCampaignRunner(
 
         /** Suffix of the scenario steps run again after the account swap. */
         const val SWAP_SUFFIX = "@swap"
-
-        /** A `wait_for` step no receiver could wait for in any wave: its check was never made (Faza 24.7). */
-        const val NOT_COVERED = "not_covered"
-
-        /** Leading keys of the `capacity` record's detail (see [CAPACITY_ACTION]). */
-        const val WITHIN_CAPACITY = "within_capacity"
-        const val OVER_CAPACITY = "over_capacity"
     }
 }

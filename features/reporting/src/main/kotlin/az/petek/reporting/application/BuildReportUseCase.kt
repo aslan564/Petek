@@ -14,24 +14,27 @@ package az.petek.reporting.application
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.AbortDetail
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.COVERAGE_ACTION
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.NOT_REACHED_ACTION
 import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
+import az.petek.evidence.domain.RosterDetail
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResult
+import az.petek.evidence.domain.SkipDetail
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
-import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.evidence.domain.UsageRecord
 import az.petek.evidence.domain.Verdict
@@ -50,6 +53,7 @@ import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
+import az.petek.reporting.domain.StepTable
 import az.petek.reporting.domain.UncoveredRow
 import java.time.Duration
 
@@ -77,8 +81,7 @@ class BuildReportUseCase(
         val usage = query.usage(runId)
         val names = agents.names(runId)
         // The roll call's own records are rows too: a tester × step it did not get to, a step nobody ran.
-        val tableSteps =
-            steps.filter { it.kind in TABLE_KINDS || it.action in ROLL_CALL_ACTIONS || isWaveGap(it) || isLeftOut(it) }
+        val tableSteps = StepTable.rows(steps)
         val expected = ExpectedOutcomes(steps)
         return ReportModel(
             run = run,
@@ -109,15 +112,7 @@ class BuildReportUseCase(
         names: Map<AgentId, String>,
     ): RollCall {
         val harness = steps.filter { it.kind == StepKind.SYSTEM && it.agentId == null }
-        val planned =
-            harness
-                .lastOrNull { it.action == ROSTER_ACTION }
-                ?.detail
-                ?.substringAfter(": ", "")
-                ?.split(", ")
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                .orEmpty()
+        val planned = RosterDetail.agentIds(harness.lastOrNull { it.action == ROSTER_ACTION }?.detail)
         val acted = actingAgents(steps, assertions, usage).map { it.value }
         val notReached =
             steps
@@ -131,7 +126,7 @@ class BuildReportUseCase(
             notReached = notReached,
             uncovered =
                 harness
-                    .filter { it.action == UNCOVERED_ACTION || isWaveGap(it) }
+                    .filter { it.action == UNCOVERED_ACTION || StepTable.isWaveGap(it) }
                     .map {
                         UncoveredRow(
                             it.scenarioStep,
@@ -141,14 +136,8 @@ class BuildReportUseCase(
                                 .trim(),
                         )
                     },
-            abortReason =
-                harness
-                    .lastOrNull { it.action == ABORT_ACTION }
-                    ?.detail
-                    ?.substringAfter("run aborted: ")
-                    ?.substringBeforeLast("; steps not run: ")
-                    ?.trim(),
-            overCapacity = harness.lastOrNull { it.action == CAPACITY_ACTION && it.detail.orEmpty().startsWith(OVER_CAPACITY) }?.detail,
+            abortReason = harness.lastOrNull { it.action == ABORT_ACTION }?.let { AbortDetail.reason(it.detail) },
+            overCapacity = harness.lastOrNull { it.action == CAPACITY_ACTION && CapacityDetail.isOver(it.detail) }?.detail,
             // Only a concluded run with its roster and a closed roll call says nobody is missing; absence proves nothing.
             recorded = run.result != RunResult.RUNNING && planned.isNotEmpty() && harness.any { it.action == ROLL_CALL_ACTION },
         )
@@ -163,32 +152,14 @@ class BuildReportUseCase(
         names: Map<AgentId, String>,
     ): NotReachedRow? {
         val agentId = record.agentId ?: return null
-        val detail = record.detail.orEmpty()
         val (key, reason) =
             when {
-                record.action == NOT_REACHED_ACTION -> {
-                    detail.substringBefore(':').trim() to detail.substringAfter(':', detail).trim()
-                }
-
-                record.action == SKIP_ACTION && detail.startsWith(FAILED_EARLIER_DETAIL) -> {
-                    NotReached.FAILED_EARLIER to detail.removePrefix(FAILED_EARLIER_DETAIL).trim().removeSurrounding("(", ")")
-                }
-
-                else -> {
-                    return null
-                }
+                record.action == NOT_REACHED_ACTION -> NotReached.key(record.detail) to NotReached.why(record.detail)
+                StepTable.isLeftOut(record) -> NotReached.FAILED_EARLIER to SkipDetail.failedEarlierReason(record.detail).orEmpty()
+                else -> return null
             }
         return NotReachedRow(agentId.value, names[agentId] ?: agentId.value, record.scenarioStep, key, reason)
     }
-
-    /** The runner's record of a tester out since an earlier failure in a step that began without it: a row too. */
-    private fun isLeftOut(step: StepRecord): Boolean =
-        step.kind == StepKind.SYSTEM && step.agentId != null && step.action == SKIP_ACTION &&
-            step.detail.orEmpty().startsWith(FAILED_EARLIER_DETAIL)
-
-    /** A wave's receivers that no wave could serve: the runner's agent-less FAILED `coverage` record (`not_covered`). */
-    private fun isWaveGap(step: StepRecord): Boolean =
-        step.kind == StepKind.SYSTEM && step.agentId == null && step.action == WAVE_COVERAGE && step.status == StepStatus.FAILED
 
     /** Testers with an action of their own: a step, a check or an AI call, never the harness's records about them. */
     private fun actingAgents(
@@ -252,10 +223,11 @@ class BuildReportUseCase(
         expected: ExpectedOutcomes,
     ): ReportSummary {
         val agents = actingAgents(steps, assertions, usage)
+        // An expected refusal or a lost race is the outcome the step asked for; the panel counts the same way.
+        val counts = StepTable.counts(tableSteps, expected)
         return ReportSummary(
-            // An expected refusal or a lost race is the outcome the step asked for.
-            stepsPassed = tableSteps.count { it.status == StepStatus.PASSED || expected.isExpected(it) },
-            stepsFailed = tableSteps.count(expected::isFailure),
+            stepsPassed = counts.passed,
+            stepsFailed = counts.failed,
             assertionsPassed = assertions.count { it.verdict == Verdict.PASSED },
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             assertionsSkipped = assertions.count { it.verdict == Verdict.SKIPPED },
@@ -361,17 +333,6 @@ class BuildReportUseCase(
     }
 
     private companion object {
-        val TABLE_KINDS = setOf(StepKind.DO, StepKind.RUN, StepKind.WAIT)
-        val ROLL_CALL_ACTIONS = setOf(NOT_REACHED_ACTION, UNCOVERED_ACTION)
-
-        /** The runner's record of a tester it left out of a step that began (`StepExecutor.recordSkippedFailedActors`). */
-        const val SKIP_ACTION = "skip"
-        const val FAILED_EARLIER_DETAIL = "agent failed earlier"
-
-        /** The runner's record of which receivers of a wave could wait for their event (`reportCoverage`). */
-        const val WAVE_COVERAGE = "coverage"
-        const val OVER_CAPACITY = "over_capacity"
-
         /** SYSTEM step recorded by the browser feature; its detail lists the transports seen, e.g. `SSE,POLLING`. */
         const val NETWORK_OBSERVATION = "network_observation"
         const val MAX_REASON_LENGTH = 200

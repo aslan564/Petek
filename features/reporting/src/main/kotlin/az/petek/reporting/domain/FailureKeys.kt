@@ -11,6 +11,8 @@
 
 package az.petek.reporting.domain
 
+import az.petek.evidence.domain.NOT_COVERED
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
 
@@ -103,8 +105,8 @@ object FailureKeys {
             ACCESS_NOT_REFUSED,
             FORBIDDEN_ACCEPTED,
             "off_site",
-            "not_covered",
-            "never_reached",
+            NOT_COVERED,
+            NotReached.NEVER_REACHED,
         )
 
     /**
@@ -125,10 +127,10 @@ object FailureKeys {
             RATE_LIMITED,
             "llm_unavailable",
             "browser_error",
-            "not_covered",
+            NOT_COVERED,
             "emitter_absent",
             // A tester the run went on without: a gap of Pətək itself, never of the site or the tester's agent.
-            "never_reached",
+            NotReached.NEVER_REACHED,
         )
 
     /**

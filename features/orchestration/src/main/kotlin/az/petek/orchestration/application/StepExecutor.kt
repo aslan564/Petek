@@ -44,6 +44,8 @@ import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.SKIP_ACTION
+import az.petek.evidence.domain.SkipDetail
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
@@ -156,7 +158,7 @@ internal class StepExecutor(
         releaseWatches(step.id, keep = chosen.map { it.agentId }.toSet())
         if (chosen.isEmpty()) {
             run.stepHadNoTester(step.id)
-            evidence.system(run, null, "skip", StepStatus.SKIPPED, "no active actor matches '${step.actors.raw}'", step.id)
+            evidence.system(run, null, SKIP_ACTION, StepStatus.SKIPPED, SkipDetail.noActor(step.actors.raw), step.id)
             return StepResult(step, emptyList(), groupFailed = false)
         }
         armReceivers(step, chosen)
@@ -220,8 +222,8 @@ internal class StepExecutor(
             .filter { run.isFailed(it.agentId) }
             .forEach {
                 val reason = run.failureReason(it.agentId) ?: "failed"
-                val detail = "agent failed earlier ($reason)"
-                evidence.system(run, it.agentId, "skip", StepStatus.SKIPPED, detail, step.id)
+                val detail = SkipDetail.failedEarlier(reason)
+                evidence.system(run, it.agentId, SKIP_ACTION, StepStatus.SKIPPED, detail, step.id)
                 run.settle(step.id, it.agentId)
                 tasks.update(step.id, it.agentId, TaskState.SKIPPED, detail)
             }
