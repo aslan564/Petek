@@ -38,7 +38,9 @@ class PlanIdentitiesUseCase(
      * The registry of a run planned ahead (`petek plan`) under the plan id [planId]: generated as [execute] generates
      * it and returned whole, but stored [IdentityPlan.withoutOwnAccounts]. A plan never keeps the owner's passwords,
      * and never holds the e-mails of the owner's accounts against the runs that will sign in with them (an e-mail
-     * belongs to one run only), so the campaign can be run, and planned again, afterwards.
+     * belongs to one run only), so the campaign can be run, and planned again, afterwards. The whole registry is checked
+     * as the run's is before a part of it is stored: one the run could not store (another tester with the name or
+     * e-mail of an owner's account, [IdentityPlan.duplicates]) fails the plan too.
      */
     suspend fun planAhead(
         planId: RunId,

@@ -237,6 +237,24 @@ class PlanCommandTest {
         }
 
     @Test
+    fun `a tester given the name of the owner's account fails the plan as it fails the run, and neither starts`() =
+        runBlocking<Unit> {
+            // a01 signs in with the owner's account and keeps its name; the campaign gives a02 the same name.
+            val cli = ownerLoginSite(names = listOf("Ali Vəliyev", OWNER_NAME))
+
+            val plan = cli.run("plan", "login.yaml")
+            val run = cli.run("run", "login.yaml")
+
+            plan.statusCode shouldBe 1
+            plan.stderr shouldContain "Identity registry cannot be built: duplicate display name $OWNER_NAME (a01, a02)"
+            plan.stdout shouldNotContain "Stored in"
+            run.statusCode shouldBe 2
+            run.stderr shouldContain "Identity registry cannot be built: duplicate display name $OWNER_NAME (a01, a02)"
+            cli.evidence { it.evidence.latest() } shouldBe null
+            (plan.output + run.output) shouldNotContain OWNER_PASSWORD
+        }
+
+    @Test
     fun `passwords are never printed`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
@@ -331,8 +349,11 @@ class PlanCommandTest {
             result.stdout shouldContain "a30"
         }
 
-    /** A site whose profile gives its `writer` tester the owner's account, and a campaign one of whose writers signs in with it. */
-    private fun ownerLoginSite(): CliHarness {
+    /**
+     * A site whose profile gives its `writer` tester the owner's account, and a campaign one of whose writers signs in
+     * with it; the testers are given [names] first.
+     */
+    private fun ownerLoginSite(names: List<String> = emptyList()): CliHarness {
         val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to OWNER_PASSWORD))
         Files.createDirectories(dir.resolve("targets"))
         Files.writeString(
@@ -344,7 +365,7 @@ class PlanCommandTest {
               tenant: none
               test_api: {mode: none}
               accounts:
-                - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                - {role: writer, name: $OWNER_NAME, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
             """.trimIndent() + "\n",
         )
         cli.write(
@@ -355,6 +376,7 @@ class PlanCommandTest {
               tenant: none
               testers: 3
               seed: 12
+              names: [${names.joinToString()}]
               roles: {writer: 2, reader: 1}
               registration: {self: 2, login: 1}
               budget: {max_steps_per_agent: 5, max_minutes: 2}
@@ -377,5 +399,6 @@ class PlanCommandTest {
 
     private companion object {
         const val OWNER_PASSWORD = "owner-writer-pass"
+        const val OWNER_NAME = "Sahibin Yazarı"
     }
 }

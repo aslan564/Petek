@@ -29,6 +29,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 
@@ -102,9 +103,20 @@ class PlanIdentitiesUseCaseTest {
             stored.map { it.password.reveal() } shouldNotContain OWNER_PASSWORD
         }
 
-    /** Four testers without companies; one reader signs in with the owner's reader account. */
-    private fun loginSpec() =
-        spec(testers = 4, names = emptyList(), admins = 0, managers = 0, employees = 0, departments = emptyList(), inviteCount = 0)
+    @Test
+    fun `planning ahead a registry the run could not store fails before storing any of it`() =
+        runTest {
+            // The editor a01 is given the name of the owner's account that the reader a02 signs in with.
+            val error =
+                shouldThrow<IdentityConflictException> { useCase.planAhead(runId, RUN_TAG, loginSpec(names = listOf("Reader One"))) }
+
+            error.message.orEmpty() shouldContain "duplicate display name Reader One (a01, a02)"
+            repository.findByRun(runId).shouldBeEmpty()
+        }
+
+    /** Four testers without companies, given [names] first; one reader signs in with the owner's reader account. */
+    private fun loginSpec(names: List<String> = emptyList()) =
+        spec(testers = 4, names = names, admins = 0, managers = 0, employees = 0, departments = emptyList(), inviteCount = 0)
             .copy(
                 companies = false,
                 ownRoles = linkedMapOf(checkNotNull(Role.fromKey("editor")) to 1, READER to 3),

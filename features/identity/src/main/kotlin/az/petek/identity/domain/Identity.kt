@@ -101,6 +101,29 @@ data class IdentityPlan(
      * with the owner's own accounts ([GivenAccount]), their e-mails and passwords.
      */
     fun withoutOwnAccounts(): IdentityPlan = copy(identities = identities.filter { it.registration != RegistrationMode.LOGIN })
+
+    /**
+     * What this plan holds more than once that a run's registry holds once, as `duplicate <what> <value> (<agents>)`:
+     * an agent id, an e-mail (compared without regard to letter case, as mail servers compare them) or a display name.
+     * Empty for a registry a run can store; the whole plan is checked, so a part of it stored alone (a plan's
+     * [withoutOwnAccounts]) never hides what the run would refuse.
+     */
+    fun duplicates(): List<String> =
+        repeated("agent id", listHolders = false) { it.agentId.value } +
+            repeated("e-mail") { it.email.lowercase() } +
+            repeated("display name") { it.displayName }
+
+    private fun repeated(
+        label: String,
+        listHolders: Boolean = true,
+        key: (Identity) -> String,
+    ): List<String> =
+        identities
+            .groupBy(key)
+            .filterValues { it.size > 1 }
+            .map { (value, holders) ->
+                "duplicate $label $value" + if (listHolders) " (${holders.joinToString { it.agentId.value }})" else ""
+            }
 }
 
 /** A registry that cannot be built (duplicate names, impossible quotas). The run must not start. */
@@ -115,6 +138,10 @@ class IdentityConflictException(
  * unique. Managers always join by invitation (a company-code sign-up becomes an employee on the target), the other
  * invitations go to employees with a seeded, department-stratified shuffle, so each department gets a mix of invite
  * and company code, and company-code identities are employees only.
+ *
+ * A registry that cannot be built is an [IdentityConflictException], also one that would repeat a name or an e-mail
+ * ([IdentityPlan.duplicates]: a `login` tester keeps its account's), so every caller that generates one (`petek plan`,
+ * the previews before a run, the run itself) refuses what the run's registry could not hold.
  */
 interface IdentityRegistryGenerator {
     fun generate(
