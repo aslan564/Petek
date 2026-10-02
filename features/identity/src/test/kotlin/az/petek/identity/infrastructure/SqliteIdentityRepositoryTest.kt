@@ -43,6 +43,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -518,6 +519,27 @@ class SqliteIdentityRepositoryTest {
         }
 
     @Test
+    fun `a database an earlier release ran a campaign on keeps no copy of the owner's password in its file`() =
+        runBlocking<Unit> {
+            val db = open()
+            db.createMissing(FirstReleaseIdentityTable)
+            insertFirstRelease(db, runId, ownAccounts)
+            runFirstRelease(db, runId, ownAccounts)
+            insertFirstRelease(db, otherRunId, plan)
+            runFirstRelease(db, otherRunId, plan)
+            closeDatabases()
+            opened.clear()
+            databaseFiles() shouldContain OWNER_PASSWORD
+
+            val repository = repository()
+
+            repository.findByRun(runId).map { it.storageStatePath } shouldBe ownAccounts.identities.map { statePath(it.agentId) }
+            closeDatabases()
+            opened.clear()
+            databaseFiles() shouldNotContain OWNER_PASSWORD
+        }
+
+    @Test
     fun `moving a database over twice changes nothing more`() =
         runBlocking<Unit> {
             val db = open()
@@ -605,6 +627,30 @@ class SqliteIdentityRepositoryTest {
             }
         }
     }
+
+    /**
+     * What the first release's runner did to [plan]'s rows during a run: each agent's status and its storage state, one
+     * write transaction each. The rows grow, so SQLite moves them and leaves the old cells in the page's free space.
+     */
+    private fun runFirstRelease(
+        db: SqliteDatabase,
+        run: RunId,
+        plan: IdentityPlan,
+    ) = runBlocking {
+        plan.identities.forEach { identity ->
+            val row = (FirstReleaseIdentityTable.runId eq run.value) and (FirstReleaseIdentityTable.agentId eq identity.agentId.value)
+            db.write { FirstReleaseIdentityTable.update({ row }) { it[status] = "registered" } }
+            db.write {
+                FirstReleaseIdentityTable.update({ row }) {
+                    it[status] = "active"
+                    it[statusReason] = "signed in and kept the session for the rest of the campaign"
+                }
+            }
+            db.write { FirstReleaseIdentityTable.update({ row }) { it[storageStatePath] = statePath(identity.agentId) } }
+        }
+    }
+
+    private fun statePath(agentId: AgentId) = "/home/owner/petek/evidence/storage-state/${agentId.value}.json"
 
     /** The `identity` table as the first release declared it: every e-mail unique, no workspace column. */
     private object FirstReleaseIdentityTable : Table("identity") {

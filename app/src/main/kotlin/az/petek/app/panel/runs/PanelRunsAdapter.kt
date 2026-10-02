@@ -792,7 +792,8 @@ internal class PanelRunsAdapter(
 
     private suspend fun triageNow(runId: RunId): List<TriageItem> =
         try {
-            // The generated testers' passwords; the owner's accounts' are never stored, the container knows them.
+            // The generated testers' passwords; the owner's accounts' are never stored, the container masks the
+            // profiles' current ones (an old one changed since is not, the run's own redaction kept it out, R04).
             val passwords =
                 container.identities
                     .findByRun(runId)

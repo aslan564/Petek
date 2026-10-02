@@ -30,9 +30,14 @@ the same identities) and independent of mailboxes a human reads.
   runs: a campaign on the owner's accounts runs again, with `--repeat` and from the panel, on one database
   (2026-10-02). A generated tester's password is stored (R01, open items); the owner's account's password never is:
   the `login` row holds an empty one, the run signs in with the password of its in-memory plan, and triage masks every
-  password of the target profiles. Opening an older database drops the old index on every e-mail
-  (`identity_email_unique`), creates the partial one and clears the owner's passwords earlier releases stored there,
-  keeping every row.
+  password of the target profiles as they are when triage runs. A password the owner changed or removed since a run is
+  therefore not masked when that run is triaged: what keeps the owner's password out of a run's evidence, and so out
+  of its triage, is the run's own redaction as it records (`AgentRuntime.redact`, the browser session's masking of
+  typed secrets); triage's masking is a last layer over it, and keeping the old password to feed that layer would put
+  it back in the database in clear. Opening a database an earlier release wrote creates the partial index, clears
+  the owner's passwords stored there, rebuilds the file (`VACUUM`, then the write-ahead log emptied) so that no copy
+  left in its free space by earlier updates and deletions survives, and only then drops the old index on every e-mail
+  (`identity_email_unique`), so a rebuild that failed is done again at the next start; every row is kept.
 - **Flows as data.** Sign-up, join and login are `TargetProfile.flows` (contract defaults, overridden per site in
   YAML); `RunFunction`s execute them: `register_owner`, `seed_company` (departments and invitations through the test
   API), `register_and_login` (by the identity's `RegistrationMode`).
@@ -59,7 +64,8 @@ the same identities) and independent of mailboxes a human reads.
 
 - `identity`: generator determinism, uniqueness for large N, quota tests; `SqliteIdentityRepositoryTest` (the owner's
   account stored by many runs, a generated e-mail refused across runs, no owner's password in the table or the file,
-  an older database moved over with its rows).
+  an older database moved over with its rows, and one an earlier release ran a campaign on left with no copy of the
+  owner's password in its file); `SqliteDatabaseTest` (a vacuum leaves nothing overwritten or deleted in the files).
 - `app`: `RunCommandTest` runs a campaign on the owner's account twice and with `--repeat 2` on one database;
   `PanelRunsTest` runs it again from the panel and triages it without showing the model the owner's password.
 - `mail`: `MailpitMailboxTest`, `TestApiMailboxTest` (Ktor fake servers), `ImapMailboxTest`, `ManualCodesTest`,

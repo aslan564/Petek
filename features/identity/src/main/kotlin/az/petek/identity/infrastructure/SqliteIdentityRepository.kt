@@ -47,9 +47,10 @@ import java.sql.SQLException
  * A `login` tester ([Identity.ownAccount]) signs in with the owner's account, so its e-mail is stored again by every run
  * that uses it, and it is stored without the owner's password ([Identity.asStored]).
  *
- * Opening the repository moves a database written by an earlier release over ([migrate]): the old index that made
- * every e-mail unique gives way to [IdentityTable.GENERATED_EMAIL_INDEX], and the owner's passwords the `login` rows
- * held are cleared. Every row is kept, and opening it again changes nothing.
+ * Opening the repository moves a database written by an earlier release over ([moveOver]): the old index that made
+ * every e-mail unique gives way to [IdentityTable.GENERATED_EMAIL_INDEX], the owner's passwords the `login` rows held
+ * are cleared, and the file is rebuilt ([SqliteDatabase.vacuum]) so that no copy of them is left in its free space.
+ * Every row is kept, and opening it again changes nothing.
  *
  * [updateStatus] and [updateStorageState] throw [NoSuchElementException] for an agent the run does not have:
  * the orchestrator only updates identities it planned, so a miss is a bug that must not go unnoticed.
@@ -60,7 +61,11 @@ class SqliteIdentityRepository(
 ) : IdentityRepository {
     init {
         db.createMissing(IdentityTable)
-        db.setUp { migrate() }
+        if (db.setUp { moveOver() }) {
+            // The old index goes last: a rebuild that fails leaves it, so the next start rebuilds the file again.
+            db.vacuum()
+            db.setUp { exec("DROP INDEX IF EXISTS \"${IdentityTable.LEGACY_EMAIL_INDEX}\"") }
+        }
     }
 
     override suspend fun replaceAll(
@@ -171,18 +176,20 @@ class SqliteIdentityRepository(
     )
 
     /**
-     * Moves a database an earlier release created over (idempotent, in the start-up transaction): drops
-     * [IdentityTable.LEGACY_EMAIL_INDEX], creates [IdentityTable.GENERATED_EMAIL_INDEX] as a new database gets it (that
-     * index's own statement, so both stay the same), and clears the owner's passwords the `login` rows of earlier runs
-     * held. No row is removed; the old index allowed no repeated e-mail, so the new one, which covers fewer rows, always
-     * builds.
+     * Moves a database an earlier release created over (idempotent, in the start-up transaction): creates
+     * [IdentityTable.GENERATED_EMAIL_INDEX] as a new database gets it (that index's own statement, so both stay the
+     * same) and clears the owner's passwords the `login` rows of earlier runs held. No row is removed; the old index
+     * allowed no repeated e-mail, so the new one, which covers fewer rows, always builds. Returns whether the database
+     * still has [IdentityTable.LEGACY_EMAIL_INDEX], the mark of a database an earlier release wrote: its file may hold
+     * the owner's passwords in free space, left there when earlier releases updated a `login` row (its status, its
+     * storage state) or replaced a run's registry, also of rows no longer there, so it is rebuilt before the index is
+     * dropped. A database a release with the partial index created never had them.
      */
-    private fun JdbcTransaction.migrate() {
+    private fun JdbcTransaction.moveOver(): Boolean {
         val indexes = mutableSetOf<String>()
         exec("PRAGMA index_list(\"${IdentityTable.tableName}\")") { rows ->
             while (rows.next()) indexes += rows.getString("name").lowercase()
         }
-        if (IdentityTable.LEGACY_EMAIL_INDEX in indexes) exec("DROP INDEX IF EXISTS \"${IdentityTable.LEGACY_EMAIL_INDEX}\"")
         if (IdentityTable.GENERATED_EMAIL_INDEX !in indexes) {
             IdentityTable.indices
                 .single { it.indexName == IdentityTable.GENERATED_EMAIL_INDEX }
@@ -191,11 +198,8 @@ class SqliteIdentityRepository(
         }
         val ownPasswordKept =
             (IdentityTable.registration eq RegistrationMode.LOGIN.key) and (IdentityTable.password neq Identity.NOT_STORED.reveal())
-        if (!IdentityTable.select(IdentityTable.runId).where { ownPasswordKept }.empty()) {
-            // The cleared values are overwritten in the file too, not left behind in its free space.
-            exec("PRAGMA secure_delete = ON")
-            IdentityTable.update({ ownPasswordKept }) { it[IdentityTable.password] = Identity.NOT_STORED.reveal() }
-        }
+        IdentityTable.update({ ownPasswordKept }) { it[IdentityTable.password] = Identity.NOT_STORED.reveal() }
+        return IdentityTable.LEGACY_EMAIL_INDEX in indexes
     }
 
     private fun row(

@@ -631,7 +631,9 @@ class AppContainer(
      * Triage of finished runs. Evidence shown to the model is redacted with every configured secret (the test token,
      * the AI key, the identity secret and the passwords of the owner's accounts in the target profiles, which the stored
      * identities never hold) plus [secrets] (the triaged run's generated test passwords, which only its stored
-     * identities know): nothing secret reaches the LLM (rule 10).
+     * identities know): nothing secret reaches the LLM (rule 10). The owner's passwords are the profiles' as they are
+     * now: one changed or removed since the triaged run is not masked here; the run's own redaction as it recorded is
+     * what kept it out of the evidence (R04).
      */
     fun triage(secrets: Collection<Secret> = emptyList()): TriageRunUseCase =
         TriageRunUseCase(
