@@ -104,8 +104,9 @@ contention, never shared state); `PER_SESSION` gives every tester its own browse
 
 - Scale cost: every session starts its own Playwright driver (Node process); sharing one driver per browser server
   would cut memory per session substantially (Faza 14, together with `petek capacity` measurements).
-- Passwords are stored in clear in the identity table although they are derivable from the identity secret; store
-  nothing and re-derive (Faza 10).
+- The generated testers' passwords are stored in clear in the identity table although they are derivable from the
+  identity secret; store nothing and re-derive (Faza 10). The owner's accounts' passwords (`login` testers) are no
+  longer stored there at all (2026-10-02, R04).
 - The usage meter and the watchdog are keyed by agent id, not run id; harmless while the panel runs one campaign at a
   time, to be scoped per run before parallel runs (Faza 14).
 - Multi-machine orchestration (Redis/NATS) is a paid-edition port (Faza 14, ADR-0011).

@@ -533,6 +533,31 @@ class RunCommandTest {
         }
 
     @Test
+    fun `a campaign on the owner's account runs again and again on one database, and never stores its password`() =
+        runBlocking<Unit> {
+            val cli = ownerAccountSite()
+
+            val first = cli.run("run", "login.yaml")
+            val second = cli.run("run", "login.yaml")
+            val repeated = cli.run("run", "login.yaml", "--repeat", "2")
+
+            listOf(first, second, repeated).forEach { result ->
+                result.output shouldNotContain "IdentityConflictException"
+                result.output shouldNotContain "already used by another run"
+                result.statusCode shouldBe 0
+            }
+            Regex(": PASSED in ").findAll(repeated.stdout).count() shouldBe 2
+            val runs = cli.evidence { it.evidence.list(10) }
+            runs shouldHaveSize 4
+            runs.forEach { it.result shouldBe RunResult.PASSED }
+            val owners = cli.evidence { stores -> runs.map { run -> stores.identities.findByRun(run.runId).single { it.ownAccount } } }
+            owners.map { it.email }.toSet() shouldBe setOf(OWNER_EMAIL)
+            owners.map { it.password.reveal() }.toSet() shouldBe setOf("")
+            storedFiles(cli) shouldNotContain OWNER_PASSWORD
+            (first.output + second.output + repeated.output) shouldNotContain OWNER_PASSWORD
+        }
+
+    @Test
     fun `a race that the waves leave with one racer is announced before the run`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
@@ -649,7 +674,55 @@ class RunCommandTest {
             result.stdout shouldContain "assertions failed 1"
         }
 
+    /**
+     * A site without companies whose profile gives the owner's `writer` account ([OWNER_EMAIL]), and a campaign whose
+     * first writer signs in with it while the others sign up (`login.yaml`).
+     */
+    private fun ownerAccountSite(): CliHarness {
+        val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to OWNER_PASSWORD))
+        Files.createDirectories(dir.resolve("targets"))
+        Files.writeString(
+            dir.resolve("targets/notes.yaml"),
+            """
+            target:
+              name: notes
+              url: ${CliHarness.UNUSED_TARGET}
+              tenant: none
+              test_api: {mode: none}
+              accounts:
+                - {role: writer, name: Sahibin Yazarı, email: $OWNER_EMAIL, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+            """.trimIndent() + "\n",
+        )
+        cli.write(
+            "login.yaml",
+            """
+            campaign:
+              name: notes-login
+              tenant: none
+              testers: 3
+              seed: 12
+              roles: {writer: 2, reader: 1}
+              registration: {self: 2, login: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            steps:
+              - id: look
+                actor: [writer[*], reader]
+                do: "Open the notes"
+            """,
+        )
+        return cli
+    }
+
+    /** Everything the commands left in the evidence directory (the database, its journal, the reports), as text. */
+    private fun storedFiles(cli: CliHarness): String =
+        Files.walk(cli.evidenceDir).use { files ->
+            files.filter(Files::isRegularFile).toList().joinToString("\n") { String(Files.readAllBytes(it), Charsets.ISO_8859_1) }
+        }
+
     private companion object {
+        const val OWNER_EMAIL = "writer@owner.example"
+        const val OWNER_PASSWORD = "owner-writer-pass-0042"
+
         /** An owner and an employee whose check calls the site's API on its own host (a full api_prefix). */
         val API_CAMPAIGN =
             """

@@ -37,7 +37,26 @@ data class Identity(
     val registration: RegistrationMode,
     val status: IdentityStatus = IdentityStatus.PLANNED,
     val storageStatePath: String? = null,
-)
+) {
+    /**
+     * Whether this tester signs in with an account the owner gave ([GivenAccount], [RegistrationMode.LOGIN]) instead of
+     * one Pətək generates for its run: its e-mail is the account's, the same in every run that uses it, and its
+     * [password] is the owner's own.
+     */
+    val ownAccount: Boolean get() = registration == RegistrationMode.LOGIN
+
+    /**
+     * This identity as an [IdentityRepository] keeps it: the owner's password of an [ownAccount] is never stored
+     * (AGENTS.md rule 10), it lives in the target profile and in the run's plan only, so the stored tester has an empty
+     * password. A generated tester is kept as it is.
+     */
+    fun asStored(): Identity = if (ownAccount) copy(password = NOT_STORED) else this
+
+    companion object {
+        /** The password a stored [ownAccount] comes back with: none, the owner's stays in the target profile. */
+        val NOT_STORED: Secret = Secret("")
+    }
+}
 
 /**
  * Where a tester stands in its run: planned, active once its setup (sign-up, verification, sign-in) passed, or failed
@@ -100,7 +119,7 @@ data class IdentityPlan(
      * This plan with only the identities Pətək generated: without the [RegistrationMode.LOGIN] testers, which sign in
      * with the owner's own accounts ([GivenAccount]), their e-mails and passwords.
      */
-    fun withoutOwnAccounts(): IdentityPlan = copy(identities = identities.filter { it.registration != RegistrationMode.LOGIN })
+    fun withoutOwnAccounts(): IdentityPlan = copy(identities = identities.filterNot { it.ownAccount })
 
     /**
      * What this plan holds more than once that a run's registry holds once, as `duplicate <what> <value> (<agents>)`:
@@ -191,14 +210,25 @@ interface NameCatalog {
     ): String = fatherName
 }
 
-/** Port: identities persisted per run (UNIQUE(email), UNIQUE(run_id, display_name)). */
+/**
+ * Port: identities persisted per run. Within a run every agent id, e-mail and display name is unique; across runs the
+ * e-mail of a tester Pətək generated is too (no other run ever used it), while the e-mail of an [Identity.ownAccount]
+ * is the owner's account and repeats in every run that signs in with it.
+ */
 interface IdentityRepository {
-    /** Replaces any identities already stored for [runId] in one transaction (so `petek plan` is repeatable). */
+    /**
+     * Replaces any identities already stored for [runId] in one transaction (so `petek plan` is repeatable), each
+     * [Identity.asStored]: the owner's passwords are never kept.
+     */
     suspend fun replaceAll(
         runId: RunId,
         plan: IdentityPlan,
     )
 
+    /**
+     * The identities of [runId] as they were stored ([Identity.asStored]): an [Identity.ownAccount] comes back with an
+     * empty password; the owner's own is in the target profile, and in the run's plan while the run goes on.
+     */
     suspend fun findByRun(runId: RunId): List<Identity>
 
     suspend fun updateStatus(

@@ -511,6 +511,12 @@ class AppContainer(
                 GivenAccount(role, email, password, account.name)
             }
 
+    /**
+     * The passwords of the owner's accounts in every target profile: a `login` tester's password is one of them, and
+     * lives there only, never in the identity table ([az.petek.identity.domain.Identity.asStored]).
+     */
+    private fun ownerPasswords(): List<Secret> = config.targets.flatMap { it.accounts }.mapNotNull { it.password }
+
     /** A runner for one `petek run`; [headless] false shows the browsers (`--headful`). */
     fun campaignRunner(headless: Boolean = config.browserHeadless): CampaignRunner =
         CountingCampaignRunner(defaultCampaignRunner(headless), telemetry, config.llmProvider.value)
@@ -622,8 +628,12 @@ class AppContainer(
     }
 
     /**
-     * Triage of finished runs. Evidence shown to the model is redacted with every configured secret plus [secrets]
-     * (the triaged run's test passwords, which only its identities know): nothing secret reaches the LLM (rule 10).
+     * Triage of finished runs. Evidence shown to the model is redacted with every configured secret (the test token,
+     * the AI key, the identity secret and the passwords of the owner's accounts in the target profiles, which the stored
+     * identities never hold) plus [secrets] (the triaged run's generated test passwords, which only its stored
+     * identities know): nothing secret reaches the LLM (rule 10). The owner's passwords are the profiles' as they are
+     * now: one changed or removed since the triaged run is not masked here; the run's own redaction as it recorded is
+     * what kept it out of the evidence (R04).
      */
     fun triage(secrets: Collection<Secret> = emptyList()): TriageRunUseCase =
         TriageRunUseCase(
@@ -635,7 +645,8 @@ class AppContainer(
             validator = scenarioValidator,
             clock = clock,
             ids = scenarioIds,
-            redactor = SecretRedactor(listOfNotNull(config.testToken, config.llmApiKey, config.identitySecret) + secrets),
+            redactor =
+                SecretRedactor(listOfNotNull(config.testToken, config.llmApiKey, config.identitySecret) + ownerPasswords() + secrets),
             options = TriageOptions(language = config.language),
         )
 

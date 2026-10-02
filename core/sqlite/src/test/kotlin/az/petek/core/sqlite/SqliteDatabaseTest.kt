@@ -14,14 +14,20 @@ package az.petek.core.sqlite
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -216,4 +222,42 @@ class SqliteDatabaseTest {
                 "column items.required cannot be added to an existing table: it needs a default"
         }
     }
+
+    @Test
+    fun `a vacuum leaves nothing overwritten or deleted in the files and keeps every row`(
+        @TempDir dir: Path,
+    ) = runBlocking<Unit> {
+        SqliteDatabase.open(dir.resolve("petek.db")).use { db ->
+            db.createMissing(Items)
+            db.write {
+                (1..20).forEach { i ->
+                    Items.insert {
+                        it[id] = i
+                        it[name] = "first-value-$i"
+                    }
+                }
+            }
+            db.write { Items.update({ Items.id eq 1 }) { it[name] = "a longer value, so the row is moved" } }
+            db.write { Items.deleteWhere { Items.id eq 2 } }
+            databaseFiles(dir) shouldContain "first-value-1;"
+            databaseFiles(dir) shouldContain "first-value-2;"
+
+            db.vacuum()
+
+            databaseFiles(dir) shouldNotContain "first-value-1;"
+            databaseFiles(dir) shouldNotContain "first-value-2;"
+            db.read { Items.selectAll().count() } shouldBe 19L
+            db.read { Items.selectAll().where { Items.id eq 1 }.single()[Items.name] } shouldBe "a longer value, so the row is moved"
+        }
+    }
+
+    /** Everything in [dir]'s files (the database and its log), as text, each value followed by `;` to tell 1 from 10. */
+    private fun databaseFiles(dir: Path): String =
+        Files.walk(dir).use { files ->
+            files
+                .filter(Files::isRegularFile)
+                .toList()
+                .joinToString("\n") { String(Files.readAllBytes(it), Charsets.ISO_8859_1) }
+                .replace(Regex("first-value-\\d+")) { "${it.value};" }
+        }
 }
