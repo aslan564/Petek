@@ -95,7 +95,13 @@ data class IdentityPlan(
     val identities: List<Identity>,
     /** Always [WorkspaceId.LOCAL] on the owner's machine (ADR-0011). */
     val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
-)
+) {
+    /**
+     * This plan with only the identities Pətək generated: without the [RegistrationMode.LOGIN] testers, which sign in
+     * with the owner's own accounts ([GivenAccount]), their e-mails and passwords.
+     */
+    fun withoutOwnAccounts(): IdentityPlan = copy(identities = identities.filter { it.registration != RegistrationMode.LOGIN })
+}
 
 /** A registry that cannot be built (duplicate names, impossible quotas). The run must not start. */
 class IdentityConflictException(

@@ -23,6 +23,7 @@ class PlanIdentitiesUseCase(
     private val generator: IdentityRegistryGenerator,
     private val repository: IdentityRepository,
 ) {
+    /** The registry of the run [runId] that is starting, stored whole: its testers sign in with what is stored. */
     suspend fun execute(
         runId: RunId,
         runTag: RunTag,
@@ -30,6 +31,22 @@ class PlanIdentitiesUseCase(
     ): IdentityPlan {
         val plan = generator.generate(spec, runTag)
         repository.replaceAll(runId, plan)
+        return plan
+    }
+
+    /**
+     * The registry of a run planned ahead (`petek plan`) under the plan id [planId]: generated as [execute] generates
+     * it and returned whole, but stored [IdentityPlan.withoutOwnAccounts]. A plan never keeps the owner's passwords,
+     * and never holds the e-mails of the owner's accounts against the runs that will sign in with them (an e-mail
+     * belongs to one run only), so the campaign can be run, and planned again, afterwards.
+     */
+    suspend fun planAhead(
+        planId: RunId,
+        runTag: RunTag,
+        spec: IdentitySpec,
+    ): IdentityPlan {
+        val plan = generator.generate(spec, runTag)
+        repository.replaceAll(planId, plan.withoutOwnAccounts())
         return plan
     }
 }
