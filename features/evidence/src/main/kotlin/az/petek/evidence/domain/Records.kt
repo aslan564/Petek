@@ -63,33 +63,136 @@ enum class StepKind { DO, RUN, WAIT, EMIT, ASSERT, SYSTEM }
 
 /**
  * The action of the harness step that records a campaign's `coverage:` lines at a run's start, one line each, so the
- * run's report names what its scenario left unchecked (the owner's decision of 2026-09-30). Not `coverage`: that is the
- * runner's record of which receivers of a wave could wait for an event.
+ * run's report names what its scenario left unchecked (the owner's decision of 2026-09-30). Not [WAVE_COVERAGE_ACTION]:
+ * that is the runner's record of which receivers of a wave could wait for an event.
  */
 const val COVERAGE_ACTION = "scenario_coverage"
 
 /**
+ * The leading key (`not_covered: ...`) of a check no tester of the run could make: the FAILED [WAVE_COVERAGE_ACTION]
+ * record and the [UNCOVERED_ACTION] record. The reports file it under the run's surroundings, never under the site or a
+ * tester.
+ */
+const val NOT_COVERED = "not_covered"
+
+/**
+ * The action of the runner's harness step (agent id null) that counts, per `wait_for` step of a run with waves, the
+ * receivers that could wait for their event: PASSED when some could (`<waited> of <all> receivers could wait for the
+ * event of '<step>'; ...`), FAILED and counted as a failed step when none could, the same detail behind the
+ * [NOT_COVERED] key. Not [COVERAGE_ACTION], the scenario's own `coverage:` lines.
+ */
+const val WAVE_COVERAGE_ACTION = "coverage"
+
+/**
+ * The action of the runner's harness step (SKIPPED) for someone a step began without: a tester out since an earlier
+ * failure (its agent id, detail [SkipDetail.failedEarlier]), or every actor when nobody active matched (agent id null,
+ * detail [SkipDetail.noActor]).
+ */
+const val SKIP_ACTION = "skip"
+
+/** The details of a [SKIP_ACTION] record, written by the runner and read by the reports. */
+object SkipDetail {
+    private const val FAILED_EARLIER = "agent failed earlier"
+
+    /** `agent failed earlier (<failure key>)`: the tester was out since an earlier failure (setup, its browser). */
+    fun failedEarlier(reason: String): String = "$FAILED_EARLIER ($reason)"
+
+    /** The failure key of a [failedEarlier] detail; null for any other detail. */
+    fun failedEarlierReason(detail: String?): String? =
+        detail
+            ?.takeIf { it.startsWith(FAILED_EARLIER) }
+            ?.removePrefix(FAILED_EARLIER)
+            ?.trim()
+            ?.removeSurrounding("(", ")")
+
+    /** `no active actor matches '<actors>'`: the step began with nobody. */
+    fun noActor(actors: String): String = "no active actor matches '$actors'"
+}
+
+/**
  * The action of the harness step (agent id null, PASSED) that lists, at a run's start, every tester the run planned,
- * so a report can set who was planned against who acted. Detail: `<count> testers: a01, a02, a03` (agent ids in order).
+ * so a report can set who was planned against who acted. Detail ([RosterDetail]): `<count> testers: a01, a02, a03`
+ * (agent ids in order).
  */
 const val ROSTER_ACTION = "roster"
+
+/** The detail of a [ROSTER_ACTION] record, written by the runner and read by the reports. */
+object RosterDetail {
+    fun of(agentIds: List<String>): String = "${agentIds.size} testers: ${agentIds.joinToString(", ")}"
+
+    /** The planned agent ids of an [of] detail, in order; empty for a run recorded before rosters were kept. */
+    fun agentIds(detail: String?): List<String> =
+        detail
+            ?.substringAfter(": ", "")
+            ?.split(", ")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+}
 
 /**
  * The action of the harness step (agent id null) that records, at a run's start, how many testers this machine is
  * advised to carry at once (`petek capacity`), when the caller knew it. It never changes a verdict: a run within the
- * advice is PASSED, one over it SKIPPED (neutral). Detail, with a leading key:
+ * advice is PASSED, one over it SKIPPED (neutral). Detail, with a leading key ([CapacityDetail]):
  * `within_capacity: <live> testers at once (<total> in the run); this machine is advised for up to <advice> at once`, or
  * `over_capacity: ...` with the same numbers and a note that slow pages and late screens may come from the machine.
  */
 const val CAPACITY_ACTION = "capacity"
 
+/** The detail of a [CAPACITY_ACTION] record, written by the runner and read by the reports. */
+object CapacityDetail {
+    const val WITHIN = "within_capacity"
+    const val OVER = "over_capacity"
+
+    /** The numbers a capacity record carries: [live] testers at once, [total] in the run, [advice] advised at once. */
+    data class Numbers(
+        val live: Int,
+        val total: Int,
+        val advice: Int,
+    )
+
+    fun within(numbers: Numbers): String = "$WITHIN: ${text(numbers)}"
+
+    fun over(numbers: Numbers): String =
+        "$OVER: ${text(numbers)}, so slow pages and late screens may come from this machine, not from the site"
+
+    /** Whether [detail] is an [over] detail: the run carried more testers at once than this machine is advised for. */
+    fun isOver(detail: String?): Boolean = detail?.startsWith(OVER) == true
+
+    /** The numbers of a [within] or [over] detail; null when it carries none. */
+    fun numbers(detail: String): Numbers? {
+        val (live, total, advice) = NUMBERS.find(detail)?.destructured ?: return null
+        return Numbers(live.toIntOrNull() ?: return null, total.toIntOrNull() ?: return null, advice.toIntOrNull() ?: return null)
+    }
+
+    private fun text(numbers: Numbers): String =
+        "${numbers.live} testers at once (${numbers.total} in the run); this machine is advised for up to ${numbers.advice} at once"
+
+    private val NUMBERS = Regex("""(\d+) testers at once \((\d+) in the run\); this machine is advised for up to (\d+)""")
+}
+
 /**
- * The action of the harness step (agent id null, SKIPPED) of a run that stopped early. Detail:
+ * The action of the harness step (agent id null, SKIPPED) of a run that stopped early. Detail ([AbortDetail]):
  * `run aborted: <reason>; steps not run: <steps>`, where `<steps>` lists the steps that never began, per wave when the
  * run had waves (`wave 4: read, approve; wave 5: join, read, approve`), `-` when every step began. The reason may itself
  * contain `; `: read it up to the last `; steps not run: `.
  */
 const val ABORT_ACTION = "abort"
+
+/** The detail of an [ABORT_ACTION] record, written by the runner and read by the reports. */
+object AbortDetail {
+    private const val LEAD = "run aborted: "
+    private const val NOT_RUN = "; steps not run: "
+
+    /** [notRun]: the steps that never began, one entry per pass (`wave 4: read, approve`). */
+    fun of(
+        reason: String,
+        notRun: List<String>,
+    ): String = "$LEAD$reason$NOT_RUN${notRun.joinToString("; ").ifEmpty { "-" }}"
+
+    /** The abort reason of an [of] detail. */
+    fun reason(detail: String?): String? = detail?.substringAfter(LEAD)?.substringBeforeLast(NOT_RUN)?.trim()
+}
 
 /**
  * The roll call at a run's end (passed, failed or aborted, with waves or without): every tester the run planned for a
@@ -99,7 +202,7 @@ const val ABORT_ACTION = "abort"
  */
 const val NOT_REACHED_ACTION = "not_reached"
 
-/** Leading keys of a [NOT_REACHED_ACTION] record's detail (`<key>: <why>`). */
+/** Leading keys of a [NOT_REACHED_ACTION] record's detail (`<key>: <why>`, [detail]). */
 object NotReached {
     /** `run_aborted: <the run's abort reason>`: the run stopped before the tester finished or reached the step. */
     const val RUN_ABORTED = "run_aborted"
@@ -116,13 +219,23 @@ object NotReached {
      * among the run's failed agents), so such a run is not PASSED.
      */
     const val NEVER_REACHED = "never_reached"
+
+    fun detail(
+        key: String,
+        why: String,
+    ): String = "$key: $why"
+
+    /** The leading key of a [detail]. */
+    fun key(detail: String?): String = detail.orEmpty().substringBefore(':').trim()
+
+    /** What a [detail] says after its key (all of it when it has none). */
+    fun why(detail: String?): String = detail.orEmpty().let { it.substringAfter(':', it).trim() }
 }
 
 /**
  * The action of the harness step (agent id null, FAILED, counted as a failed step) for a scenario step that no tester
  * ran in any pass of the run (every wave, or the run without waves, resolved it to nobody), so a run never passes with
- * a step nobody did. Detail: `not_covered: no tester matched '<actors>' ...`; `not_covered` is the key the reports
- * already file under the run's surroundings (a check the run could not make), never under the site or a tester.
+ * a step nobody did. Detail: `not_covered: no tester matched '<actors>' ...` ([NOT_COVERED]).
  */
 const val UNCOVERED_ACTION = "uncovered"
 

@@ -20,10 +20,16 @@ import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.Pacing
 import az.petek.core.model.Role
 import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.AbortDetail
 import az.petek.evidence.domain.CAPACITY_ACTION
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.ROLL_CALL_ACTION
 import az.petek.evidence.domain.ROSTER_ACTION
+import az.petek.evidence.domain.RosterDetail
+import az.petek.evidence.domain.SKIP_ACTION
+import az.petek.evidence.domain.SkipDetail
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.UNCOVERED_ACTION
@@ -168,6 +174,59 @@ class RunnerRollCallTest {
                 )
             f.system(ABORT_ACTION).single().detail shouldBe
                 "run aborted: step 'announce' failed and on_fail is abort; steps not run: read"
+        }
+
+    /**
+     * The report reads these records with the evidence domain's helpers (its tests write them with the same helpers),
+     * so the runner must write what those helpers read: a rename on either side fails one of the two. The tests above
+     * pin the stored text itself, which older evidence still has.
+     */
+    @Test
+    fun `the runner writes its roll call records as the evidence domain's helpers read them`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                when {
+                    call.scenarioStep == "join" && call.agentId.value == "a05" -> {
+                        ActionOutcome(ActionStatus.FAILED, "no code", failureReason = FailureReason.REGISTRATION_FAILED)
+                    }
+
+                    call.scenarioStep == "announce" -> {
+                        ActionOutcome(ActionStatus.FAILED, "the form was refused")
+                    }
+
+                    else -> {
+                        ok
+                    }
+                }
+            }
+            val campaign =
+                campaign(
+                    setup = listOf(setupStep("join", everyoneButAdmin())),
+                    steps =
+                        listOf(
+                            step("read", employees()),
+                            step("announce", admin(), onFail = OnFail.ABORT),
+                            step("approve", managers()),
+                        ),
+                )
+
+            f.runner().run(campaign, RunOptions(capacityAdvice = 2))
+
+            RosterDetail.agentIds(f.system(ROSTER_ACTION).single().detail) shouldContainExactly (1..7).map { "a0$it" }
+            val capacity = f.system(CAPACITY_ACTION).single().detail
+            CapacityDetail.isOver(capacity) shouldBe true
+            CapacityDetail.numbers(capacity.orEmpty()) shouldBe CapacityDetail.Numbers(live = 7, total = 7, advice = 2)
+            // a05 failed to join, so `read` began without it: the report reads that as a tester out since its failure.
+            f
+                .system(SKIP_ACTION)
+                .filter { it.agentId != null }
+                .map { Triple(it.scenarioStep, it.agentId!!.value, SkipDetail.failedEarlierReason(it.detail)) } shouldContainExactly
+                listOf(Triple("read", "a05", "registration_failed"))
+            AbortDetail.reason(f.system(ABORT_ACTION).single().detail) shouldBe "step 'announce' failed and on_fail is abort"
+            f.system(NOT_REACHED_ACTION).map { Triple(it.scenarioStep, it.agentId!!.value, NotReached.key(it.detail)) } shouldContainExactly
+                listOf("a02", "a03").map { Triple("approve", it, NotReached.RUN_ABORTED) }
+            NotReached.why(f.system(NOT_REACHED_ACTION).first().detail) shouldBe "step 'announce' failed and on_fail is abort"
         }
 
     @Test
