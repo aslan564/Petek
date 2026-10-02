@@ -873,6 +873,10 @@ class DefaultCampaignRunner(
      * nobody: an agent-less `uncovered` record that counts as a failed step, its checks recorded as not evaluated. FAILED,
      * not inconclusive: no check ran at all, as with a wave's `not_covered` receivers (Faza 24.7), and the scenario or
      * the run's testers must change for it to be done; the `not_covered` key keeps it off the site and the testers.
+     *
+     * Only a step every planned pass of which began it and chose nobody, or would have chosen nobody: when the run
+     * stopped before a pass (a wave that never began, the rest of a wave) that gives the step to someone, nothing about
+     * the scenario or the testers is wrong, and the roll call's `not_reached` records name those testers instead.
      */
     private suspend fun recordUncovered(
         run: RunState,
@@ -881,7 +885,7 @@ class DefaultCampaignRunner(
         val waves = run.passes.count { it.wave != null }
         for (step in run.campaign.allSteps) {
             val executions = run.executionsOf(step.id)
-            if (executions.isEmpty() || executions.any { it.isNotEmpty() }) continue
+            if (executions.isEmpty() || executions.any { it.isNotEmpty() } || cutOffFromSomeone(run, step.id)) continue
             // Out when it began, by role, department and registration: with `n`, a tester out before shifts the n-th one.
             val out = run.outOf(step.id)
             val detail =
@@ -899,6 +903,22 @@ class DefaultCampaignRunner(
             board.message("step '${step.id}' was run by nobody: $detail")
         }
     }
+
+    /**
+     * Whether a planned pass that never began the step [baseId] (the run stopped first) would have given it to a tester
+     * still in the run, the way the roll call resolves it.
+     */
+    private fun cutOffFromSomeone(
+        run: RunState,
+        baseId: String,
+    ): Boolean =
+        run.passes.any { pass ->
+            pass.steps.any { planned ->
+                planned.step.id.removeSuffix(SWAP_SUFFIX) == baseId &&
+                    run.chosenIn(pass.number, planned.step.id) == null &&
+                    actors.resolve(planned.step.actors, planned.pool.filterNot { run.isFailed(it.agentId) }).isNotEmpty()
+            }
+        }
 
     /** One record per agent (of [only], when given); reporting reads the comma-separated transports from `detail`. */
     private suspend fun recordNetworkObservations(

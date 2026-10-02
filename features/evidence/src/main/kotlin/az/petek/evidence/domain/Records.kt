@@ -235,7 +235,8 @@ object NotReached {
 /**
  * The action of the harness step (agent id null, FAILED, counted as a failed step) for a scenario step that no tester
  * ran in any pass of the run (every wave, or the run without waves, resolved it to nobody), so a run never passes with
- * a step nobody did. Detail: `not_covered: no tester matched '<actors>' ...` ([NOT_COVERED]).
+ * a step nobody did. A step that a pass the run stopped before would have given to someone is not one: the roll call's
+ * `not_reached` records name those testers instead. Detail: `not_covered: no tester matched '<actors>' ...` ([NOT_COVERED]).
  */
 const val UNCOVERED_ACTION = "uncovered"
 

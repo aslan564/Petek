@@ -29,7 +29,8 @@ cannot produce them; thirty humans with thirty devices cannot repeat them every 
   says whether one was loaded); `on_fail: continue | abort` is the campaign's choice.
 - **Nobody left out (2026-10-01).** Every run records its roster and, at its end, a `not_reached` record for every
   planned tester × step without a result (why: aborted, wave not started, failed earlier, never reached) and an
-  `uncovered` record (FAILED) for a step nobody ran; the report's roll call shows planned against acted. `petek run`
+  `uncovered` record (FAILED) for a step nobody ran (not for one a wave the run stopped before would have run: its
+  testers get `not_reached`); the report's roll call shows planned against acted. `petek run`
   and `petek plan` name every step that would start with nobody, wave by wave, before the run; the validator follows
   how departments are dealt; `{last_id}` of a step many testers emit with a source that does not name the tester is
   warned about.

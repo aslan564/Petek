@@ -351,6 +351,44 @@ class RunnerRollCallTest {
         }
 
     @Test
+    fun `a step only a wave the run never began has a tester for is left to the roll call, not called done by nobody`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { _, _ ->
+                delay(50.seconds)
+                ok
+            }
+            // Three managers dealt one to each wave (a02 IT | a03 HR | a04 Sales); `read` takes 50 s, the budget 1 min:
+            // it runs out during wave 2's `read`, so wave 3, the only one with the Sales manager, never begins.
+            val waved =
+                campaign(
+                    managers = 3,
+                    employees = 0,
+                    departments = listOf("IT", "HR", "Sales"),
+                    steps = listOf(step("read", managers()), step("approve", managers("Sales")), step("audit", managers("Finance"))),
+                    maxMinutes = 1,
+                ).inWavesOf(1)
+
+            val summary = f.runner().run(waved)
+
+            summary.outcome shouldBe RunOutcome.ABORTED
+            val budget = "time budget of 1 min exceeded"
+            f.system(ABORT_ACTION).single().detail shouldBe "run aborted: $budget; steps not run: wave 3: read, approve"
+            // Wave 1 began `approve` with nobody, but wave 3 would have given it to a04: the abort, not the scenario, cut it.
+            f.rollCall() shouldContainExactly
+                listOf(
+                    Triple("read", "a03", "run_aborted: $budget"),
+                    Triple("read", "a04", "wave_not_started: wave 3 of 3 never began; run aborted: $budget"),
+                    Triple("approve", "a04", "wave_not_started: wave 3 of 3 never began; run aborted: $budget"),
+                )
+            // `audit` matches nobody in any wave, began or not: still a step nobody ran.
+            f.system(UNCOVERED_ACTION).map { it.scenarioStep } shouldContainExactly listOf("audit")
+            f.evidence.assertionList
+                .filter { it.scenarioStep == "approve" }
+                .shouldBeEmpty()
+        }
+
+    @Test
     fun `a step nobody ran says which of its testers were out after failing earlier`() =
         runTest {
             val f = fixture()
