@@ -126,29 +126,16 @@ class SqliteIdentityRepository(
         requireFound(updated, runId, agentId)
     }
 
+    /** The same check the generator makes ([IdentityPlan.duplicates]), for any plan handed to [replaceAll]. */
     private fun requireUniqueWithinPlan(
         runId: RunId,
         plan: IdentityPlan,
     ) {
-        val problems =
-            duplicates("agent id", plan.identities.map { it.agentId.value }) +
-                duplicates("e-mail", plan.identities.map { it.email.lowercase() }) +
-                duplicates("display name", plan.identities.map { it.displayName })
+        val problems = plan.duplicates()
         if (problems.isNotEmpty()) {
             throw IdentityConflictException("Cannot store identities for run $runId: " + problems.joinToString("; "))
         }
     }
-
-    private fun duplicates(
-        label: String,
-        values: List<String>,
-    ): List<String> =
-        values
-            .groupingBy { it }
-            .eachCount()
-            .filterValues { it > 1 }
-            .keys
-            .map { "duplicate $label $it" }
 
     /** Must run inside a transaction; SQLite's NOCASE collation of the column makes the match case-insensitive. */
     private fun emailsOfOtherRuns(

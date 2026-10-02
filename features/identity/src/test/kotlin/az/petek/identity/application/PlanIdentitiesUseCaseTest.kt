@@ -13,17 +13,23 @@ package az.petek.identity.application
 
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
+import az.petek.core.model.RegistrationMode
+import az.petek.core.model.Role
+import az.petek.core.security.Secret
 import az.petek.identity.IdentityTestData.OTHER_RUN_TAG
 import az.petek.identity.IdentityTestData.RUN_TAG
 import az.petek.identity.IdentityTestData.generator
 import az.petek.identity.IdentityTestData.spec
+import az.petek.identity.domain.GivenAccount
 import az.petek.identity.domain.IdentityConflictException
 import az.petek.identity.domain.IdentityStatus
 import az.petek.identity.testing.InMemoryIdentityRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 
@@ -83,4 +89,44 @@ class PlanIdentitiesUseCaseTest {
 
             repository.findByRun(otherRun) shouldBe other.identities
         }
+
+    @Test
+    fun `planning ahead returns the testers on the owner's accounts but stores only the generated ones`() =
+        runTest {
+            val plan = useCase.planAhead(runId, RUN_TAG, loginSpec())
+
+            plan.identities shouldHaveSize 4
+            plan.identities.single { it.registration == RegistrationMode.LOGIN }.email shouldBe OWNER_EMAIL
+            val stored = repository.findByRun(runId)
+            stored shouldBe plan.identities.filter { it.registration != RegistrationMode.LOGIN }
+            stored.map { it.email } shouldNotContain OWNER_EMAIL
+            stored.map { it.password.reveal() } shouldNotContain OWNER_PASSWORD
+        }
+
+    @Test
+    fun `planning ahead a registry the run could not store fails before storing any of it`() =
+        runTest {
+            // The editor a01 is given the name of the owner's account that the reader a02 signs in with.
+            val error =
+                shouldThrow<IdentityConflictException> { useCase.planAhead(runId, RUN_TAG, loginSpec(names = listOf("Reader One"))) }
+
+            error.message.orEmpty() shouldContain "duplicate display name Reader One (a01, a02)"
+            repository.findByRun(runId).shouldBeEmpty()
+        }
+
+    /** Four testers without companies, given [names] first; one reader signs in with the owner's reader account. */
+    private fun loginSpec(names: List<String> = emptyList()) =
+        spec(testers = 4, names = names, admins = 0, managers = 0, employees = 0, departments = emptyList(), inviteCount = 0)
+            .copy(
+                companies = false,
+                ownRoles = linkedMapOf(checkNotNull(Role.fromKey("editor")) to 1, READER to 3),
+                gates = mapOf(RegistrationMode.SELF to 3, RegistrationMode.LOGIN to 1),
+                accounts = listOf(GivenAccount(READER, OWNER_EMAIL, Secret(OWNER_PASSWORD), "Reader One")),
+            )
+
+    private companion object {
+        val READER = checkNotNull(Role.fromKey("reader"))
+        const val OWNER_EMAIL = "owner-reader@example.com"
+        const val OWNER_PASSWORD = "given-password"
+    }
 }

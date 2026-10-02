@@ -34,6 +34,8 @@ import kotlin.random.Random
  *   employees: the employees of each department are shuffled, departments are interleaved and the first ones are
  *   invited, the rest join by company code, so the employees of every department get a mix when both their
  *   invitations and the company codes reach the number of departments. Company-code identities are always employees.
+ * - Sites without companies: a `login` tester keeps the name and e-mail of the owner's account it signs in with; a
+ *   registry in which another tester has the same one cannot be built ([IdentityPlan.duplicates]).
  *
  * Names, roles, departments and registration modes depend only on the spec (its seed), so every run of a campaign
  * tests the same people. E-mails, passwords and phones also depend on the run tag, so concurrent or leftover runs
@@ -51,7 +53,15 @@ class DefaultIdentityRegistryGenerator(
         runTag: RunTag,
     ): IdentityPlan {
         val valid = validator.validate(spec)
-        if (!spec.companies) return withoutCompanies(spec, valid, runTag)
+        val plan = if (spec.companies) withCompanies(spec, valid, runTag) else withoutCompanies(spec, valid, runTag)
+        return plan.also(::requireUnique)
+    }
+
+    private fun withCompanies(
+        spec: IdentitySpec,
+        valid: IdentitySpecValidator.Valid,
+        runTag: RunTag,
+    ): IdentityPlan {
         val seats = seats(spec, valid.departments)
         val names = nameAllocator.allocate(valid.names, spec.testers, spec.seed)
         val registrations = registrationModes(seats, valid.departments, spec)
@@ -121,6 +131,23 @@ class DefaultIdentityRegistryGenerator(
                 )
             }
         return IdentityPlan(runTag, identities)
+    }
+
+    /**
+     * The names and e-mails Pətək invents never repeat, but a `login` tester keeps those of the owner's account it signs
+     * in with, which another tester may have too: a registry no run could store ([IdentityPlan.duplicates]).
+     */
+    private fun requireUnique(plan: IdentityPlan) {
+        val problems = plan.duplicates()
+        if (problems.isEmpty()) return
+        val hint =
+            if (plan.identities.none { it.registration == RegistrationMode.LOGIN }) {
+                ""
+            } else {
+                "; testers who sign in with the owner's accounts keep the accounts' names and e-mails, so give the other " +
+                    "testers other names (campaign.names) or the accounts other ones (the target profile or the panel)"
+            }
+        throw IdentityConflictException("${NameAllocator.CANNOT_BUILD} " + problems.joinToString("; ") + hint)
     }
 
     private fun seats(
