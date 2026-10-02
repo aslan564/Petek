@@ -29,7 +29,7 @@ enum class Shelf {
         fun of(finding: FindingRecord): Shelf =
             when (finding.findingClass) {
                 FindingClass.BACKEND, FindingClass.DELIVERY_UI, FindingClass.SITE_CHECK -> SITE_BUG
-                FindingClass.AGENT_FAILURE -> TOOL_GAP
+                FindingClass.AGENT_FAILURE, FindingClass.INCONCLUSIVE -> TOOL_GAP
                 FindingClass.INVESTIGATE, FindingClass.FLAKY -> INVESTIGATE
             }
     }

@@ -96,6 +96,11 @@ data class ExplorationRequest(
     val budget: ExplorationBudget = ExplorationBudget(),
     val phases: Set<ExplorationPhase> = setOf(ExplorationPhase.ANONYMOUS, ExplorationPhase.ROLE_BASED),
     val allowWrites: Boolean = false,
+    /**
+     * The model this exploration goes on from (Faza 18: the explorer goes on while a run goes). Its pages are known: they
+     * are opened for their links but not asked about again, and the page budget counts only pages new to it.
+     */
+    val seed: SiteModel? = null,
 ) {
     init {
         val scheme = target.scheme?.lowercase()
@@ -104,6 +109,7 @@ data class ExplorationRequest(
         }
         require(target.rawUserInfo == null) { "The exploration target must not contain credentials" }
         require(phases.isNotEmpty()) { "An exploration needs at least one phase" }
+        require(seed == null || SiteOrigin.of(seed.target) == SiteOrigin.of(target)) { "A seed model must be of the same site" }
         require((instructions?.length ?: 0) <= MAX_INSTRUCTION_CHARS) {
             "Instructions must be at most $MAX_INSTRUCTION_CHARS characters"
         }

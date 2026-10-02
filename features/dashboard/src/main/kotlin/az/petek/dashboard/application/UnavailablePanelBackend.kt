@@ -14,6 +14,7 @@ package az.petek.dashboard.application
 import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.RunId
 import az.petek.dashboard.domain.CapacityView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.ExplorationView
 import az.petek.dashboard.domain.FindingView
@@ -29,6 +30,7 @@ import az.petek.dashboard.domain.ScenarioView
 import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.dashboard.domain.StabilityView
 import az.petek.dashboard.domain.TeardownView
+import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TriageView
 import az.petek.evidence.domain.ArtifactRecord
 import kotlinx.coroutines.flow.Flow
@@ -94,9 +96,19 @@ class UnavailablePanelBackend(
 
     override suspend fun reportDirectory(runId: RunId): Path? = null
 
+    override suspend fun reportPdf(runId: RunId): Path? = null
+
+    override suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+        visual: String?,
+    ): ComparisonView = unavailable()
+
     override suspend fun findings(runId: RunId): List<FindingView> = emptyList()
 
     override suspend fun teardown(runId: RunId): TeardownView = unavailable()
+
+    override suspend fun startTest(instructions: PanelInstructions): TestFlowView = unavailable()
 
     private fun unavailable(): Nothing = throw PanelUnavailableException(reason)
 

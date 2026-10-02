@@ -14,6 +14,7 @@ package az.petek.reporting.infrastructure
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
 import az.petek.evidence.domain.RunResult
+import az.petek.reporting.application.ReportLayout
 import az.petek.reporting.domain.LatencyStats
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportWriter
@@ -69,8 +70,14 @@ class HtmlReportWriter : ReportWriter {
         directory: Path,
     ): Path = ReportFormat.writeFile(directory, fileName, render(model))
 
-    /** The HTML document for [model]. */
-    fun render(model: ReportModel): String =
+    /**
+     * The HTML document for [model]; with [pdfLink] its header offers the report as a PDF (`report.pdf` beside it, which
+     * the panel prints when it is asked for and `petek report --pdf` writes).
+     */
+    fun render(
+        model: ReportModel,
+        pdfLink: Boolean = true,
+    ): String =
         buildString {
             append("<!DOCTYPE html>\n")
             appendHTML().html {
@@ -78,13 +85,15 @@ class HtmlReportWriter : ReportWriter {
                 head { head(model) }
                 body {
                     div("wrap") {
-                        pageHeader(model)
+                        pageHeader(model, pdfLink)
                         main {
                             summary(model)
                             findings(model)
                             steps(model)
                             latency(model)
+                            pageSpeed(model)
                             stability(model)
+                            rollCall(model)
                             failedAgents(model)
                             usage(model)
                         }
@@ -102,10 +111,21 @@ class HtmlReportWriter : ReportWriter {
         style { unsafe { raw(CSS) } }
     }
 
-    private fun FlowContent.pageHeader(model: ReportModel) {
+    private fun FlowContent.pageHeader(
+        model: ReportModel,
+        pdfLink: Boolean,
+    ) {
         val run = model.run
         header("page-header") {
             h1 { +ReportFormat.title(model) }
+            if (pdfLink) {
+                p("actions no-print") {
+                    a(href = ReportLayout.PDF) {
+                        attributes["download"] = "petek-${run.runId.value}.pdf"
+                        +ReportFormat.PDF_DOWNLOAD
+                    }
+                }
+            }
             ul("meta") {
                 li { +"Run: ${run.runId.value}" }
                 li { +"Hədəf: ${run.target}" }
@@ -135,15 +155,78 @@ class HtmlReportWriter : ReportWriter {
                     "${s.assertionsPassed} / ${s.assertionsFailed} / ${s.assertionsSkipped}",
                     null,
                     "keçdi / keçmədi / ötürüldü" +
-                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else ""),
+                        (if (s.assertionsNotApplicable > 0) " · ${s.assertionsNotApplicable} N/A (oracle yoxdur)" else "") +
+                        (if (s.assertionsInconclusive > 0) " · ${s.assertionsInconclusive} ${ReportFormat.INCONCLUSIVE}" else ""),
                 )
                 tile("Tapıntılar", model.findings.size.toString(), if (model.findings.isNotEmpty()) "bad" else "ok")
-                tile("Agentlər", s.agents.toString())
+                tile(
+                    "Testerlər",
+                    testers(model),
+                    if (model.rollCall.complete) null else "warn",
+                    ReportFormat.rollCallLine(model).takeIf {
+                        it.contains('·')
+                    },
+                )
                 tile("Müddət", ReportFormat.duration(s.durationMs))
                 tile("Tokenlər", ReportFormat.count(s.inputTokens + s.cacheReadTokens + s.outputTokens), null, tokenHint(model))
                 tile("Xərc", ReportFormat.cost(s.costUsd))
                 tile("Real-time", s.realtimeTransports.joinToString(", ").ifEmpty { NONE }, null, "aşkar edilən nəqliyyat")
             }
+            coverage(model)
+            model.rollCall.abortReason?.let { p("warn") { +"Run vaxtından əvvəl dayandı: $it" } }
+            model.rollCall.overCapacity?.let { p("warn") { +ReportFormat.overCapacity(it) } }
+        }
+    }
+
+    /** Acted / planned, or acted alone for a run recorded before rosters were kept. */
+    private fun testers(model: ReportModel): String {
+        val planned = model.rollCall.planned.size
+        return if (planned == 0) model.summary.agents.toString() else "${model.summary.agents} / $planned"
+    }
+
+    /** Every planned tester: who did not get to which step and why, which step nobody ran, who had nothing to do. */
+    private fun FlowContent.rollCall(model: ReportModel) {
+        val call = model.rollCall
+        section {
+            h2 { +ReportFormat.ROLL_CALL_TITLE }
+            p { +ReportFormat.rollCallLine(model) }
+            if (!call.recorded) p("warn") { +ReportFormat.ROLL_CALL_MISSING }
+            if (call.complete && call.idle.isEmpty()) return@section empty(ReportFormat.ALL_FINISHED)
+            if (call.uncovered.isNotEmpty()) {
+                h3 { +"Heç kimin icra etmədiyi addımlar (${call.uncovered.size})" }
+                dataTable(listOf("Addım", "Səbəb")) {
+                    call.uncovered.forEach { row ->
+                        tr {
+                            td { +row.scenarioStep }
+                            td { +row.reason }
+                        }
+                    }
+                }
+            }
+            if (call.notReached.isNotEmpty()) {
+                h3 { +"Çatılmayan addımlar (${call.notReached.size})" }
+                dataTable(listOf("Addım", "Testerlər", "Səbəb")) {
+                    call.notReached.groupBy { Triple(it.scenarioStep, it.key, it.reason) }.forEach { (key, rows) ->
+                        tr {
+                            td { +key.first }
+                            td { +rows.joinToString(", ") { it.agentId } }
+                            td { +"${ReportFormat.notReached(key.second)}: ${key.third}" }
+                        }
+                    }
+                }
+            }
+            if (call.idle.isNotEmpty()) {
+                p("muted") { +"Ssenarinin heç bir addım vermədiyi testerlər (${call.idle.size}): ${call.idle.joinToString(", ")}" }
+            }
+        }
+    }
+
+    /** What the scenario left unchecked, right in the summary: a passed run is never read as "everything was checked". */
+    private fun FlowContent.coverage(model: ReportModel) {
+        if (model.coverage.isEmpty()) return
+        div("coverage") {
+            p { +"${ReportFormat.COVERAGE_TITLE} (${model.coverage.size}):" }
+            ul { model.coverage.forEach { li { +it } } }
         }
     }
 
@@ -254,6 +337,28 @@ class HtmlReportWriter : ReportWriter {
         }
     }
 
+    /** How fast each page became usable per screen (`site_health`'s `perf`); shown only when the run timed pages. */
+    private fun FlowContent.pageSpeed(model: ReportModel) {
+        if (model.pageSpeed.isEmpty()) return
+        section {
+            h2 { +ReportFormat.PAGE_SPEED_TITLE }
+            p("muted") { +ReportFormat.PAGE_SPEED_NOTE }
+            dataTable(ReportFormat.PAGE_SPEED_COLUMNS, numeric = setOf(1, 2, 3, 4, 5, 6)) {
+                model.pageSpeed.forEach { row ->
+                    tr {
+                        td { +(row.page + (row.device?.let { " ($it)" } ?: "")) }
+                        td("num") { +row.testers.toString() }
+                        td("num") { +ReportFormat.latency(row.ttfbMs) }
+                        td("num") { +ReportFormat.latency(row.domContentLoadedMs) }
+                        td("num") { +ReportFormat.latency(row.loadMs) }
+                        td("num") { +ReportFormat.latency(row.largestPaintMs) }
+                        td("num") { +ReportFormat.shift(row.layoutShift) }
+                    }
+                }
+            }
+        }
+    }
+
     private fun TBODY.latencyRow(stats: LatencyStats) {
         tr {
             td { +stats.event }
@@ -282,6 +387,8 @@ class HtmlReportWriter : ReportWriter {
                             val tone =
                                 if (row.flaky) {
                                     "warn"
+                                } else if (row.unsteady) {
+                                    "info"
                                 } else if (row.runs > 0 && row.passed == row.runs) {
                                     "ok"
                                 } else {
@@ -298,7 +405,9 @@ class HtmlReportWriter : ReportWriter {
     private fun FlowContent.failedAgents(model: ReportModel) {
         section {
             h2 { +"Uğursuz agentlər (${model.failedAgents.size})" }
-            if (model.failedAgents.isEmpty()) return@section empty("Bütün agentlər addımlarını tamamladı.")
+            if (model.failedAgents.isEmpty()) {
+                return@section empty(if (model.rollCall.complete) "Bütün agentlər addımlarını tamamladı." else "Uğursuz agent yoxdur.")
+            }
             dataTable(listOf("Agent", "Ad", "Addım", "Səbəb")) {
                 model.failedAgents.forEach { row ->
                     tr {
@@ -401,10 +510,10 @@ class HtmlReportWriter : ReportWriter {
         when (value) {
             FindingClass.BACKEND, FindingClass.DELIVERY_UI, FindingClass.SITE_CHECK -> "bad"
             FindingClass.INVESTIGATE, FindingClass.FLAKY -> "warn"
-            FindingClass.AGENT_FAILURE -> "info"
+            FindingClass.AGENT_FAILURE, FindingClass.INCONCLUSIVE -> "info"
         }
 
-    private companion object {
+    internal companion object {
         /** Constant stylesheet: the only raw markup in the page. Never interpolate data into it. */
         val CSS =
             """
@@ -438,6 +547,9 @@ class HtmlReportWriter : ReportWriter {
             .tile .h { color: var(--muted); font-size: .78rem; }
             .tile.ok .v { color: var(--ok); }
             .tile.bad .v { color: var(--bad); }
+            .tile.warn .v { color: var(--warn); }
+            p.warn { color: var(--warn); }
+            .tile.muted .v { color: var(--muted); }
             .scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
             table { border-collapse: collapse; width: 100%; font-size: .9rem; }
             th, td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
@@ -468,14 +580,46 @@ class HtmlReportWriter : ReportWriter {
             .thumbs img { width: 180px; height: auto; display: block; border: 1px solid var(--border); border-radius: 6px; }
             .thumbs .file { display: inline-block; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
               font-size: .85rem; }
-            img.thumb { width: 96px; height: auto; display: block; border: 1px solid var(--border); border-radius: 4px; }
+            img.thumb { width: 96px; height: auto; max-height: 160px; object-fit: cover; object-position: top; display: block;
+              border: 1px solid var(--border); border-radius: 4px; }
             .muted, .empty { color: var(--muted); }
             .empty { font-style: italic; }
             details { margin-top: 10px; }
             details .scroll { margin-top: 8px; }
             summary { cursor: pointer; color: var(--muted); }
             footer { margin-top: 40px; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
-            @media (max-width: 720px) { .abc { grid-template-columns: 1fr; } }
+            .look { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--warn);
+              border-radius: 10px; padding: 12px 16px; margin: 0 0 12px; }
+            .look.bad { border-left-color: var(--bad); }
+            .look > summary { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+            .looks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 4px 0 12px; }
+            .looks figure { margin: 0; min-width: 0; }
+            .looks img { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 6px; }
+            .looks figcaption { color: var(--muted); font-size: .78rem; font-weight: 600; text-transform: uppercase; }
+            .cap { margin: 10px 0 0; font-size: .85rem; }
+            .prov { font-size: .8rem; overflow-wrap: anywhere; margin: 2px 0; }
+            pre.mask { background: var(--sunken); border-radius: 8px; padding: 8px 10px; overflow-x: auto; font-size: .85rem; }
+            .legend .item { display: inline-block; white-space: nowrap; margin-right: 14px; }
+            .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+            .sw.red { background: #e5484d; } .sw.orange { background: #f59e0b; } .sw.blue { background: #3b82f6; }
+            .sw.yellow { background: #eab308; } .sw.green { background: #22c55e; } .sw.violet { background: #d946ef; }
+            @media (max-width: 720px) { .abc, .looks { grid-template-columns: 1fr; } }
+            .actions { margin: 8px 0 10px; }
+            .actions a { display: inline-block; padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px;
+              background: var(--surface); text-decoration: none; font-size: .9rem; }
+            @media print {
+              :root {
+                color-scheme: light;
+                --bg: #ffffff; --surface: #ffffff; --sunken: #f0f0ec; --text: #1c1c1e; --muted: #55555c;
+                --border: #d8d8d2; --ok: #1a7f37; --ok-bg: #e5f3e9; --bad: #c0362c; --bad-bg: #fbe9e7;
+                --warn: #8a5a00; --warn-bg: #fdf1d6; --info: #0b5cad; --info-bg: #e6effa;
+              }
+              .wrap { max-width: none; padding: 0; }
+              .no-print { display: none; }
+              .scroll { overflow: visible; }
+              .finding, .tile, .source, tr, img { break-inside: avoid; }
+              h2, h3 { break-after: avoid; }
+            }
             """.trimIndent()
     }
 }

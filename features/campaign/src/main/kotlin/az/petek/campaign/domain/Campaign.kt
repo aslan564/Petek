@@ -26,8 +26,20 @@ data class Campaign(
     val sourceHash: String,
     /** Where settings, assertions and id sources were declared, for validation messages. Empty for code-built campaigns. */
     val sourceLines: SourceLines = SourceLines.NONE,
+    /**
+     * What the scenario leaves unchecked (`coverage:`, one line each): the roles its explorer never saw the site as, the
+     * test ideas it could not write and why. The run records them and its report's summary names them (the owner's
+     * decision of 2026-09-30), so a passed run is never read as "everything was checked".
+     */
+    val coverage: List<String> = emptyList(),
 ) {
     val allSteps: List<ScenarioStep> get() = setup + steps
+
+    companion object {
+        /** The most `coverage:` lines a campaign keeps, and the longest one. */
+        const val MAX_COVERAGE_LINES = 200
+        const val MAX_COVERAGE_CHARS = 600
+    }
 }
 
 data class CampaignSettings(
@@ -227,10 +239,16 @@ sealed interface StepAction {
     data object None : StepAction
 }
 
-/** `emits: announcement_created` or the long form with an explicit id source. */
+/**
+ * `emits: announcement_created`, or the long form with an explicit id source and the request that makes the change
+ * (`request: "POST /api/announcements"`). The request's answer, as the emitter's own page saw it, is when the change reached
+ * the target: its receivers' delivery latency is measured from there (Faza 24.10). Without it the action's first
+ * accepted mutating request counts, as an upper bound when it sent several.
+ */
 data class EmitSpec(
     val event: String,
     val idSource: IdSource?,
+    val request: RequestPattern? = null,
 )
 
 /** Where the harness reads the id of the object a step created (so the LLM is not the source of truth). */
@@ -312,9 +330,11 @@ sealed interface AssertionSpec {
     /**
      * Exactly one actor of a `parallel` step wins, judged by code from each actor's own requests (AGENTS.md rule 2),
      * never from what the agent says: an actor won when one of its requests matching [request] was accepted
-     * (status < 400) and none was refused (403, 409, 422). YAML `only_one_succeeds: true` checks every mutating
-     * request ([request] null); the map form `{request: "<METHOD> <path regex>", oracle: {path, field, equals}}`
-     * narrows the requests and adds a check of the target's final state through its test API ([oracle]).
+     * (status < 400) and none was refused (403, 409, 422). The YAML form is `{request: "<METHOD> <path regex>",
+     * oracle: {path, field, equals}}`; [oracle] adds a check of the target's final state through its test API. The
+     * validator requires [request] (Faza 24.5): with none, every mutating request would count, and an unrelated one
+     * (a notification marked read) would make a second winner. `only_one_succeeds: true` still reads, as [request] null,
+     * so the validator can name the problem with its line.
      */
     data class OnlyOneSucceeds(
         val request: RequestPattern? = null,

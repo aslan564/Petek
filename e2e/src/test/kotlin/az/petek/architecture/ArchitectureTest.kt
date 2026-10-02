@@ -66,6 +66,13 @@ class ArchitectureTest {
     }
 
     @Test
+    fun `the application layer never decodes or draws images`() {
+        applicationFiles.assertFalse(testName = "application decodes or draws images (docs/adr/0014)") { file ->
+            file.hasImport { import -> IMAGE_PREFIXES.any { import.name.startsWith(it) } }
+        }
+    }
+
+    @Test
     fun `infrastructure imports only its own feature's infrastructure, other features' through ports`() {
         infrastructureFiles.assertTrue { file ->
             val own = featureOf(file.packagee?.name.orEmpty())
@@ -124,6 +131,9 @@ class ArchitectureTest {
         /** Paid implementations live in a separate repository behind the core's ports (ADR-0011). */
         val PAID_EDITION_PREFIXES = listOf("az.petek.premium", "az.petek.enterprise", "az.petek.hosted", "az.petek.cloud")
 
+        /** Images are decoded and encoded behind the reporting feature's `RasterCodec` port, never in the inner layers. */
+        val IMAGE_PREFIXES = listOf("java.awt", "javax.imageio")
+
         val FRAMEWORK_PREFIXES =
             listOf(
                 "io.ktor",
@@ -134,7 +144,7 @@ class ArchitectureTest {
                 "java.sql",
                 "org.slf4j",
                 "ch.qos.logback",
-            )
+            ) + IMAGE_PREFIXES
         val INFRASTRUCTURE_IMPORT = Regex("""^az\.petek\.([a-z]+)\.infrastructure\.""")
         val LAYER_PACKAGE = Regex("""^az\.petek\.[a-z]+\.(domain|application|infrastructure)(\..+)?$""")
     }

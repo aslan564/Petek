@@ -28,7 +28,10 @@ class FakeTemplateRenderer : TemplateRenderer {
     ): String =
         placeholder.replace(template) { match ->
             val name = match.groupValues[1]
-            resolve(name, context) ?: throw TemplateException("Unknown or unresolved placeholder {$name}")
+            resolve(name, context) ?: throw TemplateException(
+                "Unknown or unresolved placeholder {$name}",
+                missingObject = name == "last_id" || (name.startsWith("event.") && name.endsWith(".id")),
+            )
         }
 
     override fun placeholders(template: String): Set<String> = placeholder.findAll(template).map { it.groupValues[1] }.toSet()

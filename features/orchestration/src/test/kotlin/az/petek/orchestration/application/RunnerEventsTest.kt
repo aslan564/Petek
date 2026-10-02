@@ -438,6 +438,36 @@ class RunnerEventsTest {
         }
 
     @Test
+    fun `an emitted object without an id makes last_id an error, never another step's object`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                ActionOutcome(ActionStatus.SUCCEEDED, "ok", objectId = if (call.scenarioStep == "ticket") "t42" else null)
+            }
+            val campaign =
+                campaign(
+                    steps =
+                        listOf(
+                            step("ticket", employees("IT", nth = 1), emits = "ticket_created"),
+                            step(
+                                "comment",
+                                employees("HR", nth = 1),
+                                emits = "comment_added",
+                                assertions = listOf(AssertionSpec.Oracle("/test/comments/{last_id}", null, null, null)),
+                            ),
+                        ),
+                )
+
+            f.runner().run(campaign)
+
+            // The comment's id was never read: its check says so instead of looking at the ticket t42.
+            val check = f.evidence.assertionList.single { it.scenarioStep == "comment" }
+            check.expected shouldBe "/test/comments/{last_id}"
+            check.verdict shouldBe Verdict.FAILED
+            check.note.orEmpty() shouldContain "{last_id}"
+        }
+
+    @Test
     fun `last_id prefers the actor's own emitted id over the awaited one`() =
         runTest {
             val f = fixture()

@@ -32,6 +32,8 @@ import az.petek.campaign.domain.Tenant
 import az.petek.core.ids.RunId
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
+import az.petek.explorer.domain.GateMaps
+import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.identity.domain.IdentityStatus
@@ -53,6 +55,11 @@ internal data class RoleSessionRequest(
     val allowWrites: Boolean,
     /** The owner's departments; the first one names the department of the session testers. */
     val departments: List<String>,
+    /**
+     * The site as the explorer's visitor walk saw it, when the sessions are opened after that walk (Faza 25.1): the
+     * way in follows it. Null: opened before any walk (the site's gate is not known then).
+     */
+    val seen: SiteModel? = null,
 )
 
 /**
@@ -64,6 +71,8 @@ internal class RoleSessions(
     val sessions: Map<String, BrowserSession>,
     val testCheck: TestTargetCheck,
     val note: String?,
+    /** The e-mail each role's session is signed in with, when known: the test API is asked about what it creates. */
+    val accounts: Map<String, String> = emptyMap(),
     private val release: suspend () -> Unit = {},
 ) {
     /** Closes the sessions and removes whatever was created for them. Call it once, also after a failure. */
@@ -119,9 +128,10 @@ internal fun interface SetupRuns {
 internal class TestCompanyRoleSessions(
     private val container: AppContainer,
     private val runs: SetupRuns,
-    private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain),
+    private val testApi: TestApiProbe = OracleTestApiProbe(container.oracle, container.config.mailDomain, container.oraclePaths),
     private val teardown: TeardownUseCase = container.teardown,
-    private val profiles: SetupProfileSource = CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator),
+    private val profiles: SetupProfileSource =
+        CatalogSetupProfiles(container.scenarioCatalog, container.scenarioValidator, container.config.target),
 ) : RoleSessionSource {
     override suspend fun open(
         request: RoleSessionRequest,
@@ -129,8 +139,9 @@ internal class TestCompanyRoleSessions(
         progress: (String) -> Unit,
     ): RoleSessions {
         refusal(request)?.let { return RoleSessions.none(it) }
+        withoutCompanies(request)?.let { return RoleSessions.none(it) }
         testApi.refusal()?.let { return RoleSessions.none("Rollarla gəzinti buraxıldı: $it") }
-        val profile = profiles.profile()
+        val profile = profiles.profile(request.target)
         val campaign = campaign(request, profile.profile)
         progress("Rollarla gəzinti üçün müvəqqəti test şirkəti yaradılır (admin, menecer, işçi); qeydiyyat axınları: ${profile.origin}…")
         val setup =
@@ -154,14 +165,15 @@ internal class TestCompanyRoleSessions(
     /**
      * The explorer's own account (`self_register`): one owner signs up through the site's registration flow, nothing
      * else is created. Its data is removed through the test API when the site has one; otherwise the account stays and
-     * the activity says so.
+     * the activity says so. On a site without companies the trial touch may write from this account alone (the owner's
+     * decision of 2026-09-30, [ExplorerAccountTestCheck]).
      */
     suspend fun registerOnly(
         request: RoleSessionRequest,
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
     ): RoleSessions {
-        val profile = profiles.profile()
+        val profile = profiles.profile(request.target)
         val companies = tenantOf(request) == Tenant.COMPANY
         val campaign = if (companies) campaign(request, profile.profile, ownerOnly = true) else selfSignUp(profile.profile)
         progress(
@@ -178,19 +190,24 @@ internal class TestCompanyRoleSessions(
                 return RoleSessions.none("Qeydiyyat alınmadı: ${e.message ?: e::class.simpleName}")
             } ?: return RoleSessions.none("Başqa run gedir; kəşfiyyatçı öz hesabını aça bilmədi.")
         return try {
-            sessionsOf(setup, request, sessions, progress)
+            sessionsOf(setup, request, sessions, progress, ownAccount = !companies)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { tearDown(setup.runId) }
             throw e
         }
     }
 
-    /** The logged-in sessions of [setup]'s testers; tears the company down itself unless it returns sessions. */
+    /**
+     * The logged-in sessions of [setup]'s testers; tears the company down itself unless it returns sessions. With
+     * [ownAccount] they are the explorer's own new account on a site without companies, which the trial touch may write
+     * from ([ExplorerAccountTestCheck]); otherwise the test API confirms the company as test data.
+     */
     private suspend fun sessionsOf(
         setup: SetupRun,
         request: RoleSessionRequest,
         sessions: BrowserSessionFactory,
         progress: (String) -> Unit,
+        ownAccount: Boolean = false,
     ): RoleSessions {
         val identities = container.identities.findByRun(setup.runId)
         val active =
@@ -227,10 +244,24 @@ internal class TestCompanyRoleSessions(
         }
         progress("Rol sessiyaları hazırdır: ${opened.keys.joinToString { ExplorerTexts.role(it) }} (run ${setup.runId}).")
         val owner = identities.firstOrNull { it.registration == RegistrationMode.OWNER }?.email
+        // Only an account the explorer signed up with itself, in this exploration: never a company's or an owner's.
+        val own = ownAccount && active.values.all { it.registration == RegistrationMode.SELF }
+        if (own) {
+            progress(
+                "Şirkətsiz sayt: sınaq toxunuşu yalnız kəşfiyyatçının bu kəşfiyyatda açdığı öz hesabından, " +
+                    "“Pətək sınaq” işarəli mətnlə yazır.",
+            )
+        }
         return RoleSessions(
             sessions = opened,
-            testCheck = OracleTestTargetCheck(container.oracle, container.config.target, owner),
+            testCheck =
+                if (own) {
+                    ExplorerAccountTestCheck(container.ownership::check, container.config.target, setup.runId)
+                } else {
+                    OracleTestTargetCheck(container.oracle, container.config.target, owner)
+                },
             note = null,
+            accounts = active.entries.filter { it.key.key in opened }.associate { (role, identity) -> role.key to identity.email },
         ) {
             withContext(NonCancellable) {
                 closeAll(opened.values)
@@ -264,14 +295,46 @@ internal class TestCompanyRoleSessions(
     }
 
     /**
-     * Whether the site has companies: its profile's `tenant`, else companies when the test API is there to confirm the
-     * test company (the contract shape), else none (Faza 13).
+     * Why no test company is made on this site (Faza 25.1): a test company only where the site has companies, as the
+     * owner says (the profile's `tenant`) or, without the owner's word, as the visitor's walk showed it (a form to join by
+     * invitation or company code, [GateMaps.joinPages]). A test API alone is no such sign: it is for oracle checks and
+     * teardown. Null when one may be made; also when no walk came first (nothing is known of the gate then).
+     */
+    private fun withoutCompanies(request: RoleSessionRequest): String? {
+        val owner =
+            container.config
+                .profileFor(request.target)
+                ?.spec
+                ?.tenant
+        val seen = request.seen
+        return when {
+            owner == Tenant.COMPANY -> null
+            owner == Tenant.NONE -> "hədəf profili saytı şirkətsiz sayır (tenant: none); test şirkəti yaradılmadı."
+            seen == null || GateMaps.joinPages(seen).isNotEmpty() -> null
+            else -> "saytda şirkətə qoşulma yolu (dəvət və ya şirkət kodu ilə forma) görünmədi; test şirkəti yaradılmadı."
+        }
+    }
+
+    /**
+     * Whether the explorer's own account opens a company: only when the owner said the site has companies (its
+     * profile's `tenant`). Before exploring nothing shows the site's gate, and a test API alone says nothing about it
+     * (Faza 25.1): otherwise the explorer signs up as a plain user.
      */
     private fun tenantOf(request: RoleSessionRequest): Tenant =
         container.config
             .profileFor(request.target)
             ?.spec
-            ?.tenant ?: if (container.oracle.isAvailable) Tenant.COMPANY else Tenant.NONE
+            ?.tenant ?: Tenant.NONE
+
+    /**
+     * [profile] as a setup of the explorer's own takes it: the site's scenario lends its flows and selectors, but the ids
+     * its main steps' events carry are not the setup's, which would refer to events nobody sends; only those of [steps]
+     * stay.
+     */
+    private fun forSetup(
+        profile: TargetProfile,
+        steps: List<ScenarioStep>,
+    ): TargetProfile = profile.copy(idSources = profile.idSources.filterKeys { event -> steps.any { it.emits?.event == event } })
 
     /** A site without companies: the explorer alone signs up through the profile's `sign_up` flow, as role `explorer`. */
     private fun selfSignUp(profile: TargetProfile): Campaign {
@@ -292,7 +355,7 @@ internal class TestCompanyRoleSessions(
                         name = NAME,
                         tenant = Tenant.NONE,
                     ),
-                target = profile,
+                target = forSetup(profile, emptyList()),
                 setup =
                     listOf(
                         ScenarioStep(
@@ -398,7 +461,7 @@ internal class TestCompanyRoleSessions(
                         onFail = OnFail.ABORT,
                         name = NAME,
                     ),
-                target = profile,
+                target = forSetup(profile, steps),
                 setup = steps,
                 steps = emptyList(),
                 sourceHash = SOURCE_HASH,

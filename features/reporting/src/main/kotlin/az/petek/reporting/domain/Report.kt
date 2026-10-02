@@ -16,6 +16,7 @@ import az.petek.core.ids.WorkspaceId
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
@@ -95,13 +96,70 @@ data class LatencyStats(
     val perReceiverMs: Map<String, Long?>,
 )
 
+/**
+ * How one scenario step behaved across the runs of a `--repeat` group, with who each run that did not pass it was on
+ * (Faza 24.13). A run can also leave a step undecided (skipped, not reached, only inconclusive checks), so the causes
+ * need not add up to the runs that did not pass.
+ */
 data class StabilityRow(
     val scenarioStep: String,
     val runs: Int,
     val passed: Int,
+    /** Runs in which the site failed the step: a check it failed, a defect code saw. */
+    val siteFailures: Int = runs - passed,
+    /** Runs in which the step failed because a tester's agent got lost (and only that). */
+    val agentFailures: Int = 0,
+    /** Runs in which the step failed because of the run's surroundings (inbox, shared IP, AI provider, browser). */
+    val environmentFailures: Int = 0,
 ) {
     val passRate: Double get() = if (runs == 0) 0.0 else passed.toDouble() / runs
-    val flaky: Boolean get() = passed in 1 until runs
+
+    /** Passed in some runs and the site failed it in others: the site itself is flaky here. */
+    val flaky: Boolean get() = passed > 0 && siteFailures > 0
+
+    /**
+     * Passed in some runs and not in others, but never because of the site: the testers' agents, the surroundings or a
+     * run that did not check it (skipped, not reached, inconclusive).
+     */
+    val unsteady: Boolean get() = passed in 1 until runs && siteFailures == 0
+
+    /** Runs that neither passed nor failed the step: it was skipped, not reached, or its checks could not decide. */
+    val undecided: Int get() = (runs - passed - siteFailures - agentFailures - environmentFailures).coerceAtLeast(0)
+}
+
+/**
+ * One page on one screen as the run's testers timed it ([PageTimingRecord]): how many timed it
+ * and the median of each measure; null where no tester's browser reported it.
+ */
+data class PageSpeedRow(
+    val page: String,
+    val device: String?,
+    val testers: Int,
+    val ttfbMs: Long?,
+    val domContentLoadedMs: Long?,
+    val loadMs: Long?,
+    val largestPaintMs: Long?,
+    val layoutShift: Double?,
+) {
+    companion object {
+        /** Rows in the order the pages were first timed, each screen of a page together. */
+        fun of(records: List<PageTimingRecord>): List<PageSpeedRow> =
+            records.groupBy { it.page to it.device }.map { (key, own) ->
+                fun median(values: List<Long>) = LatencyStatistics.nearestRank(values, MEDIAN)
+                PageSpeedRow(
+                    page = key.first,
+                    device = key.second,
+                    testers = own.map { it.agentId }.toSet().size,
+                    ttfbMs = median(own.mapNotNull { it.ttfbMs }),
+                    domContentLoadedMs = median(own.mapNotNull { it.domContentLoadedMs }),
+                    loadMs = median(own.mapNotNull { it.loadMs }),
+                    largestPaintMs = median(own.mapNotNull { it.largestPaintMs }),
+                    layoutShift = own.mapNotNull { it.layoutShift }.sorted().let { shifts -> shifts.getOrNull((shifts.size - 1) / 2) },
+                )
+            }
+
+        private const val MEDIAN = 50
+    }
 }
 
 data class FailedAgentRow(
@@ -127,6 +185,55 @@ data class ReportSummary(
     val cacheReadTokens: Long = 0,
     /** Oracle checks on a target without a test API: "N/A (no oracle)", a supported mode, not a skip. */
     val assertionsNotApplicable: Int = 0,
+    /** Checks whose evidence could not decide them (Faza 24.12): neither passed nor a defect of the site. */
+    val assertionsInconclusive: Int = 0,
+)
+
+/**
+ * The run's roll call: who the run planned (its `roster` record), who acted, and every planned tester × step that has
+ * no result of its own and why (the runner's `not_reached` records), every step nobody ran (`uncovered`), why the run
+ * stopped early (`abort`) and whether it ran more testers at once than this machine is advised for (`capacity`). The
+ * report says "every tester finished its steps" only when [complete]: nobody is left out silently, whatever N is. A run
+ * whose roll call was never closed (killed before its end, still going, or recorded before roll calls) is never
+ * [complete]: its report says the roll call is missing instead ([recorded]).
+ */
+data class RollCall(
+    /** Testers the run planned, in order; empty for a run recorded before rosters were kept. */
+    val planned: List<String> = emptyList(),
+    /** Testers with at least one action of their own (a step, a check, an AI call). */
+    val acted: List<String> = emptyList(),
+    val notReached: List<NotReachedRow> = emptyList(),
+    val uncovered: List<UncoveredRow> = emptyList(),
+    /** Why the run stopped before its end, as recorded; null when it ran to its end. */
+    val abortReason: String? = null,
+    /** The machine's capacity record when the run was over it (`over_capacity: ...`); null otherwise. */
+    val overCapacity: String? = null,
+    /** The run concluded with its roster and a closed roll call (`roll_call`), so what is missing is known. */
+    val recorded: Boolean = false,
+) {
+    /** Planned testers that never acted and have no step left open: the scenario gave them nothing to do. */
+    val idle: List<String> get() = if (recorded) planned - acted.toSet() - notReached.map { it.agentId }.toSet() else emptyList()
+
+    /** Planned testers with work and no step they did not get to; null when the roll call was not recorded. */
+    val finished: Int? get() = if (recorded) (planned.toSet() - notReached.map { it.agentId }.toSet() - idle.toSet()).size else null
+
+    /** Every planned tester got to every step it was given, every step had a tester, and the run was not stopped. */
+    val complete: Boolean get() = recorded && notReached.isEmpty() && uncovered.isEmpty() && abortReason == null
+}
+
+/** A planned tester × step with no result of its own: [key] is `run_aborted`, `wave_not_started`, `failed_earlier`, `never_reached`. */
+data class NotReachedRow(
+    val agentId: String,
+    val name: String,
+    val scenarioStep: String,
+    val key: String,
+    val reason: String,
+)
+
+/** A scenario step no tester ran in any pass of the run, and why. */
+data class UncoveredRow(
+    val scenarioStep: String,
+    val reason: String,
 )
 
 data class ReportModel(
@@ -143,6 +250,12 @@ data class ReportModel(
     val artifactLinks: Map<String, String>,
     /** Token and cost accounting per agent, as recorded by the LLM metering (never estimated). */
     val usage: List<UsageRecord> = emptyList(),
+    /** What the run's scenario left unchecked (its `coverage:` lines), which the summary names (2026-09-30). */
+    val coverage: List<String> = emptyList(),
+    /** How fast each page became usable, per screen, as the testers' browsers timed it (`site_health`'s `perf`). */
+    val pageSpeed: List<PageSpeedRow> = emptyList(),
+    /** Every planned tester set against who acted and who did not get to which step, and why ([RollCall]). */
+    val rollCall: RollCall = RollCall(),
 ) {
     /** The workspace the run belongs to (ADR-0011); `local` on the owner's machine. */
     val workspaceId: WorkspaceId get() = run.workspaceId
@@ -165,6 +278,17 @@ fun interface ReportStore {
 
         const val LOCAL_ENTRY = "index.html"
     }
+}
+
+/**
+ * Prints a report's self-contained HTML page ([html], every screenshot inside it) to a PDF file ([pdf]); the app gives
+ * the browser's own print (the owner's decision of 2026-09-30).
+ */
+fun interface ReportPdfPrinter {
+    suspend fun print(
+        html: Path,
+        pdf: Path,
+    )
 }
 
 /** Writes one report format into [directory] and returns the written file. */

@@ -13,6 +13,8 @@ package az.petek.app.di
 
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.browser.domain.BrowserEngine
+import az.petek.browser.domain.HtmlPdfPrinter
+import az.petek.capacity.domain.HostResourceProbe
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.time.HarnessClock
 import az.petek.evidence.domain.EvidenceRecorder
@@ -52,4 +54,11 @@ data class AppOverrides(
     val runsDecorator: ((RunRepository) -> RunRepository)? = null,
     /** Wraps the identity repository, e.g. so the web panel knows the testers of a run. */
     val identitiesDecorator: ((IdentityRepository) -> IdentityRepository)? = null,
+    /** Prints the report as a PDF; tests that must not launch Chromium give one that only writes a file. */
+    val pdfPrinter: HtmlPdfPrinter? = null,
+    /**
+     * This machine's memory and cores, for the capacity every run records next to its size; tests give a fixed machine
+     * so the record does not depend on where they run.
+     */
+    val hostResources: HostResourceProbe? = null,
 )

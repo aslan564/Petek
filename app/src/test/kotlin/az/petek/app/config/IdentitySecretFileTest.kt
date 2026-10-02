@@ -50,6 +50,18 @@ class IdentitySecretFileTest {
     }
 
     @Test
+    fun `a new PETEK_HOME keeps the secret an earlier setup made, so earlier runs' passwords stay the same`() {
+        val earlier = IdentitySecretFile(directory).secret()
+        val moved = home.resolve("petek-home")
+
+        IdentitySecretFile(moved, earlier = directory).secret() shouldBe earlier
+        // Nothing earlier: the new home gets its own.
+        val fresh = IdentitySecretFile(home.resolve("other-home"), earlier = home.resolve("nowhere"))
+        (fresh.secret() == earlier) shouldBe false
+        Files.exists(fresh.path) shouldBe true
+    }
+
+    @Test
     fun `two machines get different secrets`() {
         IdentitySecretFile(home.resolve("one")).secret().reveal() shouldBe IdentitySecretFile(home.resolve("one")).secret().reveal()
         (IdentitySecretFile(home.resolve("one")).secret() == IdentitySecretFile(home.resolve("two")).secret()) shouldBe false

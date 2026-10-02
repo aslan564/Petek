@@ -32,6 +32,7 @@ import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.StepPhase
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.Tenant
+import az.petek.campaign.domain.VisualProfile
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.campaign.domain.expandApiPrefix
 import az.petek.core.model.Role
@@ -84,7 +85,22 @@ internal class CampaignYamlMapper(
             val target = top.map("target_profile", TARGET_PROFILE_KEYS)?.let(::targetProfile) ?: TargetProfile.DEFAULT
             val setup = steps(top, "setup", StepPhase.SETUP)
             val steps = steps(top, "steps", StepPhase.MAIN)
-            return Campaign(settings ?: return null, target, setup, steps, sourceHash)
+            val coverage = coverage(top)
+            return Campaign(settings ?: return null, target, setup, steps, sourceHash, coverage = coverage)
+        }
+
+        /** `coverage:`: plain lines naming what the scenario leaves unchecked. */
+        private fun coverage(top: YamlFields): List<String> {
+            val lines = top.textList(COVERAGE) ?: return emptyList()
+            if (lines.size > Campaign.MAX_COVERAGE_LINES) {
+                reader.problem(COVERAGE, "'$COVERAGE' has ${lines.size} lines; at most ${Campaign.MAX_COVERAGE_LINES}")
+            }
+            lines.forEachIndexed { index, line ->
+                if (line.isBlank() || line.length > Campaign.MAX_COVERAGE_CHARS || '\n' in line) {
+                    reader.problem("$COVERAGE[$index]", "'$COVERAGE' lines are 1 to ${Campaign.MAX_COVERAGE_CHARS} characters on one line")
+                }
+            }
+            return lines.map { it.trim() }
         }
 
         // ---- campaign ----
@@ -241,6 +257,9 @@ internal class CampaignYamlMapper(
                 localStorage = textMap(fields, "local_storage"),
                 dismiss = fields.textList("dismiss").orEmpty(),
                 apiPrefix = fields.text("api_prefix")?.trim() ?: TargetProfile.DEFAULT_API_PREFIX,
+                visual =
+                    fields.map("visual", VISUAL_KEYS)?.let { visual -> VisualProfile(mask = visual.textList("mask").orEmpty()) }
+                        ?: VisualProfile.NONE,
             )
 
         private fun textMap(
@@ -442,7 +461,21 @@ internal class CampaignYamlMapper(
             val event = fields.text("event", required = true)
             val idSource = fields["id_from"]?.let { idSource(it, fields.pathOf("id_from")) }
             if (fields.has("id_from") && idSource == null) return null
-            return event?.let { EmitSpec(it, idSource) }
+            val request = requestPattern(fields, "POST .*/announcements")
+            if (fields.declares("request") && request == null) return null
+            return event?.let { EmitSpec(it, idSource, request) }
+        }
+
+        /** `request: "<METHOD> <path regex>"` of [fields], or null (reported when it is given but malformed). */
+        private fun requestPattern(
+            fields: YamlFields,
+            example: String,
+        ): RequestPattern? {
+            val requestPath = fields.pathOf("request")
+            return fields.valued("request")?.let { reader.text(it, requestPath) }?.let { raw ->
+                RequestPattern.parse(raw)
+                    ?: reader.problem(requestPath, "'$requestPath' must be \"<METHOD> <path regex>\", e.g. \"$example\", was '$raw'")
+            }
         }
 
         private fun waitFor(
@@ -581,15 +614,7 @@ internal class CampaignYamlMapper(
             path: String,
         ): AssertionSpec? {
             val fields = reader.map(node, path, ONLY_ONE_SUCCEEDS_KEYS) ?: return null
-            val requestPath = fields.pathOf("request")
-            val request =
-                fields.valued("request")?.let { reader.text(it, requestPath) }?.let { raw ->
-                    RequestPattern.parse(raw)
-                        ?: reader.problem(
-                            requestPath,
-                            "'$requestPath' must be \"<METHOD> <path regex>\", e.g. \"POST .+/approve\", was '$raw'",
-                        )
-                }
+            val request = requestPattern(fields, "POST .+/approve")
             val oracle =
                 fields.valued("oracle")?.let { reader.map(it, fields.pathOf("oracle"), RACE_ORACLE_KEYS) }?.let { oracle ->
                     oracle.text("path", required = true)?.let { OracleCondition(it, oracle.text("field"), oracle.text("equals")) }
@@ -603,7 +628,8 @@ internal class CampaignYamlMapper(
         val DEFAULT_WAIT_TIMEOUT = 30.seconds
         val DEFAULT_VISIBLE_WITHIN = 5.seconds
 
-        val ROOT_KEYS = linkedSetOf("campaign", "target_profile", "setup", "steps")
+        const val COVERAGE = "coverage"
+        val ROOT_KEYS = linkedSetOf("campaign", "target_profile", "setup", "steps", COVERAGE)
         val SETTINGS_KEYS =
             linkedSetOf(
                 "name",
@@ -625,13 +651,15 @@ internal class CampaignYamlMapper(
         val REGISTRATION_KEYS = linkedSetOf("invite", "company_code")
         val BUDGET_KEYS = linkedSetOf("max_steps_per_agent", "max_minutes")
         val PACING_KEYS = linkedSetOf("start_stagger_ms", "max_parallel_actors")
-        val TARGET_PROFILE_KEYS = linkedSetOf("paths", "selectors", "id_sources", "flows", "local_storage", "dismiss", "api_prefix")
+        val TARGET_PROFILE_KEYS =
+            linkedSetOf("paths", "selectors", "id_sources", "flows", "local_storage", "dismiss", "api_prefix", "visual")
+        val VISUAL_KEYS = linkedSetOf("mask")
         val ID_SOURCE_KEYS = linkedSetOf("url_regex", "oracle", "dom", "agent")
         val ORACLE_ID_KEYS = linkedSetOf("path", "field")
         val DOM_ID_KEYS = linkedSetOf("selector", "attribute")
         val STEP_KEYS = linkedSetOf("id", "actor", "do", "run", "emits", "wait_for", "parallel", "on_fail", "assert")
         val RUN_KEYS = linkedSetOf("function", "args")
-        val EMITS_KEYS = linkedSetOf("event", "id_from")
+        val EMITS_KEYS = linkedSetOf("event", "id_from", "request")
         val WAIT_FOR_KEYS = linkedSetOf("event", "timeout_s")
         val ASSERTION_TYPES =
             listOf("visible_text", "not_visible", "oracle", "http_status", "count", "latency_max", "only_one_succeeds")

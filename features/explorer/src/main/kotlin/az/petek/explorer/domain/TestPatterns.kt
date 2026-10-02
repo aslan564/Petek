@@ -76,6 +76,12 @@ enum class TestPattern(
 
     /** The links to other sites answer. */
     OUTBOUND_LINKS(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** Every language version of a page (`hreflang`) answers, says its language and names the page back. */
+    LANGUAGE_MIRRORS(EvidenceTier.UI_NETWORK, siteWide = true),
+
+    /** A list everyone sees (the visitor saw it list objects) is not empty for the testers. */
+    EMPTY_LISTS(EvidenceTier.UI_NETWORK, siteWide = true),
 }
 
 /**
@@ -119,11 +125,17 @@ class TestPatternLibrary {
 
     /**
      * The blind checks every site gets, even one the explorer could not see into ([TestPattern.siteWide]); the expired
-     * session check only where people sign in, since a site without accounts has no session to expire.
+     * session check only where people sign in, since a site without accounts has no session to expire, and the empty
+     * list check only where the visitor saw a list.
      */
     private fun siteWide(model: SiteModel): List<TestIdea> {
         val pages = model.pages.count { UrlPatterns.ID !in it.urlPattern }.coerceAtLeast(1)
-        val patterns = TestPattern.entries.filter { it.siteWide && (it != TestPattern.SESSION_EXPIRY || hasSignIn(model)) }
+        val patterns =
+            TestPattern.entries.filter {
+                it.siteWide &&
+                    (it != TestPattern.SESSION_EXPIRY || hasSignIn(model)) &&
+                    (it != TestPattern.EMPTY_LISTS || model.pages.any { page -> page.lists.isNotEmpty() })
+            }
         return patterns.map { pattern ->
             TestIdea(
                 pattern = pattern,
@@ -214,7 +226,11 @@ class TestPatternLibrary {
                 }
 
                 TestPattern.DIRECT_URL -> {
-                    "what it creates must not open for another tester who types its address"
+                    if (Drafts.saves(action)) {
+                        "a draft must not open for anyone else who types its address, even where published ones are public"
+                    } else {
+                        "what it creates must not open for another tester who types its address"
+                    }
                 }
 
                 else -> {
@@ -252,6 +268,8 @@ class TestPatternLibrary {
                 TestPattern.OUTBOUND_LINKS to 25,
                 TestPattern.PAGE_META to 20,
                 TestPattern.IMAGE_ALT to 15,
+                TestPattern.LANGUAGE_MIRRORS to 20,
+                TestPattern.EMPTY_LISTS to 30,
             )
 
         private val SITE_RATIONALE: Map<TestPattern, String> =
@@ -267,6 +285,8 @@ class TestPatternLibrary {
                 TestPattern.IMAGE_ALT to "every image needs an alt text for screen readers",
                 TestPattern.PAGE_META to "every page needs a title, one main heading, a description and a language",
                 TestPattern.OUTBOUND_LINKS to "links to other sites must answer",
+                TestPattern.LANGUAGE_MIRRORS to "every language version must answer, say its language and name the page back",
+                TestPattern.EMPTY_LISTS to "a list the visitor saw must not be empty for the testers",
             )
 
         private val NO_IDEAS = setOf(ActionKind.NAVIGATE, ActionKind.OTHER)

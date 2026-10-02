@@ -27,12 +27,14 @@ import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.domain.ValueTarget
+import az.petek.campaign.domain.apiOriginInUse
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.milliseconds
@@ -242,6 +244,37 @@ class FlowYamlReadingTest {
         target.flow(FlowNames.LOGIN) shouldBe Flow(listOf(FlowStep.Click("#go")))
         target.flow(FlowNames.JOIN_BY_CODE) shouldBe TargetProfile.DEFAULT_FLOWS[FlowNames.JOIN_BY_CODE]
         target.flows.keys shouldBe FlowNames.ALL
+    }
+
+    @Test
+    fun `with the API on its own host, api placeholders become its full address and the campaign names that origin`() {
+        val campaign =
+            load(
+                """
+                campaign:
+                  target: https://app.portal.test
+                  testers: 3
+                  seed: 7
+                  roles: {admin: 1, manager: 0, employee: 2}
+                  departments: [IT]
+                  budget: {max_steps_per_agent: 10, max_minutes: 5}
+                target_profile:
+                  api_prefix: https://api.portal.test/v1
+                steps:
+                  - actor: admin
+                    do: "Look at the home page"
+                    assert:
+                      - http_status: {path: "{api}/leave-requests/1/approve", method: POST, equals: 403}
+                      - http_status: {path: "/admin", method: GET, equals: 403}
+                """,
+            )
+
+        campaign.steps
+            .single()
+            .assertions
+            .first() shouldBe
+            AssertionSpec.HttpStatus("https://api.portal.test/v1/leave-requests/1/approve", "POST", 403)
+        campaign.apiOriginInUse shouldBe URI("https://api.portal.test")
     }
 
     @Test

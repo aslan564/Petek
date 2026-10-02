@@ -11,6 +11,8 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.MailSource
+import az.petek.app.config.ResolvedAccount
 import az.petek.app.config.ResolvedTarget
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.panel.explorer.RoleSessionSource
@@ -25,6 +27,7 @@ import az.petek.app.testing.PanelWaits.exploration
 import az.petek.campaign.domain.TargetMail
 import az.petek.campaign.domain.TargetSpec
 import az.petek.core.ids.RunId
+import az.petek.core.security.Secret
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.dashboard.domain.ExplorationStatus
 import az.petek.dashboard.domain.PanelConflictException
@@ -42,7 +45,9 @@ import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
+import az.petek.ownership.domain.OwnershipMethod
 import az.petek.ownership.testing.OwnershipTestKit
+import az.petek.ownership.testing.ScriptedOwnershipProbe
 import az.petek.scenarios.domain.ScenarioVersionId
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
@@ -53,6 +58,7 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -139,6 +145,144 @@ class PanelRunsTest {
         }
 
     @Test
+    fun `what the run's make-up leaves undone comes back with its start and goes to the board`() =
+        runBlocking<Unit> {
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = PanelWaits.site(),
+                    scenarios = mapOf("tiny.yaml" to tinyCampaign()),
+                    mailSource = MailSource.MANUAL,
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario, testers = 4))
+
+            // Told before the run, to the page and to a host AI over MCP alike; never blocking.
+            started.warnings.single() shouldContain "PETEK_MAIL_SOURCE=manual: 4 testerin"
+            val board = panel.ended(started.runId)
+            board.run.outcome shouldBe RunOutcome.PASSED
+            board.timeline.map { it.text }.filter { "Diqqət" in it } shouldContainExactly listOf("Diqqət: ${started.warnings.single()}")
+        }
+
+    /**
+     * A site without companies whose first writer signs in with the owner's account, in waves of two: each wave holds
+     * one writer, so the second writer of a wave never exists, and the IT writer's note is written in its own wave only.
+     */
+    private val loginInWaves =
+        """
+        campaign:
+          name: notes-login
+          tenant: none
+          testers: 4
+          seed: 12
+          wave_size: 2
+          roles: {writer: 2, reader: 2}
+          departments: [IT, HR]
+          registration: {self: 3, login: 1}
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        steps:
+          - id: it_note
+            actor: writer[IT]
+            do: "Write a note"
+            emits: noted
+          - id: second_writer
+            actor: writer[n=2]
+            do: "Open the note as the second writer"
+        """.trimIndent() + "\n"
+
+    private fun ownerAccounts(site: URI): ResolvedTarget =
+        ResolvedTarget(
+            TargetSpec("notes", site),
+            testToken = null,
+            accounts = listOf(ResolvedAccount("writer", "writer@owner.example", Secret("owner-writer-pass"), null, "Sahibin Yazarı")),
+        )
+
+    @Test
+    fun `a run whose testers sign in with the owner's accounts is told, wave by wave, which steps start with nobody`() =
+        runBlocking<Unit> {
+            val site = PanelWaits.site()
+            val panel =
+                PanelHarness(dir, site = site, scenarios = mapOf("login.yaml" to loginInWaves), targets = listOf(ownerAccounts(site.base)))
+                    .also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            // Planned ahead with the owner's account, as the run plans them: without it the registry of a `login`
+            // tester cannot be built, and the panel said nothing at all.
+            started.warnings.filter { "heç kimə uyğun gəlmir" in it } shouldContainExactly
+                listOf(
+                    "dalğa ölçüsü 2 ilə 'writer[IT]' 2 nömrəli dalğada heç kimə uyğun gəlmir, ona görə 'it_note' addımı orada " +
+                        "buraxılacaq; digər dalğalar onu icra edir.",
+                    "dalğa ölçüsü 2 ilə 'writer[n=2]' 1 nömrəli dalğada heç kimə uyğun gəlmir; 'second_writer' addımını heç bir " +
+                        "dalğada icra edən olmayacaq, ona görə run keçməyəcək.",
+                )
+            panel.ended(started.runId)
+        }
+
+    @Test
+    fun `testers that cannot be planned ahead are said to have left the run's checks undone`() =
+        runBlocking<Unit> {
+            val panel = PanelHarness(dir, site = PanelWaits.site(), scenarios = mapOf("login.yaml" to loginInWaves)).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            // No owner's account for the `login` tester: said with its reason, where the panel used to say nothing.
+            started.warnings.single { "reyestri" in it } shouldBe
+                "Testerlərin reyestri əvvəlcədən qurula bilmədi (Identity registry cannot be built: 1 testers sign in with " +
+                "the owner's accounts, but only 0 accounts match their roles (give more accounts in the target profile or " +
+                "the panel, or let more testers sign up)); ona görə heç kimin icra etməyəcəyi addımlar, dalğaların " +
+                "gözləmələri və yarışları yoxlanmadı."
+            panel.ended(started.runId).run.outcome shouldNotBe RunOutcome.PASSED
+        }
+
+    /** Two employees in waves of one: every wave has a first employee, none a second, so `second_look` is done by nobody. */
+    private val secondEmployee =
+        """
+        campaign:
+          name: second
+          testers: 3
+          seed: 7
+          wave_size: 1
+          roles: {admin: 1, manager: 0, employee: 2}
+          departments: [IT]
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        setup:
+          - id: signup
+            actor: admin
+            do: "Sign up and create the company"
+        steps:
+          - id: look
+            actor: employee[*]
+            do: "Look at the home page"
+          - id: second_look
+            actor: employee[n=2]
+            do: "Look at the home page as the second employee"
+        """.trimIndent() + "\n"
+
+    @Test
+    fun `a run failed only by a step nobody performs shows that failed step in the run list, as the report counts it`() =
+        runBlocking<Unit> {
+            val panel = PanelHarness(dir, site = PanelWaits.site(), scenarios = mapOf("second.yaml" to secondEmployee)).also { open += it }
+            val scenario = panel.approved()
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            started.warnings.single { "run keçməyəcək" in it } shouldContain "second_look"
+            panel.ended(started.runId).run.outcome shouldBe RunOutcome.FAILED
+            val history = panel.backend.runs().single()
+            history.result shouldBe RunResult.FAILED
+            // Every action of the testers passed; the step nobody performs is the run's one failed step.
+            history.stepsFailed shouldBe 1
+            val report = panel.backend.reportDirectory(started.runId).shouldNotBeNull()
+            val markdown = withContext(Dispatchers.IO) { Files.readString(report.resolve("report.md")) }
+            markdown shouldContain "| Keçən addımlar | ${history.stepsPassed} |"
+            markdown shouldContain "| Keçməyən addımlar | 1 |"
+        }
+
+    @Test
     fun `a draft, an unknown scenario or an impossible tester count does not run`() =
         runBlocking<Unit> {
             val panel = harness()
@@ -179,6 +323,21 @@ class PanelRunsTest {
                 .runs()
                 .single()
                 .result shouldBe RunResult.ABORTED
+        }
+
+    @Test
+    fun `a run of another process over the same evidence keeps the panel's run from starting`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val scenario = panel.approved()
+
+            panel.panel.container.runLock.acquire("petek run").use {
+                shouldThrow<PanelConflictException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }.message shouldContain
+                    "Başqa run gedir (petek run"
+            }
+
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+            panel.ended(started.runId)
         }
 
     @Test
@@ -406,6 +565,77 @@ class PanelRunsTest {
         }
 
     @Test
+    fun `a campaign on the owner's account runs again from the panel, and triage never shows the model its password`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm(failingSteps = setOf("look"))
+            val site = PanelWaits.site()
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = site,
+                    llm = llm,
+                    scenarios = mapOf("login.yaml" to loginLook),
+                    targets = listOf(ownerAccounts(site.base)),
+                ).also { open += it }
+            val scenario = panel.approved()
+            val first = panel.backend.startRun(RunRequest(scenarioId = scenario))
+            panel.ended(first.runId)
+
+            val next = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            panel.ended(next.runId).run.outcome shouldBe RunOutcome.FAILED
+            val container = panel.panel.container
+            val owner = container.identities.findByRun(next.runId).single { it.ownAccount }
+            owner.email shouldBe "writer@owner.example"
+            owner.password.reveal() shouldBe ""
+            val last =
+                container.evidenceQuery
+                    .steps(next.runId)
+                    .filter { it.agentId == owner.agentId && it.scenarioStep == "look" }
+                    .maxBy { it.endedAt }
+            // Evidence that quotes the owner's password without saying so (the known-secret patterns cannot catch it).
+            container.recorder.step(
+                last.copy(
+                    stepId = container.ids.stepId(),
+                    status = StepStatus.FAILED,
+                    detail = "typed owner-writer-pass into the sign-in form",
+                    startedAt = last.endedAt,
+                    endedAt = last.endedAt.plusMillis(1),
+                ),
+            )
+
+            panel.backend.runTriage(next.runId)
+
+            val prompts =
+                llm.client.requests
+                    .filter {
+                        it.label.startsWith(
+                            "triage/",
+                        )
+                    }.flatMap { request -> request.messages.map { it.content } }
+            prompts.shouldNotBeEmpty()
+            prompts.none { it.contains("owner-writer-pass") } shouldBe true
+            prompts.any { it.contains("typed *** into the sign-in form") } shouldBe true
+        }
+
+    /** A site without companies whose first writer signs in with the owner's account; every tester looks, and fails. */
+    private val loginLook =
+        """
+        campaign:
+          name: notes-look
+          tenant: none
+          testers: 3
+          seed: 12
+          roles: {writer: 2, reader: 1}
+          registration: {self: 2, login: 1}
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        steps:
+          - id: look
+            actor: [writer[*], reader]
+            do: "Open the notes"
+        """.trimIndent() + "\n"
+
+    @Test
     fun `an exploration stopped while its test company run starts stops that run too, so nothing is left behind`() =
         runBlocking<Unit> {
             val creating = CompletableDeferred<Unit>()
@@ -442,7 +672,10 @@ class PanelRunsTest {
 
             panel.backend.cancelRun() shouldBe false
             panel.backend.runs() shouldBe emptyList()
-            llm.client.requests.shouldBeEmpty()
+            // The visitor's walk comes first (Faza 25.1); no tester of the stopped run ever asked the AI.
+            llm.client.requests
+                .filterNot { it.label.startsWith("explorer/") }
+                .shouldBeEmpty()
         }
 
     /** [store] whose run creation waits for [gate] (after telling [creating]). */
@@ -523,6 +756,34 @@ class PanelRunsTest {
         }
 
     @Test
+    fun `checks that call the site's API on its own host start only once that host is proved as well`() =
+        runBlocking<Unit> {
+            val runs = FakeBrowserEngine()
+            val probe = ScriptedOwnershipProbe(found = null)
+            val panel =
+                PanelHarness(
+                    dir,
+                    runs = runs,
+                    scenarios = mapOf("api.yaml" to API_CAMPAIGN),
+                    ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe, local = setOf("127.0.0.1")),
+                ).also { open += it }
+            val scenario = panel.approved()
+
+            val refused = shouldThrow<PanelRequestException> { panel.backend.startRun(RunRequest(scenarioId = scenario)) }
+
+            refused.problems.single().field shouldBe PanelInstructions.TARGET
+            refused.problems.single().message shouldContain "saytın API ünvanına (api.stage.example.com) gedir"
+            refused.problems.single().message shouldContain "https://api.stage.example.com/.well-known/petek-verification.txt"
+            runs.options.shouldBeEmpty()
+
+            probe.found = OwnershipMethod.WELL_KNOWN_FILE
+            val started = panel.backend.startRun(RunRequest(scenarioId = scenario))
+            panel.ended(started.runId)
+
+            runs.options.map { it.apiOrigin }.toSet() shouldBe setOf(URI("https://api.stage.example.com"))
+        }
+
+    @Test
     fun `a visitor run starts on a site whose ownership is not proved`() =
         runBlocking<Unit> {
             val runs = FakeBrowserEngine()
@@ -563,4 +824,30 @@ class PanelRunsTest {
                 .single()
                 .target shouldBe "https://stage.example.com"
         }
+
+    private companion object {
+        /** An owner and an employee whose check calls the site's API on its own host (a full api_prefix). */
+        val API_CAMPAIGN =
+            """
+            campaign:
+              name: api
+              testers: 2
+              seed: 7
+              roles: {admin: 1, manager: 0, employee: 1}
+              departments: [IT]
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            target_profile:
+              api_prefix: https://api.stage.example.com/v1
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up and create the company"
+            steps:
+              - id: look
+                actor: employee[*]
+                do: "Look at the home page"
+                assert:
+                  - http_status: {path: "{api}/tickets/1/approve", method: POST, equals: 403}
+            """.trimIndent()
+    }
 }

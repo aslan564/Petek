@@ -19,8 +19,9 @@ import az.petek.agent.application.PromptBuilder
 import az.petek.agent.application.RunFunctionRegistry
 import az.petek.agent.application.TesterAgentFactory
 import az.petek.agent.application.runs.RunFunctions
-import az.petek.agent.domain.ConsecutiveLoopDetector
 import az.petek.agent.domain.JsonDecisionProtocol
+import az.petek.agent.domain.RepeatedStateLoopDetector
+import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.config.MailSource
 import az.petek.app.config.PetekConfig
 import az.petek.app.diagnostics.CliVersion
@@ -28,17 +29,25 @@ import az.petek.app.diagnostics.HttpProbe
 import az.petek.app.diagnostics.HttpTargetReachability
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.MdcDiagnosticContext
+import az.petek.app.runs.RunLock
 import az.petek.app.telemetry.CountingCampaignRunner
 import az.petek.app.telemetry.LocalFileUsageSink
 import az.petek.browser.domain.BrowserEngine
 import az.petek.browser.domain.BrowserEngineConfig
 import az.petek.browser.infrastructure.PlaywrightBrowserEngine
+import az.petek.browser.infrastructure.PlaywrightPdfPrinter
 import az.petek.campaign.application.LoadCampaignUseCase
+import az.petek.campaign.domain.Campaign
+import az.petek.campaign.domain.CampaignSettings
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.DefaultTemplateRenderer
 import az.petek.campaign.domain.TemplateRenderer
 import az.petek.campaign.infrastructure.YamlCampaignSource
+import az.petek.capacity.application.RecommendCapacityUseCase
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.infrastructure.SystemHostResourceProbe
 import az.petek.core.ids.IdGenerator
+import az.petek.core.ids.RunTags
 import az.petek.core.ids.UuidV7IdGenerator
 import az.petek.core.model.Role
 import az.petek.core.security.Secret
@@ -63,8 +72,10 @@ import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
 import az.petek.identity.domain.GivenAccount
 import az.petek.identity.domain.HmacPasswordDeriver
+import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityRegistryGenerator
 import az.petek.identity.domain.IdentityRepository
+import az.petek.identity.domain.IdentitySpec
 import az.petek.identity.infrastructure.SqliteIdentityRepository
 import az.petek.llm.application.ConcurrencyLimitedLlmClient
 import az.petek.llm.application.MeteredLlmClient
@@ -110,15 +121,24 @@ import az.petek.ownership.infrastructure.InetHostLocality
 import az.petek.ownership.infrastructure.SqliteOwnershipLedger
 import az.petek.reporting.application.BuildFindingBundlesUseCase
 import az.petek.reporting.application.BuildReportUseCase
+import az.petek.reporting.application.CompareLooks
+import az.petek.reporting.application.CompareRunsUseCase
+import az.petek.reporting.application.ExportReportPdfUseCase
 import az.petek.reporting.application.FinalizeRunUseCase
+import az.petek.reporting.domain.ReportModel
+import az.petek.reporting.domain.ReportWriter
 import az.petek.reporting.domain.ThreeSourceJudge
 import az.petek.reporting.domain.TraceSource
+import az.petek.reporting.infrastructure.ComparisonHtmlWriter
+import az.petek.reporting.infrastructure.ComparisonMarkdownWriter
 import az.petek.reporting.infrastructure.CustomerSummaryWriter
 import az.petek.reporting.infrastructure.HtmlReportWriter
+import az.petek.reporting.infrastructure.ImageIoRasterCodec
 import az.petek.reporting.infrastructure.JUnitReportWriter
 import az.petek.reporting.infrastructure.LogFileTraceSource
 import az.petek.reporting.infrastructure.MarkdownReportWriter
 import az.petek.reporting.infrastructure.SarifReportWriter
+import az.petek.reporting.infrastructure.SelfContainedPdfPrinter
 import az.petek.reporting.infrastructure.ShareableHtmlReportWriter
 import az.petek.scenarios.application.ScenarioCatalog
 import az.petek.scenarios.application.TriageOptions
@@ -141,6 +161,7 @@ import com.github.ajalt.mordant.terminal.Terminal
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
 import java.net.URI
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = KotlinLogging.logger {}
@@ -168,13 +189,27 @@ private val logger = KotlinLogging.logger {}
  * what was created (monitor, browser engine, HTTP clients, LLM client, database), in reverse order of creation.
  */
 class AppContainer(
-    val config: PetekConfig,
+    initial: PetekConfig,
     private val overrides: AppOverrides = AppOverrides(),
 ) : AutoCloseable {
     private val resources = Resources()
 
+    /**
+     * The configuration the container was built with; only [refresh] changes it, and only in what may change while a
+     * panel runs: the sites' target profiles and the AI.
+     */
+    @Volatile
+    var config: PetekConfig = initial
+        private set
+
+    /** Held while [refresh] or [refreshTargets] replaces [config]. */
+    private val refreshing = Any()
+
     val clock: HarnessClock = overrides.clock ?: SystemHarnessClock()
     val ids: IdGenerator = UuidV7IdGenerator()
+
+    /** One run at a time over this evidence store, across the panel, the CLI and MCP, in any process ([RunLock]). */
+    val runLock: RunLock by lazy { RunLock(config.evidenceDir.resolve(RunLock.FILE_NAME)) { clock.now().wall } }
     val targetPolicy: TargetPolicy get() = config.targetPolicy
     val templateRenderer: TemplateRenderer = DefaultTemplateRenderer()
     val fieldSelector: JsonFieldSelector = DefaultJsonFieldSelector()
@@ -214,7 +249,28 @@ class AppContainer(
 
     val planIdentities: PlanIdentitiesUseCase by lazy { PlanIdentitiesUseCase(identityGenerator, identities) }
 
+    /**
+     * What the testers of a campaign with [settings] are planned from, as the runner plans them: its quotas, the mail
+     * domain and inbox, and the owner's accounts for its target that its `login` testers sign in with, without which a
+     * registry with `login` testers cannot be built at all.
+     */
+    fun identitySpecFor(settings: CampaignSettings): IdentitySpec =
+        IdentitySpecs.of(settings, config.mailDomain, config.mailInbox, ownAccountsFor(settings.target))
+
+    /**
+     * The testers a run of [campaign] will plan, generated ahead for what is said before it starts (the warnings of
+     * `petek run` and of the panel, the panel's run plan); nothing is stored. Throws what the run's own planning would
+     * ([az.petek.identity.domain.IdentityConflictException] for a registry that cannot be built).
+     */
+    fun previewIdentities(campaign: Campaign): List<Identity> =
+        identityGenerator
+            .generate(identitySpecFor(campaign.settings), RunTags.forPlan(campaign.sourceHash, campaign.settings.seed))
+            .identities
+
     // --- target, mail, LLM, browser -----------------------------------------------------------------------------
+
+    /** Where the target's test API answers the oracle's own questions: the contract's, or the profile's `test_api.paths`. */
+    val oraclePaths: OraclePaths by lazy { OraclePaths.of(config.oraclePaths) }
 
     /** The `/test/...` API client; on `PETEK_TEST_API_URL` when the API is not on the target's origin. */
     val oracle: TargetOracle by lazy {
@@ -222,7 +278,7 @@ class AppContainer(
             HttpTargetOracle(
                 config.testApiBase,
                 config.testToken.takeIf { config.oracle },
-                paths = OraclePaths.of(config.oraclePaths),
+                paths = oraclePaths,
             ),
         )
     }
@@ -253,7 +309,28 @@ class AppContainer(
     /** LLM usage per agent since the last flush (see [finalizer]). */
     val usageMeter: UsageMeter by lazy { UsageMeter(telemetry) }
 
-    private val llmProvider: LlmClient by lazy { overrides.llm ?: resources.track(LlmProviders.create(config)) }
+    private val llmProvider: SwitchableLlmClient by lazy {
+        SwitchableLlmClient(overrides.llm ?: resources.track(LlmProviders.create(config)))
+    }
+
+    /**
+     * Takes from [fresh], a configuration read again from its file, what may change while a panel runs (Faza 23): the
+     * target profiles (a site added in the panel) and the AI (chosen on the setup screen), whose client is switched
+     * for the next calls; calls in flight finish with the one they started with. Everything else stays as built.
+     */
+    fun refresh(fresh: PetekConfig) =
+        synchronized(refreshing) {
+            val before = config
+            val next = before.copy(targets = fresh.targets).withAiOf(fresh)
+            config = next
+            if (overrides.llm == null && next.withAiOf(before) != next) llmProvider.switchTo(resources.track(LlmProviders.create(next)))
+        }
+
+    /** Takes only the target profiles of [fresh] (a site or an account added in the panel, Faza 23). */
+    fun refreshTargets(fresh: PetekConfig) =
+        synchronized(refreshing) {
+            config = config.copy(targets = fresh.targets)
+        }
 
     /** The client agents use: metered, retried and limited to `PETEK_LLM_CONCURRENCY` calls in flight. */
     val llm: LlmClient by lazy {
@@ -280,6 +357,13 @@ class AppContainer(
     fun browserConfig(headless: Boolean = config.browserHeadless): BrowserEngineConfig =
         BrowserEngineConfig(headless = headless, topology = config.browserTopology, ignoreTlsErrors = config.browserIgnoreTlsErrors)
 
+    /** This machine's memory and cores: every run records its size next to the capacity they advise (`capacity`). */
+    private val hostResources: HostResourceProbe by lazy { overrides.hostResources ?: SystemHostResourceProbe() }
+
+    /** How many testers this machine is advised to carry at once with [browserConfig]'s browsers (`petek capacity`). */
+    private suspend fun capacityAdvice(headless: Boolean): Int =
+        RecommendCapacityUseCase(hostResources).execute(contextsPerBrowser = browserConfig(headless).contextsPerBrowser).maxTesters
+
     /**
      * The look at the site under test before a run or an exploration opens a browser (rule 12): the site that was
      * given must answer, otherwise nothing is tested and the reason is reported.
@@ -303,7 +387,8 @@ class AppContainer(
 
     // --- agents, verification, orchestration, reporting ---------------------------------------------------------
 
-    private val watchdog = InactivityWatchdog()
+    /** A slow AI answer is the provider's to bound, never the inactivity timeout's (see [InactivityWatchdog]). */
+    private val watchdog = InactivityWatchdog(aiCallTimeout = LlmProviders.AGENT_CALL_GUARD)
 
     /** Evidence recorded by agents also proves they are alive (see [InactivityWatchdog]). */
     private val agentRecorder: EvidenceRecorder by lazy { ProgressTrackingRecorder(recorder, watchdog::progress) }
@@ -318,7 +403,7 @@ class AppContainer(
             DefaultAgentLoop(
                 llm = llm,
                 protocol = protocol,
-                loopDetectorFactory = { ConsecutiveLoopDetector() },
+                loopDetectorFactory = { RepeatedStateLoopDetector() },
                 recorder = agentRecorder,
                 artifacts = artifacts,
                 verification = verification,
@@ -355,9 +440,42 @@ class AppContainer(
                     HtmlReportWriter(),
                     JUnitReportWriter(),
                     SarifReportWriter(),
-                    ShareableHtmlReportWriter(config.llmProvider.value, config.llmModelLabel),
+                    // Named at write time: the panel may have switched the AI since the container was built.
+                    object : ReportWriter {
+                        override val fileName: String = SHARE_REPORT
+
+                        override fun write(
+                            model: ReportModel,
+                            directory: Path,
+                        ): Path = ShareableHtmlReportWriter(config.llmProvider.value, config.llmModelLabel).write(model, directory)
+                    },
                     CustomerSummaryWriter(english = config.language.value.startsWith("en", ignoreCase = true)),
                 ),
+        )
+    }
+
+    /**
+     * The report as a PDF (Faza 12; the owner's decision of 2026-09-30), printed when asked for (the panel's
+     * "PDF yüklə", `petek report --pdf`) from the single-file `share.html`, with every screenshot inside it, by
+     * Chromium's own print; no new library.
+     */
+    val reportPdf: ExportReportPdfUseCase by lazy {
+        val printer = overrides.pdfPrinter ?: PlaywrightPdfPrinter()
+        ExportReportPdfUseCase(artifacts, SelfContainedPdfPrinter { html, pdf -> printer.print(html, pdf) }, SHARE_REPORT)
+    }
+
+    /**
+     * A run against an earlier run of the same scenario (the regression baseline, Faza 14; the owner put it first on
+     * 2026-09-30): `petek compare`, the panel and MCP `compare_runs`; written as `compare-<baseline run>.html` and `.md`.
+     */
+    val compareRuns: CompareRunsUseCase by lazy {
+        CompareRunsUseCase(
+            runs,
+            evidenceQuery,
+            artifacts,
+            listOf(ComparisonHtmlWriter(), ComparisonMarkdownWriter()),
+            // How the pages look, pixel by pixel with the JDK's own PNG codec (docs/adr/0014).
+            looks = CompareLooks(artifacts, ImageIoRasterCodec()),
         )
     }
 
@@ -377,7 +495,8 @@ class AppContainer(
 
     /**
      * The owner's accounts for [site] that `login` testers may take (Faza 18): its profile's accounts with an e-mail and
-     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17).
+     * a password, except the explorer's own (role `explorer`), which is never given to a tester (Faza 17). The runner
+     * plans its testers with them, and so does every preview of its registry ([identitySpecFor]).
      */
     private fun ownAccountsFor(site: URI): List<GivenAccount> =
         config
@@ -391,6 +510,12 @@ class AppContainer(
                 val password = account.password ?: return@mapNotNull null
                 GivenAccount(role, email, password, account.name)
             }
+
+    /**
+     * The passwords of the owner's accounts in every target profile: a `login` tester's password is one of them, and
+     * lives there only, never in the identity table ([az.petek.identity.domain.Identity.asStored]).
+     */
+    private fun ownerPasswords(): List<Secret> = config.targets.flatMap { it.accounts }.mapNotNull { it.password }
 
     /** A runner for one `petek run`; [headless] false shows the browsers (`--headful`). */
     fun campaignRunner(headless: Boolean = config.browserHeadless): CampaignRunner =
@@ -423,6 +548,24 @@ class AppContainer(
                     correlationHeader = config.correlationHeader,
                     accounts = { site -> ownAccountsFor(site) },
                     proxies = config.proxies,
+                    allowedHosts = { site ->
+                        config.allowedHosts +
+                            config
+                                .profileFor(site)
+                                ?.spec
+                                ?.allowedHosts
+                                .orEmpty()
+                    },
+                    productionHosts = { site ->
+                        config.productionHosts +
+                            config
+                                .profileFor(site)
+                                ?.spec
+                                ?.productionHosts
+                                .orEmpty()
+                    },
+                    // Every run, from the CLI, the panel or MCP, says how its size stands to this machine's capacity.
+                    capacityAdvice = { capacityAdvice(headless) },
                 ),
             sharedStateFactory = ::InMemorySharedRunState,
             watchdog = watchdog,
@@ -485,8 +628,12 @@ class AppContainer(
     }
 
     /**
-     * Triage of finished runs. Evidence shown to the model is redacted with every configured secret plus [secrets]
-     * (the triaged run's test passwords, which only its identities know): nothing secret reaches the LLM (rule 10).
+     * Triage of finished runs. Evidence shown to the model is redacted with every configured secret (the test token,
+     * the AI key, the identity secret and the passwords of the owner's accounts in the target profiles, which the stored
+     * identities never hold) plus [secrets] (the triaged run's generated test passwords, which only its stored
+     * identities know): nothing secret reaches the LLM (rule 10). The owner's passwords are the profiles' as they are
+     * now: one changed or removed since the triaged run is not masked here; the run's own redaction as it recorded is
+     * what kept it out of the evidence (R04).
      */
     fun triage(secrets: Collection<Secret> = emptyList()): TriageRunUseCase =
         TriageRunUseCase(
@@ -498,7 +645,8 @@ class AppContainer(
             validator = scenarioValidator,
             clock = clock,
             ids = scenarioIds,
-            redactor = SecretRedactor(listOfNotNull(config.testToken, config.llmApiKey, config.identitySecret) + secrets),
+            redactor =
+                SecretRedactor(listOfNotNull(config.testToken, config.llmApiKey, config.identitySecret) + ownerPasswords() + secrets),
             options = TriageOptions(language = config.language),
         )
 
@@ -592,5 +740,8 @@ class AppContainer(
 
         /** Where scenario texts are written briefly to be loaded and checked: `<evidence>/scenario-checks/`. */
         const val SCENARIO_CHECK_DIRECTORY = "scenario-checks"
+
+        /** The single-file report to share (`ShareableHtmlReportWriter`'s own file name). */
+        private const val SHARE_REPORT = "share.html"
     }
 }

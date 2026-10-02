@@ -43,6 +43,8 @@ class SqliteDatabase private constructor(
     val database: Database,
     /** Write connections (`BEGIN IMMEDIATE`, waits [BUSY_TIMEOUT_MILLIS] for the lock). */
     private val writable: Database,
+    /** Where [writable] takes its connections; [vacuum] takes one of its own, outside any transaction. */
+    private val writableSource: SQLiteDataSource,
 ) : AutoCloseable {
     private val writerExecutor =
         Executors.newSingleThreadExecutor { runnable ->
@@ -57,15 +59,29 @@ class SqliteDatabase private constructor(
     suspend fun <T> read(block: JdbcTransaction.() -> T): T = withContext(Dispatchers.IO) { transaction(database) { block() } }
 
     /**
-     * Creates missing tables and indexes and adds columns a newer Pətək declares to tables an older one created
-     * (idempotent). Called once per repository at start-up. An added column must be nullable or have a default, as
-     * SQLite's `ALTER TABLE ... ADD COLUMN` requires.
+     * Creates missing tables and indexes and adds columns and indexes a newer Pətək declares to tables an older one
+     * created (idempotent). Called once per repository at start-up. An added column must be nullable or have a default,
+     * as SQLite's `ALTER TABLE ... ADD COLUMN` requires. A unique index declared later is not added to an existing
+     * table: rows an older version wrote may break it, so that takes a migration of its own.
      */
     fun createMissing(vararg tables: Table) {
         setUp {
             SchemaUtils.create(*tables)
-            tables.forEach { table -> addMissingColumns(table) }
+            tables.forEach { table ->
+                addMissingColumns(table)
+                addMissingIndexes(table)
+            }
         }
+    }
+
+    private fun JdbcTransaction.addMissingIndexes(table: Table) {
+        val existing = mutableSetOf<String>()
+        exec("PRAGMA index_list(\"${table.tableName}\")") { rows ->
+            while (rows.next()) existing += rows.getString("name").lowercase()
+        }
+        table.indices
+            .filter { !it.unique && it.indexName.lowercase() !in existing }
+            .forEach { index -> index.createStatement().forEach { exec(it) } }
     }
 
     private fun JdbcTransaction.addMissingColumns(table: Table) {
@@ -90,6 +106,23 @@ class SqliteDatabase private constructor(
      */
     fun <T> setUp(block: JdbcTransaction.() -> T): T = transaction(writable) { block() }
 
+    /**
+     * Rebuilds the database file (`VACUUM`) and then empties its write-ahead log (`wal_checkpoint(TRUNCATE)`), so that
+     * neither keeps in its free space what was deleted or overwritten before: for a migration that removes what an
+     * earlier release should not have stored. An update or delete leaves the old bytes in the file (SQLite's
+     * `secure_delete` is off), and only a rebuild drops all of them. Blocking, for start-up like [setUp]; it runs on a
+     * connection of its own outside any transaction, as SQLite requires, and waits for the write lock like a write does.
+     * A reader on another connection that keeps the log busy only puts off emptying it to the next checkpoint.
+     */
+    fun vacuum() {
+        writableSource.connection.use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("VACUUM")
+                statement.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            }
+        }
+    }
+
     override fun close() {
         writer.close()
     }
@@ -101,17 +134,19 @@ class SqliteDatabase private constructor(
         fun open(path: Path): SqliteDatabase {
             path.toAbsolutePath().parent?.let { Files.createDirectories(it) }
             val url = "jdbc:sqlite:${path.toAbsolutePath()}"
+            val writableSource = dataSource(url, SQLiteConfig.TransactionMode.IMMEDIATE)
             return SqliteDatabase(
                 path,
-                database = connect(url, SQLiteConfig.TransactionMode.DEFERRED),
-                writable = connect(url, SQLiteConfig.TransactionMode.IMMEDIATE),
+                database = connect(dataSource(url, SQLiteConfig.TransactionMode.DEFERRED)),
+                writable = connect(writableSource),
+                writableSource = writableSource,
             )
         }
 
-        private fun connect(
+        private fun dataSource(
             url: String,
             mode: SQLiteConfig.TransactionMode,
-        ): Database {
+        ): SQLiteDataSource {
             val config =
                 SQLiteConfig().apply {
                     setJournalMode(SQLiteConfig.JournalMode.WAL)
@@ -120,13 +155,16 @@ class SqliteDatabase private constructor(
                     setSynchronous(SQLiteConfig.SynchronousMode.NORMAL)
                     setTransactionMode(mode)
                 }
-            return Database.connect(
-                datasource = SQLiteDataSource(config).apply { setUrl(url) },
+            return SQLiteDataSource(config).apply { setUrl(url) }
+        }
+
+        private fun connect(source: SQLiteDataSource): Database =
+            Database.connect(
+                datasource = source,
                 databaseConfig =
                     DatabaseConfig {
                         defaultIsolationLevel = Connection.TRANSACTION_SERIALIZABLE
                     },
             )
-        }
     }
 }

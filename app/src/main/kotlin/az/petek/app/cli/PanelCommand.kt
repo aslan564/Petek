@@ -111,6 +111,7 @@ class PanelCommand : PetekSubcommand(NAME) {
                 capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
                 port = port,
                 configurationFile = session.configurationFile,
+                reloadConfig = { session.loadConfig() },
             )
         echo("Pətək paneli: ${panel.url}  (hədəf: ${config.targetLabel})")
         return panel

@@ -15,6 +15,7 @@ import az.petek.llm.LlmTestData
 import az.petek.llm.OutcomeLlmClient
 import az.petek.llm.OutcomeLlmClient.Companion.fail
 import az.petek.llm.OutcomeLlmClient.Companion.succeed
+import az.petek.llm.domain.LlmCallObserver
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmException
 import az.petek.llm.domain.LlmProviderKey
@@ -31,7 +32,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -58,6 +61,27 @@ class ConcurrencyLimitedLlmClientTest {
             } finally {
                 active.decrementAndGet()
             }
+        }
+    }
+
+    /** Writes down what it hears, in order. */
+    private class Journal : LlmCallObserver() {
+        val heard = CopyOnWriteArrayList<String>()
+
+        override fun slotWaitStarted() {
+            heard += "wait"
+        }
+
+        override fun slotWaitEnded() {
+            heard += "waited"
+        }
+
+        override fun callStarted() {
+            heard += "call"
+        }
+
+        override fun callEnded() {
+            heard += "called"
         }
     }
 
@@ -145,6 +169,59 @@ class ConcurrencyLimitedLlmClientTest {
 
             // a02 ran while a01 slept through its 2 s backoff, instead of queueing behind it.
             provider.callTimes shouldContainExactly listOf(0L, 0L, 2_000L)
+        }
+
+    @Test
+    fun `the caller's observer hears the wait for a slot and the call that follows`() =
+        runTest {
+            val delegate = GatedLlmClient()
+            val client = ConcurrencyLimitedLlmClient(delegate, permits = 1)
+            val first = Journal()
+            val second = Journal()
+
+            val running = async { withContext(first) { client.complete(request) } }
+            runCurrent()
+            val queued = async { withContext(second) { client.complete(request) } }
+            runCurrent()
+
+            first.heard shouldContainExactly listOf("call")
+            second.heard shouldContainExactly listOf("wait")
+            delegate.release()
+            awaitAll(running, queued)
+            first.heard shouldContainExactly listOf("call", "called")
+            second.heard shouldContainExactly listOf("wait", "waited", "call", "called")
+        }
+
+    @Test
+    fun `a wait cancelled before the slot came is ended for the observer`() =
+        runTest {
+            val delegate = GatedLlmClient()
+            val client = ConcurrencyLimitedLlmClient(delegate, permits = 1)
+            val journal = Journal()
+
+            val running = async { client.complete(request) }
+            val waiting = launch { withContext(journal) { client.complete(request) } }
+            runCurrent()
+            waiting.cancel()
+            runCurrent()
+            delegate.release()
+            running.await()
+
+            journal.heard shouldContainExactly listOf("wait", "waited")
+            client.availablePermits shouldBe 1
+        }
+
+    @Test
+    fun `a failed call is ended for the observer`() =
+        runTest {
+            val delegate = GatedLlmClient().apply { failWith = LlmException.Transient("503") }
+            val client = ConcurrencyLimitedLlmClient(delegate, permits = 1)
+            val journal = Journal()
+            delegate.release()
+
+            shouldThrow<LlmException.Transient> { withContext(journal) { client.complete(request) } }
+
+            journal.heard shouldContainExactly listOf("call", "called")
         }
 
     @Test

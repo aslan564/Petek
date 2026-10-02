@@ -41,7 +41,9 @@ interface PanelBackend :
     PanelRuns,
     PanelManualCodes,
     PanelAccounts,
-    PanelReadiness
+    PanelReadiness,
+    PanelTestFlow,
+    PanelSites
 
 /**
  * Accounts the owner gives the explorer on the instruction screen ("Hesablar", bring-your-own accounts, Faza 10): a
@@ -175,6 +177,25 @@ interface PanelRuns {
 
     /** Directory of a run's written report (`index.html`, `report.md`); null when there is none. */
     suspend fun reportDirectory(runId: RunId): Path?
+
+    /**
+     * A run's report as a PDF (`report.pdf`, printed now when missing or older than the report; the owner's decision of
+     * 2026-09-30); null when the run has no written report. [PanelUnavailableException] when it cannot be printed.
+     */
+    suspend fun reportPdf(runId: RunId): Path?
+
+    /**
+     * [runId] against an earlier run of its scenario (the regression baseline, Faza 14): [baseline] is `previous` (or
+     * null), a run id, or a release name; the comparison page is written beside the run's report. [visual] is `report`
+     * (or null: a page that looks different is shown, not counted as worse) or `fail` (it counts as worse). A pair that
+     * cannot be compared is a [PanelConflictException] saying why; an unknown run a [PanelNotFoundException]; another
+     * [visual] a [PanelRequestException].
+     */
+    suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+        visual: String? = null,
+    ): ComparisonView
 
     /**
      * The judged findings of a run with their three sources and evidence artifacts (which [PanelExplorer.explorationArtifact]

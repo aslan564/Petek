@@ -91,13 +91,13 @@ object ScenarioTestKit {
         |    parallel: true
         |    do: "Eyni ticketi approve et"
         |    assert:
-        |      - only_one_succeeds: true
+        |      - only_one_succeeds: {request: "POST .*/approve"}
         |
         |  - id: forbidden
         |    actor: employee[dept=IT, n=2]
         |    do: "Ticketi approve etməyə çalış"
         |    assert:
-        |      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}
+        |      - http_status: {path: "/api/tickets/t1/approve", method: POST, equals: 403}
         |
         """.trimMargin()
 

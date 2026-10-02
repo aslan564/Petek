@@ -11,6 +11,7 @@
 
 package az.petek.explorer.domain
 
+import az.petek.core.model.PathSegments
 import java.net.URI
 import java.net.URISyntaxException
 import java.text.Normalizer
@@ -58,7 +59,8 @@ object TargetKey {
 
 /**
  * Generalises page addresses so one kind of page is one entry of the model: `/tickets/t17` and `/tickets/t18` are both
- * `/tickets/{id}`. A path segment counts as an id when it is a number, a UUID, a long hex string, a short prefixed
+ * `/tickets/{id}`. A path segment counts as an id by the rule the testers' checks share ([PathSegments]): a number, a
+ * UUID, a long hex string, a short prefixed
  * counter such as `t17`/`a3` (never an API version like `v2`), a date (`2026-09-25`, `2026-09`), a numbered slug
  * (`123-noutbuk-islemir`) or a long random token (letters and digits mixed). Without the dates and numbered slugs a
  * calendar or a list of slugged items would spend the whole page budget on copies of one page.
@@ -67,26 +69,7 @@ object TargetKey {
 object UrlPatterns {
     const val ID = "{id}"
 
-    private val NUMBER = Regex("\\d+")
-    private val UUID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-    private val HEX = Regex("[0-9a-fA-F]{16,}")
-    private val PREFIXED_COUNTER = Regex("[A-Za-z]{1,4}[-_]?\\d+")
-    private val API_VERSION = Regex("[vV]\\d+")
-    private val TOKEN = Regex("[A-Za-z0-9_-]{20,}")
-    private val PREFIXED_ID = Regex("[A-Za-z]{2,6}_[0-9A-Za-z]{8,}")
-    private val DATE = Regex("\\d{4}-\\d{2}(-\\d{2})?")
-    private val NUMBERED_SLUG = Regex("\\d+-[\\p{L}\\p{N}%-]*[\\p{L}%][\\p{L}\\p{N}%-]*")
-
-    fun isIdSegment(segment: String): Boolean =
-        when {
-            segment.isEmpty() -> false
-            NUMBER.matches(segment) || UUID.matches(segment) || HEX.matches(segment) -> true
-            DATE.matches(segment) || NUMBERED_SLUG.matches(segment) -> true
-            API_VERSION.matches(segment) -> false
-            PREFIXED_COUNTER.matches(segment) || PREFIXED_ID.matches(segment) -> true
-            TOKEN.matches(segment) -> segment.any(Char::isDigit) && segment.any(Char::isLetter)
-            else -> false
-        }
+    fun isIdSegment(segment: String): Boolean = PathSegments.isId(segment)
 
     /** The pattern of [url]'s path, e.g. `/tickets/{id}`; the root is `/`. */
     fun of(url: URI): String = ofPath(url.rawPath ?: "")
@@ -102,11 +85,7 @@ object UrlPatterns {
         return of(uri)
     }
 
-    private fun ofPath(rawPath: String): String {
-        val segments = rawPath.split('/').filter { it.isNotEmpty() }
-        if (segments.isEmpty()) return "/"
-        return segments.joinToString("/", prefix = "/") { if (isIdSegment(it)) ID else it }
-    }
+    private fun ofPath(rawPath: String): String = PathSegments.generalize(rawPath, ID)
 
     /** True when the pattern contains a generalised id segment. */
     fun hasId(pattern: String): Boolean = pattern.split('/').any { it == ID }

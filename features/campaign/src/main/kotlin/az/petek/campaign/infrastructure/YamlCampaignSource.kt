@@ -24,9 +24,11 @@ import com.charleskorn.kaml.YamlException
 import com.charleskorn.kaml.YamlList
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
+import com.charleskorn.kaml.YamlScalar
 import com.charleskorn.kaml.YamlTaggedNode
 import java.io.IOException
 import java.net.URI
+import java.net.URISyntaxException
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -58,6 +60,26 @@ class YamlCampaignSource(
         requireShallow(root)
         return CampaignYamlMapper(defaultName(path), targetOverride, actorParser).map(root, sha256(bytes))
     }
+
+    /**
+     * The site a campaign [text] names itself (`campaign.target`) as written, whatever [targetOverride] would make of
+     * it: which site a stored scenario was written for. Null when it names none (it runs on `PETEK_TARGET` then) or the
+     * text cannot be read.
+     */
+    fun writtenTarget(text: String): URI? =
+        try {
+            val campaign = (Yaml.default.parseToYamlNode(text) as? YamlMap)?.get<YamlMap>("campaign")
+            campaign
+                ?.get<YamlScalar>("target")
+                ?.content
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let(::URI)
+        } catch (_: YamlException) {
+            null
+        } catch (_: URISyntaxException) {
+            null
+        }
 
     /**
      * Refuses a document nested deeper than [MAX_NESTING] levels before the recursive mapper walks it. The walk here is

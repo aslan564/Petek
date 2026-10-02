@@ -9,28 +9,32 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
-/* Təlimat — a new campaign: target, plain-language instructions, team, budget; then explore, generate, run. */
 (() => {
   'use strict';
   const P = window.Petek;
   const { h, L, fmt } = P;
   const DRAFT_KEY = 'petek.instructions';
+  // No departments and the automatic split: the team and the ways in come from what the explorer sees on the site.
   const DEFAULTS = {
     target: P.defaultTarget,
     instructions: '',
     testers: 30,
-    roles: { admins: 1, managers: 5, employees: 24 },
-    departments: ['Satış', 'Maliyyə', 'İnsan resursları', 'IT', 'Marketinq'],
+    roles: { admins: 1, managers: 0, employees: 29 },
+    departments: [],
     registration: { invite: 15, companyCode: 14 },
     budget: { maxMinutes: 30, maxStepsPerAgent: 40, maxPages: 40 },
     allowWrites: false,
     autoSplit: true,
   };
+  const TEST_STAGE = { EXPLORING: 'Kəşfiyyat gedir', DRAFTING: 'Ssenari yazılır', RUNNING: 'Run gedir', FINISHED: 'Bitdi', STOPPED: 'Dayandı' };
+  const TEST_POLL_MS = 1500;
 
   let ui = null;
   let visible = false;
   let form = load();
   let capacityTimer = null;
+  let test = null;
+  let testTimer = null;
 
   /** The tester count, shared with the setup screen: set there, it is the count here and in runs. */
   P.testers = {
@@ -122,6 +126,8 @@
     show(ui.invite, form.registration.invite);
     show(ui.companyCode, form.registration.companyCode);
     ui.auto.checked = !!form.autoSplit;
+    ui.manual.hidden = !!form.autoSplit;
+    ui.autoNote.hidden = !form.autoSplit;
     const roleSum = form.roles.admins + form.roles.managers + form.roles.employees;
     ui.roleSum.textContent = 'Cəmi ' + roleSum + ' / ' + form.testers + ' tester';
     ui.roleSum.classList.toggle('bad', roleSum !== form.testers);
@@ -166,17 +172,50 @@
   }
 
   // ---------- actions ----------
+  /** The form as the backend reads it; with the automatic split the team is left to what the explorer sees. */
   function payload() {
+    const manual = !form.autoSplit;
     return {
       target: form.target.trim(),
       instructions: form.instructions,
       testers: form.testers,
-      roles: form.roles,
+      roles: manual ? form.roles : null,
       departments: form.departments,
-      registration: form.registration,
+      registration: manual ? form.registration : null,
       budget: form.budget,
       allowWrites: form.allowWrites,
     };
+  }
+
+  /** "Test et": explore, draft from what was found, approve and run, in one go. */
+  async function testSite(button) {
+    clearErrors();
+    const res = await P.busy(button, () => P.api.post('/api/test', payload()));
+    if (!res.ok) { showProblems(res.problems); P.toast(res.error, 'error'); return; }
+    P.toast('Test başladı: ' + fmt.host(form.target) + '. Əvvəl kəşfiyyatçı saytı öyrənir.', 'ok');
+    follow(res.data);
+    P.go('kesfiyyat');
+  }
+
+  /** Follows the test until it ends: the run's start opens the live board, the end says how it went. */
+  function follow(view) {
+    const before = test;
+    test = view;
+    clearTimeout(testTimer);
+    if (view && before && !before.final) {
+      if (view.runId && view.runId !== before.runId) {
+        P.toast('Ssenari kəşfiyyatın tapdıqlarından yazıldı və təsdiqləndi; run başladı: ' + view.runId, 'ok');
+        const screen = P.current() && P.current().id;
+        if (screen === 'kesfiyyat' || screen === 'telimat') P.go('agentler');
+      }
+      if (view.final) P.toast(view.note || TEST_STAGE[view.stage], view.stage === 'FINISHED' ? 'ok' : 'error');
+    }
+    if (view && !view.final) testTimer = setTimeout(pollTest, TEST_POLL_MS);
+    if (visible) renderJobs();
+  }
+  async function pollTest() {
+    const res = await P.api.get('/api/test');
+    if (res.ok) follow(res.data); else testTimer = setTimeout(pollTest, TEST_POLL_MS * 2);
   }
 
   async function explore(button) {
@@ -197,7 +236,7 @@
 
   async function run(button) {
     clearErrors();
-    const body = { scenarioId: ui.scenario.value || null, testers: form.testers, headful: ui.headful.checked, target: form.target.trim() || null };
+    const body = { scenarioId: ui.scenario.value || null, testers: form.testers, headful: ui.headful.checked, target: form.target.trim() || null, release: ui.release.value.trim() || null };
     const res = await P.busy(button, () => P.api.post('/api/runs', body));
     if (!res.ok) { showProblems(res.problems); P.toast(res.error, 'error'); return; }
     P.toast('Run başladı: ' + res.data.runId, 'ok');
@@ -222,6 +261,13 @@
     const exploration = jobs && jobs.exploration;
     const header = P.run.header;
     const lines = [];
+    if (test && !test.final) {
+      lines.push(h('div', 'job-line', P.icon('play', 'sm'),
+        h('span', { class: 'spacer', text: 'Test gedir · ' + TEST_STAGE[test.stage] + ' · ' + fmt.host(test.target) }),
+        P.button('Dayandır', { kind: 'small danger', icon: 'stop', on: (e) => cancel(e.currentTarget, '/api/test/cancel', 'Test dayandırılır') })));
+    } else if (test && test.note) {
+      lines.push(h('div', 'job-line', P.icon(test.stage === 'FINISHED' ? 'checkCircle' : 'alert', 'sm'), h('span', { class: 'spacer', text: test.note })));
+    }
     if (exploration && exploration.status === 'RUNNING') {
       lines.push(h('div', 'job-line', P.icon('explorer', 'sm'),
         h('span', { class: 'spacer', text: 'Kəşfiyyat gedir · ' + exploration.pagesVisited + ' / ' + exploration.maxPages + ' səhifə' }),
@@ -265,9 +311,10 @@
     ui = { fields: {} };
     ui.flow = h('div', 'flow');
 
-    const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false' } });
+    const target = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Hədəf sayt' } });
     target.value = form.target;
-    target.addEventListener('input', () => { form.target = target.value; save(); renderFlow(); });
+    target.addEventListener('input', () => { form.target = target.value; save(); renderFlow(); renderSites(); });
+    ui.target = target;
     const text = h('textarea', { class: 'textarea', attrs: { rows: 8, placeholder: 'Məsələn: Admin elan yaradır, bütün işçilər onu 10 saniyə ərzində real vaxtda görməlidir. Tapşırıq yaratma və menecerin təsdiqi axınını da yoxla. Ödəniş bölməsinə toxunma.' } });
     text.value = form.instructions;
     const count = h('span', 'faint');
@@ -334,22 +381,27 @@
 
     const team = P.card('Komanda', { icon: 'team', sub: 'Neçə tester, hansı rollarla və necə qoşulsunlar' });
     team.actions.append(h('label', 'switch', ui.auto, h('span', { text: 'Avtomatik bölgü' })));
-    P.append(team.body, h('div', 'form-grid',
-      field('testers', 'Tester sayı', h('div', 'tester-row', ui.testers, ui.range)),
-      ui.capacity,
-      h('div', 'divider'),
+    ui.autoNote = h('div', { class: 'help', text: 'Avtomatik bölgü: rolları və hər rolun sayta necə girdiyini (qeydiyyat, giriş, dəvət, kod və ya qonaq) kəşfiyyatçının saytda gördükləri müəyyən edir; sizin seçiminiz yalnız tester sayıdır. Rolları özünüz bölmək üçün "Avtomatik bölgü"nü söndürün.' });
+    // The owner's own split of a company's team, only when the automatic split is off.
+    ui.manual = h('div', 'form-grid',
       field('roles', 'Rollar', h('div', 'form-grid cols-3',
         h('div', 'field', h('span', { class: 'label hint', text: 'Admin' }), ui.admins),
         h('div', 'field', h('span', { class: 'label hint', text: 'Menecer' }), ui.managers),
         h('div', 'field', h('span', { class: 'label hint', text: 'İşçi' }), ui.employees)),
-      'Admin həmişə 1-dir: şirkəti o yaradır və hamıya nəzarət edir. Menecer istənilən sayda ola bilər (hərəsi bir bölməyə baxır); qalan testerlər işçidir. Birini dəyişsəniz, işçi sayı avtomatik uyğunlaşır.'),
+      'Şirkətli saytda: admin həmişə 1-dir, şirkəti o yaradır. Menecer istənilən sayda ola bilər; qalan testerlər işçidir. Birini dəyişsəniz, işçi sayı avtomatik uyğunlaşır.'),
       ui.roleSum,
-      field('departments', 'Şöbələr', h('div', 'stack', departments, ui.deptChips), 'Vergüllə ayırın. Hər şöbəyə bir menecer düşür.'),
       field('registration', 'Qeydiyyat', h('div', 'form-grid cols-2',
         h('div', 'field', h('span', { class: 'label hint', text: 'Dəvətlə' }), ui.invite),
         h('div', 'field', h('span', { class: 'label hint', text: 'Şirkət kodu ilə' }), ui.companyCode)),
-      'Admindən başqa hamı avtomatik yarı-yarıya bölünür: yarısı dəvətlə, yarısı şirkət kodu ilə (tək qalan dəvətə düşür). Menecerlər həmişə dəvətlə qoşulur.'),
-      ui.regSum,
+      'Admindən başqa hamı yarı-yarıya bölünür: yarısı dəvətlə, yarısı şirkət kodu ilə (tək qalan dəvətə düşür). Menecerlər həmişə dəvətlə qoşulur. Yalnız sayt bu yolları təklif edirsə işləyir.'),
+      ui.regSum);
+    P.append(team.body, h('div', 'form-grid',
+      field('testers', 'Tester sayı', h('div', 'tester-row', ui.testers, ui.range)),
+      ui.capacity,
+      h('div', 'divider'),
+      ui.autoNote,
+      ui.manual,
+      field('departments', 'Şöbələr', h('div', 'stack', departments, ui.deptChips), 'İstəyə bağlı, vergüllə ayırın. Boş qalsa, kəşfiyyatçının saytda gördüyü şöbələr götürülür.'),
       h('div', { class: 'help', text: 'Giriş olmayan saytlarda (vizit kartı, bloq, vitrin) rol və qeydiyyat tətbiq olunmur: bütün testerlər ziyarətçidir və kəşfiyyatçının tapdığı səhifələri hərəsi öz ayrı brauzerində yoxlayır. Orada yalnız tester sayı vacibdir.' })));
 
     const budget = P.card('Büdcə', { icon: 'wallet', sub: 'Vaxt, addım və kəşfiyyat limitləri' });
@@ -370,25 +422,87 @@
     ui.jobs = h('div', { class: 'stack', hidden: true });
     ui.scenario = h('select', { class: 'select', attrs: { 'aria-label': 'Ssenari' } });
     ui.headful = h('input', { attrs: { type: 'checkbox' } });
-    const exploreBtn = P.button('Kəşf et', { kind: 'primary block', icon: 'explorer', on: (e) => explore(e.currentTarget) });
+    // The site's release this run tests: runs of a scenario are compared by it on the Reports screen.
+    ui.release = h('input', { class: 'input', attrs: { type: 'text', maxlength: '64', placeholder: 'məs. v1.4.2', 'aria-label': 'Saytın versiyası' } });
+    const testBtn = P.button('Test et', { kind: 'primary block', icon: 'play', on: (e) => testSite(e.currentTarget) });
+    const exploreBtn = P.button('Kəşf et', { kind: 'block', icon: 'explorer', on: (e) => explore(e.currentTarget) });
     const generateBtn = P.button('Ssenari yarat', { kind: 'block', icon: 'sparkles', on: (e) => generate(e.currentTarget) });
     ui.runBtn = P.button('Run et', { kind: 'dark block', icon: 'play', on: (e) => run(e.currentTarget) });
     const actions = P.card('Başla', { icon: 'play', class: 'action-card' });
     P.append(actions.body,
       ui.jobs,
+      h('div', 'action-block', testBtn, h('div', { class: 'help', text: 'Bir düymə ilə: kəşfiyyatçı saytı öyrənir, ssenari yalnız onun saytda tapdıqlarından yazılır, təsdiqlənir və yuxarıdakı tester sayı ilə run olunur. Ssenari faylı yazmırsınız.' })),
+      h('div', 'divider'),
+      h('div', { class: 'kicker', text: 'Addım-addım (ssenarini əvvəl görmək istəyənlər üçün)' }),
       h('div', 'action-block', exploreBtn, h('div', { class: 'help', text: 'Kəşfiyyatçı saytı gəzir, sayt modelini qurur, suallar verir və test ideyaları təklif edir.' })),
       h('div', 'action-block', generateBtn, h('div', { class: 'help', text: 'Son kəşfiyyatın modelindən ssenari layihəsi (YAML) hazırlanır; təsdiqdən sonra run oluna bilər.' })),
-      h('div', 'divider'),
       field('scenario', 'Təsdiqlənmiş ssenari', ui.scenario),
+      field('release', 'Saytın versiyası (istəyə bağlı, versiyaları müqayisə üçün)', ui.release),
       h('label', 'switch', ui.headful, h('span', { text: 'Brauzerləri göstər (headful)' })),
       h('div', 'action-block', ui.runBtn, h('div', { class: 'help', text: 'Seçilmiş ssenari yuxarıdakı tester sayı ilə işə düşür; gedişatı "Agentlər" və "Orkestrator" göstərir.' })));
 
     const how = P.card('Necə işləyir', { icon: 'help' });
     P.append(how.body, h('ol', 'steps-help',
       h('li', null, h('b', { text: '1' }), h('span', { text: 'Təlimatı yazın: hədəf və nəyin vacib olduğu.' })),
-      h('li', null, h('b', { text: '2' }), h('span', { text: 'Kəşfiyyatçı saytı öyrənir; suallarına cavab verin.' })),
-      h('li', null, h('b', { text: '3' }), h('span', { text: 'Ssenari layihəsini yoxlayıb təsdiqləyin.' })),
-      h('li', null, h('b', { text: '4' }), h('span', { text: 'Run edin: N tester eyni anda, sübutlu hesabatla.' }))));
+      h('li', null, h('b', { text: '2' }), h('span', { text: '"Test et": kəşfiyyatçı saytı öyrənir; suallarına cavab verə bilərsiniz.' })),
+      h('li', null, h('b', { text: '3' }), h('span', { text: 'Ssenari yalnız saytda tapılanlardan yazılır və təsdiqlənir; saytda olmayan heç nə gözlənilmir.' })),
+      h('li', null, h('b', { text: '4' }), h('span', { text: 'N tester eyni anda run edir; hesabatda hər hökm sübutla.' }))));
+
+    // the sites the panel knows (Faza 23), each with its own settings: "Seç" makes one the target; a new one is kept in
+    // targets/<name>.yaml (its token in .env) and known at once, without restarting the panel
+    const sitesCard = P.card('Saytlar', { icon: 'globe', sub: 'Bir neçə sayt, hər biri öz ayarları ilə; panel yenidən başlamır' });
+    const siteList = h('div', 'stack');
+    const siteName = h('input', { class: 'input', attrs: { type: 'text', placeholder: 'Ad (boş: ünvandan)', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Saytın adı' } });
+    const siteUrl = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'https://staging.example.com', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Saytın ünvanı' } });
+    const siteMail = h('select', { class: 'select', attrs: { 'aria-label': 'Saytın poçtu' } },
+      ...[['', 'Poçt: panelin ayarı'], ['mailpit', 'Mailpit'], ['manual', 'Kodu özüm yazıram'], ['imap', 'Öz qutum (IMAP)'], ['test-api', 'Saytın test API-si']]
+        .map(([value, text]) => h('option', { text, attrs: { value } })));
+    const siteToken = h('input', { class: 'input', attrs: { type: 'password', autocomplete: 'new-password', placeholder: 'Test tokeni (istəyə bağlı)', 'aria-label': 'Saytın test tokeni' } });
+    let sites = [];
+    const origin = (url) => { try { return new URL(url).origin; } catch (e) { return null; } };
+    function renderSites(list) {
+      if (list) sites = list;
+      const chosen = origin(form.target);
+      siteList.replaceChildren(...sites.map((s) => {
+        const facts = [s.own ? 'panelin öz saytı' : s.profile, s.testApi ? 'test API var' : 'test API yoxdur', 'poçt: ' + s.mail, s.accounts ? s.accounts + ' hesab' : null];
+        return h('div', { class: 'row wrap', data: { site: s.name } },
+          h('b', { text: s.name }),
+          h('span', { class: 'ellipsis', text: s.url }),
+          h('span', { class: 'faint', text: facts.filter(Boolean).join(' · ') }),
+          h('span', 'spacer'),
+          chosen && chosen === origin(s.url)
+            ? P.badge('green', 'Seçilib', { dot: true })
+            : P.button('Seç', { kind: 'small', icon: 'target', on: () => chooseSite(s.url) }));
+      }));
+    }
+    function chooseSite(url) {
+      form.target = url;
+      ui.target.value = url;
+      save();
+      renderFlow();
+      renderSites();
+      P.toast('Hədəf: ' + fmt.host(url), 'ok');
+    }
+    async function loadSites() { const res = await P.api.get('/api/sites'); if (res.ok) renderSites(res.data.sites || []); }
+    async function addSite(button) {
+      const body = { name: siteName.value, url: siteUrl.value, mail: siteMail.value, token: siteToken.value };
+      const res = await P.busy(button, () => P.api.post('/api/sites', body));
+      siteToken.value = '';
+      if (!res.ok) { P.toast((res.problems && res.problems[0] && res.problems[0].message) || res.error, 'error'); return; }
+      siteName.value = '';
+      siteUrl.value = '';
+      siteMail.value = '';
+      renderSites(res.data.sites || []);
+      P.toast('Sayt əlavə edildi: ayarları targets/ qovluğundadır' + (body.token ? ', tokeni .env-də.' : '.'), 'ok');
+    }
+    P.append(sitesCard.body, h('div', 'form-grid',
+      siteList,
+      h('div', 'divider'),
+      h('div', 'form-grid cols-2', siteName, siteUrl),
+      h('div', 'form-grid cols-2', siteMail, siteToken),
+      P.button('Sayt əlavə et', { icon: 'plus', on: (e) => addSite(e.currentTarget) }),
+      h('div', { class: 'help', text: 'Yalnız test mühitləri. Hər sayt öz ayarları ilə işləyir: öz test API-si və tokeni (token yalnız .env-ə yazılır), öz poçtu, öz hesabları. Tokeni olmayan saytda oracle yoxlamaları "N/A" olur.' })));
+    loadSites();
 
     // accounts the explorer may sign in with (bring your own accounts): the password goes to .env, never to the database
     const accounts = P.card('Hesablar', { icon: 'team', sub: 'Kəşfiyyatçı bu saytda sizin test hesablarınızla daxil olsun' });
@@ -404,7 +518,7 @@
     async function addAccount(button) {
       const res = await P.busy(button, () => P.api.post('/api/accounts', { target: form.target, role: role.value, email: email.value, password: password.value }));
       password.value = '';
-      if (res.ok) { renderAccounts(res.data.accounts || []); P.toast('Hesab saxlanıldı; parol yalnız .env-dədir.', 'ok'); }
+      if (res.ok) { renderAccounts(res.data.accounts || []); loadSites(); P.toast('Hesab saxlanıldı; parol yalnız .env-dədir.', 'ok'); }
       else P.toast((res.problems[0] && res.problems[0].message) || res.error, 'error');
     }
     P.append(accounts.body, h('div', 'form-grid',
@@ -415,7 +529,7 @@
     loadAccounts();
 
     P.append(el, ui.flow, h('div', 'grid-main-side',
-      h('div', 'stack', what.el, accounts.el, team.el, budget.el),
+      h('div', 'stack', what.el, sitesCard.el, accounts.el, team.el, budget.el),
       h('div', 'stack sticky-side', actions.el, how.el)));
     balance();
     syncTeam(true);
@@ -430,7 +544,7 @@
     group: 'Hazırlıq',
     topics: ['run', 'jobs'],
     mount,
-    show() { visible = true; loadCapacity(); loadScenarios(); renderJobs(); },
+    show() { visible = true; loadCapacity(); loadScenarios(); renderJobs(); if (!test || !test.final) pollTest(); },
     hide() { visible = false; },
   });
 })();

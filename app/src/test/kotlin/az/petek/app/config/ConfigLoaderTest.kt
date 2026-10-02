@@ -19,6 +19,7 @@ import az.petek.llm.domain.LlmProviderKey
 import az.petek.llm.infrastructure.http.StructuredMode
 import az.petek.mail.infrastructure.ImapSettings
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
@@ -94,6 +95,7 @@ class ConfigLoaderTest {
                 target,
                 "PETEK_PRODUCTION_HOSTS" to " Portal.example , app.portal.example ,",
                 "PETEK_ALLOW_PRODUCTION" to "yes",
+                "PETEK_ALLOWED_HOSTS" to " SSO.portal.example ,",
                 "PETEK_TEST_TOKEN" to "tok-123",
                 "PETEK_TEST_API_URL" to "https://api.staging.portal.example/",
                 "PETEK_MAIL_SOURCE" to "Test-API",
@@ -119,6 +121,7 @@ class ConfigLoaderTest {
 
         config.productionHosts shouldBe setOf("portal.example", "app.portal.example")
         config.allowProduction shouldBe true
+        config.allowedHosts shouldBe setOf("sso.portal.example")
         config.testToken shouldBe Secret("tok-123")
         config.testApiUrl shouldBe URI("https://api.staging.portal.example/")
         config.testApiBase shouldBe URI("https://api.staging.portal.example/")
@@ -254,6 +257,28 @@ class ConfigLoaderTest {
     }
 
     @Test
+    fun `an API key auto found without a model stops nothing that needs no AI, and says why`() {
+        val none = load(target, "OPENAI_API_KEY" to "sk-0123456789abcdef")
+        none.llmProvider shouldBe LlmProviderKey.NONE
+        none.llmProviderReason shouldBe "auto: OPENAI_API_KEY is set, but PETEK_LLM_MODEL is not set, so no AI provider is used"
+
+        // An AI command-line tool on PATH is used instead.
+        val cli =
+            ConfigLoader(emptyMap(), dir, fileSecret, onPath = { it == "codex" }).fromValues(
+                mapOf(
+                    target,
+                    "XAI_API_KEY" to "xai-0123456789",
+                ),
+            )
+        cli.llmProvider shouldBe LlmProviderKey.CODEX_CLI
+        cli.llmProviderReason shouldContain "codex-cli on PATH is used instead"
+
+        // A provider the owner named is still a configuration error without its model.
+        problems(target, "PETEK_LLM_PROVIDER" to "anthropic-api", "ANTHROPIC_API_KEY" to "sk-ant-0123456789") shouldContain
+            "PETEK_LLM_MODEL is required when PETEK_LLM_PROVIDER is anthropic-api"
+    }
+
+    @Test
     fun `auto follows the project's AI marker when its CLI is installed, else says why it went on`() {
         Files.writeString(dir.resolve("AGENTS.md"), "# agents")
         val installed = ConfigLoader(emptyMap(), dir, fileSecret, onPath = { it == "codex" }).fromValues(mapOf(target))
@@ -341,6 +366,7 @@ class ConfigLoaderTest {
               url: https://Stage.Shop.example
               api_url: https://api.stage.shop.example
               production_hosts: [shop.example]
+              allowed_hosts: [login.shop.example]
               mail: {source: test-api, domain: qa.shop.example}
               test_api: {token: '${'$'}{SHOP_TOKEN}'}
             """.trimIndent(),
@@ -358,6 +384,7 @@ class ConfigLoaderTest {
         config.mailSource shouldBe MailSource.TEST_API
         config.mailDomain shouldBe "qa.shop.example"
         config.productionHosts shouldBe setOf("shop.example")
+        config.allowedHosts shouldBe setOf("login.shop.example")
         config.targets.map { it.spec.name } shouldBe listOf("blog", "shop")
         config.profileFor(URI("https://blog.example/path"))?.testToken shouldBe null
         TargetProfileConfig.forTarget(config, URI("https://blog.example")).target shouldBe URI("https://blog.example")
@@ -369,6 +396,22 @@ class ConfigLoaderTest {
         other.mailSource shouldBe MailSource.MAILPIT
         config.toString() shouldNotContain "shop-token-123"
         problems("PETEK_TARGET" to "shop") shouldContainExactlyInAnyOrder listOf("SHOP_TOKEN, referenced by target 'shop', is not set")
+    }
+
+    @Test
+    fun `a profile of another site that names no token of its own never gets the panel's`() {
+        Files.createDirectories(dir.resolve("targets"))
+        Files.writeString(dir.resolve("targets/notes.yaml"), "target: {name: notes, url: 'https://notes.example'}")
+        Files.writeString(dir.resolve("targets/own.yaml"), "target: {name: own, url: 'https://own.example'}")
+
+        val config = load("PETEK_TARGET" to "https://own.example", "PETEK_TEST_TOKEN" to "own-token-123")
+
+        val notes = TargetProfileConfig.forTarget(config, URI("https://notes.example"))
+        notes.testToken shouldBe null
+        notes.mailSource shouldBe MailSource.MAILPIT
+        // The profile of the panel's own site keeps the site's token.
+        TargetProfileConfig.forTarget(config, URI("https://own.example")).testToken shouldBe Secret("own-token-123")
+        load("PETEK_TARGET" to "own", "PETEK_TEST_TOKEN" to "own-token-123").testToken shouldBe Secret("own-token-123")
     }
 
     @Test

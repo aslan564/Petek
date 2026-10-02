@@ -119,7 +119,7 @@ class SarifReportWriter : ReportWriter {
         when (findingClass) {
             FindingClass.BACKEND, FindingClass.DELIVERY_UI, FindingClass.SITE_CHECK -> "error"
             FindingClass.INVESTIGATE, FindingClass.AGENT_FAILURE -> "warning"
-            FindingClass.FLAKY -> "note"
+            FindingClass.FLAKY, FindingClass.INCONCLUSIVE -> "note"
         }
 
     private companion object {

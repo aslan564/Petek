@@ -75,6 +75,7 @@ object AgentTestData {
         shared: SharedRunState = InMemorySharedRunState(),
         variables: AgentVariables = AgentVariables(),
         target: TargetProfile = TargetProfile.DEFAULT,
+        siteHosts: Set<String> = setOf("staging.portal.test"),
     ) = AgentRuntime(
         runId = RUN_ID,
         identity = identity,
@@ -85,6 +86,7 @@ object AgentTestData {
         shared = shared,
         runStartedAt = RUN_STARTED_AT,
         storageStatePath = Path.of("build", "test-state", "${identity.agentId}.json"),
+        siteHosts = siteHosts,
     )
 
     fun step(

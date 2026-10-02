@@ -38,7 +38,19 @@ class EvidenceStorageFormatTest {
             val tables = db.column("SELECT name FROM sqlite_master WHERE type = 'table'")
 
             tables shouldContainAll
-                listOf("run", "run_resource", "step", "event", "receipt", "artifact", "assertion", "finding", "usage")
+                listOf(
+                    "run",
+                    "run_resource",
+                    "step",
+                    "event",
+                    "receipt",
+                    "artifact",
+                    "assertion",
+                    "finding",
+                    "usage",
+                    "page_timing",
+                    "page_look",
+                )
         }
 
     @Test

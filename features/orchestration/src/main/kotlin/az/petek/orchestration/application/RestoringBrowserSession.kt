@@ -15,11 +15,15 @@ import az.petek.browser.domain.BrowserContextLostException
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.LookRequest
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.PageTiming
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessTimestamp
@@ -134,6 +138,14 @@ internal class RestoringBrowserSession(
 
     override suspend fun isTextVisible(text: String): Boolean = guarded { it.isTextVisible(text) }
 
+    // A watch lives in the page: after a restore the new context has none, and stopTextWatch says it is lost.
+    override suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch = guarded { it.watchText(key, text) }
+
+    override suspend fun stopTextWatch(key: String): TextWatch = guarded { it.stopTextWatch(key) }
+
     override suspend fun isSelectorVisible(selector: String): Boolean = guarded { it.isSelectorVisible(selector) }
 
     override suspend fun count(selector: String): Int = guarded { it.count(selector) }
@@ -184,6 +196,10 @@ internal class RestoringBrowserSession(
     ): Viewport? = guarded { it.resizeViewport(width, height) }
 
     override suspend fun pageFacts(): PageFacts? = guarded { it.pageFacts() }
+
+    override suspend fun pageTiming(): PageTiming? = guarded { it.pageTiming() }
+
+    override suspend fun look(request: LookRequest): PageLook? = guarded { it.look(request) }
 
     override suspend fun close() = current.close()
 

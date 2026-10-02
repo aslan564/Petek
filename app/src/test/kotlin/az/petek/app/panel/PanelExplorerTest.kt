@@ -42,6 +42,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -154,7 +155,11 @@ class PanelExplorerTest {
             login.actions.single().kind shouldBe "LOGIN"
             view.ideas.map { it.pattern } shouldContain "HAPPY_PATH"
             view.unknowns.single().question shouldBe "Şirkət kodu haradan alınır?"
-            view.draftYaml.shouldNotBeNull() shouldContain "register_owner"
+            // The explorer saw a company code to join with but not who hands it out (its own question): no company is
+            // assumed, whatever the test API can do (Faza 25.1). The draft takes the site's gate as it is.
+            val draft = view.draftYaml.shouldNotBeNull()
+            draft shouldContain "tenant: none"
+            draft shouldNotContain "register_owner"
             val shot =
                 view.visited
                     .first()

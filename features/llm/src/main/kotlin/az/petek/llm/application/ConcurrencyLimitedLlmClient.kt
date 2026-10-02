@@ -11,11 +11,12 @@
 
 package az.petek.llm.application
 
+import az.petek.llm.domain.LlmCallObserver
 import az.petek.llm.domain.LlmClient
 import az.petek.llm.domain.LlmRequest
 import az.petek.llm.domain.LlmResponse
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 /**
  * Lets at most [permits] calls reach [delegate] at once; the others suspend (they do not fail) until a slot frees up.
@@ -24,6 +25,10 @@ import kotlinx.coroutines.sync.withPermit
  *
  * Put it inside [RetryingLlmClient] (`RetryingLlmClient(ConcurrencyLimitedLlmClient(provider, n))`): a permit then
  * covers one attempt, so a call sleeping through its backoff does not keep a slot from the other agents.
+ *
+ * The [LlmCallObserver] in the caller's coroutine context, if any, hears how each call goes: the wait for a slot (only
+ * when the call has to wait) and the call itself. With many testers on a few slots a call may wait minutes for the
+ * others; the runner's watchdog uses this to never count that wait against the tester whose call it is.
  */
 class ConcurrencyLimitedLlmClient(
     private val delegate: LlmClient,
@@ -38,5 +43,25 @@ class ConcurrencyLimitedLlmClient(
     /** Free slots right now; for monitoring. */
     val availablePermits: Int get() = semaphore.availablePermits
 
-    override suspend fun complete(request: LlmRequest): LlmResponse = semaphore.withPermit { delegate.complete(request) }
+    override suspend fun complete(request: LlmRequest): LlmResponse {
+        val observer = currentCoroutineContext()[LlmCallObserver]
+        if (!semaphore.tryAcquire()) {
+            observer?.slotWaitStarted()
+            try {
+                semaphore.acquire()
+            } finally {
+                observer?.slotWaitEnded()
+            }
+        }
+        try {
+            observer?.callStarted()
+            try {
+                return delegate.complete(request)
+            } finally {
+                observer?.callEnded()
+            }
+        } finally {
+            semaphore.release()
+        }
+    }
 }

@@ -412,6 +412,7 @@ class DashboardState private constructor(
                         Verdict.PASSED -> tally.copy(assertionsPassed = tally.assertionsPassed + 1)
                         Verdict.FAILED -> tally.copy(assertionsFailed = tally.assertionsFailed + 1)
                         Verdict.SKIPPED, Verdict.NOT_APPLICABLE -> tally.copy(assertionsSkipped = tally.assertionsSkipped + 1)
+                        Verdict.INCONCLUSIVE -> tally.copy(assertionsInconclusive = tally.assertionsInconclusive + 1)
                     },
             )
         val agentId = record.agentId
@@ -429,7 +430,7 @@ class DashboardState private constructor(
                 when (record.verdict) {
                     Verdict.PASSED -> TimelineStatus.OK
                     Verdict.FAILED -> TimelineStatus.FAIL
-                    Verdict.SKIPPED, Verdict.NOT_APPLICABLE -> TimelineStatus.INFO
+                    Verdict.SKIPPED, Verdict.NOT_APPLICABLE, Verdict.INCONCLUSIVE -> TimelineStatus.INFO
                 },
             text = text,
             scenarioStep = record.scenarioStep,
@@ -537,6 +538,7 @@ class DashboardState private constructor(
             assertionsPassed = tally.assertionsPassed,
             assertionsFailed = tally.assertionsFailed,
             assertionsSkipped = tally.assertionsSkipped,
+            assertionsInconclusive = tally.assertionsInconclusive,
             events = tally.events,
             receiptsReceived = tally.receiptsReceived,
             receiptsMissing = tally.receiptsMissing,
@@ -629,6 +631,7 @@ class DashboardState private constructor(
         val assertionsPassed: Int = 0,
         val assertionsFailed: Int = 0,
         val assertionsSkipped: Int = 0,
+        val assertionsInconclusive: Int = 0,
         val events: Int = 0,
         val receiptsReceived: Int = 0,
         val receiptsMissing: Int = 0,
@@ -663,7 +666,7 @@ class DashboardState private constructor(
         private val FAILED_STEPS = setOf(StepStatus.FAILED, StepStatus.ERROR, StepStatus.BLOCKED)
 
         /** Findings that ask for a closer look rather than report a defect. */
-        private val NOTICE_FINDINGS = setOf(FindingClass.INVESTIGATE, FindingClass.FLAKY)
+        private val NOTICE_FINDINGS = setOf(FindingClass.INVESTIGATE, FindingClass.FLAKY, FindingClass.INCONCLUSIVE)
         private val AGENT_TOKEN = Regex("^a\\d+\\b")
 
         /** The agent an artifact belongs to: the first path segment that is an agent id (`<run>/<agent>/<file>`). */

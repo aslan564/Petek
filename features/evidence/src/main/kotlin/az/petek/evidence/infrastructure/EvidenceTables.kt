@@ -64,12 +64,16 @@ internal object RunTable : Table("run") {
     /** Added after the first release; older databases get it with the default (`SqliteDatabase.createMissing`). */
     val workspaceId = text("workspace_id").default(WorkspaceId.LOCAL.value)
 
+    /** The site's release the run tested (2026-09-30); added later, so older databases get it empty (`createMissing`). */
+    val release = text("release").nullable()
+
     override val primaryKey = PrimaryKey(seq)
 
     init {
         uniqueIndex(runId)
         index(false, startedAt)
         index(false, repeatGroup, repeatIndex)
+        index(false, campaignName, startedAt)
     }
 }
 
@@ -227,6 +231,63 @@ internal object UsageTable : Table("usage") {
     }
 }
 
+/** One row per page a tester timed (`site_health`'s `perf`); added later, so older databases get it empty (`createMissing`). */
+internal object PageTimingTable : Table("page_timing") {
+    val seq = long("seq").autoIncrement()
+    val runId = runIdColumn()
+    val stepId = stepIdColumn()
+    val agentId = agentIdColumn("agent_id")
+    val scenarioStep = text("scenario_step")
+    val page = text("page")
+    val device = text("device").nullable()
+    val ttfbMs = long("ttfb_ms").nullable()
+    val domContentLoadedMs = long("dom_content_loaded_ms").nullable()
+    val loadMs = long("load_ms").nullable()
+    val largestPaintMs = long("largest_paint_ms").nullable()
+    val layoutShift = double("layout_shift").nullable()
+    val recordedAt = instant("recorded_at")
+
+    override val primaryKey = PrimaryKey(seq)
+
+    init {
+        index(false, runId, page)
+    }
+}
+
+/**
+ * One row per page look (`site_health`'s `look`, docs/adr/0014); added later, so older databases get it empty
+ * (`createMissing`). Frames, masks, fonts and anchors are JSON text ([LookJson]).
+ */
+internal object PageLookTable : Table("page_look") {
+    val seq = long("seq").autoIncrement()
+    val runId = runIdColumn()
+    val stepId = stepIdColumn()
+    val agentId = agentIdColumn("agent_id")
+    val scenarioStep = text("scenario_step")
+    val page = text("page")
+    val device = text("device").nullable()
+    val landedPath = text("landed_path")
+    val status = integer("status").nullable()
+    val viewportWidth = integer("viewport_width")
+    val viewportHeight = integer("viewport_height")
+    val pageHeight = integer("page_height")
+    val maxHeight = integer("max_height")
+    val testers = integer("testers")
+    val renderer = text("renderer")
+    val settled = bool("settled")
+    val unsettled = text("unsettled_json")
+    val fonts = text("fonts_json")
+    val frames = text("frames_json")
+    val anchors = text("anchors_json")
+    val recordedAt = instant("recorded_at")
+
+    override val primaryKey = PrimaryKey(seq)
+
+    init {
+        index(false, runId, scenarioStep, page)
+    }
+}
+
 /** Every table of the evidence store, in creation order. */
 internal val evidenceTables: Array<Table> =
     arrayOf(
@@ -239,4 +300,6 @@ internal val evidenceTables: Array<Table> =
         AssertionTable,
         FindingTable,
         UsageTable,
+        PageTimingTable,
+        PageLookTable,
     )

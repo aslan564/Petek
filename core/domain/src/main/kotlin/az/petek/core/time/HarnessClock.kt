@@ -24,6 +24,12 @@ data class HarnessTimestamp(
     val monotonicNanos: Long,
 ) {
     fun elapsedUntil(later: HarnessTimestamp): Duration = (later.monotonicNanos - monotonicNanos).nanoseconds
+
+    /** The harness time [duration] later (earlier when negative), e.g. a moment the browser measured from this one. */
+    operator fun plus(duration: Duration): HarnessTimestamp {
+        val nanos = duration.inWholeNanoseconds
+        return HarnessTimestamp(wall.plusNanos(nanos), monotonicNanos + nanos)
+    }
 }
 
 interface HarnessClock {

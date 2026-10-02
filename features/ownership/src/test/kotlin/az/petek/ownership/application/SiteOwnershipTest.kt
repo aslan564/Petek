@@ -90,18 +90,6 @@ class SiteOwnershipTest {
         }
 
     @Test
-    fun `a full test on a site without the proof is refused with what to publish and where Pətək looked`() =
-        runTest {
-            probe.found = null
-
-            val refusal = shouldThrow<OwnershipRequiredException> { ownership.requireFullTest(stage) }
-
-            refusal.status.challenge.host shouldBe "stage.example.com"
-            refusal.status.looked shouldBe listOf("https://stage.example.com/.well-known/petek-verification.txt: HTTP 404")
-            ledger.all().shouldBeEmpty()
-        }
-
-    @Test
     fun `inspect looks without remembering anything`() =
         runTest {
             ownership.inspect(stage).shouldBeInstanceOf<OwnershipStatus.Verified>()

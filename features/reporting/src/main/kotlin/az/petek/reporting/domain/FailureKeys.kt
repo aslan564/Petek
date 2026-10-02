@@ -11,6 +11,8 @@
 
 package az.petek.reporting.domain
 
+import az.petek.evidence.domain.NOT_COVERED
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
 
@@ -62,6 +64,19 @@ object FailureKeys {
      */
     const val RATE_LIMITED = "rate_limited"
 
+    /** `site_health` saw a page go wrong (a script error, a failed request, a page wider than a phone): the site's defect. */
+    const val UNHEALTHY_PAGE = "unhealthy_page"
+
+    /** `direct_url` opened another tester's object and the site showed it: a page open to someone who must not see it. */
+    const val ACCESS_NOT_REFUSED = "access_not_refused"
+
+    /**
+     * In a step whose `http_status` expects the site to refuse (401/403), the tester's own page sent the forbidden
+     * request during the action and the site accepted it (status < 400), whatever the agent said (Faza 24.2): the
+     * site's defect, never an expected refusal like [PERMISSION_DENIED].
+     */
+    const val FORBIDDEN_ACCEPTED = "forbidden_accepted"
+
     /** Implied by [StepStatus.BLOCKED] when the watchdog left no key of its own. */
     const val BLOCKED = "blocked"
 
@@ -86,9 +101,50 @@ object FailureKeys {
             LOST_RACE,
             REQUEST_FAILED,
             RATE_LIMITED,
-            "unhealthy_page",
-            "access_not_refused",
+            UNHEALTHY_PAGE,
+            ACCESS_NOT_REFUSED,
+            FORBIDDEN_ACCEPTED,
+            "off_site",
+            NOT_COVERED,
+            NotReached.NEVER_REACHED,
         )
+
+    /**
+     * Keys that say the site itself went wrong, as code saw it: a deterministic check's defect, no e-mail sent, the
+     * target turning down a racer's own request.
+     */
+    private val SITE_KEYS: Set<String> =
+        setOf(UNHEALTHY_PAGE, ACCESS_NOT_REFUSED, FORBIDDEN_ACCEPTED, MAIL_TIMEOUT, REQUEST_FAILED)
+
+    /**
+     * Keys of the run's surroundings rather than of the site or the tester's agent: the test inbox, a shared IP, the AI
+     * provider, the browser, a wave that could not check a step, a setup step whose event no tester of the run could
+     * emit.
+     */
+    private val ENVIRONMENT_KEYS: Set<String> =
+        setOf(
+            MAIL_UNAVAILABLE,
+            RATE_LIMITED,
+            "llm_unavailable",
+            "browser_error",
+            NOT_COVERED,
+            "emitter_absent",
+            // A tester the run went on without: a gap of Pətək itself, never of the site or the tester's agent.
+            NotReached.NEVER_REACHED,
+        )
+
+    /**
+     * Who a failure with [key] is on (Faza 24.13): [FailureCause.SITE] for the site's own defects, [FailureCause.ENVIRONMENT]
+     * for the run's surroundings, [FailureCause.AGENT] for everything else, the tester's agent getting lost (a loop, the
+     * step limit, a time-out, a problem it reported) and what follows from it (an event never published, an id that
+     * could not be read).
+     */
+    fun causeOf(key: String?): FailureCause =
+        when (key) {
+            in SITE_KEYS -> FailureCause.SITE
+            in ENVIRONMENT_KEYS -> FailureCause.ENVIRONMENT
+            else -> FailureCause.AGENT
+        }
 
     /** Keys caused by the test environment rather than by the target or the agent, with what went wrong. */
     private val ENVIRONMENT_PROBLEMS: Map<String, String> =
@@ -154,3 +210,6 @@ object FailureKeys {
         return find(step.detail) ?: BLOCKED.takeIf { step.status == StepStatus.BLOCKED }
     }
 }
+
+/** Who a failure is on (Faza 24.13): the site, the tester's agent (its model), or the run's surroundings. */
+enum class FailureCause { SITE, AGENT, ENVIRONMENT }

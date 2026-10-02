@@ -191,6 +191,37 @@ class AppContainerTest {
     }
 
     @Test
+    fun `a refreshed configuration switches the AI of the next calls and brings new site profiles, nothing else`() {
+        AppContainer(config(provider = LlmProviderKey.NONE)).use { container ->
+            container.llm.provider shouldBe LlmProviderKey.NONE
+            val fresh =
+                config(
+                    provider = LlmProviderKey.OPENAI_COMPAT,
+                ).copy(target = URI("http://127.0.0.1:10"), evidenceDir = dir.resolve("other"))
+
+            container.refresh(fresh)
+
+            container.llm.provider shouldBe LlmProviderKey.OPENAI_COMPAT
+            container.config.llmModel shouldBe "model-1"
+            container.config.llmBaseUrl shouldBe URI("http://127.0.0.1:9/v1")
+            // Only the AI and the profiles change while a panel runs: the site and the evidence stay as built.
+            container.config.target shouldBe URI("http://127.0.0.1:9")
+            container.config.evidenceDir shouldBe dir.resolve("evidence")
+        }
+    }
+
+    @Test
+    fun `a container whose AI is given by the caller keeps it, though the configuration names the new one`() {
+        val given = CountingLlm(failures = 0)
+        AppContainer(config(provider = LlmProviderKey.NONE), AppOverrides(llm = given)).use { container ->
+            container.refresh(config(provider = LlmProviderKey.CODEX_CLI))
+
+            container.config.llmProvider shouldBe LlmProviderKey.CODEX_CLI
+            container.llm.provider shouldBe given.provider
+        }
+    }
+
+    @Test
     fun `other AI tools found on the machine become fallbacks behind the chosen one`() {
         val client = LlmProviders.create(config(fallbacks = listOf(LlmProviderKey.GEMINI_CLI))).shouldBeInstanceOf<FallbackLlmClient>()
         client.provider shouldBe LlmProviderKey.CODEX_CLI

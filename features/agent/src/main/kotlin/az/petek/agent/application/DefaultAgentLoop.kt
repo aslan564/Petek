@@ -17,6 +17,7 @@ import az.petek.agent.domain.AgentAction
 import az.petek.agent.domain.AgentDecision
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.AgentVariableKeys
+import az.petek.agent.domain.ContactPolicy
 import az.petek.agent.domain.DecisionParse
 import az.petek.agent.domain.DecisionProtocol
 import az.petek.agent.domain.FailureReason
@@ -62,9 +63,13 @@ private val logger = KotlinLogging.logger {}
  * The `do` loop: snapshot -> LLM decision -> whitelist action -> evidence, until the model calls `done` /
  * `report_problem`, or a guard stops it. Guards, all decided by code (AGENTS.md rules 2 and 3):
  * - [StepContext.maxSteps] LLM decisions -> `step_limit`; the whole execution runs within [StepContext.timeout] -> `timeout`;
- * - the same action chosen repeatedly (per [LoopDetector]) -> `loop_detected`, the repeat is not executed;
- * - a ref that is not on the page, a placeholder that does not resolve or an absolute URL on another host is an
- *   invalid decision (fed back, nothing executed);
+ * - the same action chosen repeatedly on a page that does not change (per [LoopDetector]) -> `loop_detected`, the
+ *   repeat is not executed;
+ * - a ref that is not on the page, a placeholder that does not resolve, an absolute URL on another host or a typed
+ *   e-mail address or phone number that is not the test team's ([ContactPolicy]) is an invalid decision (fed back,
+ *   nothing executed);
+ * - a page that left the site under test (a link or redirect to a host that is neither the target's nor allowed) is
+ *   brought back before the model sees it; one that keeps leaving -> `off_site` (Faza 24.9);
  * - [MAX_INVALID_DECISIONS] invalid decisions in a row -> `invalid_decision`;
  * - [MAX_FAILED_ACTIONS] failed browser/mail actions in a row -> `browser_error`;
  * - no verification e-mail for `get_email_code` -> `mail_timeout`; a test inbox that stayed unreachable for the
@@ -126,6 +131,7 @@ class DefaultAgentLoop(
         private val step: StepContext,
     ) {
         private val detector = loopDetectorFactory()
+        private val contacts = ContactPolicy(runtime.identity, runtime.roster, runtime.testMail)
         private val history = mutableListOf<ActionHistoryEntry>()
         private val system: String by lazy { runtime.redact(prompts.system(runtime)) }
         private val label = "${runtime.identity.agentId}/${step.scenarioStep}"
@@ -136,6 +142,10 @@ class DefaultAgentLoop(
 
         /** The outcome of the turn that ended the loop, set before that turn's evidence is written. */
         private var concluded: ActionOutcome? = null
+
+        /** The last page of the site under test the agent was on: where a page that left the site is brought back to. */
+        private var lastOnSite: String? = null
+        private var returns = 0
 
         suspend fun run(): ActionOutcome {
             while (decisions < step.maxSteps) {
@@ -184,6 +194,7 @@ class DefaultAgentLoop(
                 } catch (e: Exception) {
                     return Turn("snapshot", StepStatus.ERROR, "ERROR: could not read the page: ${describe(e)}", actionFailed = true)
                 }
+            offSite(snapshot.url)?.let { return it }
             val request = request(snapshot)
             val output =
                 try {
@@ -221,6 +232,66 @@ class DefaultAgentLoop(
             )
         }
 
+        /**
+         * A page that left the site under test (a link or a redirect to another host, or a page that could not be shown)
+         * is brought back to the last page of the site before the model sees it, so the model never decides anything on
+         * another site (AGENTS.md rule 8, Faza 24.9). The turn records the return and the model reads it in its history.
+         * A page that leaves again at once, or more than [MAX_OFF_SITE_RETURNS] times, ends the task with `off_site`.
+         */
+        private suspend fun offSite(url: String): Turn? {
+            val scheme = url.substringBefore(':', missingDelimiterValue = "").lowercase()
+            val web = scheme == "http" || scheme == "https"
+            val host = if (web) hostOf(url) else null
+            when {
+                web && host != null && (runtime.siteHosts.isEmpty() || host in runtime.siteHosts) -> {
+                    lastOnSite = url
+                    return null
+                }
+
+                // No scheme is a page of the site as the session names it; about:blank is where a session starts.
+                !web && (scheme.isEmpty() || scheme == ABOUT || lastOnSite == null) -> {
+                    return null
+                }
+            }
+            val away = host ?: scheme
+            val back = lastOnSite ?: "/"
+            if (++returns > MAX_OFF_SITE_RETURNS) return offSiteStop(away, "left it $returns times")
+            return try {
+                runtime.session.navigate(back)
+                val landed = hostOf(runtime.session.currentUrl())
+                if (landed != null && runtime.siteHosts.isNotEmpty() && landed !in runtime.siteHosts) {
+                    offSiteStop(away, "the site sends it on to $landed")
+                } else {
+                    Turn(
+                        "return to the site",
+                        StepStatus.PASSED,
+                        "The page left the site under test for $away; it was brought back to $back. " +
+                            "Only pages of the site under test can be used.",
+                        actionFailed = false,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Turn(
+                    "return to the site",
+                    StepStatus.ERROR,
+                    "ERROR: the page left the site under test for $away and could not be brought back: ${describe(e)}",
+                    actionFailed = true,
+                )
+            }
+        }
+
+        private fun offSiteStop(
+            away: String,
+            why: String,
+        ): Turn {
+            val message =
+                "The page left the site under test for $away and $why. If $away is the site's own sign-in or mail, " +
+                    "add it to allowed_hosts of the target profile (PETEK_ALLOWED_HOSTS)."
+            return Turn("return to the site", StepStatus.FAILED, message, outcome = failed(FailureReason.OFF_SITE, message))
+        }
+
         private suspend fun decide(
             decision: AgentDecision,
             snapshot: PageSnapshot,
@@ -244,7 +315,7 @@ class DefaultAgentLoop(
                         }
 
                         is Preparation.Ready -> {
-                            if (detector.register(action)) {
+                            if (detector.register(action, snapshot.fingerprint())) {
                                 loopDetected(described, reason)
                             } else {
                                 perform(action, preparation.typedText, described, reason)
@@ -264,10 +335,18 @@ class DefaultAgentLoop(
             action: AgentAction,
             snapshot: PageSnapshot,
         ): Preparation {
-            if (action is AgentAction.Navigate && !staysOnSite(action.url, snapshot.url)) {
+            if (action is AgentAction.Navigate && !staysOnSite(action.url, runtime.siteHosts)) {
                 return Preparation.Rejected(
                     "Only pages of the site under test can be opened. Use a path such as /tickets" +
-                        (hostOf(snapshot.url)?.let { " or an absolute URL on $it" } ?: "") + ".",
+                        (
+                            runtime.siteHosts.sorted().takeIf { it.isNotEmpty() }?.let {
+                                " or an absolute URL on ${it.joinToString(
+                                    " or ",
+                                )}"
+                            }
+                                ?: ""
+                        ) +
+                        ".",
                 )
             }
             val ref =
@@ -281,6 +360,7 @@ class DefaultAgentLoop(
                 return Preparation.Rejected("Element [$ref] is not on the current page. Use a ref from the Elements list.")
             }
             if (action !is AgentAction.Type) return Preparation.Ready(null)
+            contacts.refusal(action.text)?.let { return Preparation.Rejected(it) }
             return when (val resolution = resolver.resolve(action.text, runtime)) {
                 is PlaceholderResolver.Resolution.Resolved -> Preparation.Ready(resolution.text)
                 is PlaceholderResolver.Resolution.Unresolved -> Preparation.Rejected(resolution.message)
@@ -498,7 +578,7 @@ class DefaultAgentLoop(
                 "Stopped: the same action was chosen again without progress; it was not executed.",
                 reason,
                 validDecision = true,
-                outcome = failed(FailureReason.LOOP_DETECTED, "Loop detected: '$described' was chosen repeatedly in a row."),
+                outcome = failed(FailureReason.LOOP_DETECTED, "Loop detected: '$described' was chosen repeatedly on the same page."),
             )
 
         private fun invalid(
@@ -631,14 +711,19 @@ class DefaultAgentLoop(
 
     private fun JsonObject.reason(): String? = (this["reason"] as? JsonPrimitive)?.contentOrNull
 
-    /** A path always resolves against the session's base URL; an absolute URL must keep the current page's host. */
+    /** What the model saw, as a key for the loop detector: the address without its fragment and the rendered page. */
+    private fun PageSnapshot.fingerprint(): String = url.substringBefore('#') + "|" + render().hashCode()
+
+    /**
+     * A path always resolves against the session's base URL (a `//host` or `/\host` form is another host, not a path);
+     * an absolute URL must be on one of the site's [hosts] (Faza 24.9), not merely on the host the page happens to be on.
+     */
     private fun staysOnSite(
         url: String,
-        currentUrl: String,
+        hosts: Set<String>,
     ): Boolean {
-        if (url.startsWith("/")) return true
-        val current = hostOf(currentUrl) ?: return false
-        return hostOf(url) == current
+        if (url.startsWith("/")) return url.getOrNull(1).let { it != '/' && it != '\\' }
+        return hostOf(url)?.let { it in hosts } == true
     }
 
     private fun hostOf(url: String): String? =
@@ -651,6 +736,11 @@ class DefaultAgentLoop(
     companion object {
         /** Consecutive invalid decisions that end the loop. */
         const val MAX_INVALID_DECISIONS = 2
+
+        /** Times a page that left the site under test is brought back before the task ends with `off_site`. */
+        const val MAX_OFF_SITE_RETURNS = 3
+
+        private const val ABOUT = "about"
 
         /** Consecutive failed browser or mail actions that end the loop. */
         const val MAX_FAILED_ACTIONS = 3

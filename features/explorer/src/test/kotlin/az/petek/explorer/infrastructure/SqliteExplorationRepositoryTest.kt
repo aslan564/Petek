@@ -135,8 +135,10 @@ class SqliteExplorationRepositoryTest {
     @Test
     fun `a full site model survives the round trip and versions are unique per target`() =
         withRepository { repository ->
+            val portal = Models.portal(1)
             val v1 =
-                Models.portal(1).copy(
+                portal.copy(
+                    pages = portal.pages.map { if (it.urlPattern == "/tickets") it.copy(lists = mapOf("/tickets/{id}" to 3)) else it },
                     createdAt = at,
                     unknowns = listOf(Unknown("u1", "Kim görür?", "trial", "tickets", Provenance.INFERRED, listOf(ArtifactId("art_9")))),
                     realtime =

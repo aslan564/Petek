@@ -140,7 +140,10 @@ async function main() {
     }
     if (!fs.existsSync(launcher)) fail(`the bundle did not contain ${launcher}`);
   }
-  const result = spawnSync(launcher, process.argv.slice(2), { stdio: 'inherit', shell: target === 'win-x64' });
+  // Tells the bundle it was started by this launcher (npx or a global npm install), so `petek init` can write an MCP
+  // entry that starts the same way on the project's machine.
+  const env = { ...process.env, PETEK_LAUNCHER: `npm@${version}` };
+  const result = spawnSync(launcher, process.argv.slice(2), { stdio: 'inherit', shell: target === 'win-x64', env });
   if (result.error) fail(`could not start ${launcher}: ${result.error.message}`);
   process.exit(result.status === null ? 130 : result.status);
 }

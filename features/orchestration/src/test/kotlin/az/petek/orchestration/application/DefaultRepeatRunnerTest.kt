@@ -71,14 +71,15 @@ class DefaultRepeatRunnerTest {
         }
 
     @Test
-    fun `keepData and the base options reach every run`() =
+    fun `every option the caller gave reaches every run, the account swap and the proven site too`() =
         runTest {
             val runner = RecordingRunner(List(2) { RunOutcome.PASSED })
-            val repeat = DefaultRepeatRunner(runner, SequentialIdGenerator(), RunOptions(inactivityTimeout = 45.seconds))
+            val repeat = DefaultRepeatRunner(runner, SequentialIdGenerator())
+            val given = RunOptions(keepData = true, inactivityTimeout = 45.seconds, swapAccounts = true, ownSite = true)
 
-            repeat.repeat(campaign(), times = 2, keepData = true)
+            repeat.repeat(campaign(), times = 2, given)
 
-            runner.options.all { it.keepData && it.inactivityTimeout == 45.seconds } shouldBe true
+            runner.options.map { it.copy(repeatGroup = null, repeatIndex = null) } shouldBe List(2) { given }
         }
 
     @Test

@@ -25,6 +25,7 @@ import az.petek.core.model.Role
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.explorer.domain.ActionKind
+import az.petek.explorer.domain.CardState
 import az.petek.explorer.domain.ExplorationBudget
 import az.petek.explorer.domain.ExplorationEvent
 import az.petek.explorer.domain.ExplorationId
@@ -32,7 +33,11 @@ import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.ExplorationRecord
 import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
+import az.petek.explorer.domain.GateMaps
+import az.petek.explorer.domain.SiteKind
 import az.petek.explorer.domain.SiteModel
+import az.petek.explorer.domain.SmallBugCard
+import az.petek.explorer.domain.SmallBugCatalog
 import az.petek.explorer.domain.TestPattern
 import az.petek.explorer.support.Models
 import az.petek.explorer.testing.InMemoryExplorationRepository
@@ -41,9 +46,11 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -101,9 +108,9 @@ class GenerateScenarioUseCaseTest {
         validator.validate(campaign, runFunctions).shouldBeEmpty()
         campaign.settings.tenant shouldBe Tenant.NONE
         campaign.settings.departments.shouldBeEmpty()
-        // People sign in here: every tester checks the pages a visitor sees before the gates.
+        // People sign in here: every tester looks at and checks the pages a visitor sees before the gates.
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly
-            listOf("site_health", "page_checks", "register_and_login")
+            listOf("site_health", "site_health", "page_checks", "register_and_login")
         campaign.allSteps.none { (it.action as? StepAction.Run)?.function in setOf("register_owner", "seed_company") } shouldBe true
         // The portal model shows a sign-in but no sign-up form: its testers take the owner's accounts.
         campaign.settings.registration.login shouldBe campaign.settings.testers
@@ -124,7 +131,7 @@ class GenerateScenarioUseCaseTest {
         validator.validate(campaign, runFunctions).shouldBeEmpty()
         campaign.settings.testers shouldBe 30
         campaign.settings.registration.guest shouldBe 30
-        campaign.setup.map { it.id } shouldContainExactly listOf("gates")
+        campaign.setup.map { it.id } shouldContainExactly listOf("site-look", "gates")
         campaign.steps.map { it.id } shouldContainExactly listOf("site-pages", "site-content")
         campaign.steps.forEach { step ->
             step.actors.raw shouldBe "anonymous[*]"
@@ -133,8 +140,10 @@ class GenerateScenarioUseCaseTest {
             args["share"] shouldBe "work"
             args["devices"] shouldBe "phone,tablet,desktop"
         }
-        (campaign.step("site-pages").action as StepAction.Run).args["checks"] shouldBe "console,slow,links,back,mobile"
-        (campaign.step("site-content").action as StepAction.Run).args["checks"] shouldBe "anchors,images,alt,meta,outbound"
+        // The pages are timed on their first visit, in the setup look step, before the look leaves them cached.
+        (campaign.setup.first().action as StepAction.Run).args["checks"] shouldBe "slow,perf,look"
+        (campaign.step("site-pages").action as StepAction.Run).args["checks"] shouldBe "console,links,back,mobile"
+        (campaign.step("site-content").action as StepAction.Run).args["checks"] shouldBe "anchors,images,alt,meta,outbound,mirrors"
         composed.skipped.shouldBeEmpty()
     }
 
@@ -153,14 +162,96 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
+    fun `public pages get a look step first in setup before anyone signs in`() {
+        val composed = useCase().compose(Models.portal(), request())
+
+        val look = composed.campaign.setup.first()
+        look.id shouldBe "public-look"
+        look.actors.raw shouldBe "admin | manager[*] | employee[*]"
+        look.action shouldBe
+            StepAction.Run(
+                "site_health",
+                mapOf(
+                    "checks" to "slow,perf,look",
+                    "pages" to "/login",
+                    "share" to "work",
+                    "devices" to "phone,tablet,desktop",
+                ),
+            )
+        // A draft names no masks and no look arguments: those are the owner's to add.
+        composed.campaign.target.visual.mask
+            .shouldBeEmpty()
+        composed.yaml shouldNotContain "look_"
+        // The other checks stay as they were: a look is asked for by name only.
+        (
+            composed.campaign.setup
+                .single { it.id == "public-pages" }
+                .action as StepAction.Run
+        ).args["checks"]!! shouldNotContain "look"
+        reload(composed.yaml).setup.first() shouldBe look
+    }
+
+    @Test
+    fun `a site without sign-in gets its looks in a setup step of their own`() {
+        val site = Models.model(listOf(Models.page("/"), Models.page("/about")), emptyList(), roles = listOf("anonymous"))
+
+        val campaign = useCase().compose(site, request().copy(tenant = Tenant.NONE, testers = 4)).campaign
+
+        // The site's own checks run after the scenario's writes; its looks come before anything was written.
+        val look = campaign.setup.first()
+        look.id shouldBe "site-look"
+        look.actors.raw shouldBe "anonymous[*]"
+        (look.action as StepAction.Run).args shouldBe
+            mapOf("checks" to "slow,perf,look", "pages" to "/,/about", "share" to "work", "devices" to "phone,tablet,desktop")
+        campaign.steps.none { (it.action as StepAction.Run).args["checks"]!!.contains("look") } shouldBe true
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `the visitor's pages are timed on their first visit, in the look step, since a look leaves them cached`() {
+        fun checks(step: ScenarioStep) = (step.action as StepAction.Run).args["checks"].orEmpty().split(',')
+
+        val composed = useCase().compose(Models.portal(), request(maxIdeas = 50))
+
+        // A look loads each page twice and scrolls through it: timed afterwards, the pages would load from the cache.
+        val setup = composed.campaign.setup
+        setup.first().id shouldBe "public-look"
+        checks(setup.first()) shouldContainExactly listOf("slow", "perf", "look")
+        setup.drop(1).forEach { step ->
+            checks(step) shouldNotContain "perf"
+            checks(step) shouldNotContain "slow"
+        }
+        checks(setup.single { it.id == "public-pages" }) shouldContain "console"
+        composed.covered
+            .single { it.idea.pattern == TestPattern.SLOW_ENDPOINTS }
+            .stepIds
+            .first() shouldBe "public-look"
+        // Pages only a role sees get no look, so they are still timed with the role's other checks.
+        checks(composed.campaign.step("admin-pages")) shouldContain "perf"
+    }
+
+    @Test
+    fun `pages only a role sees get no look`() {
+        val campaign = useCase().compose(Models.portal(), request(maxIdeas = 50)).campaign
+
+        val looks = campaign.allSteps.filter { ((it.action as? StepAction.Run)?.args?.get("checks") ?: "").split(',').contains("look") }
+        looks.map { it.id } shouldContainExactly listOf("public-look")
+        (looks.single().action as StepAction.Run).args["pages"] shouldBe "/login"
+        campaign.steps.filter { it.id.endsWith("-pages") }.forEach { step ->
+            (step.action as StepAction.Run).args["checks"]!! shouldNotContain "look"
+        }
+    }
+
+    @Test
     fun `a draft from the portal model validates and covers the top ideas with code-checkable steps`() {
         val composed = useCase().compose(Models.portal(), request())
 
         val campaign = composed.campaign
         validator.validate(campaign, runFunctions).shouldBeEmpty()
-        campaign.setup.map { it.id } shouldContainExactly listOf("public-pages", "public-content", "owner_signup", "seed", "join")
+        campaign.setup.map { it.id } shouldContainExactly
+            listOf("public-look", "public-pages", "public-content", "owner_signup", "seed", "join")
         campaign.setup.map { (it.action as StepAction.Run).function } shouldContainExactly
-            listOf("site_health", "page_checks", "register_owner", "seed_company", "register_and_login")
+            listOf("site_health", "site_health", "page_checks", "register_owner", "seed_company", "register_and_login")
         campaign.steps.map { it.id }.filterNot { it.endsWith("-pages") || it.endsWith("-content") } shouldContainExactly
             listOf(
                 "announcement-submit-watch",
@@ -191,10 +282,13 @@ class GenerateScenarioUseCaseTest {
         (announce.action as StepAction.Do).instruction shouldContain "/announcements"
         (announce.action as StepAction.Do).instruction shouldContain "'Dərc et'"
         announce.emits!!.event shouldBe "announcements_created"
-        announce.assertions shouldContainExactly listOf(AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit", 10.seconds))
+        // The form's request is the write its readers' delivery is measured from (Faza 24.10).
+        announce.emits!!.request shouldBe RequestPattern("POST", "/announcements")
+        announce.assertions shouldContainExactly listOf(AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit {pass}", 10.seconds))
         val ticket = campaign.step("ticket-submit-happy")
         ticket.actors.raw shouldBe "employee[n=1]"
         ticket.emits!!.idSource shouldBe IdSource.UrlRegex("/tickets/([^/?#]+)")
+        ticket.emits!!.request shouldBe RequestPattern("POST", "/tickets")
     }
 
     @Test
@@ -207,7 +301,7 @@ class GenerateScenarioUseCaseTest {
         realtime.waitFor!!.event shouldBe "announcements_created"
         realtime.assertions shouldContainExactly
             listOf(
-                AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit", 10.seconds),
+                AssertionSpec.VisibleText("Pətək yoxlaması announcement-submit {pass}", 10.seconds),
                 AssertionSpec.LatencyMax(5000.milliseconds),
             )
         campaign.step("ticket-submit-realtime").actors.raw shouldBe "manager[*]"
@@ -270,12 +364,26 @@ class GenerateScenarioUseCaseTest {
             .step("ticket-submit-idempotency")
             .assertions
             .single() shouldBe
-            AssertionSpec.Count("[data-testid=\"ticket-item\"]:has-text(\"Pətək təkrar ticket-submit\")", 1)
+            AssertionSpec.Count("[data-testid=\"ticket-item\"]:has-text(\"Pətək təkrar ticket-submit {pass}\")", 1)
         val skipped = composed.skipped.associate { (it.idea.actionId to it.idea.pattern) to it.reason }
         skipped.getValue("ticket-submit" to TestPattern.BOUNDARY) shouldContain "input rules"
         skipped.getValue("login-submit" to TestPattern.BOUNDARY) shouldContain "setup run functions"
         composed.covered.flatMap { it.stepIds }.toSet() shouldBe
-            (composed.campaign.steps.map { it.id } + listOf("public-pages", "public-content")).toSet()
+            (composed.campaign.steps.map { it.id } + listOf("public-look", "public-pages", "public-content")).toSet()
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a race whose request the explorer never saw is not written, since code could not decide the winner`() {
+        val portal = Models.portal()
+        val unseen =
+            portal.copy(actions = portal.actions.map { if (it.id == "ticket-approve") it.copy(httpMethod = null, httpPath = null) else it })
+
+        val composed = useCase().compose(unseen, request(maxIdeas = 50))
+
+        composed.campaign.steps.map { it.id } shouldNotContain "ticket-approve-race"
+        composed.skipped.single { it.idea.actionId == "ticket-approve" && it.idea.pattern == TestPattern.RACE }.reason shouldContain
+            "was not seen, so code could not decide who won a race"
         validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
     }
 
@@ -285,9 +393,474 @@ class GenerateScenarioUseCaseTest {
 
         campaign.target.idSources["announcements_created"] shouldBe IdSource.OracleField("/test/announcements/latest?by={self.email}", "id")
         campaign.step("announcement-submit-happy").assertions.last() shouldBe
-            AssertionSpec.Oracle("/test/announcements/{last_id}", null, null, "Pətək yoxlaması announcement-submit")
+            AssertionSpec.Oracle("/test/announcements/{last_id}", null, null, "Pətək yoxlaması announcement-submit {pass}")
         campaign.step("ticket-submit-happy").emits!!.idSource shouldBe null
         validator.validate(campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a company draft takes the departments and roles the explorer saw, not the contract's`() {
+        val portal = Models.portal()
+        // The site's own departments, in its ticket form; no manager was ever seen signed in.
+        val sales =
+            portal.copy(
+                pages =
+                    portal.pages.map { page ->
+                        page.copy(
+                            forms =
+                                page.forms.map { form ->
+                                    form.copy(
+                                        fields =
+                                            form.fields.map { field ->
+                                                if (field.name ==
+                                                    "department"
+                                                ) {
+                                                    field.copy(options = listOf("Seçin", "Satış", "Anbar"))
+                                                } else {
+                                                    field
+                                                }
+                                            },
+                                    )
+                                },
+                        )
+                    },
+                roles = portal.roles.filter { it.name != "manager" },
+                actions =
+                    portal.actions.map { action ->
+                        action.copy(
+                            allowedRoles = action.allowedRoles - "manager",
+                            forbiddenRoles = action.forbiddenRoles - "manager",
+                            trial = action.trial?.let { it.copy(seenLiveBy = it.seenLiveBy - "manager") },
+                        )
+                    },
+            )
+
+        val campaign = useCase().compose(sales, request(testApi = true)).campaign
+
+        campaign.settings.departments shouldBe listOf("Satış", "Anbar")
+        campaign.settings.roles.manager shouldBe 0
+        campaign.settings.roles.employee shouldBe ScenarioSettings.FAN_OUT
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a company draft whose explorer saw no department gets one of its own, and the owner's win`() {
+        val portal = Models.portal()
+        val noDepartments =
+            portal.copy(
+                pages =
+                    portal.pages.map { page ->
+                        page.copy(
+                            forms =
+                                page.forms.map { form ->
+                                    form.copy(
+                                        fields =
+                                            form.fields.filter {
+                                                it.name !=
+                                                    "department"
+                                            },
+                                    )
+                                },
+                        )
+                    },
+            )
+
+        useCase()
+            .compose(noDepartments, request(testApi = true))
+            .campaign.settings.departments shouldBe
+            listOf(ScenarioSettings.OWN_DEPARTMENT)
+        GenerateScenarioUseCase(
+            validator,
+            DefaultTemplateRenderer(),
+            runFunctions,
+            repository,
+            clock,
+            SequentialIdGenerator(),
+            ScenarioSettings(departments = listOf("Maliyyə")),
+        ).compose(noDepartments, request(testApi = true)).campaign.settings.departments shouldBe listOf("Maliyyə")
+    }
+
+    @Test
+    fun `oracle checks follow what the test API served in the trial, whatever the resource is called`() {
+        // A site whose test API serves notes, not the contract's announcements or tickets (Faza 25.2).
+        val notes =
+            Models.model(
+                listOf(
+                    Models.page("/login", Models.form(ActionKind.LOGIN, "login-submit", "/login", Models.field("email", "email"))),
+                    Models.page("/notes", Models.form(ActionKind.CREATE, "note-submit", "/notes", Models.field("text", required = true))),
+                    Models.page(
+                        "/drafts",
+                        Models.form(ActionKind.CREATE, "draft-submit", "/drafts", Models.field("text", required = true)),
+                    ),
+                ),
+                listOf(
+                    Models.action(
+                        "note-submit",
+                        ActionKind.CREATE,
+                        "/notes",
+                        httpPath = "/notes",
+                        trial = Models.trial(emptySet(), testApi = true),
+                    ),
+                    Models.action(
+                        "draft-submit",
+                        ActionKind.CREATE,
+                        "/drafts",
+                        httpPath = "/drafts",
+                        trial = Models.trial(emptySet(), testApi = false),
+                    ),
+                ),
+            )
+
+        val campaign = useCase().compose(notes, request(maxIdeas = 50, testApi = true)).campaign
+
+        campaign.target.idSources shouldBe mapOf("notes_created" to IdSource.OracleField("/test/notes/latest?by={self.email}", "id"))
+        campaign
+            .step("note-submit-happy")
+            .assertions
+            .filterIsInstance<AssertionSpec.Oracle>()
+            .single()
+            .path shouldBe
+            "/test/notes/{last_id}"
+        // The test API did not answer with the draft the trial made: no oracle check is written for it.
+        campaign.step("draft-submit-happy").assertions.none { it is AssertionSpec.Oracle } shouldBe true
+    }
+
+    /**
+     * The universal success criterion (Faza 25.4): on a site unlike the contract the draft checks only what the explorer
+     * saw there. Every main step belongs to an idea of an observed action or to the checks of observed pages, every
+     * tester passes a way in the explorer found, and nothing of the contract (companies, invitations, codes, its
+     * announcements and tickets) is assumed, not even with a test API there.
+     */
+    @Test
+    fun `on a site unlike the contract every step of the draft traces back to what the explorer saw`() {
+        val member = setOf("member")
+        val recipes =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page(
+                        "/register",
+                        Models.form(
+                            ActionKind.REGISTER,
+                            "register-submit",
+                            "/register",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/recipes",
+                        Models.form(ActionKind.CREATE, "recipe-submit", "/recipes", Models.field("title", required = true)),
+                        reachableBy = member,
+                    ),
+                ),
+                listOf(
+                    Models.action(
+                        "register-submit",
+                        ActionKind.REGISTER,
+                        "/register",
+                        allowed = setOf("anonymous"),
+                        httpPath = "/register",
+                    ),
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action(
+                        "recipe-submit",
+                        ActionKind.CREATE,
+                        "/recipes",
+                        name = "Resept əlavə et",
+                        allowed = member,
+                        httpPath = "/recipes",
+                        trial = Models.trial(emptySet(), role = "member", testApi = true),
+                    ),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(recipes, owner = null, testApi = true)
+
+        val composed = useCase().compose(recipes, request(maxIdeas = 50, testApi = true).copy(tenant = tenant, testers = 5))
+
+        val campaign = composed.campaign
+        validator.validate(campaign, runFunctions).shouldBeEmpty()
+        campaign.settings.tenant shouldBe Tenant.NONE
+        // Everyone signs up through the form the explorer found; nobody is invited or given a code.
+        campaign.settings.registration.self shouldBe campaign.settings.testers
+        campaign.settings.registration.invite shouldBe 0
+        campaign.settings.registration.companyCode shouldBe 0
+        composed.covered.map { it.idea.actionId } shouldContain "recipe-submit"
+        val functions = campaign.allSteps.mapNotNull { (it.action as? StepAction.Run)?.function }
+        functions shouldNotContain "register_owner"
+        functions shouldNotContain "seed_company"
+        // Each main step is an idea's, and each idea of an action is one of an action the explorer saw.
+        val traced = composed.covered.flatMap { it.stepIds }.toSet()
+        campaign.steps.forEach { step -> traced shouldContain step.id }
+        val seen = recipes.actions.map { it.id }.toSet()
+        composed.covered.filterNot { it.idea.pattern.siteWide }.forEach { seen shouldContain it.idea.actionId }
+        // Setup is the visitor checks and the ways in the explorer found; the checks open only pages it visited.
+        campaign.setup.map { (it.action as StepAction.Run).function }.toSet().forEach {
+            setOf("site_health", "page_checks", "register_and_login", "login") shouldContain it
+        }
+        val pages = recipes.pages.map { it.urlPattern }.toSet()
+        campaign.allSteps
+            .mapNotNull { (it.action as? StepAction.Run)?.args?.get("pages") }
+            .flatMap { it.split(',') }
+            .forEach { pages shouldContain it }
+        // Only what the trial saw the test API serve is checked there.
+        campaign.allSteps
+            .flatMap { it.assertions }
+            .filterIsInstance<AssertionSpec.Oracle>()
+            .forEach { it.path shouldStartWith "/test/recipes/" }
+        composed.yaml shouldNotContain "announcement"
+        composed.yaml shouldNotContain "ticket"
+    }
+
+    @Test
+    fun `a list the visitor saw is checked on its page, with the id written so that no placeholder is read`() {
+        val blog =
+            Models.model(
+                listOf(
+                    Models.page("/").copy(lists = mapOf("/posts/{id}" to 12)),
+                    Models.page("/about"),
+                ),
+                emptyList(),
+                roles = listOf("anonymous"),
+            )
+        val tenant = GateMaps.tenantFor(blog, owner = null, testApi = false)
+
+        val composed = useCase().compose(blog, request(maxIdeas = 50).copy(tenant = tenant, testers = 3))
+
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+        val args = (composed.campaign.step("site-content").action as StepAction.Run).args
+        args["checks"]!!.split(',') shouldContain "lists"
+        args["lists"] shouldBe "/>/posts/*>12"
+        composed.covered.single { it.idea.pattern == TestPattern.EMPTY_LISTS }.stepIds shouldBe listOf("site-content")
+        reload(composed.yaml).steps.single { it.id == "site-content" }.action shouldBe composed.campaign.step("site-content").action
+    }
+
+    @Test
+    fun `a showcase draft names every card of its kind, checked with its steps and tier, not called for, or not yet and why`() {
+        val blog =
+            Models.model(
+                listOf(Models.page("/").copy(lists = mapOf("/posts/{id}" to 12)), Models.page("/about")),
+                emptyList(),
+                roles = listOf("anonymous"),
+            )
+        val tenant = GateMaps.tenantFor(blog, owner = null, testApi = false)
+
+        val composed = useCase().compose(blog, request(maxIdeas = 50).copy(tenant = tenant, testers = 3))
+
+        val cards = composed.cards.associateBy { it.card }
+        cards.keys shouldBe SmallBugCatalog.cardsFor(SiteKind.SHOWCASE).toSet()
+        listOf(SmallBugCard.DEAD_LINKS, SmallBugCard.LANGUAGE_MIRRORS, SmallBugCard.EMPTY_LIST).forEach {
+            cards.getValue(it).state shouldBe CardState.CHECKED
+        }
+        cards.getValue(SmallBugCard.EMPTY_LIST).detail shouldBe "steps site-content"
+        cards.getValue(SmallBugCard.DEAD_LINKS).detail shouldContain "partly: links are checked"
+        cards.getValue(SmallBugCard.DOUBLE_SUBMIT).state shouldBe CardState.NOT_CALLED_FOR
+        cards.getValue(SmallBugCard.CONFIRMATION_LINK).state shouldBe CardState.NOT_CALLED_FOR
+        cards.getValue(SmallBugCard.AUTOFILL).state shouldBe CardState.NOT_YET
+        cards.values.count { it.state == CardState.NOT_YET } shouldBe SmallBugCard.entries.count { it.kinds.isEmpty() && it.notYet != null }
+        composed.yaml shouldContain "small-bug cards (docs/LINK_ONLY_SWARM.md section 6): 3 of ${cards.size} checked here"
+        composed.yaml shouldContain "# card empty_list (ui_network), a list shows nothing: checked, steps site-content"
+        composed.yaml shouldContain "# card autofill, a field the password manager fills does not enable the button: not yet,"
+        composed.yaml shouldNotContain "stock_race"
+    }
+
+    @Test
+    fun `a news draft checks its draft's address and a comment posted twice as the news cards`() {
+        val member = setOf("member")
+        val trial = Models.trial(emptySet(), urlPatternAfter = "/posts/{id}", role = "member")
+        val news =
+            Models.model(
+                listOf(
+                    Models.page("/", title = "Xəbərlər"),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/admin/posts",
+                        Models.form(ActionKind.CREATE, "post-publish", "/admin/posts", Models.field("title", required = true)),
+                        reachableBy = member,
+                    ),
+                    Models.page(
+                        "/posts/{id}",
+                        Models.form(ActionKind.CREATE, "comment-submit", "/posts/{id}/comments", Models.field("body", required = true)),
+                        reachableBy = setOf("anonymous", "member"),
+                        title = "Məqalə və şərhlər",
+                        testIds = listOf("comment-item"),
+                    ),
+                ),
+                listOf(
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action("post-publish", ActionKind.CREATE, "/admin/posts", name = "Dərc et", allowed = member, trial = trial),
+                    Models.action(
+                        "post-draft",
+                        ActionKind.CREATE,
+                        "/admin/posts",
+                        name = "Qaralama kimi saxla",
+                        allowed = member,
+                        trial = trial,
+                    ),
+                    Models.action(
+                        "comment-submit",
+                        ActionKind.CREATE,
+                        "/posts/{id}",
+                        name = "Şərh yaz",
+                        allowed = member,
+                        httpPath = "/posts/{id}/comments",
+                    ),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(news, owner = null, testApi = false)
+
+        val composed = useCase().compose(news, request(maxIdeas = 50).copy(tenant = tenant, testers = 4))
+
+        val cards = composed.cards.associateBy { it.card }
+        cards.keys shouldBe SmallBugCatalog.cardsFor(SiteKind.NEWS).toSet()
+        cards.getValue(SmallBugCard.DRAFT_LEAK).detail shouldBe "steps post-draft-happy, post-draft-direct-url"
+        // The comment form on a post's page makes comments: their list items are counted, not the post's.
+        cards.getValue(SmallBugCard.COMMENT_TWICE).state shouldBe CardState.CHECKED
+        cards.getValue(SmallBugCard.DOUBLE_SUBMIT).state shouldBe CardState.CHECKED
+        composed.campaign.allSteps
+            .single { it.id == "comment-submit-idempotency" }
+            .assertions
+            .single()
+            .shouldBeInstanceOf<AssertionSpec.Count>()
+            .selector shouldStartWith "[data-testid=\"comment-item\"]"
+        // Nothing reached the others live in the trial, and the site sends no confirmation link.
+        cards.getValue(SmallBugCard.PUBLISHED_REACHES_ALL).state shouldBe CardState.NOT_CALLED_FOR
+        cards.getValue(SmallBugCard.CONFIRMATION_LINK).detail shouldBe "the explorer saw no confirmation link (not_seen)"
+    }
+
+    @Test
+    fun `the draft names what it leaves unchecked, which the run's report shows, sign-up and sign-in aside`() {
+        val member = setOf("member")
+        val site =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/notes",
+                        Models.form(ActionKind.CREATE, "note-submit", "/notes", Models.field("title", required = true)),
+                        reachableBy = member,
+                    ),
+                ),
+                listOf(
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action("note-submit", ActionKind.CREATE, "/notes", name = "Yadda saxla", allowed = member, httpPath = "/notes"),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(site, owner = null, testApi = false)
+
+        val composed = useCase().compose(site, request(maxIdeas = 50).copy(tenant = tenant, testers = 3))
+
+        val coverage = composed.campaign.coverage
+        coverage.any { it.startsWith("BOUNDARY of 'Yadda saxla' was not written: ") } shouldBe true
+        coverage.last() shouldContain "small-bug cards are not checked by code yet"
+        coverage.none { "login-submit" in it || "Daxil ol" in it } shouldBe true
+        // Written into the draft, read back by the loader as the same lines.
+        reload(composed.yaml).coverage shouldBe coverage
+    }
+
+    @Test
+    fun `a draft whose explorer saw the site only as a visitor says so`() {
+        val site =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page("/login", Models.form(ActionKind.LOGIN, "login-submit", "/login", Models.field("email", "email"))),
+                ),
+                listOf(Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login")),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(site, owner = null, testApi = false)
+
+        val composed = useCase().compose(site, request(maxIdeas = 50).copy(tenant = tenant, testers = 2))
+
+        composed.campaign.coverage.first() shouldBe
+            "The explorer saw the site only as a visitor: what signed-in users see was not explored."
+    }
+
+    @Test
+    fun `objects visitors see are not checked as leaks, but a draft must not open for anyone else`() {
+        val editor = setOf("member")
+        val trial = Models.trial(emptySet(), urlPatternAfter = "/posts/{id}", role = "member")
+        val news =
+            Models.model(
+                listOf(
+                    Models.page("/"),
+                    Models.page(
+                        "/login",
+                        Models.form(
+                            ActionKind.LOGIN,
+                            "login-submit",
+                            "/login",
+                            Models.field("email", "email"),
+                            Models.field("password", "password"),
+                        ),
+                    ),
+                    Models.page(
+                        "/admin/posts",
+                        Models.form(ActionKind.CREATE, "post-publish", "/admin/posts", Models.field("title", required = true)),
+                        reachableBy = editor,
+                    ),
+                    Models.page("/posts/{id}", reachableBy = setOf("anonymous", "member")),
+                ),
+                listOf(
+                    Models.action("login-submit", ActionKind.LOGIN, "/login", allowed = setOf("anonymous"), httpPath = "/login"),
+                    Models.action("post-publish", ActionKind.CREATE, "/admin/posts", name = "Dərc et", allowed = editor, trial = trial),
+                    Models.action(
+                        "post-draft",
+                        ActionKind.CREATE,
+                        "/admin/posts",
+                        name = "Qaralama kimi saxla",
+                        allowed = editor,
+                        trial = trial,
+                    ),
+                ),
+                roles = listOf("anonymous", "member"),
+            )
+        val tenant = GateMaps.tenantFor(news, owner = null, testApi = false)
+
+        val composed = useCase().compose(news, request(maxIdeas = 50).copy(tenant = tenant, testers = 4))
+
+        validator.validate(composed.campaign, runFunctions).shouldBeEmpty()
+        composed.skipped
+            .single { it.idea.pattern == TestPattern.DIRECT_URL && it.idea.actionId == "post-publish" }
+            .reason shouldContain "shows them to everyone"
+        val draft = composed.covered.single { it.idea.pattern == TestPattern.DIRECT_URL && it.idea.actionId == "post-draft" }
+        draft.idea.rationale shouldContain "a draft must not open"
+        composed.campaign.allSteps
+            .filter { it.id in draft.stepIds }
+            .mapNotNull { (it.action as? StepAction.Run)?.function } shouldContain "direct_url"
     }
 
     @Test
@@ -445,7 +1018,7 @@ class GenerateScenarioUseCaseTest {
     }
 
     @Test
-    fun `with a test API only the resources it serves get oracle ids and checks, others are named by their form`() {
+    fun `with a test API only the resources the trial saw it serve get oracle ids and checks, others are named by their form`() {
         val portal = Models.portal()
         val model =
             portal.copy(

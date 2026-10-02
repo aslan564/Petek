@@ -34,6 +34,7 @@ import az.petek.explorer.domain.RobotsRules
 import az.petek.explorer.domain.ScannedDocument
 import az.petek.explorer.domain.Selectors
 import az.petek.explorer.domain.Severity
+import az.petek.explorer.domain.SiteModelAccumulator
 import az.petek.explorer.domain.SkipReason
 import az.petek.explorer.domain.UrlPatterns
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -177,10 +178,12 @@ internal class CrawlPass(
             if (looksLikeSignIn(finalPattern)) context.accumulator.recordDenied(role, pattern)
             if (!visitedPatterns.add(finalPattern)) return
         }
-        visited++
+        // A page the seed brought (Faza 18) is opened for its links only; the page budget counts pages new to the model.
+        val known = context.accumulator.seeded(finalPattern)
+        if (!known) visited++
         context.pagesVisitedByRole.merge(role, 1, Int::plus)
         try {
-            learn(finalUrl, finalPattern, link.depth, answer?.status, loadMs, since)
+            learn(finalUrl, finalPattern, link.depth, answer?.status, loadMs, since, known)
         } catch (e: CancellationException) {
             throw e
         } catch (e: BrowserActionException) {
@@ -242,6 +245,7 @@ internal class CrawlPass(
         status: Int?,
         loadMs: Long,
         since: HarnessTimestamp,
+        known: Boolean = false,
     ) {
         val captured = context.capture.capture(session, role)
         val snapshot = captured.snapshot
@@ -257,7 +261,8 @@ internal class CrawlPass(
             return
         }
         val facts = PageHeuristics.inspect(snapshot, captured.document, url)
-        val analysis = context.analyst.analyse(snapshot, pattern, viewer, context.request.grounding, facts.forms)
+        // A known page is not asked about again: what the AI said of it is in the seed.
+        val analysis = if (known) null else context.analyst.analyse(snapshot, pattern, viewer, context.request.grounding, facts.forms)
         val evidence = captured.evidence
         val pageId = context.accumulator.pageIdOf(pattern)
         context.accumulator.recordPage(
@@ -272,6 +277,7 @@ internal class CrawlPass(
                 linkCount = facts.links.size,
                 loadMs = loadMs,
                 evidence = evidence,
+                lists = if (role == SiteModelAccumulator.ANONYMOUS && !UrlPatterns.hasId(pattern)) lists(url, facts) else emptyMap(),
             ),
         )
         context.emitter.emit {
@@ -461,6 +467,23 @@ internal class CrawlPass(
         }
     }
 
+    /**
+     * The object pages [page] lists (`/posts/{id}` and the like, on this site), with how many different objects it
+     * shows; a list is two objects or more, since one link to an object is a feature, not a list.
+     */
+    private fun lists(
+        page: URI,
+        facts: PageFacts,
+    ): Map<String, Int> =
+        facts.links
+            .mapNotNull { UrlPatterns.resolve(page, it.href) }
+            .filter { context.origin.contains(it) }
+            .map { UrlPatterns.of(it) to it.rawPath.orEmpty().trimEnd('/') }
+            .filter { (pattern, _) -> pattern.endsWith("/${UrlPatterns.ID}") && pattern.split('/').count { it == UrlPatterns.ID } == 1 }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, paths) -> paths.distinct().size }
+            .filterValues { it >= MIN_LIST }
+
     private suspend fun followLinks(
         page: URI,
         pattern: String,
@@ -560,6 +583,9 @@ internal class CrawlPass(
 
         /** How many script errors or failed requests one finding lists before it only counts the rest. */
         const val MAX_LISTED = 5
+
+        /** The fewest objects a page shows for them to count as a list ([PageModel.lists]). */
+        const val MIN_LIST = 2
         const val SERVER_ERROR = 500
 
         /** How the browser adapter labels each transport in its details. */

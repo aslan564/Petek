@@ -23,8 +23,6 @@ import az.petek.dashboard.domain.PanelException
 import az.petek.dashboard.domain.PanelInstructions
 import az.petek.dashboard.domain.PanelNotFoundException
 import az.petek.dashboard.domain.PanelRequestException
-import az.petek.dashboard.domain.RegistrationSplit
-import az.petek.dashboard.domain.RoleSplit
 import az.petek.dashboard.domain.RunRequest
 import az.petek.dashboard.domain.TeardownView
 import az.petek.dashboard.infrastructure.PanelJson
@@ -71,7 +69,7 @@ internal class McpTools(
         val run: suspend (JsonObject) -> JsonElement,
     )
 
-    private val tools: List<Tool> = listOf(listTargets(), capacity()) + explorer() + scenarios() + runs()
+    private val tools: List<Tool> = listOf(listTargets(), capacity()) + test() + explorer() + scenarios() + runs()
 
     private val byName = tools.associateBy { it.name }
 
@@ -144,6 +142,54 @@ internal class McpTools(
             schema = { integer("testers", "wanted tester count (default 30)") },
         ) { args -> PanelJson.capacity(backend.capacity(args.intArgument("testers") ?: DEFAULT_CAPACITY_TESTERS)) }
 
+    /** "Test et" (Faza 25.3): the main path, exploring, drafting from what was found, approving and running in one go. */
+    private fun test(): List<Tool> =
+        listOf(
+            Tool(
+                name = "test_site",
+                description =
+                    "Test the site in one go, the main path: the explorer learns the site, the scenario is drafted only " +
+                        "from what it found (its pages, forms, operations and ways in), approved and run with the tester " +
+                        "agents; no scenario file is written by hand. Runs in the background; poll get_test, or set " +
+                        "wait=true to return when the test has ended. Ask the owner before starting it: it signs up and " +
+                        "writes on the site. allowWrites also lets the explorer submit each create form once.",
+                writes = true,
+                schema = {
+                    string("target", "site URL (default: the configured target)")
+                    string("instructions", "what to test, what matters, what to avoid (free text)")
+                    integer("testers", "how many tester agents run the drafted scenario (default 6)")
+                    strings("departments", "department names for a drafted company (default: the ones the explorer saw)")
+                    integer("maxPages", "the explorer's page budget (default 10)")
+                    integer("maxMinutes", "the explorer's time budget in minutes (default 5)")
+                    boolean("allowWrites", "let the explorer submit each create form once (test targets only)")
+                    boolean("wait", "return only when the test has ended")
+                },
+            ) { args ->
+                val instructions = instructions(args, args.booleanArgument("allowWrites"))
+                val started = backend.startTest(instructions)
+                if (!args.booleanArgument("wait")) return@Tool PanelJson.testFlow(started)
+                val ended =
+                    withTimeoutOrNull(instructions.budget.maxMinutes.minutes + WAIT_GRACE + RUN_WAIT) {
+                        while (backend.testFlow()?.stage?.isFinal != true) delay(RUN_POLL)
+                        true
+                    } ?: false
+                testStatus(ended)
+            },
+            Tool(
+                name = "get_test",
+                description =
+                    "The current (or last) test of test_site: stage (EXPLORING, DRAFTING, RUNNING, FINISHED, STOPPED), " +
+                        "its exploration, scenario version and run, the run's result, a note for the owner, the report " +
+                        "directory once written, and nextScenarioId: the next run's scenario, drafted from what the explorer " +
+                        "found going on during the run and waiting for approval (null when it found nothing new).",
+            ) { testStatus() },
+            Tool(
+                name = "cancel_test",
+                description = "Stop the running test: its exploration keeps what it learned, its run is still torn down and reported.",
+                writes = true,
+            ) { buildJsonObject { put("cancelled", backend.cancelTest()) } },
+        )
+
     private fun explorer(): List<Tool> =
         listOf(
             Tool(
@@ -157,7 +203,7 @@ internal class McpTools(
                     string("target", "site URL (default: the configured target)")
                     string("instructions", "what to test, what matters, what to avoid (free text)")
                     integer("testers", "how many tester agents the drafted campaign plans for (default 6)")
-                    strings("departments", "department names for the drafted company (default IT, HR)")
+                    strings("departments", "department names for a drafted company (default: the ones the explorer saw)")
                     integer("maxPages", "page budget (default 10)")
                     integer("maxMinutes", "time budget in minutes (default 5)")
                     boolean("allowWrites", "let the explorer submit each create form once (test targets only)")
@@ -281,15 +327,24 @@ internal class McpTools(
                 name = "run_campaign",
                 description =
                     "Run an approved scenario with its tester agents against the configured target (one run at a time). " +
-                        "Runs in the background; poll get_run_status, or set wait=true to return the run's summary when it ends.",
+                        "Runs in the background; poll get_run_status, or set wait=true to return the run's summary when it ends. " +
+                        "The answer's warnings name what the run's make-up leaves undone (steps nobody can run, receivers or " +
+                        "racers a wave leaves alone); tell the owner.",
                 writes = true,
                 schema = {
                     string("scenarioId", "an APPROVED or FROZEN scenario version id", required = true)
                     integer("testers", "override the scenario's tester count")
+                    string("release", "the site's release this run tests, e.g. v1.4.2 (compare_runs compares releases)")
                     boolean("wait", "return only when the run has ended")
                 },
             ) { args ->
-                val request = RunRequest(scenarioId = args.stringArgument("scenarioId"), testers = args.intArgument("testers"))
+                val request =
+                    RunRequest(
+                        scenarioId = args.stringArgument("scenarioId"),
+                        testers = args.intArgument("testers"),
+                        release = args.stringArgument("release", required = false),
+                    )
+                request.problems().takeIf { it.isNotEmpty() }?.let { throw PanelRequestException(it) }
                 val started = backend.startRun(request)
                 if (!args.booleanArgument("wait")) return@Tool PanelJson.runStarted(started)
                 waitForRun(started.runId)
@@ -311,7 +366,8 @@ internal class McpTools(
             Tool(
                 name = "get_findings",
                 description =
-                    "The judged findings of a run: class (BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE), step, " +
+                    "The judged findings of a run: class (BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE, " +
+                        "INCONCLUSIVE: the evidence could not decide it), step, " +
                         "agent, the three sources A (what the sender did), B (what receivers saw), C (what the target's API " +
                         "says), and the evidence artifact ids for get_evidence. A root-cause investigation starts here.",
                 schema = { string("runId", "run id", required = true) },
@@ -368,6 +424,31 @@ internal class McpTools(
                 schema = { string("runId", "run id", required = true) },
             ) { args -> PanelJson.triage(backend.runTriage(RunId(args.stringArgument("runId")!!))) },
             Tool(
+                name = "compare_runs",
+                description =
+                    "A finished run against an earlier run of its scenario (another release of the site): the steps the site " +
+                        "broke, fixed and still fails, what it made slower, and which pages look different on which screen " +
+                        "(where the scenario took page looks). baseline: 'previous' (default), a run id, or a release named when " +
+                        "the run started.",
+                schema = {
+                    string("runId", "run id", required = true)
+                    string("baseline", "'previous', a run id, or a release name")
+                    string(
+                        "visual",
+                        "'report' (default): a page that looks different is shown, not counted as worse; 'fail': it makes the " +
+                            "comparison worse",
+                    )
+                },
+            ) { args ->
+                PanelJson.comparison(
+                    backend.compare(
+                        RunId(args.stringArgument("runId")!!),
+                        args.stringArgument("baseline", required = false),
+                        args.stringArgument("visual", required = false),
+                    ),
+                )
+            },
+            Tool(
                 name = "get_stability",
                 description = "How the steps of a --repeat group behaved across its runs (flaky steps).",
                 schema = { string("repeatGroup", "repeat group id", required = true) },
@@ -397,22 +478,16 @@ internal class McpTools(
         }
     }
 
+    /** The instruction form of a tool call: no team of its own, so the draft takes the roles and ways in the explorer saw. */
     private fun instructions(
         args: JsonObject,
         writes: Boolean,
-    ): PanelInstructions {
-        val testers = args.intArgument("testers") ?: DEFAULT_TESTERS
-        val joining = (testers - 1).coerceAtLeast(0)
-        val managers = joining / MANAGER_SHARE
-        val employees = joining - managers
-        val invite = managers + employees / 2
-        return PanelInstructions(
+    ): PanelInstructions =
+        PanelInstructions(
             target = args.stringArgument("target", required = false) ?: settings.target,
             instructions = args.stringArgument("instructions", required = false).orEmpty(),
-            testers = testers,
-            roles = RoleSplit(admins = 1, managers = managers, employees = employees),
-            departments = args.stringsArgument("departments") ?: DEFAULT_DEPARTMENTS,
-            registration = RegistrationSplit(invite = invite, companyCode = joining - invite),
+            testers = args.intArgument("testers") ?: DEFAULT_TESTERS,
+            departments = args.stringsArgument("departments").orEmpty(),
             budget =
                 PanelBudget(
                     maxMinutes = args.intArgument("maxMinutes") ?: DEFAULT_MINUTES,
@@ -420,6 +495,23 @@ internal class McpTools(
                     maxPages = args.intArgument("maxPages") ?: DEFAULT_PAGES,
                 ),
             allowWrites = writes,
+        )
+
+    /** The current test with the run's report directory once written; [ended] says whether a wait saw it end. */
+    private suspend fun testStatus(ended: Boolean? = null): JsonElement {
+        val view = backend.testFlow() ?: throw PanelNotFoundException("Hələ test olmayıb: test_site ilə başladın.")
+        val flow = PanelJson.testFlow(view) as JsonObject
+        val report =
+            view.runId
+                ?.let { backend.reportDirectory(it) }
+                ?.toAbsolutePath()
+                ?.toString()
+        return JsonObject(
+            flow +
+                mapOf(
+                    "reportDirectory" to (report?.let(::JsonPrimitive) ?: JsonNull),
+                    "waitedToEnd" to (ended?.let(::JsonPrimitive) ?: JsonNull),
+                ),
         )
     }
 
@@ -584,11 +676,9 @@ internal class McpTools(
     private companion object {
         const val DEFAULT_TESTERS = 6
         const val DEFAULT_CAPACITY_TESTERS = 30
-        const val MANAGER_SHARE = 3
         const val DEFAULT_MINUTES = 5
         const val DEFAULT_STEPS = 20
         const val DEFAULT_PAGES = 10
-        val DEFAULT_DEPARTMENTS = listOf("IT", "HR")
         val WAIT_GRACE: Duration = 1.minutes
         val RUN_WAIT: Duration = 60.minutes
         val RUN_POLL: Duration = 1.seconds

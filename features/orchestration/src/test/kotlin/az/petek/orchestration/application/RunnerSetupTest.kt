@@ -22,6 +22,7 @@ import az.petek.core.ids.AgentId
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.evidence.domain.Verdict
 import az.petek.identity.domain.IdentityStatus
 import az.petek.oracle.domain.TestCompany
@@ -269,17 +270,23 @@ class RunnerSetupTest {
         }
 
     @Test
-    fun `a step whose expression matches nobody is skipped without failing the run`() =
+    fun `a step whose expression matches nobody is done by nobody, which fails the run without blaming anyone`() =
         runTest {
             val f = fixture()
 
             val summary = f.runner().run(campaign(steps = listOf(step("finance", employees("Maliyyə")))))
 
-            summary.outcome shouldBe RunOutcome.PASSED
-            val skipped = f.steps("finance").single()
+            val (skipped, uncovered) = f.steps("finance")
             skipped.kind shouldBe StepKind.SYSTEM
             skipped.agentId shouldBe null
             skipped.status shouldBe StepStatus.SKIPPED
+            uncovered.action shouldBe UNCOVERED_ACTION
+            uncovered.agentId shouldBe null
+            uncovered.status shouldBe StepStatus.FAILED
+            uncovered.detail shouldBe "not_covered: no tester matched '${employees("Maliyyə").raw}' in the run; nobody ran this step"
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.stepsFailed shouldBe 1
+            summary.failedAgents shouldBe 0
         }
 
     @Test

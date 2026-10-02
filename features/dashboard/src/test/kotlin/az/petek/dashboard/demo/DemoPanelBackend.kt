@@ -19,6 +19,7 @@ import az.petek.core.time.HarnessClock
 import az.petek.core.time.HarnessTimestamp
 import az.petek.dashboard.domain.CapacityLimit
 import az.petek.dashboard.domain.CapacityView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.ExplorationEventView
 import az.petek.dashboard.domain.ExplorationPhase
@@ -786,6 +787,42 @@ class DemoPanelBackend(
     override suspend fun reportDirectory(runId: RunId): Path? =
         withContext(kotlinx.coroutines.Dispatchers.IO) {
             reportRoot.resolve(runId.value).resolve("report").takeIf { Files.isDirectory(it) }
+        }
+
+    /** The demo prints nothing: a small stand-in PDF beside the report, so the panel's link can be followed. */
+    override suspend fun reportPdf(runId: RunId): Path? =
+        reportDirectory(runId)?.let { directory ->
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                directory.resolve("report.pdf").also { if (!Files.exists(it)) Files.writeString(it, "%PDF-1.4 demo\n") }
+            }
+        }
+
+    /** The demo compares nothing: an earlier run of the same scenario is named, with no step changed. */
+    override suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+        visual: String?,
+    ): ComparisonView =
+        lock.withLock {
+            val run = runList.firstOrNull { it.runId == runId } ?: throw PanelNotFoundException("Run tapılmadı: ${runId.value}")
+            val earlier =
+                runList.firstOrNull { it.campaignName == run.campaignName && it.startedAt < run.startedAt }
+                    ?: throw PanelConflictException("Müqayisə üçün bu ssenarinin əvvəlki run-ı yoxdur.")
+            ComparisonView(
+                runId = runId,
+                release = run.release,
+                baseline = earlier.runId,
+                baselineRelease = earlier.release,
+                scenario = run.campaignName,
+                scenarioChanged = false,
+                regressed = false,
+                newFailures = emptyList(),
+                fixed = emptyList(),
+                stillFailing = emptyList(),
+                slower = emptyList(),
+                notComparable = emptyList(),
+                pageUrl = "/runs/${runId.value}/report/compare-${earlier.runId.value}.html",
+            )
         }
 
     override suspend fun findings(runId: RunId): List<FindingView> = emptyList()

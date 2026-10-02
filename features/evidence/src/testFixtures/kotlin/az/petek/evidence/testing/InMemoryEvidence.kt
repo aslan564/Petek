@@ -23,6 +23,8 @@ import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageLookRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
@@ -49,6 +51,8 @@ class InMemoryEvidence :
     val usageList = CopyOnWriteArrayList<UsageRecord>()
     val runList = CopyOnWriteArrayList<RunRecord>()
     val resourceList = CopyOnWriteArrayList<RunResource>()
+    val pageTimingList = CopyOnWriteArrayList<PageTimingRecord>()
+    val pageLookList = CopyOnWriteArrayList<PageLookRecord>()
 
     override suspend fun step(record: StepRecord) {
         stepList += record
@@ -92,6 +96,18 @@ class InMemoryEvidence :
 
     override suspend fun usage(runId: RunId) = usageList.filter { it.runId == runId }
 
+    override suspend fun pageTiming(record: PageTimingRecord) {
+        pageTimingList += record
+    }
+
+    override suspend fun pageTimings(runId: RunId) = pageTimingList.filter { it.runId == runId }
+
+    override suspend fun pageLook(record: PageLookRecord) {
+        pageLookList += record
+    }
+
+    override suspend fun pageLooks(runId: RunId) = pageLookList.filter { it.runId == runId }
+
     override suspend fun create(run: RunRecord) {
         runList += run
     }
@@ -120,6 +136,22 @@ class InMemoryEvidence :
     }
 
     override suspend fun byRepeatGroup(group: String) = runList.filter { it.repeatGroup == group }.sortedBy { it.repeatIndex }
+
+    override suspend fun latestFinished(
+        campaignName: String,
+        except: RunId,
+        release: String?,
+        startedBefore: Instant?,
+        outsideGroup: String?,
+    ) = runList
+        .withIndex()
+        .filter { (_, run) ->
+            run.campaignName == campaignName && run.runId != except && run.result != RunResult.RUNNING &&
+                (release == null || run.release == release) &&
+                (startedBefore == null || run.startedAt < startedBefore) &&
+                (outsideGroup == null || run.repeatGroup != outsideGroup)
+        }.maxWithOrNull(compareBy<IndexedValue<RunRecord>> { it.value.startedAt }.thenBy { it.index })
+        ?.value
 
     override suspend fun addResource(resource: RunResource) {
         resourceList += resource

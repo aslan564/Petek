@@ -85,6 +85,8 @@ data class DashboardCounters(
     val receiptsReceived: Int,
     val receiptsMissing: Int,
     val findings: Int,
+    /** Checks whose evidence could not decide them (Faza 24.12). */
+    val assertionsInconclusive: Int = 0,
 ) {
     val agents: Int get() = agentsByState.values.sum()
 }

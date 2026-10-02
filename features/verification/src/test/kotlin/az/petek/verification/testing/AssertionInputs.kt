@@ -18,6 +18,8 @@ import az.petek.core.ids.RunId
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.verification.domain.AssertionInput
+import az.petek.verification.domain.EventTime
+import az.petek.verification.domain.WatchedText
 
 /** Templates of a typical receiver: `{last_id}` = 42, `{self.email}`, `{self.name}`, `{event.ticket_created.id}` = t7. */
 val DEFAULT_TEMPLATES =
@@ -27,14 +29,18 @@ val DEFAULT_TEMPLATES =
         eventIds = mapOf("ticket_created" to "t7"),
     )
 
+/** An input for [session]; [t0] is an event written at that moment exactly, unless [eventTime] says otherwise. */
 fun assertionInput(
     session: BrowserSession?,
-    eventEmittedAt: HarnessTimestamp? = null,
+    t0: HarnessTimestamp? = null,
     agentId: AgentId? = AgentId("a01"),
     templates: TemplateContext = DEFAULT_TEMPLATES,
     scenarioStep: String = "read_announce",
     stepId: StepId = StepId("stp_read"),
     runId: RunId = RunId("run_test"),
+    eventTime: EventTime? = t0?.let { EventTime.at(it) },
+    watch: WatchedText? = null,
+    earlierDelivery: String? = null,
 ): AssertionInput =
     AssertionInput(
         runId = runId,
@@ -43,5 +49,7 @@ fun assertionInput(
         agentId = agentId,
         session = session,
         templates = templates,
-        eventEmittedAt = eventEmittedAt,
+        eventTime = eventTime,
+        watch = watch,
+        earlierDelivery = earlierDelivery,
     )

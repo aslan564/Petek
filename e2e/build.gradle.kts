@@ -23,6 +23,8 @@ dependencies {
     testImplementation(testFixtures(project(":features:llm")))
     testImplementation(libs.konsist)
     testImplementation(libs.playwright)
+    // The live contract demo drives `petek run` in-process, as the owner types it.
+    testImplementation(libs.clikt)
 }
 
 // Architecture tests run with the normal build; browser end-to-end runs are opt-in (heavier).

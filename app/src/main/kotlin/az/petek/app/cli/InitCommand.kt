@@ -12,6 +12,7 @@
 package az.petek.app.cli
 
 import az.petek.app.init.HostAi
+import az.petek.app.init.McpLaunch
 import az.petek.app.init.ProjectInitializer
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.options.convert
@@ -44,7 +45,7 @@ class InitCommand(
     ).convert { HostAi.parse(it) }
     private val force by option(
         "--force",
-        help = "rewrite the files Pətək owns (.petek/*, skill copies) from the current templates; .env is never rewritten",
+        help = "rewrite the files Pətək owns (.petek/*) from the current templates; .env is never rewritten",
     ).flag()
     private val directory by option("--dir", help = "project directory (default: the working directory)", metavar = "PATH").path()
 
@@ -55,7 +56,9 @@ class InitCommand(
         val project: Path = directory?.let { session.resolve(it) } ?: session.runtime.workingDirectory
         val result =
             withContext(Dispatchers.IO) {
-                initializer.initialize(ProjectInitializer.Request(project, target, ais, force))
+                val environment = session.runtime.environment()
+                val mcp = McpLaunch.of(environment, System.getProperty(PETEK_HOME)) { McpLaunch.onPath(it, environment["PATH"]) }
+                initializer.initialize(ProjectInitializer.Request(project, target, ais, force, mcp))
             }
         if (json) {
             emitJson(
@@ -87,5 +90,10 @@ class InitCommand(
             "Next: fill .env (PETEK_TARGET, and PETEK_TEST_TOKEN + PETEK_IDENTITY_SECRET for full runs), then `petek doctor` and `petek panel`.",
         )
         return ExitCodes.OK
+    }
+
+    private companion object {
+        /** Where the bundle's launcher says the bundle is (`-Dpetek.home`). */
+        const val PETEK_HOME = "petek.home"
     }
 }

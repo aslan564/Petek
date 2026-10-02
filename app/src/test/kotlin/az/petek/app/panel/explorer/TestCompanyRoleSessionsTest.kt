@@ -11,19 +11,30 @@
 
 package az.petek.app.panel.explorer
 
+import az.petek.app.config.ResolvedTarget
 import az.petek.app.testing.PanelHarness
 import az.petek.browser.domain.BrowserSessionFactory
 import az.petek.browser.domain.SessionOptions
 import az.petek.browser.testing.FakeBrowserSession
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.TargetProfile
+import az.petek.campaign.domain.TargetSpec
+import az.petek.campaign.domain.Tenant
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
 import az.petek.core.ids.RunTag
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
 import az.petek.core.security.Secret
+import az.petek.explorer.domain.ActionKind
+import az.petek.explorer.domain.ExplorationId
+import az.petek.explorer.domain.FieldModel
+import az.petek.explorer.domain.FormModel
+import az.petek.explorer.domain.PageModel
+import az.petek.explorer.domain.Provenance
+import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.TestTargetVerdict
+import az.petek.explorer.domain.UrlPatterns
 import az.petek.identity.domain.Identity
 import az.petek.identity.domain.IdentityPlan
 import az.petek.identity.domain.IdentityStatus
@@ -48,6 +59,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
 class TestCompanyRoleSessionsTest {
@@ -64,7 +76,63 @@ class TestCompanyRoleSessionsTest {
     @AfterEach
     fun close() = open.forEach { it.close() }
 
-    private fun harness(testToken: String? = "dev-token") = PanelHarness(dir, testToken = testToken).also { open += it }
+    private fun harness(
+        testToken: String? = "dev-token",
+        tenant: Tenant? = null,
+    ) = PanelHarness(
+        dir,
+        testToken = testToken,
+        targets =
+            listOfNotNull(
+                tenant?.let {
+                    ResolvedTarget(
+                        TargetSpec("demo", URI("http://127.0.0.1:9"), tenant = it),
+                        testToken = Secret("dev-token"),
+                        accounts = emptyList(),
+                    )
+                },
+            ),
+    ).also { open += it }
+
+    /** What the explorer's visitor walk saw (Faza 25.1): one page with a form of these fields. */
+    private fun seen(vararg fields: String): SiteModel {
+        val form =
+            FormModel(
+                "join form",
+                ActionKind.REGISTER,
+                fields.map { FieldModel(it, it, "text", true, "f-$it", "[data-testid=\"f-$it\"]", emptyList()) },
+                "[data-testid=\"join-submit\"]",
+                "POST",
+                "/join",
+                Provenance.OBSERVED,
+                emptyList(),
+            )
+        val page =
+            PageModel(
+                id = UrlPatterns.pageId("/join"),
+                urlPattern = "/join",
+                title = "Qoşul",
+                purpose = "",
+                reachableBy = setOf("anonymous"),
+                forms = listOf(form),
+                testIds = emptyList(),
+                linkCount = 1,
+                loadMs = 100,
+                provenance = Provenance.OBSERVED,
+                evidence = emptyList(),
+            )
+        return SiteModel(
+            version = 1,
+            explorationId = ExplorationId("exp_seen"),
+            target = URI("http://127.0.0.1:9"),
+            createdAt = Instant.EPOCH,
+            pages = listOf(page),
+            actions = emptyList(),
+            roles = emptyList(),
+            realtime = emptyList(),
+            unknowns = emptyList(),
+        )
+    }
 
     private fun request(
         panel: PanelHarness,
@@ -122,6 +190,47 @@ class TestCompanyRoleSessionsTest {
         }
 
     @Test
+    fun `no test company where the visitor's walk saw no way to join one, whatever the test API says`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val source = sessions(panel) { error("nothing may be created") }
+
+            val roles = source.open(request(panel).copy(seen = seen("email", "password")), factory) { progress += it }
+
+            roles.note.shouldNotBeNull() shouldContain "şirkətə qoşulma yolu"
+            campaigns.shouldBeEmpty()
+            opened.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a site whose visitor walk shows a form to join by company code gets its test company`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val source = sessions(panel) { null }
+
+            source.open(request(panel).copy(seen = seen("email", "company_code")), factory) { progress += it }
+
+            campaigns.single().settings.name shouldBe TestCompanyRoleSessions.NAME
+        }
+
+    @Test
+    fun `the owner's word on the site's companies wins over what the visitor's walk saw`() =
+        runBlocking<Unit> {
+            val companies = harness(tenant = Tenant.COMPANY)
+            sessions(companies) { null }.open(request(companies).copy(seen = seen("email")), factory) { progress += it }
+            campaigns.single().settings.name shouldBe TestCompanyRoleSessions.NAME
+            open.removeAt(0).close()
+
+            val plain = harness(tenant = Tenant.NONE)
+            val roles =
+                sessions(plain) { error("nothing may be created") }
+                    .open(request(plain).copy(seen = seen("email", "company_code")), factory) { progress += it }
+
+            roles.note.shouldNotBeNull() shouldContain "tenant: none"
+            campaigns.size shouldBe 1
+        }
+
+    @Test
     fun `the test company's active testers become logged-in sessions per role, closed when the exploration ends`() =
         runBlocking<Unit> {
             val panel = harness()
@@ -153,6 +262,49 @@ class TestCompanyRoleSessionsTest {
         }
 
     @Test
+    fun `on a site without companies the explorer's own new account may be written from, and the owner is told how`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val run = RunId("run_own")
+            val source =
+                sessions(panel) {
+                    store(panel, run, identity("a01", checkNotNull(Role.fromKey("explorer")), RegistrationMode.SELF))
+                    SetupRun(run, RunOutcome.PASSED)
+                }
+
+            val roles = source.registerOnly(request(panel), factory) { progress += it }
+
+            campaigns.single().settings.tenant shouldBe Tenant.NONE
+            roles.note.shouldBeNull()
+            roles.sessions.keys.toList() shouldContainExactly listOf("explorer")
+            progress.filter { "“Pətək sınaq” işarəli" in it }.size shouldBe 1
+            roles.testCheck
+                .check(panel.config.target)
+                .shouldBeInstanceOf<TestTargetVerdict.Confirmed>()
+                .evidence shouldContain "made in this exploration (run run_own)"
+            roles.close()
+        }
+
+    @Test
+    fun `an account the explorer did not sign up with itself is never written from on a site without companies`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            val run = RunId("run_login")
+            val source =
+                sessions(panel) {
+                    store(panel, run, identity("a01", checkNotNull(Role.fromKey("explorer")), RegistrationMode.LOGIN))
+                    SetupRun(run, RunOutcome.PASSED)
+                }
+
+            val roles = source.registerOnly(request(panel), factory) { progress += it }
+
+            roles.sessions.keys.toList() shouldContainExactly listOf("explorer")
+            roles.testCheck.check(panel.config.target).shouldBeInstanceOf<TestTargetVerdict.Refused>()
+            progress.none { "“Pətək sınaq” işarəli" in it } shouldBe true
+            roles.close()
+        }
+
+    @Test
     fun `the setup campaign signs up with the target profile of the site's own scenario`() =
         runBlocking<Unit> {
             val ownFile =
@@ -172,6 +324,90 @@ class TestCompanyRoleSessionsTest {
             campaign.target.selector("login.email") shouldBe "#giris-email"
             campaign.target.selector("login.password") shouldBe TargetProfile.DEFAULT.selector("login.password")
             progress.first() shouldContain "qeydiyyat axınları: real-site v1"
+        }
+
+    @Test
+    fun `the site's own scenario lends its flows, not the ids its main steps' events carry`() =
+        runBlocking<Unit> {
+            // The explorer's second look at a site whose drafted scenario was approved (Faza 18: it goes on during a run).
+            val ownFile =
+                PanelHarness.tinyCampaign(name = "real-site").replace(
+                    "    do: \"Look at the home page\"\n",
+                    "    do: \"Look at the home page\"\n    emits: note_created\n",
+                ) +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#giris-email'
+                      id_sources:
+                        note_created:
+                          oracle: {path: "/test/notes/latest?by={self.email}", field: id}
+                    """.trimIndent() + "\n"
+            val panel = PanelHarness(dir, scenarios = mapOf("real-site.yaml" to ownFile)).also { open += it }
+            panel.backend.scenarios().map { it.name } shouldContainExactly listOf("real-site")
+            val source = sessions(panel) { SetupRun(RunId("run_profile"), RunOutcome.ABORTED) }
+
+            source.open(request(panel), factory) { progress += it }
+
+            val campaign = campaigns.single()
+            campaign.target.selector("login.email") shouldBe "#giris-email"
+            campaign.target.idSources shouldBe emptyMap()
+            // The explorer's own sign-up takes the same profile the same way.
+            source.registerOnly(request(panel), factory) { progress += it }
+            campaigns.last().target.idSources shouldBe emptyMap()
+            campaigns.last().settings.name shouldBe campaign.settings.name
+        }
+
+    @Test
+    fun `another site's scenario never gives the explorer its flows`() =
+        runBlocking<Unit> {
+            val otherSite =
+                PanelHarness.tinyCampaign(name = "other-site").replace("campaign:\n", "campaign:\n  target: http://127.0.0.2:9\n") +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#other-email'
+                    """.trimIndent() + "\n"
+            val panel = PanelHarness(dir, scenarios = mapOf("other-site.yaml" to otherSite)).also { open += it }
+            panel.backend.scenarios().map { it.name } shouldContainExactly listOf("other-site") // waits for the start-up import
+            val source = sessions(panel) { SetupRun(RunId("run_profile"), RunOutcome.ABORTED) }
+
+            source.open(request(panel), factory) { progress += it }
+
+            campaigns.single().target.selector("login.email") shouldBe TargetProfile.DEFAULT.selector("login.email")
+            progress.first() shouldContain "qeydiyyat axınları: docs/TARGET_CONTRACT.md default"
+        }
+
+    @Test
+    fun `the campaign file the site's target profile points at gives the explorer its flows`() =
+        runBlocking<Unit> {
+            Files.writeString(
+                dir.resolve("site-flows.yaml"),
+                PanelHarness.tinyCampaign(name = "site-flows") +
+                    """
+                    target_profile:
+                      selectors:
+                        login.email: '#pointed-email'
+                    """.trimIndent() + "\n",
+            )
+            val profile = TargetSpec("demo", URI("http://127.0.0.1:9"), profile = "site-flows.yaml")
+            val panel =
+                PanelHarness(dir, targets = listOf(ResolvedTarget(profile, testToken = Secret("dev-token"), accounts = emptyList()))).also {
+                    open += it
+                }
+            val profiles =
+                CatalogSetupProfiles(
+                    panel.panel.container.scenarioCatalog,
+                    panel.panel.container.scenarioValidator,
+                    panel.config.target,
+                    PointedProfiles(panel.panel.container, dir)::of,
+                )
+
+            val chosen = profiles.profile(URI("http://127.0.0.1:9"))
+
+            chosen.origin shouldBe "site-flows.yaml"
+            chosen.profile.selector("login.email") shouldBe "#pointed-email"
+            profiles.profile(URI("http://127.0.0.2:9")).origin shouldBe "docs/TARGET_CONTRACT.md default"
         }
 
     @Test
@@ -265,18 +501,21 @@ class TestCompanyRoleSessionsTest {
             }
         }
 
-    /** What a finished setup run leaves: one active tester per role with a saved browser state. */
+    /** What a finished setup run leaves: one active tester per role (by default a test company's) with a saved browser state. */
     private suspend fun store(
         panel: PanelHarness,
         run: RunId,
+        vararg people: Identity,
     ) {
         val identities = panel.panel.container.identities
         val testers =
-            listOf(
-                identity("a01", Role.ADMIN, RegistrationMode.OWNER),
-                identity("a02", Role.MANAGER, RegistrationMode.INVITE),
-                identity("a03", Role.EMPLOYEE, RegistrationMode.COMPANY_CODE),
-            )
+            people.toList().ifEmpty {
+                listOf(
+                    identity("a01", Role.ADMIN, RegistrationMode.OWNER),
+                    identity("a02", Role.MANAGER, RegistrationMode.INVITE),
+                    identity("a03", Role.EMPLOYEE, RegistrationMode.COMPANY_CODE),
+                )
+            }
         identities.replaceAll(run, IdentityPlan(RunTag("k7x2"), testers))
         testers.forEach { tester ->
             val state = dir.resolve("${tester.agentId.value}.json").also { Files.writeString(it, "{}") }

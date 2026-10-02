@@ -19,6 +19,13 @@ import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.LookAnchor
+import az.petek.evidence.domain.LookBox
+import az.petek.evidence.domain.LookFrame
+import az.petek.evidence.domain.LookFrameKind
+import az.petek.evidence.domain.LookMask
+import az.petek.evidence.domain.LookMaskReason
+import az.petek.evidence.domain.PageLookRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
@@ -107,6 +114,53 @@ class SqliteEvidenceRecorderTest {
             artifacts.forEach { store.artifact(it) }
 
             store.artifacts(RUN) shouldContainExactly artifacts
+        }
+
+    @Test
+    fun `a page look round-trips with its frames, masks, fonts and anchors`() =
+        withStore(dir) { store, _ ->
+            val look =
+                PageLookRecord(
+                    runId = RUN,
+                    stepId = StepId("stp_look"),
+                    agentId = A07,
+                    scenarioStep = "public-look",
+                    page = "/qiymətlər",
+                    device = "phone",
+                    landedPath = "/qiymətlər/",
+                    status = 200,
+                    viewportWidth = 375,
+                    viewportHeight = 812,
+                    pageHeight = 2_310,
+                    maxHeight = 4_000,
+                    testers = 8,
+                    renderer = "chromium 141.0; Mac OS X aarch64; headless",
+                    settled = false,
+                    unsettled = listOf("network", "images"),
+                    fonts = listOf("Sans 400 normal", "Sans 700 normal"),
+                    frames =
+                        listOf(
+                            LookFrame(
+                                ArtifactId("art_main"),
+                                LookFrameKind.MAIN,
+                                375,
+                                2_310,
+                                LookMaskReason.entries.mapIndexed { i, reason ->
+                                    LookMask(LookBox(i, 12 + i, 120, 18), reason, "source \"$i\"")
+                                },
+                            ),
+                            LookFrame(ArtifactId("art_reloaded"), LookFrameKind.RELOADED, 375, 2_290, emptyList()),
+                        ),
+                    anchors = listOf(LookAnchor("[data-testid=\"price-table\"]", LookBox(0, 400, 375, 600))),
+                    recordedAt = T0,
+                )
+            val other = look.copy(runId = OTHER_RUN, frames = emptyList(), anchors = emptyList(), status = null, device = null)
+
+            store.pageLook(look)
+            store.pageLook(other)
+
+            store.pageLooks(RUN) shouldContainExactly listOf(look)
+            store.pageLooks(OTHER_RUN) shouldContainExactly listOf(other)
         }
 
     @Test

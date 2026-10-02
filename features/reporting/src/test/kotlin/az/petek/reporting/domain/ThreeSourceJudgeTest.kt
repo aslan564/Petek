@@ -25,11 +25,14 @@ import az.petek.evidence.domain.EvidenceSource.SENDER
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
 import az.petek.evidence.domain.Verdict.FAILED
+import az.petek.evidence.domain.Verdict.INCONCLUSIVE
 import az.petek.evidence.domain.Verdict.PASSED
 import az.petek.evidence.domain.Verdict.SKIPPED
 import az.petek.reporting.ReportTestData.assertion
@@ -286,6 +289,45 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a stale text beside a confirming oracle is no delivery defect but an inconclusive finding`() {
+            // Before Faza 24.12 the FAILED stale text and the passing oracle made this a DELIVERY_UI finding about the site.
+            val stale = "stale_text: the receiver's page showed \"Elan\" already when the emitting step began"
+            val assertions =
+                listOf(
+                    assertion(
+                        "read_announce",
+                        "a02",
+                        RECEIVER,
+                        INCONCLUSIVE,
+                        observed = "visible before the change was written",
+                        note = stale,
+                        artifacts = listOf("art_1"),
+                    ),
+                    assertion("read_announce", "a02", ORACLE, PASSED, artifacts = listOf("art_2")),
+                )
+
+            val finding = judge.findings(run, assertions).single()
+
+            finding.findingClass shouldBe FindingClass.INCONCLUSIVE
+            Shelf.of(finding) shouldBe Shelf.TOOL_GAP
+            finding.note shouldContain "not a defect of the site"
+            finding.note shouldContain stale
+            finding.b!! shouldContain "visible before the change was written"
+            finding.artifactIds shouldContainExactly listOf(ArtifactId("art_1"))
+        }
+
+        @Test
+        fun `an inconclusive check beside a failing one leaves the classification to the failing one`() {
+            val assertions =
+                listOf(
+                    assertion("read_announce", "a02", RECEIVER, INCONCLUSIVE, note = "stale_text: ..."),
+                    assertion("read_announce", "a02", ORACLE, FAILED),
+                )
+
+            judge.findings(run, assertions).single().findingClass shouldBe FindingClass.BACKEND
+        }
+
+        @Test
         fun `a group with only skipped assertions yields no finding`() {
             val assertions = listOf(assertion("announce", "a01", ORACLE, SKIPPED), assertion("announce", "a01", SENDER, SKIPPED))
 
@@ -319,6 +361,35 @@ class ThreeSourceJudgeTest {
             finding.agentId.shouldBeNull()
             finding.findingClass shouldBe FindingClass.INVESTIGATE
             finding.a shouldBe "exactly one success -> 2 succeeded"
+        }
+
+        @Test
+        fun `a race several racers won by the site's own answers is a defect of the site, one nobody won stays with a human`() {
+            val won =
+                assertion(
+                    "race",
+                    null,
+                    SENDER,
+                    FAILED,
+                    "exactly one success",
+                    "a02 POST /t/approve -> 303; a03 POST /t/approve -> 303",
+                    type = "only_one_succeeds",
+                    note = "${RaceNotes.SEVERAL_WINNERS}: more than one actor succeeded (a02, a03); expected exactly one",
+                )
+            val refused =
+                won.copy(
+                    scenarioStep = "race-2",
+                    observed = "a02 POST /t/approve -> 409; a03 POST /t/approve -> 409",
+                    note = "no actor succeeded: every attempt was refused; expected exactly one winner",
+                )
+
+            val findings = judge.findings(run, listOf(won, refused))
+
+            findings.single { it.scenarioStep == "race" }.let {
+                it.findingClass shouldBe FindingClass.SITE_CHECK
+                it.note shouldContain "more than one racer win the same decision"
+            }
+            findings.single { it.scenarioStep == "race-2" }.findingClass shouldBe FindingClass.INVESTIGATE
         }
 
         @Test
@@ -427,6 +498,23 @@ class ThreeSourceJudgeTest {
         }
 
         @Test
+        fun `a step the roll call says a tester never got to is no finding against that tester`() {
+            val steps =
+                listOf(
+                    step(
+                        "read",
+                        "a08",
+                        StepStatus.FAILED,
+                        StepKind.SYSTEM,
+                        detail = "never_reached: the run went on, but a08 has no record of step 'read'",
+                        action = NOT_REACHED_ACTION,
+                    ),
+                )
+
+            judge.findings(run, emptyList(), steps).shouldBeEmpty()
+        }
+
+        @Test
         fun `a site defect a deterministic check saw is a finding about the site, never a tool gap`() {
             val steps =
                 listOf(
@@ -452,6 +540,21 @@ class ThreeSourceJudgeTest {
             findings.map { Shelf.of(it) } shouldContainExactly listOf(Shelf.SITE_BUG, Shelf.SITE_BUG)
             findings.first().note shouldContain "The site failed a check that code made on what the browser saw (unhealthy_page)"
             findings.first().evidenceTier shouldBe EvidenceTier.UI_NETWORK
+        }
+
+        @Test
+        fun `a forbidden action the site accepted is a finding about the site that code saw, even in a do step`() {
+            val detail =
+                "forbidden_accepted: POST /api/tickets/t1/approve -> 200 was accepted, although this step expects the site to " +
+                    "refuse it; agent: Approved the ticket"
+            val steps = listOf(step("forbidden", "a06", StepStatus.FAILED, detail = detail))
+
+            val finding = judge.findings(run, emptyList(), steps).single()
+
+            finding.findingClass shouldBe FindingClass.SITE_CHECK
+            Shelf.of(finding) shouldBe Shelf.SITE_BUG
+            finding.note shouldContain "(forbidden_accepted)"
+            finding.evidenceTier shouldBe EvidenceTier.UI_NETWORK
         }
 
         @Test
@@ -607,6 +710,28 @@ class ThreeSourceJudgeTest {
 
             findings.map { it.scenarioStep } shouldContainExactly listOf("announce", "join")
             findings.map { it.findingId } shouldContainExactly listOf(FindingId("fnd_1"), FindingId("fnd_2"))
+        }
+
+        @Test
+        fun `a step checked only by the oracle shows what the sender did from its own record`() {
+            val assertions = listOf(assertion("ticket_flow", "a02", ORACLE, FAILED, "status = in_progress", "status = open"))
+            val steps =
+                listOf(
+                    step("ticket_flow", "a02", detail = "the ticket is in progress", action = "do: Ticketi in-progress et"),
+                    step("ticket_flow", "a02", action = "click [7] \"İcraya götür\""),
+                )
+
+            val finding = judge.findings(run, assertions, steps).single()
+
+            finding.findingClass shouldBe FindingClass.BACKEND
+            finding.a shouldBe "do: Ticketi in-progress et -> PASSED: the ticket is in progress"
+            finding.c shouldBe "status = in_progress -> status = open"
+            // Without the steps there is no record to show, and nothing is made up.
+            judge
+                .findings(run, assertions)
+                .single()
+                .a
+                .shouldBeNull()
         }
 
         @Test

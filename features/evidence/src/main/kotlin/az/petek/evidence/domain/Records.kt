@@ -44,6 +44,11 @@ data class RunRecord(
     val repeatIndex: Int? = null,
     /** Always [WorkspaceId.LOCAL] on the owner's machine (ADR-0011). */
     val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
+    /**
+     * The site's release the run tested, as the owner named it (`petek run --release v1.4.2`); runs of one scenario are
+     * compared by it (the regression baseline, Faza 14). Null: not named.
+     */
+    val release: String? = null,
 )
 
 /** External objects a run created on the target (e.g. the test company) so teardown can remove them. */
@@ -55,6 +60,201 @@ data class RunResource(
 )
 
 enum class StepKind { DO, RUN, WAIT, EMIT, ASSERT, SYSTEM }
+
+/**
+ * The action of the harness step that records a campaign's `coverage:` lines at a run's start, one line each, so the
+ * run's report names what its scenario left unchecked (the owner's decision of 2026-09-30). Not [WAVE_COVERAGE_ACTION]:
+ * that is the runner's record of which receivers of a wave could wait for an event.
+ */
+const val COVERAGE_ACTION = "scenario_coverage"
+
+/**
+ * The leading key (`not_covered: ...`) of a check no tester of the run could make: the FAILED [WAVE_COVERAGE_ACTION]
+ * record and the [UNCOVERED_ACTION] record. The reports file it under the run's surroundings, never under the site or a
+ * tester.
+ */
+const val NOT_COVERED = "not_covered"
+
+/**
+ * The action of the runner's harness step (agent id null) that counts, per `wait_for` step of a run with waves, the
+ * receivers that could wait for their event: PASSED when some could (`<waited> of <all> receivers could wait for the
+ * event of '<step>'; ...`), FAILED and counted as a failed step when none could, the same detail behind the
+ * [NOT_COVERED] key. Not [COVERAGE_ACTION], the scenario's own `coverage:` lines.
+ */
+const val WAVE_COVERAGE_ACTION = "coverage"
+
+/**
+ * The action of the runner's harness step (SKIPPED) for someone a step began without: a tester out since an earlier
+ * failure (its agent id, detail [SkipDetail.failedEarlier]), or every actor when nobody active matched (agent id null,
+ * detail [SkipDetail.noActor]).
+ */
+const val SKIP_ACTION = "skip"
+
+/** The details of a [SKIP_ACTION] record, written by the runner and read by the reports. */
+object SkipDetail {
+    private const val FAILED_EARLIER = "agent failed earlier"
+
+    /** `agent failed earlier (<failure key>)`: the tester was out since an earlier failure (setup, its browser). */
+    fun failedEarlier(reason: String): String = "$FAILED_EARLIER ($reason)"
+
+    /** The failure key of a [failedEarlier] detail; null for any other detail. */
+    fun failedEarlierReason(detail: String?): String? =
+        detail
+            ?.takeIf { it.startsWith(FAILED_EARLIER) }
+            ?.removePrefix(FAILED_EARLIER)
+            ?.trim()
+            ?.removeSurrounding("(", ")")
+
+    /** `no active actor matches '<actors>'`: the step began with nobody. */
+    fun noActor(actors: String): String = "no active actor matches '$actors'"
+}
+
+/**
+ * The action of the harness step (agent id null, PASSED) that lists, at a run's start, every tester the run planned,
+ * so a report can set who was planned against who acted. Detail ([RosterDetail]): `<count> testers: a01, a02, a03`
+ * (agent ids in order).
+ */
+const val ROSTER_ACTION = "roster"
+
+/** The detail of a [ROSTER_ACTION] record, written by the runner and read by the reports. */
+object RosterDetail {
+    fun of(agentIds: List<String>): String = "${agentIds.size} testers: ${agentIds.joinToString(", ")}"
+
+    /** The planned agent ids of an [of] detail, in order; empty for a run recorded before rosters were kept. */
+    fun agentIds(detail: String?): List<String> =
+        detail
+            ?.substringAfter(": ", "")
+            ?.split(", ")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+}
+
+/**
+ * The action of the harness step (agent id null) that records, at a run's start, how many testers this machine is
+ * advised to carry at once (`petek capacity`), when the caller knew it. It never changes a verdict: a run within the
+ * advice is PASSED, one over it SKIPPED (neutral). Detail, with a leading key ([CapacityDetail]):
+ * `within_capacity: <live> testers at once (<total> in the run); this machine is advised for up to <advice> at once`, or
+ * `over_capacity: ...` with the same numbers and a note that slow pages and late screens may come from the machine.
+ */
+const val CAPACITY_ACTION = "capacity"
+
+/** The detail of a [CAPACITY_ACTION] record, written by the runner and read by the reports. */
+object CapacityDetail {
+    const val WITHIN = "within_capacity"
+    const val OVER = "over_capacity"
+
+    /** The numbers a capacity record carries: [live] testers at once, [total] in the run, [advice] advised at once. */
+    data class Numbers(
+        val live: Int,
+        val total: Int,
+        val advice: Int,
+    )
+
+    fun within(numbers: Numbers): String = "$WITHIN: ${text(numbers)}"
+
+    fun over(numbers: Numbers): String =
+        "$OVER: ${text(numbers)}, so slow pages and late screens may come from this machine, not from the site"
+
+    /** Whether [detail] is an [over] detail: the run carried more testers at once than this machine is advised for. */
+    fun isOver(detail: String?): Boolean = detail?.startsWith(OVER) == true
+
+    /** The numbers of a [within] or [over] detail; null when it carries none. */
+    fun numbers(detail: String): Numbers? {
+        val (live, total, advice) = NUMBERS.find(detail)?.destructured ?: return null
+        return Numbers(live.toIntOrNull() ?: return null, total.toIntOrNull() ?: return null, advice.toIntOrNull() ?: return null)
+    }
+
+    private fun text(numbers: Numbers): String =
+        "${numbers.live} testers at once (${numbers.total} in the run); this machine is advised for up to ${numbers.advice} at once"
+
+    private val NUMBERS = Regex("""(\d+) testers at once \((\d+) in the run\); this machine is advised for up to (\d+)""")
+}
+
+/**
+ * The action of the harness step (agent id null, SKIPPED) of a run that stopped early. Detail ([AbortDetail]):
+ * `run aborted: <reason>; steps not run: <steps>`, where `<steps>` lists the steps that never began, per wave when the
+ * run had waves (`wave 4: read, approve; wave 5: join, read, approve`), `-` when every step began. The reason may itself
+ * contain `; `: read it up to the last `; steps not run: `.
+ */
+const val ABORT_ACTION = "abort"
+
+/** The detail of an [ABORT_ACTION] record, written by the runner and read by the reports. */
+object AbortDetail {
+    private const val LEAD = "run aborted: "
+    private const val NOT_RUN = "; steps not run: "
+
+    /** [notRun]: the steps that never began, one entry per pass (`wave 4: read, approve`). */
+    fun of(
+        reason: String,
+        notRun: List<String>,
+    ): String = "$LEAD$reason$NOT_RUN${notRun.joinToString("; ").ifEmpty { "-" }}"
+
+    /** The abort reason of an [of] detail. */
+    fun reason(detail: String?): String? = detail?.substringAfter(LEAD)?.substringBeforeLast(NOT_RUN)?.trim()
+}
+
+/**
+ * The roll call at a run's end (passed, failed or aborted, with waves or without): every tester the run planned for a
+ * step that has no final record of its own for it gets one harness step with this action, its agent id and the
+ * scenario step, the detail saying why with a leading key from [NotReached]. So no planned tester × step is missing from
+ * the evidence, whatever stopped it. SKIPPED, except [NotReached.NEVER_REACHED], which is FAILED.
+ */
+const val NOT_REACHED_ACTION = "not_reached"
+
+/** Leading keys of a [NOT_REACHED_ACTION] record's detail (`<key>: <why>`, [detail]). */
+object NotReached {
+    /** `run_aborted: <the run's abort reason>`: the run stopped before the tester finished or reached the step. */
+    const val RUN_ABORTED = "run_aborted"
+
+    /** `wave_not_started: wave <n> of <waves> never began; run aborted: <reason>`: the tester's wave never began. */
+    const val WAVE_NOT_STARTED = "wave_not_started"
+
+    /** `failed_earlier: <failure key>`: the tester was out of the run since an earlier failure (setup, its browser). */
+    const val FAILED_EARLIER = "failed_earlier"
+
+    /**
+     * `never_reached: ...`: the run went on, yet the tester never got to the step. A gap of Pətək itself, never of the
+     * site or the tester: its record is FAILED and it is counted as a failed step (with no agent, so the tester is not
+     * among the run's failed agents), so such a run is not PASSED.
+     */
+    const val NEVER_REACHED = "never_reached"
+
+    fun detail(
+        key: String,
+        why: String,
+    ): String = "$key: $why"
+
+    /** The leading key of a [detail]. */
+    fun key(detail: String?): String = detail.orEmpty().substringBefore(':').trim()
+
+    /** What a [detail] says after its key (all of it when it has none). */
+    fun why(detail: String?): String = detail.orEmpty().let { it.substringAfter(':', it).trim() }
+}
+
+/**
+ * The action of the harness step (agent id null, FAILED, counted as a failed step) for a scenario step that no tester
+ * ran in any pass of the run (every wave, or the run without waves, resolved it to nobody), so a run never passes with
+ * a step nobody did. A step that a pass the run stopped before would have given to someone is not one: the roll call's
+ * `not_reached` records name those testers instead. Detail: `not_covered: no tester matched '<actors>' ...` ([NOT_COVERED]).
+ */
+const val UNCOVERED_ACTION = "uncovered"
+
+/**
+ * The action of the harness step (agent id null, PASSED) that closes the roll call once its `not_reached` and
+ * `uncovered` records are written: `done`. A report claims that every tester got to its steps only when this record is
+ * there; a run killed before its end (or one recorded before roll calls) has none, and its report says so.
+ */
+const val ROLL_CALL_ACTION = "roll_call"
+
+/**
+ * How a page look's sub-action is named after its function (`site_health: look at /pricing (phone)`). Its time is mostly
+ * Pətək's own waiting for the page to settle, so a step's speed never counts it (the regression baseline, Faza 14).
+ */
+const val LOOK_ACTION = "look at "
+
+/** Whether [action] (a step record's action) is a page look's sub-action ([LOOK_ACTION]). */
+fun isLookAction(action: String): Boolean = action.substringAfter(": ").startsWith(LOOK_ACTION)
 
 enum class StepStatus { PASSED, FAILED, SKIPPED, BLOCKED, ERROR }
 
@@ -100,6 +300,133 @@ data class EventReceipt(
     val latencyMs: Long?,
 )
 
+/**
+ * How fast one page became usable for one tester, as the browser itself timed it (Navigation Timing and paint entries,
+ * read by code, never told by the AI; AGENTS.md rules 1 and 2): `site_health`'s `perf` check records one per page and
+ * screen. Milliseconds from the start of the navigation; null where the browser did not report it (e.g. no largest
+ * contentful paint on an empty page). Releases are compared by them (the regression baseline, Faza 14).
+ */
+data class PageTimingRecord(
+    val runId: RunId,
+    val stepId: StepId,
+    val agentId: AgentId,
+    val scenarioStep: String,
+    /** The page's path on the target, as the step asked for it (`/announcements`). */
+    val page: String,
+    /** `phone`, `tablet` or `desktop` when the step chose a screen; null: the session's own. */
+    val device: String?,
+    /** Time to the first byte of the page's answer. */
+    val ttfbMs: Long?,
+    val domContentLoadedMs: Long?,
+    val loadMs: Long?,
+    /** Largest contentful paint: when the page's main content showed. */
+    val largestPaintMs: Long?,
+    /** Cumulative layout shift: how much the page jumped while it loaded (unitless; under 0.1 is good). */
+    val layoutShift: Double?,
+    val recordedAt: Instant,
+)
+
+/** A box on a page look, in CSS pixels of its captured image (`0,0` is the page's top-left corner). */
+data class LookBox(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
+
+/** Why an area of a page look is not compared between releases (the look's masks, recorded by code, never painted). */
+enum class LookMaskReason {
+    /** A selector of the owner's target profile (`target_profile.visual.mask`). */
+    PROFILE,
+
+    /** A selector the step named (`site_health`'s `look_mask`). */
+    STEP,
+
+    /** An element the site marked `data-petek-mask` (docs/TARGET_CONTRACT.md). */
+    MARKUP,
+
+    /** The run's own texts on the page: the testers' names and e-mails, the company code, the run's mark. */
+    RUN_TEXT,
+
+    /** A date or a time of day written on the page. */
+    TIME_TEXT,
+
+    /** Video and frames of another origin: not what the site itself drew. */
+    EMBED,
+}
+
+/** One masked area of a look; [source] names it (a selector key, or the kind of run text, never the text itself). */
+data class LookMask(
+    val box: LookBox,
+    val reason: LookMaskReason,
+    val source: String,
+)
+
+enum class LookFrameKind {
+    /** The look itself: the page once it stopped changing, or after the settle budget. */
+    MAIN,
+
+    /** A frame of the same load that differed from [MAIN]: what moves by itself. */
+    MOVED,
+
+    /** The page after a reload, when it differed from [MAIN]: what changes from load to load. */
+    RELOADED,
+}
+
+/** One captured image of a look, stored as the [ArtifactType.VISUAL] artifact [artifactId]. */
+data class LookFrame(
+    val artifactId: ArtifactId,
+    val kind: LookFrameKind,
+    val width: Int,
+    val height: Int,
+    val masks: List<LookMask>,
+)
+
+/** An element a mask could name ([selector]: a test id or a stable id), for the comparison's mask suggestions only. */
+data class LookAnchor(
+    val selector: String,
+    val box: LookBox,
+)
+
+/**
+ * One look of a page on one screen (`site_health`'s `look`, docs/adr/0014): how the page looked to a tester, taken by
+ * code, kept as [ArtifactType.VISUAL] frames on the look's own sub-action [stepId]. Releases are compared by them
+ * (`petek compare`, the regression baseline, Faza 14). [frames] starts with the [LookFrameKind.MAIN] frame.
+ */
+data class PageLookRecord(
+    val runId: RunId,
+    val stepId: StepId,
+    val agentId: AgentId,
+    val scenarioStep: String,
+    /** The page's path on the target, as the step asked for it. */
+    val page: String,
+    /** `phone`, `tablet` or `desktop` when the step chose a screen; null: the session's own. */
+    val device: String?,
+    /** The path the browser ended on (the site may have redirected it). */
+    val landedPath: String,
+    /** The HTTP status of the page's own answer, when the browser reported it. */
+    val status: Int?,
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+    /** The document's whole height, before the look's height cap. */
+    val pageHeight: Int,
+    /** The cap the look was taken with, in CSS pixels; 0: the first screen only. */
+    val maxHeight: Int,
+    /** How many testers shared the step (visited-link colours can differ when this does). */
+    val testers: Int,
+    /** Browser, version, system and mode, e.g. `chromium 141.0; Mac OS X aarch64; headless`. */
+    val renderer: String,
+    /** The page finished loading (fonts, images, network) within the settle budget. */
+    val settled: Boolean,
+    /** What had not finished when [settled] is false: `network`, `fonts`, `images`. */
+    val unsettled: List<String>,
+    /** The loaded font faces, `family weight style`, sorted. */
+    val fonts: List<String>,
+    val frames: List<LookFrame>,
+    val anchors: List<LookAnchor>,
+    val recordedAt: Instant,
+)
+
 /** Kind of a stored artifact; [extension] is the file extension it is written with, so viewers open it right. */
 enum class ArtifactType(
     val extension: String,
@@ -116,6 +443,12 @@ enum class ArtifactType(
     ORACLE("json"),
     PROMPT("txt"),
     LOG("txt"),
+
+    /**
+     * A page look's frame (`site_health`'s `look`, [PageLookRecord]): kept apart from [SCREENSHOT] so a look never
+     * stands for its step's screenshot in the report or on the live board.
+     */
+    VISUAL("png"),
 }
 
 data class ArtifactRecord(
@@ -135,8 +468,13 @@ enum class EvidenceSource { SENDER, RECEIVER, ORACLE, HARNESS }
 /**
  * [NOT_APPLICABLE] is an oracle check on a target without a test API: not a skipped test but a supported mode
  * ("N/A (no oracle)", Faza 10); the other sources still judge the step.
+ *
+ * [INCONCLUSIVE] is a check that ran but whose evidence cannot decide it (Faza 24.12): a race nobody attempted, one with
+ * a single racer or with requests that could not be read, a text the receiver's page showed before the change was
+ * written, a latency known only as a range around its limit. It says nothing against the site, so it is no site
+ * finding (the "tool gap" shelf); nor does it prove anything, so a run with one is not PASSED.
  */
-enum class Verdict { PASSED, FAILED, SKIPPED, NOT_APPLICABLE }
+enum class Verdict { PASSED, FAILED, SKIPPED, NOT_APPLICABLE, INCONCLUSIVE }
 
 data class AssertionRecord(
     val stepId: StepId,
@@ -154,11 +492,24 @@ data class AssertionRecord(
 )
 
 /**
+ * How a race (`only_one_succeeds`) ended, as the lead word of its assertion's note, so the judge and the reports tell
+ * the cases apart without reading prose (the owner's decisions of 2026-09-30).
+ */
+object RaceNotes {
+    /** More than one racer won by the site's own answers: the site decided the same thing twice, a site defect. */
+    const val SEVERAL_WINNERS = "several_winners"
+
+    /** Only one racer sent the deciding request: the site was never asked two decisions at once, so nothing was proved. */
+    const val UNCONTESTED = "uncontested"
+}
+
+/**
  * What a finding is about. [SITE_CHECK]: a deterministic check of the site itself (blind `site_health`, `direct_url`)
  * saw it go wrong — a page wider than a phone, a script error, a broken link, a page open to a role that must not
- * see it; the check's own words say what.
+ * see it; the check's own words say what. [INCONCLUSIVE]: the checks of a step had no evidence to decide with
+ * ([Verdict.INCONCLUSIVE]); their notes say what was missing.
  */
-enum class FindingClass { BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE }
+enum class FindingClass { BACKEND, DELIVERY_UI, SITE_CHECK, INVESTIGATE, FLAKY, AGENT_FAILURE, INCONCLUSIVE }
 
 /**
  * How strong a finding's proof is (Faza 10), shown next to every finding: the target's own test API confirmed it

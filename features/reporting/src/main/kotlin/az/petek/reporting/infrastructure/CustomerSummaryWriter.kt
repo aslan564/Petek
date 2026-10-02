@@ -76,6 +76,22 @@ class CustomerSummaryWriter(
                 }
                 append("</ul></section>")
             }
+            // Nobody is left out silently: testers that did not get to their steps, and steps nobody ran, are said here too.
+            val call = model.rollCall
+            val left =
+                call.notReached
+                    .map { it.agentId }
+                    .toSet()
+                    .size
+            call.abortReason?.let { append("<p class=\"coverage\">").append(esc(t.stopped(it))).append("</p>") }
+            if (left > 0 || call.uncovered.isNotEmpty()) {
+                append("<p class=\"coverage\">")
+                    .append(esc(t.leftOut(call.planned.size.takeIf { it > 0 } ?: s.agents, left, call.uncovered.size)))
+                    .append("</p>")
+            }
+            if (!call.recorded) append("<p class=\"coverage\">").append(esc(t.rollCallMissing())).append("</p>")
+            // A passed run is never read as "everything was checked": what the scenario left out is said here too.
+            if (model.coverage.isNotEmpty()) append("<p class=\"coverage\">").append(esc(t.notChecked(model.coverage.size))).append("</p>")
             append("<p class=\"more\"><a href=\"index.html\">").append(esc(t.details)).append("</a></p>")
             append("</main></body></html>\n")
         }
@@ -91,6 +107,19 @@ class CustomerSummaryWriter(
             duration: String,
         ): String
 
+        /** The run stopped before its end, and why. */
+        fun stopped(reason: String): String
+
+        /** The run's roll call was never closed, so who was left out is not known. */
+        fun rollCallMissing(): String
+
+        /** Testers that did not get to all their steps ([left] of [planned]) and steps nobody ran ([uncovered]). */
+        fun leftOut(
+            planned: Int,
+            left: Int,
+            uncovered: Int,
+        ): String
+
         fun verdict(
             findings: Int,
             passed: Int,
@@ -104,6 +133,9 @@ class CustomerSummaryWriter(
         /** Added to a sentence when several testers saw the same problem. */
         fun seenBy(testers: Int): String
 
+        /** That the scenario left [count] things unchecked, listed in the detailed report. */
+        fun notChecked(count: Int): String
+
         val details: String
     }
 
@@ -115,6 +147,20 @@ class CustomerSummaryWriter(
             testers: Int,
             duration: String,
         ) = "Pətək $target saytını $testers testerlə $duration ərzində yoxladı."
+
+        override fun stopped(reason: String) = "Run vaxtından əvvəl dayandı: $reason."
+
+        override fun rollCallMissing() = "Testerlərin yoxlaması yazılmayıb: kimin hansı addıma çatmadığı bilinmir."
+
+        override fun leftOut(
+            planned: Int,
+            left: Int,
+            uncovered: Int,
+        ) = listOfNotNull(
+            "Planlanan $planned testerdən $left nəfəri bütün addımlarına çatmadı.".takeIf { left > 0 },
+            "$uncovered addımı heç kim icra etmədi.".takeIf { uncovered > 0 },
+            "Kim və niyə: hesabatın \"${ReportFormat.ROLL_CALL_TITLE}\" bölməsi.",
+        ).joinToString(" ")
 
         override fun verdict(
             findings: Int,
@@ -144,10 +190,14 @@ class CustomerSummaryWriter(
                 FindingClass.INVESTIGATE -> "$step addımında mənbələr uyğun gəlmir; səbəbi aydınlaşdırılmalıdır."
                 FindingClass.FLAKY -> "$step addımı təkrar run-larda gah keçir, gah keçmir."
                 FindingClass.AGENT_FAILURE -> "$step addımında tester işini bitirə bilmədi."
+                FindingClass.INCONCLUSIVE -> "$step addımında yoxlama qərara gələ bilmədi: sübut yetərli deyildi."
             }
         }
 
         override fun seenBy(testers: Int) = " ($testers tester gördü)"
+
+        override fun notChecked(count: Int) =
+            "Bu test hər şeyi əhatə etmir: ssenari $count şeyi yoxlamadı (hansıları və niyə, ətraflı hesabatdadır)."
 
         override val details = "Bütün addımlar, sübutlar və screenshot-lar: ətraflı hesabat"
     }
@@ -160,6 +210,20 @@ class CustomerSummaryWriter(
             testers: Int,
             duration: String,
         ) = "Pətək checked $target with $testers testers in $duration."
+
+        override fun stopped(reason: String) = "The run stopped before its end: $reason."
+
+        override fun rollCallMissing() = "The roll call was not recorded: who did not get to which step is not known."
+
+        override fun leftOut(
+            planned: Int,
+            left: Int,
+            uncovered: Int,
+        ) = listOfNotNull(
+            "Of $planned planned testers, $left did not get to all their steps.".takeIf { left > 0 },
+            "$uncovered steps were run by nobody.".takeIf { uncovered > 0 },
+            "Who and why: the report's roll call.",
+        ).joinToString(" ")
 
         override fun verdict(
             findings: Int,
@@ -189,10 +253,14 @@ class CustomerSummaryWriter(
                 FindingClass.INVESTIGATE -> "In step $step the sources disagree; the cause needs a closer look."
                 FindingClass.FLAKY -> "Step $step passes in some runs and fails in others."
                 FindingClass.AGENT_FAILURE -> "In step $step a tester could not finish its task."
+                FindingClass.INCONCLUSIVE -> "In step $step a check could not reach a verdict: its evidence was not enough."
             }
         }
 
         override fun seenBy(testers: Int) = " (seen by $testers testers)"
+
+        override fun notChecked(count: Int) =
+            "This test does not cover everything: its scenario left $count things unchecked (which and why: the detailed report)."
 
         override val details = "Every step, its proof and screenshots: the detailed report"
     }

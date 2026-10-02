@@ -18,6 +18,10 @@ import az.petek.app.di.AppContainer
 import az.petek.app.di.AppOverrides
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.app.logging.LoggingSettings
+import az.petek.browser.domain.BrowserEngine
+import az.petek.browser.domain.HtmlPdfPrinter
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.domain.HostResources
 import az.petek.core.sqlite.SqliteDatabase
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.evidence.infrastructure.SqliteEvidenceStore
@@ -55,6 +59,12 @@ class CliHarness(
     var reachability: TargetReachability = TargetReachability.ALWAYS,
     /** Every site counts as proved to be the tester's own unless a test says otherwise (ADR-0012). */
     var ownership: SiteOwnership = OwnershipTestKit.owned(FakeHarnessClock()),
+    /** The explorer's browser of the panel-backed commands (`petek test`); null: [browser] plays it too. */
+    var explorerBrowser: BrowserEngine? = null,
+    /** A roomy machine unless a test says otherwise: capacity advice never warns by accident. */
+    var hostResources: HostResourceProbe = HostResourceProbe { HostResources(64L shl 30, 32L shl 30, 32) },
+    /** Prints a report "as a PDF" without Chromium: the file holds a PDF header and the page it was printed from. */
+    var pdfPrinter: HtmlPdfPrinter = HtmlPdfPrinter { html, pdf -> Files.writeString(pdf, "%PDF-fake " + html.fileName) },
 ) {
     val env: MutableMap<String, String> = (defaultEnvironment() + environment).toMutableMap()
     val loggingRequests = CopyOnWriteArrayList<LoggingSettings>()
@@ -88,6 +98,8 @@ class CliHarness(
                             browser = browser,
                             reachability = reachability,
                             ownership = ownership,
+                            pdfPrinter = pdfPrinter,
+                            hostResources = hostResources,
                         ),
                     )
                 },
@@ -96,7 +108,15 @@ class CliHarness(
                 panelContainers = { config, overrides ->
                     AppContainer(
                         config,
-                        overrides.copy(llm = llm, browser = browser, reachability = reachability, ownership = ownership),
+                        overrides.copy(
+                            llm = llm,
+                            browser = browser,
+                            explorerBrowser = explorerBrowser,
+                            reachability = reachability,
+                            ownership = ownership,
+                            pdfPrinter = pdfPrinter,
+                            hostResources = hostResources,
+                        ),
                     )
                 },
                 openInBrowser = {
@@ -107,6 +127,7 @@ class CliHarness(
                 standardInput = standardInput,
                 standardOutput = standardOutput,
                 home = home,
+                hostResources = hostResources,
             )
 
     suspend fun run(vararg args: String): CliktCommandTestResult = PetekCommand(runtime).test(args.toList(), width = WIDE)

@@ -390,6 +390,67 @@ class RunnerConcurrencyTest {
             summary.failedAgents shouldBe 0
         }
 
+    private val forbiddenApproval =
+        step(
+            "forbidden",
+            employees("IT", nth = 2),
+            assertions = listOf(AssertionSpec.HttpStatus("/api/tickets/t1/approve", "POST", 403)),
+        )
+
+    @Test
+    fun `a forbidden action the site accepted from the tester's own page fails as a defect of the site`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                f.browser.session(call.agentId.value).mutated("POST", "/api/tickets/t1/approve/", 200)
+                ActionOutcome(ActionStatus.SUCCEEDED, "Approved the ticket")
+            }
+
+            val summary = f.runner().run(campaign(steps = listOf(forbiddenApproval)))
+
+            val record = f.step("forbidden", StepKind.DO, "a06")
+            record.status shouldBe StepStatus.FAILED
+            record.detail shouldBe
+                "forbidden_accepted: POST /api/tickets/t1/approve/ -> 200 was accepted, although this step expects the site " +
+                "to refuse it; agent: Approved the ticket"
+            f.evidence.artifactList.map { it.stepId } shouldBe listOf(record.stepId)
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.stepsFailed shouldBe 1
+        }
+
+    @Test
+    fun `a forbidden action is decided by the requests even when the agent says it was refused`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                f.browser.session(call.agentId.value).mutated("POST", "/api/tickets/t1/approve", 303)
+                ActionOutcome(ActionStatus.FAILED, "no approve button", failureReason = FailureReason.PROBLEM_REPORTED)
+            }
+
+            f.runner().run(campaign(steps = listOf(forbiddenApproval)))
+
+            f.step("forbidden", StepKind.DO, "a06").detail shouldBe
+                "forbidden_accepted: POST /api/tickets/t1/approve -> 303 was accepted, although this step expects the site " +
+                "to refuse it; agent: no approve button"
+        }
+
+    @Test
+    fun `a refused or unrelated request leaves a forbidden action to its assertions`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                val session = f.browser.session(call.agentId.value)
+                session.mutated("POST", "/api/tickets/t1/approve", 403)
+                session.mutated("POST", "/api/notifications/read", 200)
+                ActionOutcome(ActionStatus.BLOCKED, "refused", failureReason = FailureReason.PERMISSION_DENIED)
+            }
+
+            val summary = f.runner().run(campaign(steps = listOf(forbiddenApproval)))
+
+            f.step("forbidden", StepKind.DO, "a06").detail shouldBe "permission_denied: refused"
+            summary.outcome shouldBe RunOutcome.PASSED
+        }
+
     @Test
     fun `a problem reported in a step whose assertions do not test a refusal stays a failure`() =
         runTest {

@@ -14,6 +14,8 @@ package az.petek.orchestration.application
 import az.petek.core.ids.AgentId
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.core.time.SystemHarnessClock
+import az.petek.orchestration.domain.EventOrigin
+import az.petek.orchestration.domain.EventWrite
 import az.petek.orchestration.testing.VirtualClock
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
@@ -55,6 +57,30 @@ class InProcessEventBusTest {
             first.t0.elapsedUntil(second.t0) shouldBe 2.seconds
             second.emitter shouldBe employee
             bus.history().map { it.name } shouldContainExactly listOf("announcement_created", "ticket_created")
+        }
+
+    @Test
+    fun `an event whose write was seen measures from the write and keeps its publish time apart`() =
+        runTest {
+            val bus = bus()
+            val clock = VirtualClock(testScheduler)
+            val actionStart = clock.now()
+            delay(1.seconds)
+            val written = clock.now()
+            delay(4.seconds)
+
+            val event =
+                bus.publish(
+                    "announcement_created",
+                    "a1",
+                    admin,
+                    EventOrigin(actionStart, EventWrite("POST /api/announcements -> 201", written, exact = true)),
+                )
+            val unseen = bus.publish("ticket_created", "t1", employee, EventOrigin(actionStart, write = null))
+
+            event.t0 shouldBe written
+            event.t0.elapsedUntil(event.publishedAt) shouldBe 4.seconds
+            unseen.t0 shouldBe unseen.publishedAt
         }
 
     @Test

@@ -20,6 +20,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
+import java.net.URI
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -286,13 +287,23 @@ class TargetProfileRulesTest {
     }
 
     @Test
-    fun `the API prefix is empty or a clean path`() {
-        listOf("", "/api", "/api/v1", "/rest/v2.1").forEach { prefix ->
-            messages(TargetProfile.DEFAULT.copy(apiPrefix = prefix)).shouldBeEmpty()
-        }
-        listOf("api", "/api/", "//api", "/api?x=1", "/a pi", "https://x/api").forEach { prefix ->
-            single(TargetProfile.DEFAULT.copy(apiPrefix = prefix), "api_prefix must be empty or a path like /api/v1")
-        }
+    fun `the API prefix is empty, a clean path or the full address of an API on its own host`() {
+        listOf("", "/api", "/api/v1", "/rest/v2.1", "https://api.example.com/v1", "http://127.0.0.1:18081", "https://API.example.com")
+            .forEach { prefix -> messages(TargetProfile.DEFAULT.copy(apiPrefix = prefix)).shouldBeEmpty() }
+        listOf(
+            "api",
+            "/api/",
+            "//api",
+            "/api?x=1",
+            "/a pi",
+            "https://api.example.com/v1/",
+            "https://user:pass@api.example.com/v1",
+            "https://api.example.com/v1?key=1",
+            "ftp://api.example.com/v1",
+            "https:///v1",
+        ).forEach { prefix -> single(TargetProfile.DEFAULT.copy(apiPrefix = prefix), "api_prefix must be empty, a path like /api/v1") }
+        TargetProfile.DEFAULT.copy(apiPrefix = "https://API.example.com:8443/v1").apiOrigin shouldBe URI("https://api.example.com:8443")
+        TargetProfile.DEFAULT.copy(apiPrefix = "/api/v1").apiOrigin shouldBe null
     }
 
     @Test
@@ -311,6 +322,80 @@ class TargetProfileRulesTest {
 
         single(target, "target_profile.dismiss[1]: overlay selectors are checked before every flow step as written")
         messages(TargetProfile.DEFAULT.copy(dismiss = listOf("role=button[name=\"Qəbul edirəm\"]", "session.logout"))).shouldBeEmpty()
+    }
+
+    @Test
+    fun `visual masks of plain CSS and of selector keys that stand for plain CSS are valid`() {
+        val target =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.clock" to "[data-testid=\"server-clock\"]"),
+                visual = VisualProfile(listOf("visual.clock", ".news-ticker", "session.user_name", "header time")),
+            )
+
+        messages(target).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a visual mask named like a visual key that the profile does not define is refused`() {
+        // No other visual.* key exists, so the group alone does not tell it apart from CSS; as CSS it would match nothing.
+        val forgotten = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf("visual.clock", ".ticker")))
+
+        single(
+            forgotten,
+            "target_profile.visual.mask[0]: 'visual.clock' names a selector key, but target_profile.selectors has no such key " +
+                "(it has no visual.* keys)",
+        )
+        val misspelt =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.clock" to "[data-testid=\"server-clock\"]"),
+                visual = VisualProfile(listOf("visual.clok", "visual.clock-face")),
+            )
+        messages(misspelt) shouldBe
+            listOf(0, 1).map { i ->
+                val ref = misspelt.visual.mask[i]
+                "target_profile.visual.mask[$i]: '$ref' names a selector key, but target_profile.selectors has no such key " +
+                    "(its visual.* keys: visual.clock); as CSS it would match nothing, so nothing would be masked"
+            }
+    }
+
+    @Test
+    fun `a visual mask with a placeholder is refused`() {
+        val target = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf(".ticker", "#hi-{self.agent_id}")))
+
+        single(target, "target_profile.visual.mask[1]: masks are looked for on the page as written; they cannot use placeholders")
+    }
+
+    @Test
+    fun `a blank visual mask is refused`() {
+        val target = TargetProfile.DEFAULT.copy(visual = VisualProfile(listOf(" ", ".ticker")))
+
+        messages(target) shouldBe listOf("target_profile.visual.mask[0]: selector must not be blank")
+    }
+
+    @Test
+    fun `a Playwright-only visual mask is refused with its path`() {
+        val target =
+            TargetProfile.DEFAULT.copy(
+                selectors = mapOf("visual.banner" to "div.banner >> nth=0"),
+                visual = VisualProfile(listOf("role=button[name=\"Qəbul edirəm\"]", ".ok", "visual.banner", "li:has-text(\"Bu gün\")")),
+            )
+
+        val all = issues(target, sourceLines = SourceLines(mapOf("target_profile.visual.mask[2]" to 41)))
+
+        all.map { it.message.substringBefore(':') } shouldBe
+            listOf("target_profile.visual.mask[0]", "target_profile.visual.mask[2]", "target_profile.visual.mask[3]")
+        all[0].message shouldContain "uses 'role=', which only Playwright understands"
+        all[1].message shouldContain "'visual.banner' (div.banner >> nth=0) uses '>>'"
+        all[1].line shouldBe 41
+        all[2].message shouldContain "uses ':has-text('"
+    }
+
+    @Test
+    fun `more than 50 visual masks are refused`() {
+        val fifty = (1..VisualProfile.MAX_MASKS).map { ".part-$it" }
+
+        messages(TargetProfile.DEFAULT.copy(visual = VisualProfile(fifty))).shouldBeEmpty()
+        single(TargetProfile.DEFAULT.copy(visual = VisualProfile(fifty + ".one-more")), "names 51 selectors; at most 50")
     }
 
     @Test

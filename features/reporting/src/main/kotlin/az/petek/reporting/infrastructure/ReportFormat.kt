@@ -11,8 +11,10 @@
 
 package az.petek.reporting.infrastructure
 
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
+import az.petek.evidence.domain.NotReached
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepStatus
 import az.petek.reporting.domain.FailureKeys
@@ -51,7 +53,24 @@ internal object ReportFormat {
             FindingClass.INVESTIGATE -> "Araşdırılmalı"
             FindingClass.FLAKY -> "Qeyri-sabit (flaky)"
             FindingClass.AGENT_FAILURE -> "Agent xətası"
+            FindingClass.INCONCLUSIVE -> "Sübut yetərli deyil"
         }
+
+    /** How the reports name checks whose evidence could not decide them (Faza 24.12). */
+    const val INCONCLUSIVE = "sübutu yetərli olmayan"
+
+    /** How the reports head what the run's scenario left unchecked (its `coverage:` lines, 2026-09-30). */
+    const val COVERAGE_TITLE = "Bu ssenarinin yoxlamadıqları"
+
+    /** The section of the pages' own timing (`site_health`'s `perf`). */
+    const val PAGE_SPEED_TITLE = "Səhifə sürəti"
+    const val PAGE_SPEED_NOTE =
+        "Brauzerin özünün ölçdüyü vaxtlar, səhifə və ekran üzrə testerlərin medianı: ilk bayt, DOM hazır, yüklənmə, əsas " +
+            "məzmunun görünməsi (LCP) və yüklənərkən sürüşmə (CLS; 0,10-dan aşağı sabit sayılır). Versiyalar petek compare ilə tutuşdurulur."
+    val PAGE_SPEED_COLUMNS = listOf("Səhifə", "Tester", "İlk bayt", "DOM hazır", "Yüklənmə", "LCP", "CLS")
+
+    /** The header link that downloads the report as a PDF. */
+    const val PDF_DOWNLOAD = "PDF yüklə"
 
     /** The strength of a finding's proof as the owner reads it (Faza 10). */
     fun evidenceTier(value: EvidenceTier): String =
@@ -104,9 +123,18 @@ internal object ReportFormat {
     fun stability(row: StabilityRow): String =
         when {
             row.flaky -> "flaky"
+            row.unsteady -> "testerə görə dəyişdi: ${testerCauses(row)} (saytın xətası deyil)"
             row.runs > 0 && row.passed == row.runs -> "sabit"
             else -> "həmişə keçmir"
         }
+
+    /** Why a step did not pass when the site had no part in it (Faza 24.13): `agent`, `mühit`, `yoxlanmadı`. */
+    private fun testerCauses(row: StabilityRow): String =
+        listOfNotNull(
+            "agent".takeIf { row.agentFailures > 0 },
+            "mühit".takeIf { row.environmentFailures > 0 },
+            "yoxlanmadı".takeIf { row.undecided > 0 },
+        ).joinToString(", ")
 
     fun agent(
         id: String?,
@@ -142,6 +170,9 @@ internal object ReportFormat {
     }
 
     fun latency(ms: Long?): String = ms?.let { "$it ms" } ?: NONE
+
+    /** A cumulative layout shift as the report writes numbers: two decimals, a decimal comma (`0,02`). */
+    fun shift(value: Double?): String = value?.let { String.format(Locale.ROOT, "%.2f", it).replace('.', ',') } ?: NONE
 
     /** `5 000 000`: grouped so token counts stay readable. */
     fun count(value: Long): String = String.format(Locale.ROOT, "%,d", value).replace(',', ' ')
@@ -187,4 +218,50 @@ internal object ReportFormat {
     private const val MS_PER_SECOND = 1_000L
     private const val MS_PER_MINUTE = 60_000L
     private const val MS_PER_HOUR = 3_600_000L
+
+    /** The roll call's title, in every format. */
+    const val ROLL_CALL_TITLE = "Testerlərin yoxlaması"
+
+    const val ALL_FINISHED = "Hər planlanan tester ona verilən bütün addımlara çatdı."
+
+    /** Why a planned tester did not get to a step, by the roll call's key, in the owner's words. */
+    fun notReached(key: String): String =
+        when (key) {
+            NotReached.RUN_ABORTED -> "run dayandırıldı"
+            NotReached.WAVE_NOT_STARTED -> "testerin dalğası başlamadı"
+            NotReached.FAILED_EARLIER -> "tester əvvəlki addımda düşdü"
+            NotReached.NEVER_REACHED -> "run davam etdi, amma tester bu addıma çatmadı (Pətəkin öz boşluğu)"
+            else -> key
+        }
+
+    /**
+     * `Planlanan: 50 tester · İşləyən: 50 · Bütün addımlarını bitirən: 50`; just the testers that acted for a run recorded
+     * before rosters were kept.
+     */
+    fun rollCallLine(model: ReportModel): String {
+        val call = model.rollCall
+        if (call.planned.isEmpty() && call.acted.isEmpty()) return model.summary.agents.toString()
+        return listOfNotNull(
+            call.planned.takeIf { it.isNotEmpty() }?.let { "Planlanan: ${it.size} tester" },
+            "İşləyən: ${call.acted.size}",
+            call.finished?.let { "Bütün addımlarını bitirən: $it" },
+        ).joinToString(" · ")
+    }
+
+    /** Said instead of a roll call a run never closed: whether anybody was left out is not known. */
+    const val ROLL_CALL_MISSING =
+        "Bu run-ın testerlərin yoxlaması yazılmayıb (run sona çatmayıb, hələ gedir və ya yoxlamadan əvvəlki run-dır): " +
+            "kimin hansı addıma çatmadığı bilinmir."
+
+    /** The over-capacity record as a warning: how many ran at once against the machine's advice. */
+    fun overCapacity(detail: String): String {
+        val numbers = CapacityDetail.numbers(detail)
+        val head =
+            if (numbers == null) {
+                "Bu maşın üçün tövsiyə olunandan çox tester eyni anda işlədi"
+            } else {
+                "Eyni anda ${numbers.live} tester işlədi (run-da ${numbers.total}), bu maşın isə ən çox ${numbers.advice} üçün tövsiyə olunur"
+            }
+        return "$head: gec görünən ekranlar və yavaş səhifələr saytdan yox, maşından ola bilər."
+    }
 }

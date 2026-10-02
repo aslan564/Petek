@@ -18,6 +18,9 @@ import java.net.URISyntaxException
  * What the owner asks for on the "Təlimat" screen: which site, what to test in plain words, and the team and budget a
  * campaign gets. The panel hands it to the backend as is; [problems] are the checks the page shows next to the fields
  * before anything starts, the same rules the campaign validator applies later (docs/ARCHITECTURE.md decisions).
+ *
+ * The team is the owner's only when given (Faza 25): without [roles] and [registration] the draft takes the roles and
+ * the ways in the explorer saw on the site, without [departments] the departments it saw.
  */
 data class PanelInstructions(
     /** The site under test, an absolute http(s) URL. The target policy of the backend still decides if it may be used. */
@@ -25,9 +28,12 @@ data class PanelInstructions(
     /** Free text: what to test, what matters, what to avoid. May be empty. */
     val instructions: String,
     val testers: Int,
-    val roles: RoleSplit,
-    val departments: List<String>,
-    val registration: RegistrationSplit,
+    /** The owner's split of a company's team; null: the roles the explorer saw. */
+    val roles: RoleSplit? = null,
+    /** The owner's departments; empty: the ones the explorer saw. */
+    val departments: List<String> = emptyList(),
+    /** How the owner's team joins a company; null: the ways in the explorer saw. Only with [roles]. */
+    val registration: RegistrationSplit? = null,
     val budget: PanelBudget,
     /** Let the explorer submit each create form once (TRIAL_TOUCH); only honoured on an `is_test` target. */
     val allowWrites: Boolean = false,
@@ -61,24 +67,23 @@ data class PanelInstructions(
 
     private fun roleProblems(): List<FieldProblem> =
         buildList {
-            val negative = minOf(roles.admins, roles.managers, roles.employees) < 0
+            val team = roles ?: return@buildList
+            val negative = minOf(team.admins, team.managers, team.employees) < 0
             if (negative) {
                 add(FieldProblem(ROLES, "Rol sayları mənfi ola bilməz."))
             }
-            if (roles.admins < 1) {
+            if (team.admins < 1) {
                 add(FieldProblem(ROLES, "Ən azı bir admin lazımdır: test şirkətini o yaradır."))
             }
-            if (roles.total != testers) {
-                add(FieldProblem(ROLES, "Rolların cəmi (${roles.total}) tester sayına ($testers) bərabər olmalıdır."))
+            if (team.total != testers) {
+                add(FieldProblem(ROLES, "Rolların cəmi (${team.total}) tester sayına ($testers) bərabər olmalıdır."))
             }
         }
 
+    /** Departments are optional: without them the draft takes the ones the explorer saw, else its own one (Faza 25.2). */
     private fun departmentProblems(): List<FieldProblem> =
         buildList {
             val names = departments.map { it.trim() }
-            if (roles.managers + roles.employees > 0 && names.none { it.isNotEmpty() }) {
-                add(FieldProblem(DEPARTMENTS, "Menecer və işçilər üçün ən azı bir şöbə yazın."))
-            }
             if (names.any { it.isEmpty() || it.length > MAX_DEPARTMENT_CHARS }) {
                 add(FieldProblem(DEPARTMENTS, "Şöbə adı boş ola bilməz və $MAX_DEPARTMENT_CHARS simvoldan uzun olmamalıdır."))
             }
@@ -89,16 +94,22 @@ data class PanelInstructions(
 
     private fun registrationProblems(): List<FieldProblem> =
         buildList {
-            val joining = roles.managers + roles.employees
-            val negative = minOf(registration.invite, registration.companyCode) < 0
+            val split = registration ?: return@buildList
+            val team = roles
+            if (team == null) {
+                add(FieldProblem(REGISTRATION, "Qeydiyyat bölgüsü yalnız rollarla birlikdə verilir."))
+                return@buildList
+            }
+            val joining = team.managers + team.employees
+            val negative = minOf(split.invite, split.companyCode) < 0
             if (negative) {
                 add(FieldProblem(REGISTRATION, "Qeydiyyat sayları mənfi ola bilməz."))
             }
-            if (registration.total != joining) {
+            if (split.total != joining) {
                 add(FieldProblem(REGISTRATION, "Dəvətlə və şirkət kodu ilə qoşulanların cəmi $joining olmalıdır (admin olmayanlar)."))
             }
-            if (registration.invite < roles.managers) {
-                add(FieldProblem(REGISTRATION, "Menecerlər yalnız dəvətlə qoşulur: dəvət sayı ən azı ${roles.managers} olmalıdır."))
+            if (split.invite < team.managers) {
+                add(FieldProblem(REGISTRATION, "Menecerlər yalnız dəvətlə qoşulur: dəvət sayı ən azı ${team.managers} olmalıdır."))
             }
         }
 

@@ -28,12 +28,12 @@ interface CampaignRunner {
     ): RunSummary
 }
 
-/** Runs the same campaign N times as one repeat group and reports stability. */
+/** Runs the same campaign N times as one repeat group and reports stability; [options] reach every run. */
 interface RepeatRunner {
     suspend fun repeat(
         campaign: Campaign,
         times: Int,
-        keepData: Boolean = false,
+        options: RunOptions = RunOptions(),
     ): List<RunSummary>
 }
 

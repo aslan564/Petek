@@ -16,6 +16,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import java.net.URI
 
 class TargetPathTest {
     @Test
@@ -36,10 +37,23 @@ class TargetPathTest {
     fun `every template value is encoded`() {
         val encoded =
             TargetPath.encodeValues(
-                TemplateContext(lastId = "a/b", self = mapOf("name" to "Ə b"), eventIds = mapOf("ticket_created" to "t 1")),
+                TemplateContext(
+                    lastId = "a/b",
+                    self = mapOf("name" to "Ə b"),
+                    eventIds = mapOf("ticket_created" to "t 1"),
+                    testers = mapOf("manager.1" to mapOf("email" to "m 1@test.example")),
+                    pass = "k7x2 2",
+                ),
             )
 
-        encoded shouldBe TemplateContext("a%2Fb", mapOf("name" to "%C6%8F%20b"), mapOf("ticket_created" to "t%201"))
+        encoded shouldBe
+            TemplateContext(
+                "a%2Fb",
+                mapOf("name" to "%C6%8F%20b"),
+                mapOf("ticket_created" to "t%201"),
+                mapOf("manager.1" to mapOf("email" to "m%201@test.example")),
+                "k7x2%202",
+            )
         TargetPath.encodeValues(TemplateContext(null, emptyMap(), emptyMap())).lastId.shouldBeNull()
     }
 
@@ -53,6 +67,22 @@ class TargetPathTest {
             "/files/report.v2/..x",
             "/test/x?next=/../y",
         ).forEach { TargetPath.problem(it).shouldBeNull() }
+    }
+
+    @Test
+    fun `an address on the site's own API host is accepted when api_prefix names it, and only then`() {
+        val api = URI("https://api.portal.example")
+
+        TargetPath.problem("https://api.portal.example/v1/tickets/42/approve", api).shouldBeNull()
+        TargetPath.problem("https://API.portal.example/v1/tickets/42", api).shouldBeNull()
+        listOf(
+            "https://api.portal.example/v1/tickets/../admin",
+            "https://api.portal.example.evil.test/v1/x",
+            "https://api.portal.example@evil.test/v1/x",
+            "https://other.portal.example/v1/x",
+            "https://api.portal.example",
+        ).forEach { TargetPath.problem(it, api).shouldNotBeNull() }
+        TargetPath.problem("https://api.portal.example/v1/tickets/42").shouldNotBeNull()
     }
 
     @Test

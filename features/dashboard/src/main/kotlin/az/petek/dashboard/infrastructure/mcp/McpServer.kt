@@ -130,7 +130,8 @@ class McpServer(
                 "instructions",
                 "Pətək tests the web application at ${settings.target} with many AI tester agents at once and reports with " +
                     "evidence. Read the project's .petek/SKILL.md for the roles (explorer, scenario author, judge, root-cause). " +
-                    "Assertions are checked by Pətək's code, time by its harness; you only call the tools. " +
+                    "The main path is test_site: it explores the site, drafts the scenario from what it found, approves and " +
+                    "runs it. Assertions are checked by Pətək's code, time by its harness; you only call the tools. " +
                     if (settings.allowWrites) {
                         "Writes (runs, approvals, teardown) are allowed in this session."
                     } else {

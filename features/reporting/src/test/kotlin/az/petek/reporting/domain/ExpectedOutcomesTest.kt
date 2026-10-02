@@ -158,6 +158,67 @@ class ExpectedOutcomesTest {
     }
 
     @Test
+    fun `a tool call the agent recovered from is no failure, while an action that ended failed stays one`() {
+        val task = "do: Ticketi in-progress et, sonra HR menecerinə assign et"
+        val select = "select [8] (İcraçı) \"HR\""
+        val recovered =
+            listOf(
+                step("ticket_flow", "a02", StepStatus.PASSED, detail = "assigned", action = task, correlation = "cor_a02"),
+                step(
+                    "ticket_flow",
+                    "a02",
+                    StepStatus.ERROR,
+                    detail = "ERROR: option \"HR\" not found",
+                    action = select,
+                    correlation = "cor_a02",
+                ),
+            )
+        val gaveUp =
+            listOf(
+                step(
+                    "ticket_flow",
+                    "a05",
+                    StepStatus.FAILED,
+                    detail = "loop_detected: Loop detected",
+                    action = task,
+                    correlation = "cor_a05",
+                ),
+                step(
+                    "ticket_flow",
+                    "a05",
+                    StepStatus.ERROR,
+                    detail = "ERROR: option \"HR\" not found",
+                    action = select,
+                    correlation = "cor_a05",
+                ),
+            )
+        val expected = ExpectedOutcomes(recovered + gaveUp)
+
+        recovered.map { expected.isRecovered(it) } shouldBe listOf(false, true)
+        (recovered + gaveUp).filter(expected::isFailure) shouldBe gaveUp
+        expected.failureKey(gaveUp.first()) shouldBe "loop_detected"
+    }
+
+    @Test
+    fun `a retried attempt of a run function that then passed is no failure`() {
+        val steps =
+            listOf(
+                step("join", "a07", StepStatus.PASSED, StepKind.RUN, "Joined", action = "run register_and_login", correlation = "cor_a07"),
+                step(
+                    "join",
+                    "a07",
+                    StepStatus.FAILED,
+                    StepKind.RUN,
+                    "mail_timeout: no code",
+                    action = "register_and_login: attempt 1 of 3",
+                    correlation = "cor_a07",
+                ),
+            )
+
+        ExpectedOutcomes(steps).let { expected -> steps.filter(expected::isFailure) }.shouldBeEmpty()
+    }
+
+    @Test
     fun `an expected refusal stays expected`() {
         val refused = step("forbidden", "a06", StepStatus.BLOCKED, detail = "permission_denied: no approve button")
 

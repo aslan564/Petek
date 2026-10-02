@@ -12,6 +12,7 @@
 package az.petek.verification.domain
 
 import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.TextWatch
 import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.TemplateContext
 import az.petek.core.ids.AgentId
@@ -20,6 +21,7 @@ import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.Verdict
+import java.net.URI
 import kotlin.time.Duration
 
 /** What an assertion about one actor's step can look at. */
@@ -31,8 +33,50 @@ data class AssertionInput(
     /** The actor's own browser session (receiver view "B"). */
     val session: BrowserSession?,
     val templates: TemplateContext,
-    /** Harness time the awaited event was emitted (t0); visible_text latency is measured from here. */
-    val eventEmittedAt: HarnessTimestamp?,
+    /** When the awaited event's change reached the target (t0); `visible_text` latency is measured from here. */
+    val eventTime: EventTime?,
+    /** What the receiver's page saw while it watched for a `visible_text` before the change was written (Faza 24.10). */
+    val watch: WatchedText? = null,
+    /**
+     * Why the awaited event has no delivery to time here: it was published in an earlier execution of the steps (a
+     * setup event of the first wave read in a later wave, or in the account swap). `visible_text` then only checks
+     * that the text is shown, and `latency_max` does not apply; [eventTime] would time a delivery long past.
+     */
+    val earlierDelivery: String? = null,
+    /**
+     * The site's API host when the campaign's `api_prefix` is a full address there (2026-09-30): the one origin other
+     * than the target an `http_status` check may call. Null: only the target.
+     */
+    val apiOrigin: URI? = null,
+)
+
+/**
+ * When the change a receiver waits for reached the target (docs/adr/0006). The latency t1 − t0 is measured from [t0];
+ * the write itself happened between [earliest] and [latest], one instant when the emitter's page showed the request
+ * that made it. [source] says what t0 is, for the evidence.
+ */
+data class EventTime(
+    val t0: HarnessTimestamp,
+    val earliest: HarnessTimestamp,
+    val latest: HarnessTimestamp,
+    val source: String,
+) {
+    /** The write's moment is known, not only a window around it. */
+    val exact: Boolean get() = earliest.monotonicNanos == latest.monotonicNanos
+
+    companion object {
+        /** A change whose write time is known exactly. */
+        fun at(
+            t0: HarnessTimestamp,
+            source: String = "the event",
+        ): EventTime = EventTime(t0, t0, t0, source)
+    }
+}
+
+/** A receiver's watch for [text] (rendered as it was when the watch began) and what it saw by the time it was read. */
+data class WatchedText(
+    val text: String,
+    val reading: TextWatch,
 )
 
 /** Result of one typed check. Evaluated by code only (AGENTS.md rule 2). */
@@ -66,6 +110,8 @@ data class ActorResult(
     val race: RaceEvidence? = null,
     /** The actor lost the race: refused because the object was already decided (an expected outcome, not a failure). */
     val lostRace: Boolean = false,
+    /** The actor's page, for the evidence of a group check that failed (every racer's screen as the race left it). */
+    val session: BrowserSession? = null,
 )
 
 /**

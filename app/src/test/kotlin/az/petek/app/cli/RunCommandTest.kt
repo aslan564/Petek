@@ -13,22 +13,34 @@ package az.petek.app.cli
 
 import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.diagnostics.TargetReachability
+import az.petek.app.runs.RunLock
 import az.petek.app.testing.CliHarness
 import az.petek.app.testing.CliHarness.Companion.done
 import az.petek.app.testing.CliHarness.Companion.tinyCampaign
 import az.petek.app.testing.FakeBrowserEngine
 import az.petek.app.testing.scriptedLlm
+import az.petek.capacity.domain.HostResourceProbe
+import az.petek.capacity.domain.HostResources
 import az.petek.core.ids.AgentId
+import az.petek.core.ids.RunId
 import az.petek.core.testing.FakeHarnessClock
+import az.petek.evidence.domain.CAPACITY_ACTION
 import az.petek.evidence.domain.RunResult
+import az.petek.evidence.domain.StepStatus
+import az.petek.orchestration.domain.RunOutcome
+import az.petek.orchestration.domain.RunSummary
+import az.petek.ownership.domain.OwnershipMethod
 import az.petek.ownership.testing.OwnershipTestKit
 import az.petek.ownership.testing.ScriptedOwnershipProbe
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -40,6 +52,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
@@ -68,6 +81,36 @@ class RunCommandTest {
             Files.isRegularFile(Path.of(report)) shouldBe true
             Files.isRegularFile(Path.of(report).resolveSibling("report.md")) shouldBe true
             cli.evidence { it.evidence.latest() }?.result shouldBe RunResult.PASSED
+        }
+
+    @Test
+    fun `a run that did not pass only because checks could not be decided exits with 3, and a failure elsewhere wins`() {
+        fun summary(
+            outcome: RunOutcome,
+            failed: Int = 0,
+            undecided: Int = 0,
+        ) = RunSummary(RunId("run_x"), outcome, 3, 0, failed, 0, null, 10, undecided)
+
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.FAILED, undecided = 1))) shouldBe ExitCodes.INCONCLUSIVE
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.FAILED, undecided = 1), summary(RunOutcome.FAILED, failed = 1))) shouldBe
+            ExitCodes.FAILURE
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.FAILED, undecided = 1), summary(RunOutcome.ABORTED))) shouldBe
+            ExitCodes.CONFIG_OR_ABORTED
+        RunCommand.exitCodeOf(listOf(summary(RunOutcome.PASSED))) shouldBe ExitCodes.OK
+    }
+
+    @Test
+    fun `a run the panel holds over the same evidence keeps petek run from starting`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("tiny.yaml", tinyCampaign())
+            val lock = RunLock(cli.evidenceDir.resolve(RunLock.FILE_NAME))
+
+            val result = lock.acquire("the panel").use { cli.run("run", "tiny.yaml") }
+
+            result.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            result.stderr shouldContain "Another run is going over this evidence store (the panel"
+            cli.evidence { it.evidence.latest() } shouldBe null
         }
 
     @Test
@@ -129,6 +172,42 @@ class RunCommandTest {
         }
 
     @Test
+    fun `a visitor run on a stage whose owner has not proved it sends no one through the owner's proxies`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com", "PETEK_PROXIES" to "http://10.0.0.1:3128,http://10.0.0.2:3128"),
+                    ownership = OwnershipTestKit.unowned(FakeHarnessClock()),
+                )
+            cli.write("visit.yaml", VISITOR_CAMPAIGN)
+
+            val result = cli.run("run", "visit.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "PETEK_PROXIES is not used here"
+            cli.browser.options.map { it.proxy } shouldBe listOf(null, null)
+        }
+
+    @Test
+    fun `on a stage whose owner proved it every tester goes out through its own proxy`() =
+        runBlocking<Unit> {
+            val cli =
+                CliHarness(
+                    dir,
+                    mapOf("PETEK_TARGET" to "https://stage.example.com", "PETEK_PROXIES" to "http://10.0.0.1:3128,http://10.0.0.2:3128"),
+                    ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), ScriptedOwnershipProbe()),
+                )
+            cli.write("tiny.yaml", tinyCampaign())
+
+            cli.run("run", "tiny.yaml").statusCode shouldBe 0
+
+            cli.browser.options
+                .map { it.proxy?.server }
+                .toSet() shouldBe setOf("http://10.0.0.1:3128", "http://10.0.0.2:3128")
+        }
+
+    @Test
     fun `a stage whose owner has published the proof is tested`() =
         runBlocking<Unit> {
             val probe = ScriptedOwnershipProbe()
@@ -143,6 +222,36 @@ class RunCommandTest {
             cli.run("run", "tiny.yaml").statusCode shouldBe 0
 
             probe.looks.map { it.host } shouldBe listOf("stage.example.com")
+        }
+
+    @Test
+    fun `checks that call the site's API on its own host need that host proved as well, and never a production one`() =
+        runBlocking<Unit> {
+            val probe = ScriptedOwnershipProbe(found = null)
+            val cli = CliHarness(dir, ownership = OwnershipTestKit.siteOwnership(FakeHarnessClock(), probe, local = setOf("127.0.0.1")))
+            cli.write("api.yaml", API_CAMPAIGN)
+
+            val refused = cli.run("run", "api.yaml")
+
+            refused.statusCode shouldBe ExitCodes.CONFIG_OR_ABORTED
+            refused.stderr shouldContain "nothing was tested on api.stage.example.com"
+            refused.stderr shouldContain "https://api.stage.example.com/.well-known/petek-verification.txt"
+            refused.stderr shouldContain "Its http_status checks call the site's API at api.stage.example.com"
+            cli.browser.options.shouldBeEmpty()
+
+            // Proved: the check calls the API host, and the testers' sessions know it for the page's own token.
+            probe.found = OwnershipMethod.WELL_KNOWN_FILE
+            cli.run("run", "api.yaml").statusCode shouldBe ExitCodes.FAILURE
+            cli.browser.sessions
+                .flatMap { it.actions }
+                .filter { it.startsWith("request") } shouldContain
+                "request POST https://api.stage.example.com/v1/tickets/1/approve"
+            cli.browser.options
+                .map { it.apiOrigin }
+                .toSet() shouldBe setOf(URI("https://api.stage.example.com"))
+
+            cli.env["PETEK_PRODUCTION_HOSTS"] = "api.stage.example.com"
+            cli.run("run", "api.yaml").stderr shouldContain "Refusing to contact the target"
         }
 
     @Test
@@ -257,6 +366,50 @@ class RunCommandTest {
         }
 
     @Test
+    fun `more testers live at once than this machine is advised to carry is said before the run, which goes on`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir).apply { hostResources = HostResourceProbe { HostResources(2L shl 30, 256L shl 20, 1) } }
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            val result = cli.run("run", "tiny.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "4 testers live at once is more than this machine is advised to carry"
+            // The run's own evidence says it too, so its report can tell slow screens of this machine from the site's.
+            val run = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
+            val capacity = cli.evidence { it.evidence.steps(run.runId) }.single { it.action == CAPACITY_ACTION }
+            capacity.status shouldBe StepStatus.SKIPPED
+            capacity.detail.shouldNotBeNull() shouldStartWith "over_capacity: 4 testers at once (4 in the run); this machine is advised"
+            run.result shouldBe RunResult.PASSED
+        }
+
+    @Test
+    fun `a run within this machine's advice records that next to its size`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            cli.run("run", "tiny.yaml").statusCode shouldBe 0
+
+            val run = cli.evidence { it.evidence.latest() }.shouldNotBeNull()
+            val capacity = cli.evidence { it.evidence.steps(run.runId) }.single { it.action == CAPACITY_ACTION }
+            capacity.status shouldBe StepStatus.PASSED
+            capacity.detail.shouldNotBeNull() shouldStartWith "within_capacity: 4 testers at once (4 in the run)"
+        }
+
+    @Test
+    fun `a swarm with codes typed by hand is warned about, since that suits the explorer's few sessions`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, mapOf("PETEK_MAIL_SOURCE" to "manual"))
+            cli.write("tiny.yaml", tinyCampaign(testers = 4))
+
+            val result = cli.run("run", "tiny.yaml")
+
+            result.statusCode shouldBe 0
+            result.stderr shouldContain "PETEK_MAIL_SOURCE=manual: you type every tester's e-mail code in the panel, 4 of them"
+        }
+
+    @Test
     fun `repeated runs form one stability group`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
@@ -286,7 +439,7 @@ class RunCommandTest {
         }
 
     @Test
-    fun `--testers warns about steps nobody can run anymore`() =
+    fun `--testers that deals no tester to a step's department is refused, naming the step`() =
         runBlocking<Unit> {
             val cli = CliHarness(dir)
             cli.write(
@@ -312,8 +465,133 @@ class RunCommandTest {
 
             val result = cli.run("run", "depts.yaml", "--testers", "3")
 
-            result.statusCode shouldBe 0
-            result.stderr shouldContain "Warning: with --testers 3 no tester matches 'employee[dept=HR, n=2]', so step 'hr_second'"
+            // Two employees are dealt to IT and HR in turn: HR has one, so the step would have nobody.
+            result.statusCode shouldBe 2
+            result.stderr shouldContain "step 'hr_second': actor 'employee[dept=HR, n=2]' can never match a tester"
+            result.stderr shouldContain "department 'HR' gets 1 of the 2 'employee' testers"
+            result.stderr shouldContain "--testers 3 does not fit this campaign"
+        }
+
+    @Test
+    fun `every run says which steps nobody would perform, wave by wave, without --testers too`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write("second.yaml", SECOND_MANAGER_IN_WAVES)
+
+            val result = cli.run("run", "second.yaml")
+
+            // Waves of two: a02 (manager) and a04 in wave 1, a03 (manager) and a05 in wave 2, the admin in both. The
+            // second manager of a wave never exists, and the step starts in wave 1 only.
+            result.stderr shouldContain
+                "Warning: with campaign.wave_size 2 no tester matches 'manager[n=2]' in wave 1, every wave it starts in, so " +
+                "nobody performs step 'second_manager' (line 15) and the run fails for it (not_covered)."
+        }
+
+    @Test
+    fun `a run whose testers sign in with the owner's accounts previews them for its warnings and starts`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to "owner-writer-pass"))
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/notes.yaml"),
+                """
+                target:
+                  name: notes
+                  url: ${CliHarness.UNUSED_TARGET}
+                  tenant: none
+                  test_api: {mode: none}
+                  accounts:
+                    - {role: writer, name: Sahibin Yazarı, email: writer@owner.example, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+                """.trimIndent() + "\n",
+            )
+            cli.write(
+                "login.yaml",
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 3
+                  seed: 12
+                  roles: {writer: 2, reader: 1}
+                  registration: {self: 1, login: 1, guest: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 3}
+                setup:
+                  - id: gates
+                    actor: [writer[*], reader]
+                    run: register_and_login
+                steps:
+                  - id: who-am-i
+                    actor: writer[*]
+                    run: verify_identity
+                """,
+            )
+
+            val result = cli.run("run", "login.yaml")
+
+            result.stderr shouldNotContain "Identity registry cannot be built"
+            result.stdout shouldContain "Running 'notes-login' with 3 agents"
+        }
+
+    @Test
+    fun `a campaign on the owner's account runs again and again on one database, and never stores its password`() =
+        runBlocking<Unit> {
+            val cli = ownerAccountSite()
+
+            val first = cli.run("run", "login.yaml")
+            val second = cli.run("run", "login.yaml")
+            val repeated = cli.run("run", "login.yaml", "--repeat", "2")
+
+            listOf(first, second, repeated).forEach { result ->
+                result.output shouldNotContain "IdentityConflictException"
+                result.output shouldNotContain "already used by another run"
+                result.statusCode shouldBe 0
+            }
+            Regex(": PASSED in ").findAll(repeated.stdout).count() shouldBe 2
+            val runs = cli.evidence { it.evidence.list(10) }
+            runs shouldHaveSize 4
+            runs.forEach { it.result shouldBe RunResult.PASSED }
+            val owners = cli.evidence { stores -> runs.map { run -> stores.identities.findByRun(run.runId).single { it.ownAccount } } }
+            owners.map { it.email }.toSet() shouldBe setOf(OWNER_EMAIL)
+            owners.map { it.password.reveal() }.toSet() shouldBe setOf("")
+            storedFiles(cli) shouldNotContain OWNER_PASSWORD
+            (first.output + second.output + repeated.output) shouldNotContain OWNER_PASSWORD
+        }
+
+    @Test
+    fun `a race that the waves leave with one racer is announced before the run`() =
+        runBlocking<Unit> {
+            val cli = CliHarness(dir)
+            cli.write(
+                "waves.yaml",
+                """
+                campaign:
+                  name: waves
+                  testers: 5
+                  seed: 3
+                  wave_size: 2
+                  roles: {admin: 1, manager: 3, employee: 1}
+                  departments: [IT, HR]
+                  registration: {invite: 3, company_code: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                setup:
+                  - id: signup
+                    actor: admin
+                    do: "Sign up"
+                steps:
+                  - id: race
+                    actor: manager[*]
+                    parallel: true
+                    do: "Approve the same ticket"
+                    assert:
+                      - only_one_succeeds: {request: "POST .*/approve"}
+                """,
+            )
+
+            val result = cli.run("run", "waves.yaml")
+
+            // Three racing managers, waves of two: a02 and a03 race in wave 1, a04 is alone in wave 2.
+            result.stderr shouldContain "Warning: with campaign.wave_size 2, race step 'race'"
+            result.stderr shouldContain "has a single racer in wave 2, where it never passes (inconclusive)"
         }
 
     @Test
@@ -396,7 +674,79 @@ class RunCommandTest {
             result.stdout shouldContain "assertions failed 1"
         }
 
+    /**
+     * A site without companies whose profile gives the owner's `writer` account ([OWNER_EMAIL]), and a campaign whose
+     * first writer signs in with it while the others sign up (`login.yaml`).
+     */
+    private fun ownerAccountSite(): CliHarness {
+        val cli = CliHarness(dir, environment = mapOf("NOTES_WRITER_PASSWORD" to OWNER_PASSWORD))
+        Files.createDirectories(dir.resolve("targets"))
+        Files.writeString(
+            dir.resolve("targets/notes.yaml"),
+            """
+            target:
+              name: notes
+              url: ${CliHarness.UNUSED_TARGET}
+              tenant: none
+              test_api: {mode: none}
+              accounts:
+                - {role: writer, name: Sahibin Yazarı, email: $OWNER_EMAIL, password: '${'$'}{NOTES_WRITER_PASSWORD}'}
+            """.trimIndent() + "\n",
+        )
+        cli.write(
+            "login.yaml",
+            """
+            campaign:
+              name: notes-login
+              tenant: none
+              testers: 3
+              seed: 12
+              roles: {writer: 2, reader: 1}
+              registration: {self: 2, login: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            steps:
+              - id: look
+                actor: [writer[*], reader]
+                do: "Open the notes"
+            """,
+        )
+        return cli
+    }
+
+    /** Everything the commands left in the evidence directory (the database, its journal, the reports), as text. */
+    private fun storedFiles(cli: CliHarness): String =
+        Files.walk(cli.evidenceDir).use { files ->
+            files.filter(Files::isRegularFile).toList().joinToString("\n") { String(Files.readAllBytes(it), Charsets.ISO_8859_1) }
+        }
+
     private companion object {
+        const val OWNER_EMAIL = "writer@owner.example"
+        const val OWNER_PASSWORD = "owner-writer-pass-0042"
+
+        /** An owner and an employee whose check calls the site's API on its own host (a full api_prefix). */
+        val API_CAMPAIGN =
+            """
+            campaign:
+              name: api
+              testers: 2
+              seed: 7
+              roles: {admin: 1, manager: 0, employee: 1}
+              departments: [IT]
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            target_profile:
+              api_prefix: https://api.stage.example.com/v1
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up and create the company"
+            steps:
+              - id: look
+                actor: employee[*]
+                do: "Look at the home page"
+                assert:
+                  - http_status: {path: "{api}/tickets/1/approve", method: POST, equals: 403}
+            """.trimIndent()
+
         /** Two visitors that only read: the gate `guest` and the read-only `site_health`. */
         val VISITOR_CAMPAIGN =
             """
@@ -416,6 +766,28 @@ class RunCommandTest {
               - id: health
                 actor: visitor[n=1]
                 run: {function: site_health, args: {checks: "console,mobile", pages: "/"}}
+            """.trimIndent()
+
+        /** Five testers in waves of two: one manager in each wave, so `manager[n=2]` matches nobody in any of them. */
+        val SECOND_MANAGER_IN_WAVES =
+            """
+            campaign:
+              name: second
+              testers: 5
+              seed: 3
+              wave_size: 2
+              roles: {admin: 1, manager: 2, employee: 2}
+              departments: [IT, HR]
+              registration: {invite: 3, company_code: 1}
+              budget: {max_steps_per_agent: 5, max_minutes: 2}
+            setup:
+              - id: signup
+                actor: admin
+                do: "Sign up"
+            steps:
+              - id: second_manager
+                actor: manager[n=2]
+                do: "Open the page as the second manager"
             """.trimIndent()
     }
 }

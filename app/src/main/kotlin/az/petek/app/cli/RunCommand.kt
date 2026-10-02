@@ -12,22 +12,28 @@
 package az.petek.app.cli
 
 import az.petek.app.campaign.CampaignScaler
-import az.petek.app.campaign.IdentitySpecs
+import az.petek.app.campaign.CoverageWarnings
+import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.CampaignValidationException
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.ValidationIssue
 import az.petek.campaign.domain.VisitorRun
-import az.petek.core.ids.RunTags
+import az.petek.campaign.domain.apiOriginInUse
+import az.petek.capacity.application.RecommendCapacityUseCase
+import az.petek.evidence.domain.ReleaseNames
+import az.petek.identity.domain.Identity
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.domain.RunSummary
+import az.petek.orchestration.domain.Waves
 import az.petek.ownership.domain.OwnershipRequiredException
 import az.petek.ownership.domain.OwnershipStatus
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.check
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -48,12 +54,19 @@ import java.util.Locale
 /**
  * `petek run <campaign.yaml>`: one run (or `--repeat N` runs as one stability group) end to end, then the summary and
  * the report path. Exit code 0 when every run PASSED, 1 when one FAILED, 2 when one was ABORTED or nothing could
- * start (configuration, refused target, invalid campaign).
+ * start (configuration, refused target, invalid campaign), 3 when a run did not pass only because some of its checks
+ * could not be decided (nothing failed).
  */
 class RunCommand : PetekSubcommand("run") {
     private val file by argument("campaign", help = "campaign YAML file, e.g. docs/examples/company-portal.yaml").path()
     private val repeat by option("--repeat", help = "run the campaign N times and report stability").int().restrictTo(min = 1).default(1)
     private val keepData by option("--keep-data", help = "keep the test company on the target (debugging)").flag()
+    private val release by option(
+        "--release",
+        help = "the site's release this run tests, e.g. v1.4.2; petek compare --baseline <release> compares with it",
+    ).check(
+        "a release is 1-${ReleaseNames.MAX} letters, digits and . _ - +, and neither '${ReleaseNames.PREVIOUS}' nor a run id (run_...)",
+    ) { ReleaseNames.isValid(it.trim()) }
     private val headful by option("--headful", help = "show the browser windows").flag()
     private val swapAccounts by option(
         "--swap-accounts",
@@ -99,7 +112,42 @@ class RunCommand : PetekSubcommand("run") {
                             "${campaign.settings.testers} visitor(s) that only read; nothing is sent to the site.",
                     )
                 }
+                // Separate IPs only for the owner's own site (Faza 21): nobody spreads load over many addresses elsewhere.
+                if (config.proxies.isNotEmpty()) {
+                    echo("Warning: PETEK_PROXIES is not used here: every visitor goes out from this machine's IP.", err = true)
+                }
             }
+            // The site's API on its own host (a full api_prefix, 2026-09-30) is checked like the target: allowed, and
+            // proved as the owner's, so no one's verified site can point Pətək's checks at somebody else's server.
+            campaign.apiOriginInUse?.let { api ->
+                TargetGuard.requireAllowed(config.targetPolicy, api)
+                val apiOwnership = container.ownership.check(api)
+                if (apiOwnership is OwnershipStatus.Unverified) {
+                    throw OwnershipRequiredException(
+                        apiOwnership,
+                        "Its http_status checks call the site's API at ${apiOwnership.host} (target_profile.api_prefix), " +
+                            "so that host proves its ownership too.",
+                    )
+                }
+            }
+            if (swapAccounts && campaign.settings.waveSize != null) {
+                echo("Warning: --swap-accounts is not done in a campaign with campaign.wave_size; the run says so too.", err = true)
+            }
+            // The registry the run will plan, with the owner's accounts its `login` testers sign in with.
+            val identities = container.previewIdentities(campaign)
+            // Steps nobody would perform, waits and races the waves break: said on every run, scaled or not.
+            CoverageWarnings.of(campaign, identities, testers = agents).forEach { echo("Warning: $it", err = true) }
+            warnAboutCapacity(campaign, identities, container)
+            // Every tester's code typed by hand is for the explorer's few sessions, not for a swarm (R07).
+            if (config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
+                echo(
+                    "Warning: PETEK_MAIL_SOURCE=manual: you type every tester's e-mail code in the panel, " +
+                        "${campaign.settings.testers} of them; a test inbox (mailpit, test-api or imap) suits a swarm.",
+                    err = true,
+                )
+            }
+            // Valid, but likely not what was meant (Faza 24.15); never blocks the run.
+            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { echo("Warning: $it", err = true) }
             val runner = container.campaignRunner(headless = config.browserHeadless && !headful)
             if (!json) {
                 echo(
@@ -107,14 +155,24 @@ class RunCommand : PetekSubcommand("run") {
                         (if (repeat > 1) ", $repeat times" else "") + (if (keepData) ", keeping the test data" else "") + ".",
                 )
             }
+            val options =
+                RunOptions(
+                    keepData = keepData,
+                    swapAccounts = swapAccounts,
+                    ownSite = ownership !is OwnershipStatus.Unverified,
+                    release = release?.trim()?.takeIf { it.isNotEmpty() },
+                )
+            // One run at a time over this evidence store: a panel of the same workspace may be running one already.
+            val held = container.runLock.acquire("petek run")
             val summaries =
                 try {
                     if (repeat == 1) {
-                        listOf(runner.run(campaign, RunOptions(keepData = keepData, swapAccounts = swapAccounts)))
+                        listOf(runner.run(campaign, options))
                     } else {
-                        container.repeatRunner(runner).repeat(campaign, repeat, keepData)
+                        container.repeatRunner(runner).repeat(campaign, repeat, options)
                     }
                 } finally {
+                    held.close()
                     container.closeMonitor()
                 }
             if (json) emitJson(summariesJson(summaries)) else summaries.forEach { printSummary(it, config.logDirectory.resolve(LOG_FILE)) }
@@ -138,16 +196,30 @@ class RunCommand : PetekSubcommand("run") {
         if (issues.isNotEmpty()) {
             throw CampaignValidationException(issues + ValidationIssue(null, "--testers $agents does not fit this campaign"))
         }
-        val spec = IdentitySpecs.of(scaled.settings, container.config.mailDomain, container.config.mailInbox)
-        val preview = container.identityGenerator.generate(spec, RunTags.forPlan(scaled.sourceHash, scaled.settings.seed))
-        CampaignScaler.uncoveredSteps(scaled, preview.identities, DefaultActorResolver()).forEach { step ->
+        return scaled
+    }
+
+    /**
+     * More testers live at once than this machine is advised to carry (`petek capacity`), said before the run starts:
+     * advice only, never a limit (the owner's decision, 2026-09-25).
+     */
+    private suspend fun warnAboutCapacity(
+        campaign: Campaign,
+        identities: List<Identity>,
+        container: AppContainer,
+    ) {
+        val live = Waves.plan(campaign, identities, DefaultActorResolver())?.maxLive ?: campaign.settings.testers
+        val advice =
+            RecommendCapacityUseCase(
+                session.runtime.hostResources,
+            ).execute(contextsPerBrowser = container.browserConfig().contextsPerBrowser)
+        if (live > advice.maxTesters) {
             echo(
-                "Warning: with --testers $agents no tester matches '${step.actors.raw}', so step '${step.id}' (line ${step.line}) " +
-                    "will be skipped.",
+                "Warning: $live testers live at once is more than this machine is advised to carry (${advice.maxTesters}, " +
+                    "limited by ${advice.limitingFactor.name.lowercase()}); the run goes on, but may slow down (petek capacity).",
                 err = true,
             )
         }
-        return scaled
     }
 
     private fun printSummary(
@@ -156,7 +228,8 @@ class RunCommand : PetekSubcommand("run") {
     ) {
         echo(
             "Run ${summary.runId}: ${summary.outcome} in ${seconds(summary.durationMs)} " +
-                "(steps passed ${summary.stepsPassed}, failed ${summary.stepsFailed}; assertions failed ${summary.assertionsFailed}; " +
+                "(steps passed ${summary.stepsPassed}, failed ${summary.stepsFailed}; assertions failed ${summary.assertionsFailed}" +
+                (if (summary.assertionsInconclusive > 0) ", inconclusive ${summary.assertionsInconclusive}" else "") + "; " +
                 "failed agents ${summary.failedAgents})",
         )
         val report = summary.reportDirectory
@@ -202,6 +275,7 @@ class RunCommand : PetekSubcommand("run") {
                         put("stepsPassed", summary.stepsPassed)
                         put("stepsFailed", summary.stepsFailed)
                         put("assertionsFailed", summary.assertionsFailed)
+                        put("assertionsInconclusive", summary.assertionsInconclusive)
                         put("failedAgents", summary.failedAgents)
                         val directory = summary.reportDirectory?.let { Path.of(it).toAbsolutePath() }
                         put("report", directory?.resolve(HTML_REPORT)?.toString())
@@ -223,11 +297,18 @@ class RunCommand : PetekSubcommand("run") {
         private const val LOG_FILE = "petek.log"
         private const val MILLIS_PER_SECOND = 1000.0
 
-        /** The worst outcome decides: any ABORTED run is 2, any FAILED run is 1, else 0. */
+        /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
+        private const val MANUAL_MAIL_TESTERS = 3
+
+        /**
+         * The worst outcome decides: any ABORTED run is 2, any FAILED run with a failure of its own is 1, a run that did
+         * not pass only because checks could not be decided is 3, else 0.
+         */
         fun exitCodeOf(summaries: List<RunSummary>): Int =
             when {
                 summaries.any { it.outcome == RunOutcome.ABORTED } -> ExitCodes.CONFIG_OR_ABORTED
-                summaries.any { it.outcome == RunOutcome.FAILED } -> ExitCodes.FAILURE
+                summaries.any { it.outcome == RunOutcome.FAILED && !it.undecidedOnly } -> ExitCodes.FAILURE
+                summaries.any { it.outcome == RunOutcome.FAILED } -> ExitCodes.INCONCLUSIVE
                 else -> ExitCodes.OK
             }
     }

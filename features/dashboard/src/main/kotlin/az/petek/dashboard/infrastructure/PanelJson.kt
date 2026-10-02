@@ -14,7 +14,10 @@ package az.petek.dashboard.infrastructure
 import az.petek.dashboard.domain.AccountRequest
 import az.petek.dashboard.domain.AccountView
 import az.petek.dashboard.domain.AiCheckView
+import az.petek.dashboard.domain.AiChoice
+import az.petek.dashboard.domain.AiOptionsView
 import az.petek.dashboard.domain.CapacityView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.DiffView
 import az.petek.dashboard.domain.EventView
 import az.petek.dashboard.domain.ExplorationView
@@ -38,7 +41,10 @@ import az.petek.dashboard.domain.ScenarioVersionView
 import az.petek.dashboard.domain.ScenarioView
 import az.petek.dashboard.domain.SiteCheckView
 import az.petek.dashboard.domain.SiteModelDiffView
+import az.petek.dashboard.domain.SiteRequest
+import az.petek.dashboard.domain.SiteView
 import az.petek.dashboard.domain.StabilityView
+import az.petek.dashboard.domain.TestFlowView
 import az.petek.dashboard.domain.TriageView
 import az.petek.dashboard.domain.VisitedPageView
 import kotlinx.serialization.SerializationException
@@ -192,6 +198,24 @@ internal object PanelJson {
             }
         } ?: JsonNull
 
+    /** "Test et": where the test is and what it made so far (null when there has been none). */
+    fun testFlow(view: TestFlowView?): JsonElement =
+        view?.let {
+            buildJsonObject {
+                put("target", it.target)
+                put("stage", it.stage.name)
+                put("final", it.stage.isFinal)
+                time("startedAtMs", it.startedAt)
+                put("explorationId", it.explorationId)
+                put("scenarioId", it.scenarioId)
+                put("runId", it.runId?.value)
+                put("result", it.result?.name)
+                put("note", it.note)
+                put("nextScenarioId", it.nextScenarioId)
+                put("undecided", it.undecided)
+            }
+        } ?: JsonNull
+
     fun modelDiff(view: SiteModelDiffView?): JsonElement =
         view?.let {
             buildJsonObject {
@@ -265,6 +289,32 @@ internal object PanelJson {
                 put("configured", view.ai.configured)
             }
         }
+
+    /** The AIs to choose from on the setup screen; whether a key is set, never the key. */
+    fun aiOptions(view: AiOptionsView): JsonElement =
+        buildJsonObject {
+            putJsonArray("options") {
+                view.options.forEach { option ->
+                    addJsonObject {
+                        put("provider", option.provider)
+                        put("label", option.label)
+                        put("available", option.available)
+                        strings("needs", option.needs)
+                    }
+                }
+            }
+            put("chosen", view.chosen)
+            put("model", view.model)
+            put("endpoint", view.endpoint)
+            put("keySet", view.keySet)
+            put("unavailable", view.unavailable)
+        }
+
+    /** `{"provider", "model"?, "endpoint"?, "key"?}` from the setup screen's AI card; a missing or blank key keeps it. */
+    fun aiChoice(body: String): AiChoice {
+        val root = parse(body)
+        return AiChoice(root.string("provider"), root.optionalString("model"), root.optionalString("endpoint"), root.optionalString("key"))
+    }
 
     fun siteCheck(view: SiteCheckView): JsonElement =
         buildJsonObject {
@@ -382,11 +432,35 @@ internal object PanelJson {
                     put("repeatGroup", it.repeatGroup)
                     put("repeatIndex", it.repeatIndex)
                     put("reportUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/" else null)
+                    put("pdfUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/report.pdf" else null)
+                    // Against the scenario's previous run, written when asked for (the regression baseline, Faza 14).
+                    put("compareUrl", if (it.reportAvailable) "/runs/${it.runId.value}/report/compare.html" else null)
+                    put("release", it.release)
                     put("triaged", it.triaged)
                     put("scenarioId", it.scenarioId)
                 }
             },
         )
+
+    fun comparison(view: ComparisonView): JsonObject =
+        buildJsonObject {
+            put("runId", view.runId.value)
+            put("release", view.release)
+            put("baseline", view.baseline.value)
+            put("baselineRelease", view.baselineRelease)
+            put("scenario", view.scenario)
+            put("scenarioChanged", view.scenarioChanged)
+            put("regressed", view.regressed)
+            strings("newFailures", view.newFailures)
+            strings("fixed", view.fixed)
+            strings("stillFailing", view.stillFailing)
+            strings("slower", view.slower)
+            strings("notComparable", view.notComparable)
+            strings("looksChanged", view.looksChanged)
+            strings("looksNotComparable", view.looksNotComparable)
+            put("visualGate", view.visualGate)
+            put("pageUrl", view.pageUrl)
+        }
 
     fun stability(view: StabilityView?): JsonElement =
         view?.let {
@@ -400,6 +474,10 @@ internal object PanelJson {
                             put("runs", step.runs)
                             put("passed", step.passed)
                             put("flaky", step.flaky)
+                            put("unsteady", step.unsteady)
+                            put("siteFailures", step.siteFailures)
+                            put("agentFailures", step.agentFailures)
+                            put("environmentFailures", step.environmentFailures)
                         }
                     }
                 }
@@ -411,22 +489,27 @@ internal object PanelJson {
             put("runId", view.runId.value)
             put("scenarioId", view.scenarioId)
             put("testers", view.testers)
+            putJsonArray("warnings") { view.warnings.forEach { add(JsonPrimitive(it)) } }
         }
 
     // --- requests -------------------------------------------------------------------------------------------------
 
+    /**
+     * The instruction form. `roles`, `registration` and `departments` are the owner's only when sent: left out (or
+     * null), the draft takes what the explorer saw on the site (Faza 25).
+     */
     fun instructions(body: String): PanelInstructions {
         val root = parse(body)
-        val roles = root.obj("roles")
-        val registration = root.obj("registration")
+        val roles = root.optionalObj("roles")
+        val registration = root.optionalObj("registration")
         val budget = root.obj("budget")
         return PanelInstructions(
             target = root.string("target"),
             instructions = root.string("instructions", required = false),
             testers = root.int("testers"),
-            roles = RoleSplit(roles.int("admins"), roles.int("managers"), roles.int("employees")),
-            departments = root.strings("departments"),
-            registration = RegistrationSplit(registration.int("invite"), registration.int("companyCode")),
+            roles = roles?.let { RoleSplit(it.int("admins"), it.int("managers"), it.int("employees")) },
+            departments = if (root["departments"].isAbsent()) emptyList() else root.strings("departments"),
+            registration = registration?.let { RegistrationSplit(it.int("invite"), it.int("companyCode")) },
             budget = PanelBudget(budget.int("maxMinutes"), budget.int("maxStepsPerAgent"), budget.int("maxPages")),
             allowWrites = root.boolean("allowWrites"),
         )
@@ -440,6 +523,7 @@ internal object PanelJson {
             testers = root["testers"]?.takeUnless { it is JsonNull }?.let { root.int("testers") },
             headful = root.boolean("headful"),
             target = root.optionalString("target"),
+            release = root.optionalString("release"),
         )
     }
 
@@ -450,6 +534,35 @@ internal object PanelJson {
             throw PanelRequestException(listOf(FieldProblem("answer", "Cavab 1–$MAX_ANSWER_CHARS simvol olmalıdır.")))
         }
         return answer
+    }
+
+    /** The sites the panel knows, never a token. */
+    fun sites(sites: List<SiteView>): JsonElement =
+        buildJsonObject {
+            putJsonArray("sites") {
+                sites.forEach { site ->
+                    addJsonObject {
+                        put("name", site.name)
+                        put("url", site.url)
+                        put("own", site.own)
+                        put("profile", site.profile)
+                        put("testApi", site.testApi)
+                        put("mail", site.mail)
+                        put("accounts", site.accounts)
+                    }
+                }
+            }
+        }
+
+    fun siteRequest(body: String): SiteRequest {
+        val root = parse(body)
+        return SiteRequest(
+            root.optionalString("name"),
+            root.string("url"),
+            root.optionalString("mail"),
+            root.optionalString("apiUrl"),
+            root.optionalString("token"),
+        )
     }
 
     /** `{"target", "role", "email", "password"}` from the "Hesablar" form. */
@@ -634,6 +747,11 @@ internal object PanelJson {
     }
 
     private fun JsonObject.obj(key: String): JsonObject = this[key] as? JsonObject ?: throw invalid(key, "\"$key\" obyekti yoxdur.")
+
+    /** An object that may be left out or null; anything else under [key] is refused. */
+    private fun JsonObject.optionalObj(key: String): JsonObject? = if (this[key].isAbsent()) null else obj(key)
+
+    private fun JsonElement?.isAbsent(): Boolean = this == null || this is JsonNull
 
     private fun JsonObject.string(
         key: String,
