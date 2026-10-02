@@ -365,7 +365,12 @@ class RunnerRollCallTest {
                     managers = 3,
                     employees = 0,
                     departments = listOf("IT", "HR", "Sales"),
-                    steps = listOf(step("read", managers()), step("approve", managers("Sales")), step("audit", managers("Finance"))),
+                    steps =
+                        listOf(
+                            step("read", managers()),
+                            step("approve", managers("Sales"), assertions = listOf(AssertionSpec.Count("#approved", 1))),
+                            step("audit", managers("Finance"), assertions = listOf(AssertionSpec.Count("#audited", 1))),
+                        ),
                     maxMinutes = 1,
                 ).inWavesOf(1)
 
@@ -381,11 +386,10 @@ class RunnerRollCallTest {
                     Triple("read", "a04", "wave_not_started: wave 3 of 3 never began; run aborted: $budget"),
                     Triple("approve", "a04", "wave_not_started: wave 3 of 3 never began; run aborted: $budget"),
                 )
-            // `audit` matches nobody in any wave, began or not: still a step nobody ran.
+            // `audit` matches nobody in any wave, began or not: still a step nobody ran, its check not evaluated. `approve`'s
+            // check is not written off as "nobody ran the step": the abort, not a missing tester, kept it from running.
             f.system(UNCOVERED_ACTION).map { it.scenarioStep } shouldContainExactly listOf("audit")
-            f.evidence.assertionList
-                .filter { it.scenarioStep == "approve" }
-                .shouldBeEmpty()
+            f.evidence.assertionList.map { it.scenarioStep to it.verdict } shouldContainExactly listOf("audit" to Verdict.SKIPPED)
         }
 
     @Test
