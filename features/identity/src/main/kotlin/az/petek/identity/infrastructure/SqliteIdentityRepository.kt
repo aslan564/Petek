@@ -28,6 +28,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
@@ -40,9 +41,15 @@ import java.sql.SQLException
  * creates one per process. Writes go through [SqliteDatabase.write], reads through [SqliteDatabase.read].
  *
  * [replaceAll] swaps a run's identities in one write transaction, so `petek plan` can be repeated and a failed
- * replacement leaves the previous registry untouched. An e-mail already used by another run, or a plan that
- * repeats an agent id, e-mail or display name, is an [IdentityConflictException] naming the offending values;
- * conflicts are detected before inserting so no SQL error (which could carry row values) is raised for them.
+ * replacement leaves the previous registry untouched. A plan that repeats an agent id, e-mail or display name, or a
+ * generated tester whose e-mail another run already stored, is an [IdentityConflictException] naming the offending
+ * values; conflicts are detected before inserting so no SQL error (which could carry row values) is raised for them.
+ * A `login` tester ([Identity.ownAccount]) signs in with the owner's account, so its e-mail is stored again by every run
+ * that uses it, and it is stored without the owner's password ([Identity.asStored]).
+ *
+ * Opening the repository moves a database written by an earlier release over ([migrate]): the old index that made
+ * every e-mail unique gives way to [IdentityTable.GENERATED_EMAIL_INDEX], and the owner's passwords the `login` rows
+ * held are cleared. Every row is kept, and opening it again changes nothing.
  *
  * [updateStatus] and [updateStorageState] throw [NoSuchElementException] for an agent the run does not have:
  * the orchestrator only updates identities it planned, so a miss is a bug that must not go unnoticed.
@@ -53,6 +60,7 @@ class SqliteIdentityRepository(
 ) : IdentityRepository {
     init {
         db.createMissing(IdentityTable)
+        db.setUp { migrate() }
     }
 
     override suspend fun replaceAll(
@@ -60,13 +68,14 @@ class SqliteIdentityRepository(
         plan: IdentityPlan,
     ) {
         requireUniqueWithinPlan(runId, plan)
-        val emails = plan.identities.map { it.email }
+        // Only the e-mails Pətək generated must be new to the database; the owner's accounts repeat in every run.
+        val emails = plan.identities.filterNot { it.ownAccount }.map { it.email }
         try {
             db.write {
                 IdentityTable.deleteWhere { IdentityTable.runId eq runId.value }
                 val taken = emailsOfOtherRuns(runId, emails)
                 if (taken.isNotEmpty()) throw emailConflict(runId, taken)
-                IdentityTable.batchInsert(plan.identities, shouldReturnGeneratedValues = false) { identity ->
+                IdentityTable.batchInsert(plan.identities.map { it.asStored() }, shouldReturnGeneratedValues = false) { identity ->
                     this[IdentityTable.runId] = runId.value
                     this[IdentityTable.agentId] = identity.agentId.value
                     this[IdentityTable.displayName] = identity.displayName
@@ -83,7 +92,7 @@ class SqliteIdentityRepository(
                 }
             }
         } catch (e: SQLException) {
-            // Only reachable when another process inserted the same e-mail between our check and our insert.
+            // Only reachable when another process inserted the same generated e-mail between our check and our insert.
             if (!e.isUniqueViolation()) throw e
             throw emailConflict(runId, db.read { emailsOfOtherRuns(runId, emails) })
         }
@@ -137,7 +146,11 @@ class SqliteIdentityRepository(
         }
     }
 
-    /** Must run inside a transaction; SQLite's NOCASE collation of the column makes the match case-insensitive. */
+    /**
+     * Which of [emails] another run stored, for any of its testers: a generated tester's e-mail is never one an earlier
+     * run used, not even for an owner's account. Must run inside a transaction; SQLite's NOCASE collation of the column
+     * makes the match case-insensitive.
+     */
     private fun emailsOfOtherRuns(
         runId: RunId,
         emails: List<String>,
@@ -156,6 +169,34 @@ class SqliteIdentityRepository(
         "Cannot store identities for run $runId: e-mail already used by another run: " +
             emails.ifEmpty { listOf("(unknown, the conflicting row was removed meanwhile)") }.joinToString(", "),
     )
+
+    /**
+     * Moves a database an earlier release created over (idempotent, in the start-up transaction): drops
+     * [IdentityTable.LEGACY_EMAIL_INDEX], creates [IdentityTable.GENERATED_EMAIL_INDEX] as a new database gets it (that
+     * index's own statement, so both stay the same), and clears the owner's passwords the `login` rows of earlier runs
+     * held. No row is removed; the old index allowed no repeated e-mail, so the new one, which covers fewer rows, always
+     * builds.
+     */
+    private fun JdbcTransaction.migrate() {
+        val indexes = mutableSetOf<String>()
+        exec("PRAGMA index_list(\"${IdentityTable.tableName}\")") { rows ->
+            while (rows.next()) indexes += rows.getString("name").lowercase()
+        }
+        if (IdentityTable.LEGACY_EMAIL_INDEX in indexes) exec("DROP INDEX IF EXISTS \"${IdentityTable.LEGACY_EMAIL_INDEX}\"")
+        if (IdentityTable.GENERATED_EMAIL_INDEX !in indexes) {
+            IdentityTable.indices
+                .single { it.indexName == IdentityTable.GENERATED_EMAIL_INDEX }
+                .createStatement()
+                .forEach { exec(it) }
+        }
+        val ownPasswordKept =
+            (IdentityTable.registration eq RegistrationMode.LOGIN.key) and (IdentityTable.password neq Identity.NOT_STORED.reveal())
+        if (!IdentityTable.select(IdentityTable.runId).where { ownPasswordKept }.empty()) {
+            // The cleared values are overwritten in the file too, not left behind in its free space.
+            exec("PRAGMA secure_delete = ON")
+            IdentityTable.update({ ownPasswordKept }) { it[IdentityTable.password] = Identity.NOT_STORED.reveal() }
+        }
+    }
 
     private fun row(
         runId: RunId,

@@ -20,9 +20,19 @@ the same identities) and independent of mailboxes a human reads.
 ## Architecture
 
 - **Registry.** `DefaultIdentityRegistryGenerator` (`features/identity`) derives identities from the campaign seed and
-  a run tag; passwords are HMAC(`PETEK_IDENTITY_SECRET`) so they are reproducible and never stored in clear; only the
-  orchestrator creates identities (rule 7). `RegistrationQuota` splits non-admins into invited and company-code
-  joiners; managers are always invited (the join form has no role field).
+  a run tag; passwords are HMAC(`PETEK_IDENTITY_SECRET`) so they are reproducible; only the orchestrator creates
+  identities (rule 7). `RegistrationQuota` splits non-admins into invited and company-code joiners; managers are
+  always invited (the join form has no role field).
+- **Storage.** `SqliteIdentityRepository` keeps each run's registry in the `identity` table. The e-mail of a tester
+  Pətək generates is unique across all runs (partial unique index `identity_generated_email_unique`, every row whose
+  `registration` is not `login`, case-insensitive), and no generated e-mail may be one another run stored at all. A
+  `login` tester signs in with the owner's account (R16), whose e-mail is the same in every run, so it repeats across
+  runs: a campaign on the owner's accounts runs again, with `--repeat` and from the panel, on one database
+  (2026-10-02). A generated tester's password is stored (R01, open items); the owner's account's password never is:
+  the `login` row holds an empty one, the run signs in with the password of its in-memory plan, and triage masks every
+  password of the target profiles. Opening an older database drops the old index on every e-mail
+  (`identity_email_unique`), creates the partial one and clears the owner's passwords earlier releases stored there,
+  keeping every row.
 - **Flows as data.** Sign-up, join and login are `TargetProfile.flows` (contract defaults, overridden per site in
   YAML); `RunFunction`s execute them: `register_owner`, `seed_company` (departments and invitations through the test
   API), `register_and_login` (by the identity's `RegistrationMode`).
@@ -47,7 +57,11 @@ the same identities) and independent of mailboxes a human reads.
 
 ## Verification
 
-- `identity`: generator determinism, uniqueness for large N, quota tests.
+- `identity`: generator determinism, uniqueness for large N, quota tests; `SqliteIdentityRepositoryTest` (the owner's
+  account stored by many runs, a generated e-mail refused across runs, no owner's password in the table or the file,
+  an older database moved over with its rows).
+- `app`: `RunCommandTest` runs a campaign on the owner's account twice and with `--repeat 2` on one database;
+  `PanelRunsTest` runs it again from the panel and triages it without showing the model the owner's password.
 - `mail`: `MailpitMailboxTest`, `TestApiMailboxTest` (Ktor fake servers), `ImapMailboxTest`, `ManualCodesTest`,
   extractor tests; `ImapMailboxServerTest` against a real IMAP server (GreenMail, test only, 2026-09-30): each tester
   finds only the mail to its own `+` address (To, Cc or `Delivered-To`), reading leaves it unread, a wrong password

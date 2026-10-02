@@ -23,7 +23,10 @@ class PlanIdentitiesUseCase(
     private val generator: IdentityRegistryGenerator,
     private val repository: IdentityRepository,
 ) {
-    /** The registry of the run [runId] that is starting, stored whole: its testers sign in with what is stored. */
+    /**
+     * The registry of the run [runId] that is starting, stored whole (the owner's passwords excepted,
+     * [IdentityRepository.replaceAll]) and returned whole: the run's testers sign in with what this returns.
+     */
     suspend fun execute(
         runId: RunId,
         runTag: RunTag,
@@ -36,11 +39,11 @@ class PlanIdentitiesUseCase(
 
     /**
      * The registry of a run planned ahead (`petek plan`) under the plan id [planId]: generated as [execute] generates
-     * it and returned whole, but stored [IdentityPlan.withoutOwnAccounts]. A plan never keeps the owner's passwords,
-     * and never holds the e-mails of the owner's accounts against the runs that will sign in with them (an e-mail
-     * belongs to one run only), so the campaign can be run, and planned again, afterwards. The whole registry is checked
-     * as the run's is before a part of it is stored: one the run could not store (another tester with the name or
-     * e-mail of an owner's account, [IdentityPlan.duplicates]) fails the plan too.
+     * it and returned whole, but stored [IdentityPlan.withoutOwnAccounts]. A plan keeps nothing of the owner's accounts;
+     * each run that signs in with them stores them for itself, so the campaign can be run, and planned again,
+     * afterwards. The whole registry is checked as the run's is before a part of it is stored: one the run could not
+     * store (another tester with the name or e-mail of an owner's account, [IdentityPlan.duplicates]) fails the plan
+     * too.
      */
     suspend fun planAhead(
         planId: RunId,

@@ -792,7 +792,12 @@ internal class PanelRunsAdapter(
 
     private suspend fun triageNow(runId: RunId): List<TriageItem> =
         try {
-            val passwords = container.identities.findByRun(runId).map { it.password }
+            // The generated testers' passwords; the owner's accounts' are never stored, the container knows them.
+            val passwords =
+                container.identities
+                    .findByRun(runId)
+                    .filterNot { it.ownAccount }
+                    .map { it.password }
             container.triage(passwords).execute(runId).items
         } catch (e: ScenarioNotInCatalogException) {
             throw PanelConflictException(

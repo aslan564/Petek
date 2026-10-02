@@ -565,6 +565,77 @@ class PanelRunsTest {
         }
 
     @Test
+    fun `a campaign on the owner's account runs again from the panel, and triage never shows the model its password`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm(failingSteps = setOf("look"))
+            val site = PanelWaits.site()
+            val panel =
+                PanelHarness(
+                    dir,
+                    site = site,
+                    llm = llm,
+                    scenarios = mapOf("login.yaml" to loginLook),
+                    targets = listOf(ownerAccounts(site.base)),
+                ).also { open += it }
+            val scenario = panel.approved()
+            val first = panel.backend.startRun(RunRequest(scenarioId = scenario))
+            panel.ended(first.runId)
+
+            val next = panel.backend.startRun(RunRequest(scenarioId = scenario))
+
+            panel.ended(next.runId).run.outcome shouldBe RunOutcome.FAILED
+            val container = panel.panel.container
+            val owner = container.identities.findByRun(next.runId).single { it.ownAccount }
+            owner.email shouldBe "writer@owner.example"
+            owner.password.reveal() shouldBe ""
+            val last =
+                container.evidenceQuery
+                    .steps(next.runId)
+                    .filter { it.agentId == owner.agentId && it.scenarioStep == "look" }
+                    .maxBy { it.endedAt }
+            // Evidence that quotes the owner's password without saying so (the known-secret patterns cannot catch it).
+            container.recorder.step(
+                last.copy(
+                    stepId = container.ids.stepId(),
+                    status = StepStatus.FAILED,
+                    detail = "typed owner-writer-pass into the sign-in form",
+                    startedAt = last.endedAt,
+                    endedAt = last.endedAt.plusMillis(1),
+                ),
+            )
+
+            panel.backend.runTriage(next.runId)
+
+            val prompts =
+                llm.client.requests
+                    .filter {
+                        it.label.startsWith(
+                            "triage/",
+                        )
+                    }.flatMap { request -> request.messages.map { it.content } }
+            prompts.shouldNotBeEmpty()
+            prompts.none { it.contains("owner-writer-pass") } shouldBe true
+            prompts.any { it.contains("typed *** into the sign-in form") } shouldBe true
+        }
+
+    /** A site without companies whose first writer signs in with the owner's account; every tester looks, and fails. */
+    private val loginLook =
+        """
+        campaign:
+          name: notes-look
+          tenant: none
+          testers: 3
+          seed: 12
+          roles: {writer: 2, reader: 1}
+          registration: {self: 2, login: 1}
+          budget: {max_steps_per_agent: 5, max_minutes: 2}
+        steps:
+          - id: look
+            actor: [writer[*], reader]
+            do: "Open the notes"
+        """.trimIndent() + "\n"
+
+    @Test
     fun `an exploration stopped while its test company run starts stops that run too, so nothing is left behind`() =
         runBlocking<Unit> {
             val creating = CompletableDeferred<Unit>()
