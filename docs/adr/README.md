@@ -16,5 +16,6 @@
 | [0012](0012-link-only-swarm.md) | Link-only swarm: verified ownership, a gate learnt once, isolated cards | Accepted |
 | [0013](0013-apache-2-open-source.md) | Open source under Apache 2.0 now; DCO sign-off; maintainers merge into develop, the owner into main | Accepted |
 | [0014](0014-visual-regression.md) | Releases compared by how their pages look: looks as evidence, masks measured not painted, a JDK-only diff, the owner's gate | Accepted |
+| [0015](0015-mobile-device-sessions.md) | Mobile apps as a second kind of session: `UiSession` port, devices over their own CLIs, read-only on production backends | Proposed |
 
 Each ADR records the forces at the time of the decision. Supersede an ADR with a new one rather than rewriting it.
