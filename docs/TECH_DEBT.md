@@ -16,7 +16,7 @@ təklifdir (az asılılıqlı olan əvvəl); sahib dəyişə bilər.
 | 3 | **API adapteri** (brauzersiz test) | Saytın API-sini brauzersiz, eyni sübut və hesabat qaydası ilə yoxlamaq. | Yeni kitabxana yoxdur (Ktor client). |
 | 4 | **LLM hakim** (yalnız `LLM_JUDGED`) | Kodun qərar verə bilmədiyi yerdə (məs. mətnin mənası) AI-ın rəyi, ən zəif sübut səviyyəsi kimi. | Qayda 2 ilə sərhəd: kodun hökmünü heç vaxt dəyişmir, yalnız ayrıca işarəli rəy əlavə edir. |
 | 5 | **Hazır qoşma paketləri** (Spring Boot starter, Express router, Laravel paketi) | Hədəf sayt `docs/TARGET_CONTRACT.md`-dəki test API-sini bir sətirlə qoşur. | Hər ekosistemdə yeni asılılıq (qayda 11) və sahibin dərc hesabları (Maven Central, npm, Packagist). |
-| 6 | **Mobil adapter** (Maestro və ya Appium) | Mobil tətbiqləri eyni orkestrator və hesabatla sınamaq. | Yeni kitabxana (qayda 11), emulyator və ya cihaz. |
+| 6 | **Mobil tətbiqlər** (PLAN, "Pətək 4", Faza 26–32; ADR-0015, R17) | Android və iOS tətbiqlərini eyni agent, saat, assert və hesabatla, veblə bir ssenaridə sınamaq. Sahib planı 2026-11-27-də təsdiqləyib. | Yeni kitabxana yoxdur (`adb`, `simctl`, AXe xarici alətdir); Faza 26-dan başlayır. Açıq suallar PLAN-dadır (ASCII olmayan mətn, saxta tətbiqin build-i, production backend). |
 | 7 | **Ödənişli modullar** | Bir neçə maşında sürü (Redis/NATS), hesabat tarixçəsi və ortaq panel, SSO və audit, hesabat hostingi, OpenTelemetry adapteri, Pətəkin öz poçt qutusu. | Ayrı repo (ADR-0011); açıq nüvədə yalnız portlar qalır. |
 
 ## Müddətli

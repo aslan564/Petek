@@ -1732,6 +1732,110 @@ kəşfiyyatçının sınaq toxunuşu lokal saytda öz açdığı hesabdan bir i�
 verdiyini sübut edib `oracle` yoxlaması və qeydin öz səhifəsi üçün `direct_url` addımı yazır; qeydin başqasına
 açıldığı sayt (`NotesBug.FOREIGN_NOTE_VISIBLE`) bu addımda FAILED olur (`access_not_refused`).
 
+## Pətək 4: mobil tətbiqlər (2026-11-27)
+
+Sahibin qərarı (2026-11-27): Pətək veb saytla yanaşı eyni backend-in Android və iOS tətbiqlərini də test edir; mobil
+testerlər eyni agent, harness saatı, assertlər, sübut bazası və hesabatla işləyir. Qərar:
+[ADR-0015](adr/0015-mobile-device-sessions.md). Tələb: [R17](requirements/R17-mobile-apps.md). Bu, `TECH_DEBT.md`-dəki
+6-cı bəndin (mobil adapter) planıdır. Sıra sahibin təsdiqlədiyi sıradır: əvvəl Android (Linux-da tam işləyir), sonra iOS
+(yalnız macOS).
+
+Əsas fikir: brauzerin yerinə telefonu qoşmaq üçün agentin danışdığı port ümumiləşdirilir; telefon platformanın öz
+əmr sətri alətləri ilə idarə olunur (Android: `adb`, `uiautomator`; iOS: `xcrun simctl`, AXe), yeni kitabxana yoxdur
+(qayda 11). Ən böyük qazanc platformalar arası ssenaridir: admin vebdə elan verir, işçi telefonda görür, gecikməni
+harness ölçür.
+
+### Faza 26 — Ortaq sessiya portu (`UiSession`)
+
+- [ ] `BrowserSession`-un hər ekranda olan hissəsi (`snapshot`, `click`, `fill`, `select`, `readText`, `waitForText`,
+  `watchText`, `isTextVisible`, `count`, `screenshot`, `accessibilitySnapshot`) `UiSession` portuna çıxarılır;
+  `BrowserSession : UiSession` yalnız brauzerə aid olanı əlavə edir (URL, DOM, şəbəkə, mutasiyalar, storage, sorğu).
+- [ ] Agent döngüsü, run funksiyaları və yoxlama `UiSession`-a bağlanır, veb imkanlarını açıq soruşur.
+- [ ] Konsist qaydası: agent və yoxlama `BrowserSession`-un veb hissəsini yalnız imkan yoxlamasından sonra çağırır.
+
+Hazır sayılır: davranış dəyişmir, bütün mövcud testlər (e2e daxil) dəyişmədən yaşıldır.
+
+### Faza 27 — Android adapteri
+
+- [ ] `features/device` modulu: domain (`DevicePlatform`, `DeviceProfile`, `DeviceSession : UiSession`, `DevicePool`),
+  infrastructure `adb` üzərindən (xarici proses, ADR-0008-dəki AI CLI-ları kimi).
+- [ ] Ekran: `uiautomator dump` → nömrələnmiş elementlər, toxunuş elementin mərkəzinə; screenshot hər addımda.
+- [ ] Yeni hərəkətlər whitelist-də: `Swipe`, `Back`, `Relaunch`; sessiya dəstəklədiyi hərəkətləri elan edir.
+- [ ] Emulyator hovuzu: AVD açmaq, açılışı gözləmək, tətbiqi quraşdırmaq, testerlər arasında tətbiq datasını
+  təmizləmək; persona ayarları (dil, şrift ölçüsü, tema, yer).
+- [ ] Sübut: video (`screenrecord`, 180 s hissələr), `logcat`-dan çökmələr tətbiq rəfinə tapıntı kimi, əlçatanlıq
+  yoxlaması (adsız idarəetmə elementi, 48 dp-dən kiçik toxunuş sahəsi).
+- [ ] Mətn yazmaq: `adb input text` ASCII olmayan hərfləri (ə, ş, ğ, ç, ö, ü, ı, İ) yaza bilmir; həll yolu sahibin
+  qərarıdır (aşağıdakı suallar).
+- [ ] `doctor` və `capacity`: `adb`, emulyator, KVM, nüvə və yaddaşa görə neçə emulyator.
+- [ ] Neytral saxta tətbiq (`testing/fake-app`, qayda 12): fake target-in kontraktına qoşulan kiçik Android tətbiqi,
+  Pətəkin öz e2e testləri üçün. Onun build-i Android Gradle plugin-i istəyir (qayda 11, sual aşağıda).
+- [ ] Başqa alətdən köçürülən kod MIT lisenziyasının müəllif sətrini `NOTICE`-da saxlayır.
+
+Hazır sayılır: neytral saxta tətbiq (`testing/`, qayda 12) emulyatorda açılır, tester daxil olur və bir tapşırığı
+bitirir; hər addımın screenshot-u və run-ın videosu sübut bazasındadır.
+
+### Faza 28 — Ssenari formatı
+
+- [ ] Aktorun `platform: web | android | ios` və `device` profili; hədəf profilində `apps` (APK və paket adı, iOS
+  `.app` və bundle id) və tətbiqin backend host-u.
+- [ ] Backend host `TargetPolicy` və sahiblik qapısından keçmədən heç bir cihaz başlamır (R06); production backend-də
+  cihaz yalnız oxuyur.
+- [ ] Validator: cihazın sübut edə bilmədiyi assertlər (`http_status`, `only_one_succeeds.request`) oracle-sız rədd
+  olunur.
+- [ ] `emits`/`wait_for` platformalar arası işləyir; cihazda t1 əlçatanlıq ağacının sorğusu ilə oxunur və hər gecikmə
+  öz dəqiqliyini (sorğu intervalı) daşıyır.
+- [ ] `scenarios/contract-demo`-ya platformalar arası nümunə: vebdə elan → saxta tətbiqdə görünür.
+
+Hazır sayılır: platformalar arası demo ssenari fake target və saxta tətbiqlə keçir, hesabat gecikməni dəqiqliyi ilə
+göstərir.
+
+### Faza 29 — Personalar və ekran şəkli
+
+- [ ] Persona kitabxanası (cihaz, OS səviyyəsi, dil, şrift ölçüsü, tema, yer, xarakter) bütün platformalar üçün;
+  vebdə viewport, dil, rəng sxemi və şrift ölçüsü kimi tətbiq olunur.
+- [ ] `LlmMessage`-ə isteğe bağlı şəkil hissələri; şəkil qəbul etməyən provayder yalnız mətn snapshot-u alır, `doctor`
+  bunu deyir (ADR-0003, ADR-0008 genişlənir).
+
+Hazır sayılır: adı olmayan düymə ekran şəklindən tapılıb basılır, mətn-yalnız provayderdə run yenə işləyir.
+
+### Faza 30 — iOS adapteri
+
+- [ ] `xcrun simctl` və AXe ilə `DeviceSession` (yalnız macOS); simulyator yaratmaq, dil, mətn ölçüsü, tema, yer,
+  video (`recordVideo`), çökmə hesabatları, əlçatanlıq yoxlaması (44 pt).
+- [ ] macOS olmayan maşında `doctor` iOS-u "yoxdur" kimi göstərir, run iOS aktorlarını səbəbi ilə rədd edir.
+
+Hazır sayılır: saxta tətbiqin iOS build-i simulyatorda eyni tapşırığı bitirir.
+
+### Faza 31 — CI və canlı lövhə
+
+- [ ] `docs/ci/`-ə emulyator (Linux runner, KVM, Android 14+) və simulyator (macOS runner) nümunələri; nəticələr
+  şifrəli artefakt kimi.
+- [ ] Panelin Agentlər lövhəsində cihaz kafelləri: ekran mütəmadi yenilənir, sahib testi canlı izləyir.
+
+Hazır sayılır: CI nümunəsi saxta tətbiqlə yaşıl keçir; paneldə emulyatorun ekranı run boyu yenilənir.
+
+### Faza 32 — Mövcud mobil test quruluşlarından köçmək
+
+- [ ] Brief və persona ilə qurulmuş mobil testlərin (bir agent, bir cihaz) ssenariyə çevrilməsi bələdçisi: brief →
+  `do` addımları və missiya, persona → `device` profili, test hesabları → kimlik reyestri və ya sahibin hesabları.
+
+Hazır sayılır: bələdçi ilə çevrilmiş nümunə eyni tapıntıları kod hökmü ilə verir.
+
+### Qərar gözləyən suallar (Pətək 4)
+
+- **ASCII olmayan mətn (Faza 27):** test klaviaturası (cihaza ayrıca APK quraşdırmaq, qayda 11-ə yaxın) və ya
+  clipboard ilə yapışdırma (Android versiyasına görə məhdud). Hansı?
+- **Production backend:** pinning olan tətbiqin yazısını şəbəkədə saxlamaq olmur, ona görə production backend-də cihaz
+  yalnız oxuyur və bu kodla yox, whitelist və missiya ilə təmin olunur. Bu kifayətdirmi, yoxsa production backend-də
+  cihaz ümumiyyətlə başlamasın?
+- **Test API olmayan backend:** oracle və teardown olmadan cihaz hökmləri yalnız ekrana söykənir. Belə hədəfdə
+  cihaz run-ı icazəlidirmi, yoxsa test API məcburidir?
+- **Saxta tətbiqin build-i (Faza 27):** `testing/fake-app` Android Gradle plugin-i və Android SDK istəyir; bu,
+  build-ə yeni asılılıqdır. Repoda ayrıca, `./gradlew build`-dən kənar bir build kimi qalsınmı?
+- **Bir neçə maşın:** hər emulyator ayrı CI maşınındadırsa hadisə şini maşınlar arası olmalıdır (ödənişli nəşr,
+  ADR-0011). Açıq nüvədə platformalar arası run bir maşınla məhdudlaşsınmı?
+
 ## Sübut bazası və hesabat
 
 Hər keçdi/keçmədi hökmü ən azı bir screenshot və ya oracle cavabına bağlıdır; sübutsuz nəticə hesabata düşmür.
