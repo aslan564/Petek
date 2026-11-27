@@ -20,6 +20,7 @@ import az.petek.campaign.domain.AssertionSpec
 import az.petek.campaign.domain.StepAction
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunTags
+import az.petek.evidence.domain.COVERAGE_ACTION
 import az.petek.evidence.domain.RunResult
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
@@ -53,6 +54,32 @@ class DefaultCampaignRunnerTest {
     private val announcement = "Sabah 10:00 ümumi iclas"
 
     private fun TestScope.fixture() = RunnerFixture(VirtualClock(testScheduler))
+
+    @Test
+    fun `testers stay on the site and its allowed hosts and never open a production host`() =
+        runTest {
+            val f = fixture()
+            val seen = java.util.concurrent.CopyOnWriteArrayList<Set<String>>()
+            f.agents.script = { _, runtime ->
+                seen += runtime.siteHosts
+                ActionOutcome(ActionStatus.SUCCEEDED, "ok")
+            }
+            val settings =
+                RunnerSettings(
+                    mailDomain = "test.example.test",
+                    storageRoot = Path.of("build", "storage"),
+                    allowedHosts = { setOf("SSO.example.test") },
+                    // The target itself is production here, which the owner allowed: only the other one is blocked.
+                    productionHosts = { setOf("example.test", "staging.example.test") },
+                )
+
+            f.runner(settings = settings).run(campaign(managers = 0, employees = 1, steps = listOf(step("look", employees()))))
+
+            f.browser.opened
+                .map { it.blockedHosts }
+                .toSet() shouldBe setOf(setOf("example.test"))
+            seen.toSet() shouldBe setOf(setOf("staging.example.test", "sso.example.test"))
+        }
 
     /** The shape of docs/examples/company-portal.yaml on a 7-tester registry: a01 admin, a02-a03 managers, a04-a07 employees. */
     private fun portalCampaign() =
@@ -178,6 +205,23 @@ class DefaultCampaignRunnerTest {
         }
 
     @Test
+    fun `what the scenario leaves unchecked is recorded once at the run's start, and a scenario without it records nothing`() =
+        runTest {
+            val f = fixture().apply { scriptPortal() }
+            val lines = listOf("The explorer never saw the site as manager.", "BOUNDARY of 'Göndər' was not written: no rules.")
+
+            val summary = f.runner().run(portalCampaign().copy(coverage = lines))
+
+            val recorded = f.evidence.stepList.filter { it.runId == summary.runId && it.action == COVERAGE_ACTION }
+            recorded.single().kind shouldBe StepKind.SYSTEM
+            recorded.single().status shouldBe StepStatus.SKIPPED
+            recorded.single().detail shouldBe lines.joinToString("\n")
+            summary.outcome shouldBe RunOutcome.PASSED
+            val plain = f.runner().run(portalCampaign())
+            f.evidence.stepList.none { it.runId == plain.runId && it.action == COVERAGE_ACTION } shouldBe true
+        }
+
+    @Test
     fun `every identity gets its own session and agent runtime`() =
         runTest {
             val f = fixture().apply { scriptPortal() }
@@ -214,7 +258,9 @@ class DefaultCampaignRunnerTest {
             f.steps("read_announce", StepKind.WAIT) shouldHaveSize 4
             val emit = f.step("announce", StepKind.EMIT, "a01")
             emit.status shouldBe StepStatus.PASSED
-            emit.detail shouldBe "announcement_created id=a1 (agent_report)"
+            emit.detail shouldBe
+                "announcement_created id=a1 (agent_report); the page sent no accepted request to the site; " +
+                "latency is measured from this publish"
             val wait = f.step("read_announce", StepKind.WAIT, "a05")
             val action = f.step("read_announce", StepKind.DO, "a05")
             wait.correlationId shouldBe action.correlationId
@@ -260,7 +306,7 @@ class DefaultCampaignRunnerTest {
                 f.agents.runtimes
                     .getValue(receiptCheck.second.agentId!!)
                     .identity.email
-            receiptCheck.second.eventEmittedAt shouldBe
+            receiptCheck.second.eventTime?.t0 shouldBe
                 f.buses
                     .single()
                     .latest("announcement_created")
@@ -283,6 +329,7 @@ class DefaultCampaignRunnerTest {
                                 "open",
                                 managers("IT"),
                                 StepAction.Do("Open ticket {last_id} as {self.name} ({self.role}, {self.department})"),
+                                waitFor = "ticket_created",
                             ),
                             step(
                                 "approve",

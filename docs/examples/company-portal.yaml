@@ -19,7 +19,7 @@ campaign:
   pacing: {start_stagger_ms: 1500}        # per-IP limits (50 sign-ins a minute): the actors of a step start 1.5 s apart
 
 target_profile:
-  api_prefix: /api/v1
+  api_prefix: /api/v1                     # an API on its own host: the full address, e.g. https://api.portal.example/v1
   local_storage:
     "portal:domain_dialog_dismissed": "1"  # no "Use your own server?" dialog on the first visit
     "portal:lang": az                       # the labels below are the Azerbaijani UI
@@ -53,6 +53,14 @@ target_profile:
     join.password: 'input[autocomplete="new-password"] >> nth=0'
     join.confirm_password: 'input[autocomplete="new-password"] >> nth=1'
     join.submit: 'form button[type="submit"]'
+    visual.online_count: 'header .online-count'
+  # What site_health's look check never compares between releases (it changes by itself): selector keys or plain CSS,
+  # found in the page with querySelectorAll, so no Playwright selectors here. The run's own texts, dates and times,
+  # frames of other sites and [data-petek-mask] elements are masked without being named.
+  visual:
+    mask:
+      - visual.online_count
+      - 'aside .news-ticker'
   flows:
     # Owner sign-up: the form, then the verification link from the e-mail (a backend page), then the SPA's status page
     # until the registration saga has created the company. It ends signed out; register_owner then publishes the
@@ -137,24 +145,24 @@ setup:
 steps:
   - id: announce
     actor: admin
-    do: "Elanlar səhifəsində (/announcements) 'Yeni elan' ilə elan yarat: başlıq 'Sabah 10:00 ümumi iclas', mesaj 'Hamı iştirak etsin', hədəf bütün işçilər; yadda saxla"
+    do: "Elanlar səhifəsində (/announcements) 'Yeni elan' ilə elan yarat: başlıq 'Sabah 10:00 ümumi iclas {pass}', mesaj 'Hamı iştirak etsin', hədəf bütün işçilər; yadda saxla"
     emits: announcement_created
     assert:
-      - oracle: {path: "/test/announcements/{last_id}", field: title, equals: "Sabah 10:00 ümumi iclas"}
+      - oracle: {path: "/test/announcements/{last_id}", field: title, equals: "Sabah 10:00 ümumi iclas {pass}"}
 
   # Only the bell badge is live on the portal (SSE); the notifications and announcement pages load once. The receipt is
   # therefore checked in the test API and the text on the page after reading, not as a delivery latency.
   - id: read_announce
     actor: employee[*]
     wait_for: {event: announcement_created, timeout_s: 60}
-    do: "Yuxarıdakı bildiriş zənginə bax, elanlar səhifəsini (/announcements) aç, 'Sabah 10:00 ümumi iclas' elanını tap və 'Oxundu' ilə oxunmuş kimi qeyd et"
+    do: "Yuxarıdakı bildiriş zənginə bax, elanlar səhifəsini (/announcements) aç, 'Sabah 10:00 ümumi iclas {pass}' elanını tap və 'Oxundu' ilə oxunmuş kimi qeyd et"
     assert:
       - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
 
   - id: announce_seen
     actor: employee[*]
     assert:
-      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 10}
+      - visible_text: {text: "Sabah 10:00 ümumi iclas {pass}", within_s: 10}
 
   - id: leave_request
     actor: employee[dept=IT, n=1]
@@ -173,7 +181,12 @@ steps:
 
   - id: forbidden_approval
     actor: employee[n=2]
-    do: "Məzuniyyət sorğusunu (/leave/{last_id}) təsdiqləməyə çalış"
+    do: "Məzuniyyət sorğusunu (/leave/{event.leave_request_created.id}) təsdiqləməyə çalış"
     assert:
       - not_visible: {selector: 'role=button[name="Təsdiqlə"]'}
-      - http_status: {path: "{api}/leave-requests/{last_id}/approve", method: POST, equals: 403}
+      - http_status: {path: "{api}/leave-requests/{event.leave_request_created.id}/approve", method: POST, equals: 403}
+
+# What this scenario leaves unchecked (optional; the explorer's drafts write it themselves). The run records the lines
+# and its report's summary names them, so a passed run is never read as "everything was checked".
+coverage:
+  - "Approving a leave request from the link in the manager's email is not tested here, only the page's own button."

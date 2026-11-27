@@ -12,7 +12,11 @@
 package az.petek.reporting.infrastructure
 
 import az.petek.reporting.ReportTestData
+import az.petek.reporting.domain.NotReachedRow
+import az.petek.reporting.domain.RollCall
+import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
+import az.petek.reporting.domain.UncoveredRow
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.paths.shouldExist
@@ -57,7 +61,7 @@ class MarkdownReportWriterTest {
         md shouldContain "| Keçməyən addımlar | 3 |"
         md shouldContain "| Assertlər | 88 keçdi · 4 keçmədi · 2 ötürüldü |"
         md shouldContain "| Tapıntılar | 2 |"
-        md shouldContain "| Agentlər | 30 |"
+        md shouldContain "| Testerlər | 30 |"
         md shouldContain "| Müddət | 4 dəq 05 san |"
         md shouldContain "| Tokenlər | giriş 1 234 567 · keşdən 1 600 · çıxış 89 012 |"
         md shouldContain "| Xərc | $0.0420 |"
@@ -97,6 +101,20 @@ class MarkdownReportWriterTest {
         md shouldContain "## Real-time gecikmə"
         md shouldContain "| announcement_created \\#42 | 29 | 28 | 812 ms | 1450 ms | 2210 ms | a17 |"
         md shouldContain "- **announcement_created \\#42**: a02 640 ms, a17 —"
+    }
+
+    @Test
+    fun `a step that varies only because of the testers is not called flaky`() {
+        val rows =
+            listOf(
+                StabilityRow("join", runs = 3, passed = 2, siteFailures = 0, environmentFailures = 1),
+                StabilityRow("read_announce", runs = 3, passed = 1, siteFailures = 0, agentFailures = 1),
+            )
+
+        val md = writer.render(SampleReport.model(stability = rows))
+
+        md shouldContain "| join | 3 | 2 | 67% | testerə görə dəyişdi: mühit (saytın xətası deyil) |"
+        md shouldContain "| read_announce | 3 | 1 | 33% | testerə görə dəyişdi: agent, yoxlanmadı (saytın xətası deyil) |"
     }
 
     @Test
@@ -200,9 +218,61 @@ class MarkdownReportWriterTest {
     }
 
     @Test
+    fun `the roll call names every tester left out and why, and never claims everyone finished`() {
+        val model =
+            SampleReport.model().copy(
+                failedAgents = emptyList(),
+                rollCall =
+                    RollCall(
+                        planned = listOf("a01", "a02", "a03", "a04"),
+                        acted = listOf("a01", "a02"),
+                        notReached =
+                            listOf(
+                                NotReachedRow("a02", "Vəli Həsənov", "read", "run_aborted", "time budget of 2m used up"),
+                                NotReachedRow("a03", "Sahil Quliyev", "read", "run_aborted", "time budget of 2m used up"),
+                            ),
+                        uncovered = listOf(UncoveredRow("second_manager", "no tester matched 'manager[n=2]' in the run")),
+                        abortReason = "time budget of 2m used up",
+                        overCapacity = "over_capacity: 4 testers at once (4 in the run); this machine is advised for up to 2 at once",
+                        recorded = true,
+                    ),
+            )
+
+        val text = writer.render(model)
+
+        text shouldContain "Testerlərin yoxlaması"
+        text shouldContain "Planlanan: 4 tester · İşləyən: 2 · Bütün addımlarını bitirən: 1"
+        text shouldContain "a02, a03"
+        text shouldContain "run dayandırıldı: time budget of 2m used up"
+        text shouldContain "second_manager"
+        text shouldContain "Run vaxtından əvvəl dayandı:** time budget of 2m used up"
+        text shouldContain "Eyni anda 4 tester işlədi (run-da 4), bu maşın isə ən çox 2 üçün tövsiyə olunur"
+        text shouldContain "a04"
+        text shouldNotContain "Bütün agentlər addımlarını tamamladı."
+        text shouldContain "Uğursuz agent yoxdur."
+    }
+
+    @Test
+    fun `a roll call that was never closed says nobody knows who is missing, never that everyone finished`() {
+        val model =
+            SampleReport.model().copy(
+                failedAgents = emptyList(),
+                rollCall = RollCall(planned = listOf("a01", "a02"), acted = listOf("a01", "a02")),
+            )
+
+        val text = writer.render(model)
+
+        text shouldContain "kimin hansı addıma çatmadığı bilinmir"
+        text shouldNotContain "Bütün addımlarını bitirən"
+        text shouldNotContain "Hər planlanan tester ona verilən bütün addımlara çatdı."
+        text shouldNotContain "Bütün agentlər addımlarını tamamladı."
+    }
+
+    @Test
     fun `empty sections say so instead of printing empty tables`() {
         val empty =
             SampleReport.model().copy(
+                rollCall = RollCall(planned = listOf("a01"), acted = listOf("a01"), recorded = true),
                 steps = emptyList(),
                 latency = emptyList(),
                 findings = emptyList(),

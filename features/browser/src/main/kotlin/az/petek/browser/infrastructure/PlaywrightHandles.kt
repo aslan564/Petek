@@ -19,8 +19,11 @@ import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Request
 import com.microsoft.playwright.Response
+import com.microsoft.playwright.Route
 import com.microsoft.playwright.options.Proxy
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.net.URI
+import java.net.URISyntaxException
 import kotlin.time.Duration
 
 private val logger = KotlinLogging.logger {}
@@ -59,6 +62,9 @@ internal class PlaywrightHandles private constructor(
         const val TIMEZONE = "Asia/Baku"
 
         private const val EVENT_STREAM = "text/event-stream"
+        private const val BLOCKED_BY_CLIENT = "blockedbyclient"
+        private const val NO_CONTENT = 204
+        private val WRITING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
         private val LINE_COLUMN = Regex(":\\d+:\\d+$")
         private val FETCH_TYPES = setOf("xhr", "fetch")
 
@@ -71,24 +77,70 @@ internal class PlaywrightHandles private constructor(
             mutations: MutationRecorder,
             clock: HarnessClock,
             health: HealthRecorder? = null,
+            credentials: PageCredentials? = null,
         ): PlaywrightHandles {
             val playwright = Playwright.create()
             try {
                 val browser = connector.connect(playwright)
                 val context = browser.newContext(contextOptions(options, connector.ignoreTlsErrors))
                 context.setDefaultTimeout(options.defaultTimeout.toPlaywrightTimeout())
+                if (options.blockedHosts.isNotEmpty()) blockHosts(context, options.blockedHosts)
                 LocalStorageSeed.script(options)?.let(context::addInitScript)
                 val page = context.newPage()
                 observeRealtimeTraffic(page, traffic, clock)
                 observeMutations(page, mutations, clock)
                 acceptDialogs(page, dialogs, clock)
                 if (health != null) observeHealth(page, health, clock)
+                if (credentials !=
+                    null
+                ) {
+                    page.onRequest { request -> credentials.sent(request.url(), request.resourceType(), request.headers()) }
+                }
                 return PlaywrightHandles(playwright, browser, context, page)
             } catch (e: Exception) {
                 runCatching { playwright.close() }
                 throw e
             }
         }
+
+        /**
+         * Keeps the session off [hosts] (the owner's production hosts, AGENTS.md rule 8) whatever a page links to or
+         * redirects to: a page or frame of such a host never loads (answered `204 No Content` by the session itself, so
+         * the tab stays where it was instead of showing an error page) and nothing is written to it (the request fails);
+         * other requests there, such as an image or a script a staging page loads, pass. The handler runs on the session
+         * thread like every other one.
+         */
+        private fun blockHosts(
+            context: BrowserContext,
+            hosts: Set<String>,
+        ) {
+            val blocked = hosts.map { it.trim().lowercase() }.toSet()
+            context.route({ url -> hostOf(url) in blocked }) { route ->
+                val request = route.request()
+                when {
+                    request.isNavigationRequest -> {
+                        logger.info { "blocked opening ${hostOf(request.url())}: a production host" }
+                        route.fulfill(Route.FulfillOptions().setStatus(NO_CONTENT))
+                    }
+
+                    request.method().uppercase() in WRITING_METHODS -> {
+                        logger.info { "blocked ${request.method()} to ${hostOf(request.url())}: a production host" }
+                        route.abort(BLOCKED_BY_CLIENT)
+                    }
+
+                    else -> {
+                        route.resume()
+                    }
+                }
+            }
+        }
+
+        private fun hostOf(url: String): String? =
+            try {
+                URI(url).host?.lowercase()
+            } catch (_: URISyntaxException) {
+                null
+            }
 
         /**
          * Accepts every dialog the page opens and records it. Without a handler Playwright dismisses dialogs, which

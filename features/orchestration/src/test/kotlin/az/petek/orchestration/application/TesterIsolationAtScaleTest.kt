@@ -20,6 +20,7 @@ import az.petek.campaign.domain.StepAction
 import az.petek.core.ids.AgentId
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.Verdict
 import az.petek.oracle.domain.TestCompany
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.testing.RunnerFixture
@@ -34,6 +35,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.params.ParameterizedTest
@@ -52,8 +54,9 @@ import kotlin.time.Duration.Companion.seconds
  * - an agent's runtime knows its colleagues without their secrets (the roster carries no password);
  * - the values agents share (`company_code`) are write-once: an agent that tries to change them is refused;
  * - every step, assertion, event and receipt is attributed to the agent that acted, by the harness;
- * - `{last_id}` is an agent's own object, the object it waited for, or the state before the step began — never an id
- *   a colleague produced concurrently in the same step;
+ * - `{last_id}` is an agent's own object or the object it waited for — never an id a colleague produced concurrently in
+ *   the same step, and never another step's object (Faza 24.6); a step without an event of its own names another step's
+ *   object with `{event.<name>.id}`, one value for everyone;
  * - one emitted event reaches every receiver exactly once.
  */
 class TesterIsolationAtScaleTest {
@@ -99,7 +102,7 @@ class TesterIsolationAtScaleTest {
                     "check",
                     employees(),
                     StepAction.Do("Look at the newest ticket"),
-                    assertions = listOf(AssertionSpec.Oracle("/test/tickets/{last_id}", "status", "open", null)),
+                    assertions = listOf(AssertionSpec.Oracle("/test/tickets/{event.ticket_created.id}", "status", "open", null)),
                 ),
                 step("whoami", everyoneButAdmin(), StepAction.Do("Say who you are")),
             ),
@@ -207,14 +210,17 @@ class TesterIsolationAtScaleTest {
                 .filter { it.name == "ticket_created" }
                 .map { it.emitter } shouldContainExactlyInAnyOrder employeeIds.filterNot { it == failingEmployee }
 
-            // {last_id}: each employee's own ticket in the emitting step; the refused one falls back to the state before
-            // the step (the announcement), never to a colleague's ticket created at the same time.
+            // {last_id}: each employee's own ticket in the emitting step; the refused one emitted nothing, so its check cannot
+            // be rendered (said as such), never falling back to the announcement or a colleague's ticket.
             val ticketChecks = f.evidence.assertionList.filter { it.scenarioStep == "ticket" && it.type == "oracle" }
             ticketChecks.filter { it.agentId != failingEmployee }.all { it.expected == "/test/tickets/t-${it.agentId}" } shouldBe true
-            ticketChecks.filter { it.agentId == failingEmployee }.map { it.expected }.distinct() shouldBe listOf("/test/tickets/ann-1")
+            val refused = ticketChecks.single { it.agentId == failingEmployee }
+            refused.expected shouldBe "/test/tickets/{last_id}"
+            refused.note.orEmpty() shouldContain "last_id"
+            refused.verdict shouldBe Verdict.FAILED
             f.step("ticket", StepKind.DO, failingEmployee.value).status shouldBe StepStatus.FAILED
 
-            // A later step without wait_for sees one deterministic value for everyone: the newest ticket before it began.
+            // A later step without an event of its own names the ticket event: one deterministic value for everyone.
             val checks =
                 f.evidence.assertionList
                     .filter { it.scenarioStep == "check" && it.type == "oracle" }

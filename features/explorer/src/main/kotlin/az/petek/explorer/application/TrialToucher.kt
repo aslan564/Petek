@@ -22,6 +22,8 @@ import az.petek.explorer.domain.Keywords
 import az.petek.explorer.domain.LinkPolicy
 import az.petek.explorer.domain.PageModel
 import az.petek.explorer.domain.Provenance
+import az.petek.explorer.domain.Resources
+import az.petek.explorer.domain.TestApiProbe
 import az.petek.explorer.domain.TrialOutcome
 import az.petek.explorer.domain.TrialTouch
 import az.petek.explorer.domain.UrlPatterns
@@ -49,10 +51,11 @@ private val logger = KotlinLogging.logger {}
  * - only forms that code classified CREATE (an LLM's reading of a button never makes a form writable), never login,
  *   sign-up, verification, approval or deletion forms, never a form sent to another site, never a form with a
  *   password or file field, never a form whose page, address or button looks destructive;
- * - one submission per form, from a logged-in role that was offered it (never as a visitor: only the test company's
- *   data is torn down), on a page of the target's own origin; nothing is typed when the browser does not land on the
- *   page the form was seen on (a redirect to the sign-in page, another site), because the same selectors could then
- *   address another form;
+ * - one submission per form, from a logged-in role that was offered it (never as a visitor: the writers are the test
+ *   company's accounts or, on a site without companies, the explorer's own account made in this exploration; what a
+ *   visitor creates belongs to nobody Pətək made), on a page of the target's own origin; nothing is typed when the
+ *   browser does not land on the page the form was seen on (a redirect to the sign-in page, another site), because the
+ *   same selectors could then address another form;
  * - every text carries a unique marker (`Pətək sınaq …`) so the result can be recognised; at the end each object it
  *   created is deleted again through the site's own delete action on the object's page, and only when that page still
  *   shows the marker (Faza 17: in an admin account only Pətək-marked objects are made, and they are removed). An object
@@ -67,6 +70,9 @@ internal class TrialToucher(
     private val writers: Map<String, BrowserSession>,
     private val watchers: Map<String, BrowserSession>,
     private val clock: HarnessClock,
+    private val testApi: TestApiProbe = TestApiProbe.NONE,
+    /** The e-mail each writer is signed in with, to ask the test API for what it created. */
+    private val accounts: Map<String, String> = emptyMap(),
 ) {
     private var touched = 0
 
@@ -180,6 +186,30 @@ internal class TrialToucher(
             else -> null
         }
 
+    /**
+     * Whether the site's test API answers with what [role] just created (Faza 25.2), asked before the object is cleaned
+     * up; null when nobody can ask (no test API, no e-mail for the role) or it could not say.
+     */
+    private suspend fun servedByTestApi(
+        action: ActionModel,
+        page: PageModel,
+        role: String,
+        marker: String,
+    ): Boolean? {
+        val by = accounts[role] ?: return null
+        val resource = Resources.created(action, page)
+        return try {
+            testApi.serves(resource, by, marker).also { served ->
+                if (served == true) context.notes += "The test API serves $resource: it answered with the trial's object"
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.debug { "The test API could not be asked about $resource (${e.message})" }
+            null
+        }
+    }
+
     private suspend fun touch(
         action: ActionModel,
         page: PageModel,
@@ -225,8 +255,13 @@ internal class TrialToucher(
         val urlAfter = landedAfter?.let { UrlPatterns.of(it) }
         if (accepted && landedAfter != null && urlAfter != null && UrlPatterns.ID in urlAfter) {
             created += Created(role, landedAfter, marker, action.name)
+        } else if (accepted) {
+            // No page of its own to delete it from: said, not forgotten. The test company's teardown removes it with
+            // the company where the site has one.
+            context.notes += "Trial touch left '$marker' (${action.name}) on the site: it opened no page of its own to delete it from"
         }
-        context.accumulator.recordTrial(action.id, TrialTouch(role, outcome, marker, messages, urlAfter, seenLiveBy, evidence))
+        val served = if (accepted) servedByTestApi(action, page, role, marker) else null
+        context.accumulator.recordTrial(action.id, TrialTouch(role, outcome, marker, messages, urlAfter, seenLiveBy, evidence, served))
         if (accepted && observers.isNotEmpty() && seenLiveBy.isEmpty()) {
             context.raiseUnknown(
                 "After '${action.name}' as $role, no other role (${observers.keys.sorted().joinToString()}) saw the new item " +

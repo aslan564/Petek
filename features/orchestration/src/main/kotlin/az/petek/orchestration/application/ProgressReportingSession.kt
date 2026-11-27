@@ -13,7 +13,9 @@ package az.petek.orchestration.application
 
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.LookRequest
 import az.petek.browser.domain.NetworkObservation
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageSnapshot
 import az.petek.browser.domain.WaitOutcome
 import java.nio.file.Path
@@ -43,6 +45,9 @@ internal class ProgressReportingSession(
     override suspend fun navigate(pathOrUrl: String) = tracked { delegate.navigate(pathOrUrl) }
 
     override suspend fun snapshot(): PageSnapshot = tracked { delegate.snapshot() }
+
+    // A look waits for the page to settle, seconds at a time: a sign of life when it starts and when it ends.
+    override suspend fun look(request: LookRequest): PageLook? = tracked { delegate.look(request) }
 
     override suspend fun click(ref: Int) = tracked { delegate.click(ref) }
 

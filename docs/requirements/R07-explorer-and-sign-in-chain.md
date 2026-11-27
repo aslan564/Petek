@@ -19,16 +19,29 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 - `ExploreSiteUseCase` runs three phases under a page/time budget: `ANONYMOUS` (read-only session, crawl under
   `LinkPolicy`/`RobotsRules`), `ROLE_BASED` (logged-in sessions per role), `TRIAL_TOUCH` (harmless submits, only with
-  permission and a confirmed test target). Code reads the page (`HtmlScanner`, `FormClassifier`, `Keywords`); the AI
-  answers one structured question per page (`PageAnalyst`).
+  permission and a confirmed test target: the test company, or on a site without companies the explorer's own account
+  made in the same exploration, 2026-09-30). Code reads the page (`HtmlScanner`, `FormClassifier`, `Keywords`); the AI
+  answers one structured question per page (`PageAnalyst`). After an accepted submit the trial touch asks the test
+  API, as the role that created the object (the sessions' e-mails), whether it serves the object's resource
+  (`TestApiProbe`, Faza 25.2); drafts write oracle checks only for resources proven so. An exploration may go on
+  from an earlier model (`ExplorationRequest.seed`, Faza 18: "Test et" does so while its run goes): the model's pages
+  are opened for their links but not asked about again, and the page budget counts only pages new to it.
 - `SiteModel` with `Provenance` (observed/inferred), versioned per target, event-logged; `CompareExplorationsUseCase`
   diffs versions. `TestPatterns` derive ideas; `GenerateScenarioUseCase` drafts a campaign the validator accepts,
   named once per site (`explorer-<host>`: every exploration's draft is the next version, so versions compare) and with
-  the owner's tester count. Its site-wide checks (`site_health`, `page_checks`) are done by every tester on every page,
-  each in its own browser, the links shared out (`share: links`); where people sign in, the pages a visitor sees are
-  checked before anyone signs in and each role's own pages after the scenario (owner's decision, 2026-09-27).
-- Logged-in sessions come from `TestCompanyRoleSessions` (app): a setup-only campaign creates a test company through
-  the test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8).
+  the owner's tester count. Its site-wide checks (`site_health`, `page_checks`) are done by every tester at once, each
+  in its own browser with a job of its own (`share: work`, `devices: phone,tablet,desktop`: every page on each device
+  is a job, dealt out, and dealt round again as a second look when there are more testers than jobs; a page's links
+  are asked about once); where people sign in, the pages a visitor sees are checked before anyone signs in and each
+  role's own pages after the scenario (owner's decision, 2026-09-27).
+- Logged-in sessions are opened once the visitor's walk is done (`RoleWalkSource`, Faza 25.1), with the site as that
+  walk saw it, and only when a phase needs them. `TestCompanyRoleSessions` (app) then creates a test company through the
+  test API with the site's own target profile from the scenario catalog (`CatalogSetupProfiles`, Faza 8), but only
+  where the site has companies: the profile's `tenant: company`, or, without the owner's word, a form to join by
+  invitation or company code the visitor's walk saw (`GateMaps.joinPages`); `tenant: none` never. A test API alone
+  is no such sign.
+- The site's kind and its gate are what a visitor sees (`SiteKinds.visitorPages`): the pages the logged-in walk adds
+  never make a portal a shop, and an admin's "add user" form inside is never taken for the sign-up (`SiteKindsTest`).
 - Findings are recorded by code, never judged by the AI: broken links, HTTP errors, slow pages, accessibility gaps,
   leaked error text, and what the browser itself saw go wrong on each page since it started loading (script errors
   and uncaught exceptions, failed requests to the site: `CONSOLE_ERROR`, `FAILED_REQUEST`), plus the page measured at
@@ -49,7 +62,18 @@ must be able to register, read the OTP, and fall back to provided credentials if
 
 - `SignInChain` (app): the methods of the site's target profile (`sign_in`, default `test_company` → `own_accounts` →
   `self_register` → `anonymous`) are tried in order until one yields logged-in sessions; every attempt and fallback
-  is a line of the exploration's activity.
+  is a line of the exploration's activity. `test_company` is used only where the site has companies (above);
+  `self_register` opens a company only when the profile says `tenant: company`; otherwise the explorer signs up as a
+  plain user (Faza 25.1).
+- Drafts choose their tenant by `GateMaps.tenantFor` (Faza 25.1): the profile's `tenant`, else companies only when
+  the explorer saw the site's own way into one (`GateMaps.companyWay`: a form taking an invitation or company code,
+  and an operation of a signed-in role handing them out) and the test API can seed the test company; a test API
+  alone never makes a company draft. When the explorer saw a code but not who gives it, it asks, and the draft takes
+  the gate as it is.
+- A draft names what it leaves unchecked in its `coverage:` block (2026-09-30): the team's roles the explorer never
+  saw the site as (or that it saw it only as a visitor), the ideas it could not write and why (sign-up and sign-in
+  excepted: the setup does them), and how many small-bug cards code does not check yet. The run records the block and
+  its report's summary shows it (R03).
 - `OwnAccountRoleSessions`: the owner's accounts from the panel ("Hesablar", password to `.env` as
   `PETEK_ACC_<SITE>_<ROLE>`, the account with its `${VAR}` reference to `targets/<site>.yaml`; the database never
   sees it) or from the target profile. A given `storage_state` file is used as is; a session saved by an earlier

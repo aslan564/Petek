@@ -18,6 +18,7 @@ import az.petek.agent.domain.FailureReason
 import az.petek.agent.domain.StepContext
 import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.PageFacts
+import az.petek.core.model.PathSegments
 import az.petek.evidence.domain.StepStatus
 import java.net.URI
 
@@ -33,7 +34,15 @@ import java.net.URI
  *   title;
  * - `outbound`: the links to other sites answer; up to `max_outbound` (default 40) distinct addresses are asked once,
  *   and only an answer of 404 or 410, or none at all, is a dead link: 401, 403, 405, 429, 999 and 5xx mean the other
- *   site refuses automated visitors, which is noted, not reported.
+ *   site refuses automated visitors, which is noted, not reported;
+ * - `mirrors`: the page's language versions (`hreflang`, the showcase card "language mirrors differ"): each answers
+ *   (a version that answers 404 is the card "a deep link is 404 in one language"), and one on the same site says it is
+ *   in the language it is named for and names the page back among its own versions; up to `max_mirrors` (default 30)
+ *   distinct versions are looked at once. A version on another site is only asked whether it answers;
+ * - `lists`: a list everyone sees is not empty (the showcase card "empty list"). The argument `lists` names, per page,
+ *   the object pages it lists and how many objects the explorer saw there as a visitor (`page>objects>seen`, the id
+ *   segment of the object page written as an asterisk); the page must show at least one link to such an object. It is
+ *   looked at on a desktop screen only, as the explorer saw it: a phone layout may fold a list away.
  *
  * With `share: work` the step's testers split the pages and devices between them (each job a page on a phone, tablet
  * or desktop), with `share: pages` the pages (duplicate titles are then compared within a tester's pages only), and
@@ -62,9 +71,13 @@ internal class PageChecksRunFunction(
             PageShare.problem(args)?.let { throw RunFailure(FailureReason.MISSING_PREREQUISITE, "page_checks: $it") }
             val jobs = PageShare.jobs(list(args["pages"]).ifEmpty { listOf("home") }, args, step.share)
             val maxOutbound = args["max_outbound"]?.toIntOrNull() ?: DEFAULT_MAX_OUTBOUND
+            val maxMirrors = args["max_mirrors"]?.toIntOrNull() ?: DEFAULT_MAX_MIRRORS
             val problems = mutableListOf<String>()
             val titles = LinkedHashMap<String, MutableSet<String>>()
             val outbound = LinkedHashMap<String, String>()
+            // One entry per page, whatever its spelling (`/en/about` and `/en/about/`), holding the address first named.
+            val mirrors = LinkedHashMap<String, Pair<String, Mirror>>()
+            val lists = listsOf(args[LISTS])
             val screens = Screens(this)
             var firstFailing: PageShare.Job? = null
             try {
@@ -103,6 +116,24 @@ internal class PageChecksRunFunction(
                             .filter { external(it.url, here) }
                             .forEach { outbound.putIfAbsent(withoutFragment(it.url), path) }
                     }
+                    if (LISTS in checks && (job.device == null || job.device == Device.DESKTOP)) {
+                        lists[ref].orEmpty().forEach { list ->
+                            val shown =
+                                facts.links
+                                    .mapNotNull { linkPath(it.url) }
+                                    .filter(list::lists)
+                                    .distinct()
+                            if (shown.isEmpty()) {
+                                problems += "$where shows no ${list.objects} of its list (the explorer saw ${list.seen} there as a visitor)"
+                            }
+                        }
+                    }
+                    if ("mirrors" in checks && job.asksLinks) {
+                        val here = runtime.session.currentUrl()
+                        facts.alternates
+                            .filterNot { sameAddress(it.url, here) }
+                            .forEach { mirrors.putIfAbsent(addressKey(it.url), withoutFragment(it.url) to Mirror(path, here, it.language)) }
+                    }
                     if (problems.size > before && firstFailing == null) firstFailing = job
                 }
                 if ("meta" in checks) {
@@ -128,6 +159,11 @@ internal class PageChecksRunFunction(
                         }
                     }
                 }
+                if ("mirrors" in checks) {
+                    PageShare.links(mirrors.values.take(maxMirrors), args, step.share).forEach { (url, mirror) ->
+                        problems += mirrorProblems(runtime, url, mirror)
+                    }
+                }
                 val skipped =
                     if (unverified.isEmpty()) "" else " ${unverified.size} link(s) to sites that refuse automated visitors were not judged."
                 if (problems.isEmpty()) {
@@ -146,6 +182,100 @@ internal class PageChecksRunFunction(
                 screens.restore()
             }
         }
+
+    /**
+     * A list of [objects] (an object page, its id segment an asterisk) the explorer saw a page show [seen] of; a link is
+     * one of them when its path, its ids written the same way ([PathSegments], the explorer's own rule), is [objects].
+     */
+    private class ListOf(
+        val objects: String,
+        val seen: Int,
+    ) {
+        fun lists(path: String): Boolean = PathSegments.generalize(path, "*") == PathSegments.generalize(objects, "*")
+    }
+
+    /** The `lists` argument by page; entries that are not `page>objects>seen` are left out. */
+    private fun listsOf(text: String?): Map<String, List<ListOf>> =
+        list(text)
+            .mapNotNull { entry ->
+                val parts = entry.split('>')
+                val seen = parts.getOrNull(2)?.trim()?.toIntOrNull()
+                if (parts.size != LIST_PARTS || seen == null || !parts[1].trim().startsWith("/")) return@mapNotNull null
+                parts[0].trim() to ListOf(parts[1].trim(), seen)
+            }.groupBy({ it.first }, { it.second })
+
+    /** The path of [url] (absolute or not), or null when it is not an address. */
+    private fun linkPath(url: String): String? = runCatching { URI(withoutFragment(url)).rawPath }.getOrNull()?.takeIf { it.isNotEmpty() }
+
+    /** A language version named by the page [page] (at [from]) as its [language] version. */
+    private data class Mirror(
+        val page: String,
+        val from: String,
+        val language: String,
+    )
+
+    /**
+     * What is wrong with the version at [url]: it does not answer, or (on the same site) it says it is in another
+     * language than it is named for, or does not name the page back.
+     */
+    private suspend fun RunTrace.mirrorProblems(
+        runtime: AgentRuntime,
+        url: String,
+        mirror: Mirror,
+    ): List<String> {
+        val named = "${mirror.page} names $url as its ${mirror.language} version"
+        val status =
+            probe("check the ${mirror.language} version $url", {
+                try {
+                    runtime.session.request("GET", url, null).status
+                } catch (_: BrowserActionException) {
+                    NO_ANSWER
+                }
+            }) { it != NO_ANSWER && it < REFUSED_FROM }
+        if (status == NO_ANSWER) return listOf("$named, which does not answer")
+        if (status >= REFUSED_FROM) return listOf("$named, which answers $status")
+        if (external(url, hostOf(mirror.from))) return emptyList()
+        openUrl(url)
+        val facts = act("read the ${mirror.language} version $url") { runtime.session.pageFacts() } ?: return emptyList()
+        val declared = facts.language?.trim().orEmpty()
+        return listOfNotNull(
+            when {
+                mirror.language.equals(ANY_LANGUAGE, ignoreCase = true) -> null
+                declared.isEmpty() -> "$url, the ${mirror.language} version of ${mirror.page}, does not name its language (html lang)"
+                !primary(declared).equals(primary(mirror.language), ignoreCase = true) -> "$named, but it says it is in $declared"
+                else -> null
+            },
+            "$url does not name ${mirror.page} back among its language versions".takeIf {
+                facts.alternates.none { sameAddress(it.url, mirror.from) }
+            },
+        )
+    }
+
+    /** The language of a language tag: `en` of `en-GB`. */
+    private fun primary(tag: String): String = tag.substringBefore('-').substringBefore('_')
+
+    /** Whether [a] and [b] are the same page: host (when both have one), path without a trailing slash, and query. */
+    private fun sameAddress(
+        a: String,
+        b: String,
+    ): Boolean {
+        val first = runCatching { URI(withoutFragment(a)) }.getOrNull() ?: return false
+        val second = runCatching { URI(withoutFragment(b)) }.getOrNull() ?: return false
+        val hosts = first.host == null || second.host == null || first.host.equals(second.host, ignoreCase = true)
+        return hosts && pathOf(first) == pathOf(second) && first.query == second.query
+    }
+
+    /** One spelling of [url]'s page: its host, path without a trailing slash, and query. */
+    private fun addressKey(url: String): String {
+        val uri = runCatching { URI(withoutFragment(url)) }.getOrNull() ?: return url
+        return uri.host?.lowercase().orEmpty() + pathOf(uri) + (uri.query?.let { "?$it" } ?: "")
+    }
+
+    private fun pathOf(uri: URI): String =
+        uri.path
+            .orEmpty()
+            .trimEnd('/')
+            .ifEmpty { "/" }
 
     private fun altProblem(
         path: String,
@@ -190,8 +320,14 @@ internal class PageChecksRunFunction(
             .filter { it.isNotEmpty() }
 
     companion object {
-        val ALL_CHECKS: List<String> = listOf("anchors", "images", "alt", "meta", "outbound")
+        const val LISTS = "lists"
+        val ALL_CHECKS: List<String> = listOf("anchors", "images", "alt", "meta", "outbound", "mirrors", LISTS)
+        private const val LIST_PARTS = 3
         const val DEFAULT_MAX_OUTBOUND = 40
+        const val DEFAULT_MAX_MIRRORS = 30
+
+        /** The `hreflang` of the version for every other language: it has no language of its own to say. */
+        private const val ANY_LANGUAGE = "x-default"
         private const val NO_ANSWER = -1
         private const val REFUSED_FROM = 400
         private val DEAD = setOf(404, 410)

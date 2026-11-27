@@ -31,7 +31,10 @@ import java.nio.file.Path
  * so a config can be logged or printed safely.
  *
  * @property target the system under test (`PETEK_TARGET`); it replaces `campaign.target` of every campaign.
- * @property productionHosts hosts refused as a target unless [allowProduction] (AGENTS.md rule 8).
+ * @property productionHosts hosts refused as a target unless [allowProduction] (AGENTS.md rule 8); no tester page ever
+ *   opens one or writes to one, the target itself excepted when it was allowed.
+ * @property allowedHosts hosts besides the target's own testers may open (`PETEK_ALLOWED_HOSTS`, a profile's
+ *   `allowed_hosts`): a sign-in service, the host of an e-mail link. Every other host is off the site (Faza 24.9).
  * @property testToken `X-Test-Token` for the target's `/test/...` API; null disables oracle assertions.
  * @property testApiUrl where the `/test/...` API lives when it is not on the target's own origin (`PETEK_TEST_API_URL`,
  *   e.g. a separate `api.` host); null means the target itself, see [testApiBase].
@@ -46,7 +49,7 @@ import java.nio.file.Path
  * @property llmEnvUnset variables removed from an AI tool's environment, `NAME` or `PREFIX*` (`PETEK_LLM_ENV_UNSET`).
  * @property llmBaseUrl an OpenAI-compatible endpoint (`PETEK_LLM_BASE_URL`, e.g. `http://localhost:11434/v1`).
  * @property llmApiKey the provider's API key (`PETEK_LLM_API_KEY`, aliases `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
- *   `GEMINI_API_KEY`).
+ *   `XAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`).
  * @property llmStructured how an OpenAI-compatible endpoint is asked for JSON (`PETEK_LLM_STRUCTURED`).
  * @property llmEffort reasoning effort (`PETEK_LLM_EFFORT`), passed only to providers that support it; null means the
  *   provider's default ([effectiveLlmEffort]).
@@ -59,6 +62,7 @@ data class PetekConfig(
     val target: URI,
     val productionHosts: Set<String> = DEFAULT_PRODUCTION_HOSTS,
     val allowProduction: Boolean = false,
+    val allowedHosts: Set<String> = emptySet(),
     val testToken: Secret? = null,
     val testApiUrl: URI? = null,
     val mailSource: MailSource = MailSource.MAILPIT,
@@ -148,11 +152,32 @@ data class PetekConfig(
     /** The profile of [site] (same scheme, host and port), if `targets/` has one. */
     fun profileFor(site: URI): ResolvedTarget? = targets.firstOrNull { sameSite(it.spec.url, site) }
 
+    /**
+     * These settings with the AI of [other]: the provider (and why it was chosen), its fallbacks, model, binary,
+     * arguments, environment, endpoint, key, JSON mode and effort. The panel switches the AI this way while it runs
+     * (Faza 23); how many calls run at once stays as the container was built with.
+     */
+    fun withAiOf(other: PetekConfig): PetekConfig =
+        copy(
+            llmProvider = other.llmProvider,
+            llmProviderReason = other.llmProviderReason,
+            llmFallbacks = other.llmFallbacks,
+            llmModel = other.llmModel,
+            llmBin = other.llmBin,
+            llmArgs = other.llmArgs,
+            llmEnvUnset = other.llmEnvUnset,
+            llmBaseUrl = other.llmBaseUrl,
+            llmApiKey = other.llmApiKey,
+            llmStructured = other.llmStructured,
+            llmEffort = other.llmEffort,
+        )
+
     /** Where the log file lives: `<evidenceDir>/logs`. */
     val logDirectory: Path get() = evidenceDir.resolve("logs")
 
     override fun toString(): String =
         "PetekConfig(target=${masked(target)}, productionHosts=$productionHosts, allowProduction=$allowProduction, " +
+            "allowedHosts=$allowedHosts, " +
             "testToken=${setOrUnset(testToken)}, testApiUrl=${testApiUrl?.let(::masked)}, mailSource=${mailSource.key}, " +
             "mailpitUrl=${masked(mailpitUrl)}, mailDomain=$mailDomain, mailInbox=${mailInbox ?: "unset"}, imap=${imap ?: "unset"}, " +
             "identitySecret=***, llmProvider=$llmProvider ($llmProviderReason), llmModel=$llmModelLabel, llmBin=$effectiveLlmBin, " +

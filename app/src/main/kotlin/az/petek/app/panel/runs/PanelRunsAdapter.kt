@@ -12,14 +12,16 @@
 package az.petek.app.panel.runs
 
 import az.petek.app.campaign.CampaignScaler
-import az.petek.app.campaign.IdentitySpecs
 import az.petek.app.campaign.ScalingException
+import az.petek.app.config.MailSource
 import az.petek.app.di.AppContainer
 import az.petek.app.panel.Contacts
 import az.petek.app.panel.PanelTargets
 import az.petek.app.panel.explorer.SetupRun
 import az.petek.app.panel.explorer.SetupRuns
 import az.petek.app.panel.scenarios.PanelScenariosAdapter
+import az.petek.app.runs.RunLockBusyException
+import az.petek.app.runs.SlowerLines
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.DefaultCampaignValidator
 import az.petek.campaign.domain.VisitorRun
@@ -28,8 +30,8 @@ import az.petek.core.error.PetekException
 import az.petek.core.ids.ArtifactId
 import az.petek.core.ids.FindingId
 import az.petek.core.ids.RunId
-import az.petek.core.ids.RunTags
 import az.petek.dashboard.domain.BundleEvidenceView
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.FieldProblem
 import az.petek.dashboard.domain.FindingBundleView
 import az.petek.dashboard.domain.FindingView
@@ -49,19 +51,25 @@ import az.petek.dashboard.domain.TriageCategory
 import az.petek.dashboard.domain.TriageVerdictView
 import az.petek.dashboard.domain.TriageView
 import az.petek.evidence.domain.ArtifactRecord
+import az.petek.evidence.domain.ReleaseNames
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunResult
-import az.petek.evidence.domain.StepKind
-import az.petek.evidence.domain.StepStatus
 import az.petek.evidence.domain.Verdict
+import az.petek.identity.domain.Identity
 import az.petek.llm.domain.LlmProviderKey
 import az.petek.orchestration.domain.DefaultActorResolver
 import az.petek.orchestration.domain.MonitorView
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunSummary
+import az.petek.reporting.application.CompareRunsUseCase
+import az.petek.reporting.domain.ComparisonRefusedException
 import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
+import az.petek.reporting.domain.StepChange
+import az.petek.reporting.domain.StepTable
+import az.petek.reporting.domain.visual.VisualGate
+import az.petek.reporting.infrastructure.LookLines
 import az.petek.scenarios.application.TriageItem
 import az.petek.scenarios.domain.CodeTriage
 import az.petek.scenarios.domain.EvidenceRefType
@@ -107,7 +115,8 @@ private val logger = KotlinLogging.logger {}
  *   "Hədəf sayt" when one is given, with `PETEK_TARGET` semantics ([RunTargets]); an explorer draft only on the site it
  *   was written for, since its steps open that site's pages. The plan is published to the
  *   orchestrator screen before the first step ([PanelRunWatch]); the run itself goes on in [scope].
- * - **One at a time.** The owner's runs and the explorer's session setup ([runKeepingData]) share one slot; a second
+ * - **One at a time.** The owner's runs and the explorer's session setup ([runKeepingData]) share one slot, and the
+ *   evidence store's [az.petek.app.runs.RunLock] keeps a run of another process (`petek run`) out too; a second
  *   start is a [PanelConflictException]. [cancelRun] cancels the running one; its teardown and report still happen.
  * - **History** comes from the run repository, newest first, with the scenario version each run executed.
  * - **Triage** of a finished run runs in [scope] (a closed browser tab does not stop it) and is resumable.
@@ -129,7 +138,33 @@ internal class PanelRunsAdapter(
     private val triaged: MutableSet<RunId> = ConcurrentHashMap.newKeySet()
     private val evidenceShown = ConcurrentHashMap<ArtifactId, ArtifactRecord>()
 
-    override suspend fun startRun(request: RunRequest): RunStartView {
+    override suspend fun startRun(request: RunRequest): RunStartView = launch(request).view
+
+    /** A run [launch] started: what "Run et" answers, and a way to wait for the run's end. */
+    class LaunchedRun internal constructor(
+        val view: RunStartView,
+        private val job: Deferred<RunSummary?>,
+    ) {
+        /** Returns once the run ended (torn down and reported), also when it was stopped. */
+        suspend fun join() = job.join()
+
+        /**
+         * The runner's own summary once the run ended: its outcome and why, by the same tally `petek run` exits by.
+         * Null when the run was stopped or broke.
+         */
+        suspend fun summary(): RunSummary? =
+            try {
+                job.await()
+            } catch (e: CancellationException) {
+                if (currentCoroutineContext().isActive) null else throw e
+            }
+
+        /** Stops the run as "Dayandır" does: its teardown and report still happen. */
+        fun cancel() = job.cancel()
+    }
+
+    /** [startRun] for "Test et", which follows the run it started to its end (Faza 25.3). */
+    suspend fun launch(request: RunRequest): LaunchedRun {
         val problems = request.problems()
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val version = scenarios.runnable(request)
@@ -153,24 +188,41 @@ internal class PanelRunsAdapter(
         }
         val target = asked ?: own?.let { PanelTargets.allowed(it.toString(), container.config.targetPolicy, PanelInstructions.TARGET) }
         val lease = targets.lease(target)
-        val campaign =
+        val cleared =
             try {
                 load(version, lease, request.testers).let {
                     PanelTargets.allowed(it.settings.target.toString(), lease.container.config.targetPolicy, PanelInstructions.TARGET)
                     requireOwnSettings(it)
                     PanelTargets.reachable(it.settings.target, lease.container.reachability, PanelInstructions.TARGET)
-                    PanelTargets.runnable(it, lease.container.ownership, PanelInstructions.TARGET)
+                    PanelTargets.runnable(it, lease.container.ownership, PanelInstructions.TARGET).also { cleared ->
+                        PanelTargets.apiHost(
+                            cleared.campaign,
+                            lease.container.config.targetPolicy,
+                            lease.container.ownership,
+                            PanelInstructions.TARGET,
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 lease.close()
                 throw e
             }
-        val (started, job) = begin(campaign, lease, RunOptions(), request.headful)
+        val campaign = cleared.campaign
+        // Told before the run starts: the caller (the page, a host AI over MCP) gets them with the run's id.
+        val warnings = warningsFor(campaign, lease.container)
+        val release = request.release?.trim()?.takeIf { it.isNotEmpty() }
+        val (started, job) = begin(campaign, lease, RunOptions(ownSite = cleared.ownSite, release = release), request.headful)
         // A closed browser tab cancels this request, never the run: it goes on and the board shows it.
         val runId = awaitStart(started, job)
-        warnAboutUncoveredSteps(campaign, lease.container)
-        return RunStartView(runId, version.id.value, campaign.settings.testers)
+        warnings.forEach { board.message("Diqqət: $it") }
+        return LaunchedRun(RunStartView(runId, version.id.value, campaign.settings.testers, warnings), job)
     }
+
+    /** The history row of [runId]; null for an unknown run. */
+    suspend fun summary(runId: RunId): RunSummaryView? = container.runs.find(runId)?.let { summary(it, scenarios.versionsByHash()) }
+
+    /** Whether a run is going. */
+    fun busy(): Boolean = synchronized(lock) { current?.isActive == true }
 
     override suspend fun cancelRun(): Boolean {
         val running = synchronized(lock) { current?.takeIf { it.isActive } } ?: return false
@@ -191,7 +243,12 @@ internal class PanelRunsAdapter(
         return StabilityView(
             repeatGroup = repeatGroup,
             runs = runs.map { it.runId },
-            steps = rows.filter { it.scenarioStep != HARNESS_STEP }.map { StepStabilityView(it.scenarioStep, it.runs, it.passed) },
+            steps =
+                rows
+                    .filter { it.scenarioStep != HARNESS_STEP }
+                    .map {
+                        StepStabilityView(it.scenarioStep, it.runs, it.passed, it.siteFailures, it.agentFailures, it.environmentFailures)
+                    },
         )
     }
 
@@ -221,6 +278,98 @@ internal class PanelRunsAdapter(
                 .resolve(REPORT_DIRECTORY)
                 .takeIf { it.resolve(REPORT_FILE).exists() }
         }
+
+    override suspend fun compare(
+        runId: RunId,
+        baseline: String?,
+        visual: String?,
+    ): ComparisonView {
+        val gate =
+            when {
+                visual.isNullOrBlank() || visual.equals("report", ignoreCase = true) -> VisualGate.REPORT
+                visual.equals("fail", ignoreCase = true) -> VisualGate.FAIL
+                else -> throw PanelRequestException(listOf(FieldProblem("visual", "Görünüş qapısı \"report\" və ya \"fail\" olur.")))
+            }
+        val choice =
+            when {
+                baseline.isNullOrBlank() ||
+                    baseline.equals(
+                        ReleaseNames.PREVIOUS,
+                        ignoreCase = true,
+                    )
+                -> CompareRunsUseCase.Baseline.Previous
+
+                ReleaseNames.RUN_ID.matches(baseline) -> CompareRunsUseCase.Baseline.Run(RunId(baseline))
+
+                else -> CompareRunsUseCase.Baseline.Release(baseline)
+            }
+        val comparison =
+            try {
+                container.compareRuns.compare(runId, choice, gate).comparison
+            } catch (e: RunNotFoundException) {
+                throw PanelNotFoundException("Run tapılmadı: ${e.message}")
+            } catch (e: ComparisonRefusedException) {
+                throw PanelConflictException(refusal(e, baseline))
+            }
+        return ComparisonView(
+            runId = comparison.current.runId,
+            release = comparison.current.release,
+            baseline = comparison.baseline.runId,
+            baselineRelease = comparison.baseline.release,
+            scenario = comparison.current.campaignName,
+            scenarioChanged = comparison.scenarioChanged,
+            regressed = comparison.regressed,
+            newFailures = comparison.newFailures.map { it.scenarioStep },
+            fixed = comparison.fixed.map { it.scenarioStep },
+            stillFailing = comparison.steps.filter { it.change == StepChange.STILL_FAILING }.map { it.scenarioStep },
+            slower = SlowerLines.PANEL.of(comparison),
+            notComparable = comparison.steps.filter { it.change == StepChange.NOT_COMPARABLE }.map { it.scenarioStep },
+            // The page of this very pair: opening it never compares again, or with another baseline.
+            pageUrl = "/runs/${runId.value}/report/compare-${comparison.baseline.runId.value}.html",
+            looksChanged = LookLines.changed(comparison),
+            looksNotComparable = LookLines.notComparable(comparison),
+            visualGate = gate.name.lowercase(),
+        )
+    }
+
+    /** Why two runs are not compared, said to the owner. */
+    private fun refusal(
+        e: ComparisonRefusedException,
+        baseline: String?,
+    ): String =
+        when (e.reason) {
+            ComparisonRefusedException.Reason.NO_BASELINE -> {
+                if (baseline.isNullOrBlank() || baseline.equals(ReleaseNames.PREVIOUS, ignoreCase = true)) {
+                    "Müqayisə üçün bu ssenarinin əvvəlki, bitmiş run-ı yoxdur."
+                } else {
+                    "Bu ssenarinin \"$baseline\" versiyasını yoxlayan bitmiş run-ı yoxdur (versiya run başlayanda adlanır)."
+                }
+            }
+
+            ComparisonRefusedException.Reason.OTHER_SCENARIO -> {
+                "Yalnız eyni ssenarinin run-ları müqayisə olunur."
+            }
+
+            ComparisonRefusedException.Reason.NOT_FINISHED -> {
+                "Run hələ bitməyib; bitəndən sonra müqayisə edin."
+            }
+
+            ComparisonRefusedException.Reason.SAME_RUN -> {
+                "Run özü ilə müqayisə olunmur; əvvəlki run-ı və ya versiyanı seçin."
+            }
+        }
+
+    override suspend fun reportPdf(runId: RunId): Path? {
+        if (reportDirectory(runId) == null) return null
+        return try {
+            container.reportPdf.export(runId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.warn(e) { "The report of $runId could not be printed as a PDF" }
+            throw PanelUnavailableException("Hesabat PDF kimi çap edilə bilmədi: ${e.message ?: e::class.simpleName}")
+        }
+    }
 
     override suspend fun findings(runId: RunId): List<FindingView> {
         val findings = container.evidenceQuery.findings(runId)
@@ -362,6 +511,14 @@ internal class PanelRunsAdapter(
                     lease.close()
                     throw PanelConflictException("Artıq bir run gedir. Bitməsini gözləyin və ya dayandırın.")
                 }
+                // Another process (`petek run`, another panel) may run over the same evidence store too.
+                val held =
+                    try {
+                        container.runLock.acquire("the panel")
+                    } catch (e: RunLockBusyException) {
+                        lease.close()
+                        throw PanelConflictException("Başqa run gedir (${e.holder}). Bitməsini gözləyin.")
+                    }
                 watch.expect(campaign, started)
                 val config = lease.container.config
                 val runner = lease.container.campaignRunner(headless = config.browserHeadless && !headful)
@@ -379,7 +536,10 @@ internal class PanelRunsAdapter(
                             started.completeExceptionally(e)
                             null
                         } finally {
-                            withContext(NonCancellable) { lease.close() }
+                            withContext(NonCancellable) {
+                                lease.close()
+                                held.close()
+                            }
                         }
                     }.also { job ->
                         // A job cancelled before its body ran never reaches the finally above.
@@ -387,6 +547,7 @@ internal class PanelRunsAdapter(
                             if (!entered.get()) {
                                 started.cancel()
                                 lease.close()
+                                held.close()
                             }
                         }
                         current = job
@@ -499,29 +660,87 @@ internal class PanelRunsAdapter(
         return resized
     }
 
-    /** Tells the board which steps nobody can run with this tester count (they will be skipped); never blocks. */
-    private fun warnAboutUncoveredSteps(
+    /**
+     * What the campaign's make-up leaves undone, said before the run starts; never blocks. The validator's warnings, a
+     * manual mail source for many testers, and what the testers the run will plan ([AppContainer.previewIdentities],
+     * with the owner's accounts of its `login` testers) leave undone ([coverageWarnings]). A registry that cannot be built
+     * is said too, never passed over in silence: its checks were not made.
+     */
+    private fun warningsFor(
         campaign: Campaign,
         container: AppContainer,
-    ) {
-        try {
-            val identities =
-                container.identityGenerator
-                    .generate(
-                        IdentitySpecs.of(campaign.settings, container.config.mailDomain, container.config.mailInbox),
-                        RunTags.forPlan(campaign.sourceHash, campaign.settings.seed),
-                    ).identities
-            val uncovered = CampaignScaler.uncoveredSteps(campaign, identities, DefaultActorResolver())
-            if (uncovered.isNotEmpty()) {
-                board.message(
-                    "Diqqət: ${campaign.settings.testers} testerlə bu addımları icra edən olmayacaq və onlar buraxılacaq: " +
-                        uncovered.joinToString { it.id },
+    ): List<String> =
+        buildList {
+            DefaultCampaignValidator(container.templateRenderer).warnings(campaign).forEach { add(it.toString()) }
+            if (container.config.mailSource == MailSource.MANUAL && campaign.settings.testers > MANUAL_MAIL_TESTERS) {
+                add(
+                    "PETEK_MAIL_SOURCE=manual: ${campaign.settings.testers} testerin hər birinin e-poçt kodunu siz " +
+                        "yazırsınız; sürü üçün test poçt qutusu (mailpit, test-api, imap) uyğundur.",
                 )
             }
-        } catch (e: Exception) {
-            logger.debug(e) { "uncovered steps could not be checked" }
+            val identities =
+                try {
+                    container.previewIdentities(campaign)
+                } catch (e: Exception) {
+                    logger.debug(e) { "the testers of the run could not be planned ahead" }
+                    val why = (e as? PetekException)?.message ?: e::class.simpleName
+                    add(
+                        "Testerlərin reyestri əvvəlcədən qurula bilmədi ($why); ona görə heç kimin icra etməyəcəyi addımlar, " +
+                            "dalğaların gözləmələri və yarışları yoxlanmadı.",
+                    )
+                    return@buildList
+                }
+            addAll(coverageWarnings(campaign, identities))
         }
-    }
+
+    /**
+     * Which steps start with nobody to perform them (in the run, or wave by wave: those some waves skip and those no
+     * wave performs), which receivers a wave leaves without an emitter, and which races the waves leave with a single
+     * racer (they never pass there: the verdict is inconclusive).
+     */
+    private fun coverageWarnings(
+        campaign: Campaign,
+        identities: List<Identity>,
+    ): List<String> =
+        buildList {
+            val size = campaign.settings.waveSize
+            val gaps = CampaignScaler.stepsWithoutActors(campaign, identities, DefaultActorResolver())
+            val nowhere = gaps.filter { it.waves.isEmpty() }
+            if (nowhere.isNotEmpty()) {
+                add(
+                    "${campaign.settings.testers} testerlə bu addımları icra edən olmayacaq, ona görə run keçməyəcək: " +
+                        nowhere.joinToString { it.step.id },
+                )
+            }
+            gaps.filter { it.waves.isNotEmpty() }.forEach { gap ->
+                val nobody = "dalğa ölçüsü $size ilə '${gap.step.actors.raw}' ${inWaves(gap.waves)} heç kimə uyğun gəlmir"
+                add(
+                    if (gap.covered) {
+                        "$nobody, ona görə '${gap.step.id}' addımı orada buraxılacaq; digər dalğalar onu icra edir."
+                    } else {
+                        "$nobody; '${gap.step.id}' addımını heç bir dalğada icra edən olmayacaq, ona görə run keçməyəcək."
+                    },
+                )
+            }
+            CampaignScaler.waitsWithoutEmitter(campaign, identities, DefaultActorResolver()).forEach { gap ->
+                val never = if (gap.covered) "" else " Heç bir dalğada ikisi bir yerdə deyil, ona görə bu addım heç yoxlanmayacaq."
+                add(
+                    "dalğa ölçüsü $size olduğu üçün '${gap.step.id}' addımı " +
+                        "${gap.waves.joinToString()} nömrəli dalğada '${gap.step.waitFor?.event}' hadisəsini gözləyir, " +
+                        "amma orada onu emit edən '${gap.emitter.id}' addımının testeri yoxdur; oradakı qəbul edənlər " +
+                        "buraxılacaq.$never",
+                )
+            }
+            CampaignScaler.racesSplitByWaves(campaign, identities, DefaultActorResolver()).forEach { split ->
+                add(
+                    "dalğa ölçüsü $size olduğu üçün '${split.step.id}' yarışının ${inWaves(split.waves)} yalnız bir " +
+                        "iştirakçı qalır və yarış orada keçmir; yarış üçün eyni dalğada ən azı 2 iştirakçı lazımdır.",
+                )
+            }
+        }
+
+    private fun inWaves(waves: List<Int>): String =
+        if (waves.size == 1) "${waves.single()} nömrəli dalğada" else "${waves.joinToString()} nömrəli dalğalarda"
 
     // --- views ----------------------------------------------------------------------------------------------------
 
@@ -531,7 +750,8 @@ internal class PanelRunsAdapter(
     ): RunSummaryView {
         val runId = run.runId
         val query = container.evidenceQuery
-        val steps = query.steps(runId).filter { it.kind == StepKind.DO || it.kind == StepKind.RUN }
+        // Counted as the report counts them, so the run list, the test's end note and the report agree.
+        val steps = StepTable.counts(query.steps(runId))
         val assertions = query.assertions(runId)
         val usage = query.usage(runId)
         return RunSummaryView(
@@ -543,11 +763,8 @@ internal class PanelRunsAdapter(
             durationMs = run.endedAt?.let { it.toEpochMilli() - run.startedAt.toEpochMilli() },
             result = run.result,
             testers = container.identities.findByRun(runId).size,
-            stepsPassed = steps.count { it.status == StepStatus.PASSED },
-            stepsFailed =
-                steps.count {
-                    it.status == StepStatus.FAILED || it.status == StepStatus.ERROR || it.status == StepStatus.BLOCKED
-                },
+            stepsPassed = steps.passed,
+            stepsFailed = steps.failed,
             assertionsPassed = assertions.count { it.verdict == Verdict.PASSED },
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             findings = query.findings(runId).size,
@@ -559,6 +776,8 @@ internal class PanelRunsAdapter(
             reportAvailable = reportDirectory(runId) != null,
             triaged = runId in triaged || container.triageResults.forRun(runId).any { it.verdict != null },
             scenarioId = executed(run, versions)?.id?.value,
+            assertionsInconclusive = assertions.count { it.verdict == Verdict.INCONCLUSIVE },
+            release = run.release,
         )
     }
 
@@ -573,7 +792,13 @@ internal class PanelRunsAdapter(
 
     private suspend fun triageNow(runId: RunId): List<TriageItem> =
         try {
-            val passwords = container.identities.findByRun(runId).map { it.password }
+            // The generated testers' passwords; the owner's accounts' are never stored, the container masks the
+            // profiles' current ones (an old one changed since is not, the run's own redaction kept it out, R04).
+            val passwords =
+                container.identities
+                    .findByRun(runId)
+                    .filterNot { it.ownAccount }
+                    .map { it.password }
             container.triage(passwords).execute(runId).items
         } catch (e: ScenarioNotInCatalogException) {
             throw PanelConflictException(
@@ -688,6 +913,9 @@ internal class PanelRunsAdapter(
     private fun withoutContacts(text: String): String = Contacts.masked(text)
 
     private companion object {
+        /** More testers than the explorer's few sessions: typing every code by hand no longer suits. */
+        const val MANUAL_MAIL_TESTERS = 3
+
         /** The newest runs the history shows; each summary reads its run's evidence, so the list stays bounded. */
         const val HISTORY_LIMIT = 100
 

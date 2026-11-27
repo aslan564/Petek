@@ -100,6 +100,7 @@ object ReportTestData {
         startOffsetMs: Long = 0,
         durationMs: Long = 1_000,
         runId: RunId = RUN_ID,
+        correlation: String = "cor_$stepId",
     ) = StepRecord(
         stepId = StepId(stepId),
         runId = runId,
@@ -113,7 +114,7 @@ object ReportTestData {
         durationMs = durationMs,
         status = status,
         detail = detail,
-        correlationId = CorrelationId("cor_$stepId"),
+        correlationId = CorrelationId(correlation),
     )
 
     fun event(

@@ -4,9 +4,10 @@
 Pətək çoxistifadəçili AI test platformasıdır: N AI tester agenti istənilən hədəf saytda eyni anda ayrı
 brauzer sessiyalarında işləyir, orkestrator onları koordinasiya edir, nəticə sübut əsaslı hesabatdır.
 Tam plan: `docs/PLAN.md`. Arxitektura və modul xəritəsi: `docs/ARCHITECTURE.md`. Hər tələbin arxitektura sənədi:
-`docs/requirements/` (R01–R15, dəyişiklik toxunduğu tələbi yeniləyir). Hədəf saytın test kontraktı
+`docs/requirements/` (R01–R16, dəyişiklik toxunduğu tələbi yeniləyir). Hədəf saytın test kontraktı
 (`data-testid`, `/test/...` endpointləri): `docs/TARGET_CONTRACT.md`. Qərarlar: `docs/adr/`. İstifadəçi sənədi:
 `README.md` (EN) və `README.az.md` (AZ). Töhfə və təhlükəsizlik qaydaları: `CONTRIBUTING.md`, `SECURITY.md`.
+Açıq işlərin prioriteti və sırası: `docs/TECH_DEBT.md` (yeni işə başlamazdan əvvəl bax).
 Tapşırığa başlamazdan əvvəl uyğun bölməni oxu.
 
 ## Sahib, lisenziya və branch-lar
@@ -66,13 +67,15 @@ Spotless/ktlint, Kover. Paket kökü: `az.petek`.
 13. Pətək universal alətdir, heç bir konkret sayt, müştəri və ya şirkət üçün yazılmayıb: kodda, testlərdə, sənədlərdə,
     nümunələrdə və konfiqurasiyada heç bir real saytın/məhsulun adı keçmir. Nümunələr neytral adlarla yazılır
     (`staging.example.com`, `portal.example`, `*.test`, "Demo Portal"); bir saytın ayarları yalnız sahibin öz hədəf
-    profilində (`targets/<ad>.yaml`) olur.
+    profilində (`targets/<ad>.yaml`) olur. Sahibin öz demo saytları da istisna deyil (2026-09-30): sahib onları öz AI-ı
+    ilə öz iş qovluğunda sınayır; onların profili, ssenarisi və nəticəsi repoya düşmür, heç bir xüsusiyyəti koda
+    yazılmır.
 
 ## Əmrlər
     docker compose up -d                                   # Mailpit :1025 / :8025
     ./gradlew build                                        # compile + unit testlər + ktlint + lisenziya başlıqları + arxitektura testləri
     ./gradlew spotlessApply                                # formatlama
-    ./gradlew e2eTest                                      # fake target + real Chromium ilə e2e (panel, e2e modulu, 30 sessiyalı izolyasiya sübutu)
+    ./gradlew e2eTest                                      # fake target + real Chromium ilə e2e (panel, 30 testerli contract demo, e2e modulu, 30 sessiyalı izolyasiya sübutu)
     ./gradlew :e2e:liveTest                                # real LLM ilə (sizin öz AI planınızı/kvotanızı işlədir)
     ./gradlew :testing:fake-target:run                     # lokal fake target: http://127.0.0.1:18080, poçt 18025
     ./gradlew :app:run --args="--env-file .env.fake-target doctor"   # fake saytla yoxlama (IntelliJ: hazır run konfiqurasiyaları)

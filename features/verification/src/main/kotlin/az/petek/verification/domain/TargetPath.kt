@@ -11,7 +11,9 @@
 
 package az.petek.verification.domain
 
+import az.petek.campaign.domain.ApiAddress
 import az.petek.campaign.domain.TemplateContext
+import java.net.URI
 
 /**
  * Request paths of `oracle` and `http_status` assertions, which are sent to the target (the latter with the agent's
@@ -36,6 +38,8 @@ internal object TargetPath {
             lastId = context.lastId?.let(::encode),
             self = context.self.mapValues { encode(it.value) },
             eventIds = context.eventIds.mapValues { encode(it.value) },
+            testers = context.testers.mapValues { (_, fields) -> fields.mapValues { encode(it.value) } },
+            pass = context.pass?.let(::encode),
         )
 
     /** Percent-encodes [value] as UTF-8 so it can only ever be one path segment or one query value. */
@@ -52,8 +56,15 @@ internal object TargetPath {
             }
         }
 
-    /** Why [path] must not be requested, or null when it is a plain path on the target. */
-    fun problem(path: String): String? {
+    /**
+     * Why [path] must not be requested, or null when it is a plain path on the target, or on the site's API host
+     * ([apiOrigin], a full `api_prefix`) followed by such a path.
+     */
+    fun problem(
+        path: String,
+        apiOrigin: URI? = null,
+    ): String? {
+        if (apiOrigin != null && ApiAddress.onOrigin(path, apiOrigin)) return problem(path.substring(apiOrigin.toString().length))
         val route = path.substringBefore('?').substringBefore('#')
         return when {
             !path.startsWith('/') -> "must start with '/' (absolute URLs are not allowed)"

@@ -74,7 +74,7 @@ class RunPlansTest {
                 parallel: true
                 do: "Eyni ticketi təsdiqlə"
                 assert:
-                  - only_one_succeeds: true
+                  - only_one_succeeds: {request: "POST .*/approve"}
               - id: forbidden
                 actor: employee[dept=IT, n=1]
                 do: "Təsdiqləməyə çalış"
@@ -123,7 +123,7 @@ class RunPlansTest {
         plan.steps[3].waitFor shouldBe "announcement_created"
         plan.steps[3].assertions shouldContainExactly listOf("visible_text 'Sabah iclas' within 10s", "latency_max 5s")
         plan.steps[4].parallel shouldBe true
-        plan.steps[4].assertions shouldContainExactly listOf("only_one_succeeds")
+        plan.steps[4].assertions shouldContainExactly listOf("only_one_succeeds POST .*/approve")
         plan.steps[5].assertions shouldContainExactly
             listOf("not_visible [data-testid=approve]", "http_status POST /api/tickets/1/approve = 403")
     }

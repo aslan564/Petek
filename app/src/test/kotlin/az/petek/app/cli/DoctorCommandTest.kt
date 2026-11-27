@@ -120,6 +120,28 @@ class DoctorCommandTest {
         }
 
     @Test
+    fun `the doctor asks the test API at the site profile's own path, and a page there is no test API`() =
+        runBlocking<Unit> {
+            Files.createDirectories(dir.resolve("targets"))
+            Files.writeString(
+                dir.resolve("targets/demo.yaml"),
+                """
+                target:
+                  name: demo
+                  url: ${target.baseUrl}
+                  test_api: {token: '${'$'}{PETEK_TEST_TOKEN}', paths: {otp: '/qa/otp/{phone}'}}
+                """.trimIndent(),
+            )
+
+            val result = cli("PETEK_TARGET" to "demo").run("doctor")
+
+            result.statusCode shouldBe 1
+            val testApi = row(result.stdout, "Test API")
+            testApi shouldContain "GET /qa/otp/%2B994500000000"
+            testApi shouldContain "no test API there"
+        }
+
+    @Test
     fun `a site without a test API shows it as not used and the doctor still passes`() =
         runBlocking<Unit> {
             val result = cli("PETEK_ORACLE" to "none", "PETEK_TEST_TOKEN" to "").run("doctor")

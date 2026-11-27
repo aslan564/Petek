@@ -21,6 +21,7 @@ import az.petek.campaign.domain.EmitSpec
 import az.petek.campaign.domain.IdSource
 import az.petek.campaign.domain.OnFail
 import az.petek.campaign.domain.RegistrationQuota
+import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.RoleQuota
 import az.petek.campaign.domain.ScenarioStep
 import az.petek.campaign.domain.StepAction
@@ -60,6 +61,7 @@ fun step(
     phase: StepPhase = StepPhase.MAIN,
     emits: String? = null,
     idSource: IdSource? = null,
+    emitsRequest: RequestPattern? = null,
     waitFor: String? = null,
     waitTimeout: Duration = 30.seconds,
     parallel: Boolean = false,
@@ -70,7 +72,7 @@ fun step(
     phase = phase,
     actors = actors,
     action = action,
-    emits = emits?.let { EmitSpec(it, idSource) },
+    emits = emits?.let { EmitSpec(it, idSource, emitsRequest) },
     waitFor = waitFor?.let { WaitForSpec(it, waitTimeout) },
     parallel = parallel,
     assertions = assertions,

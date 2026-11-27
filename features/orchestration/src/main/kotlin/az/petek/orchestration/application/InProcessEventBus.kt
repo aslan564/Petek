@@ -15,6 +15,7 @@ import az.petek.core.ids.AgentId
 import az.petek.core.ids.IdGenerator
 import az.petek.core.time.HarnessClock
 import az.petek.orchestration.domain.EventBus
+import az.petek.orchestration.domain.EventOrigin
 import az.petek.orchestration.domain.PublishedEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -26,8 +27,8 @@ import kotlin.time.Duration
 /**
  * The MVP [EventBus]: one per run, in memory, retaining every event until the run ends.
  *
- * Publishing is serialized by a [Mutex] so that the event id, the harness timestamp t0 and the sequence number are
- * taken in the same order (a later sequence never has an earlier t0). Waiters observe a [MutableStateFlow] of the
+ * Publishing is serialized by a [Mutex] so that the event id, the publish time and the sequence number are taken in
+ * the same order (a later sequence is never published earlier; its write, the latency's t0, may be earlier). Waiters observe a [MutableStateFlow] of the
  * newest event per name, so [await] suspends without polling and a waiter that arrives after the publish returns
  * immediately. Because only the newest event per name matters to `wait_for`, older events are kept in [history]
  * for diagnostics but never block a waiter.
@@ -43,6 +44,8 @@ class InProcessEventBus(
         name: String,
         objectId: String?,
         emitter: AgentId,
+        origin: EventOrigin?,
+        pass: Int,
     ): PublishedEvent =
         publishLock.withLock {
             val current = state.value
@@ -52,11 +55,19 @@ class InProcessEventBus(
                     name = name,
                     objectId = objectId,
                     emitter = emitter,
-                    t0 = clock.now(),
+                    publishedAt = clock.now(),
                     sequence = current.lastSequence + 1,
+                    origin = origin,
+                    pass = pass,
                 )
             state.value = current.with(event)
             event
+        }
+
+    override suspend fun carry(event: PublishedEvent): PublishedEvent =
+        publishLock.withLock {
+            val current = state.value
+            event.copy(sequence = current.lastSequence + 1).also { state.value = current.with(it) }
         }
 
     override suspend fun await(

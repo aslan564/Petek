@@ -13,17 +13,29 @@ package az.petek.reporting.application
 
 import az.petek.core.ids.AgentId
 import az.petek.core.ids.RunId
+import az.petek.evidence.domain.ABORT_ACTION
+import az.petek.evidence.domain.AbortDetail
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.AssertionRecord
+import az.petek.evidence.domain.CAPACITY_ACTION
+import az.petek.evidence.domain.COVERAGE_ACTION
+import az.petek.evidence.domain.CapacityDetail
 import az.petek.evidence.domain.EvidenceQuery
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.NotReached
+import az.petek.evidence.domain.ROLL_CALL_ACTION
+import az.petek.evidence.domain.ROSTER_ACTION
+import az.petek.evidence.domain.RosterDetail
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
+import az.petek.evidence.domain.RunResult
+import az.petek.evidence.domain.SkipDetail
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
-import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.UNCOVERED_ACTION
 import az.petek.evidence.domain.UsageRecord
 import az.petek.evidence.domain.Verdict
 import az.petek.reporting.domain.AgentDirectory
@@ -31,16 +43,19 @@ import az.petek.reporting.domain.ExpectedOutcomes
 import az.petek.reporting.domain.FailedAgentRow
 import az.petek.reporting.domain.FailureKeys
 import az.petek.reporting.domain.LatencyStatistics
+import az.petek.reporting.domain.NotReachedRow
+import az.petek.reporting.domain.PageSpeedRow
 import az.petek.reporting.domain.RepeatRunEvidence
 import az.petek.reporting.domain.ReportModel
 import az.petek.reporting.domain.ReportSummary
+import az.petek.reporting.domain.RollCall
 import az.petek.reporting.domain.RunNotFoundException
 import az.petek.reporting.domain.StabilityAnalyzer
 import az.petek.reporting.domain.StabilityRow
 import az.petek.reporting.domain.StepRow
-import java.nio.file.Path
+import az.petek.reporting.domain.StepTable
+import az.petek.reporting.domain.UncoveredRow
 import java.time.Duration
-import kotlin.io.path.invariantSeparatorsPathString
 
 /**
  * Collects everything the report shows for one run from the evidence store (docs/PLAN.md "Sübut bazası və
@@ -65,7 +80,8 @@ class BuildReportUseCase(
         val artifactRecords = query.artifacts(runId)
         val usage = query.usage(runId)
         val names = agents.names(runId)
-        val tableSteps = steps.filter { it.kind in TABLE_KINDS }
+        // The roll call's own records are rows too: a tester × step it did not get to, a step nobody ran.
+        val tableSteps = StepTable.rows(steps)
         val expected = ExpectedOutcomes(steps)
         return ReportModel(
             run = run,
@@ -78,8 +94,83 @@ class BuildReportUseCase(
             stability = stability(run),
             artifactLinks = artifactLinks(runId, artifactRecords),
             usage = usage,
+            coverage =
+                steps
+                    .filter { it.kind == StepKind.SYSTEM && it.action == COVERAGE_ACTION }
+                    .flatMap { it.detail.orEmpty().lines() }
+                    .filter { it.isNotBlank() },
+            pageSpeed = PageSpeedRow.of(query.pageTimings(runId)),
+            rollCall = rollCall(run, steps, assertions, usage, names),
         )
     }
+
+    private fun rollCall(
+        run: RunRecord,
+        steps: List<StepRecord>,
+        assertions: List<AssertionRecord>,
+        usage: List<UsageRecord>,
+        names: Map<AgentId, String>,
+    ): RollCall {
+        val harness = steps.filter { it.kind == StepKind.SYSTEM && it.agentId == null }
+        val planned = RosterDetail.agentIds(harness.lastOrNull { it.action == ROSTER_ACTION }?.detail)
+        val acted = actingAgents(steps, assertions, usage).map { it.value }
+        val notReached =
+            steps
+                .filter { it.kind == StepKind.SYSTEM && it.agentId != null }
+                .mapNotNull { record -> notReached(record, names) }
+                .distinctBy { it.agentId to it.scenarioStep }
+                .sortedWith(compareBy({ AgentId(it.agentId) }, { it.scenarioStep }))
+        return RollCall(
+            planned = planned.sortedBy(::AgentId),
+            acted = acted.sortedBy(::AgentId),
+            notReached = notReached,
+            uncovered =
+                harness
+                    .filter { it.action == UNCOVERED_ACTION || StepTable.isWaveGap(it) }
+                    .map {
+                        UncoveredRow(
+                            it.scenarioStep,
+                            it.detail
+                                .orEmpty()
+                                .substringAfter(':')
+                                .trim(),
+                        )
+                    },
+            abortReason = harness.lastOrNull { it.action == ABORT_ACTION }?.let { AbortDetail.reason(it.detail) },
+            overCapacity = harness.lastOrNull { it.action == CAPACITY_ACTION && CapacityDetail.isOver(it.detail) }?.detail,
+            // Only a concluded run with its roster and a closed roll call says nobody is missing; absence proves nothing.
+            recorded = run.result != RunResult.RUNNING && planned.isNotEmpty() && harness.any { it.action == ROLL_CALL_ACTION },
+        )
+    }
+
+    /**
+     * A tester × step without a result of its own: the roll call's `not_reached` record, or the runner's `skip` of a
+     * tester out since an earlier failure (its gate, its browser) in a step that began without it.
+     */
+    private fun notReached(
+        record: StepRecord,
+        names: Map<AgentId, String>,
+    ): NotReachedRow? {
+        val agentId = record.agentId ?: return null
+        val (key, reason) =
+            when {
+                record.action == NOT_REACHED_ACTION -> NotReached.key(record.detail) to NotReached.why(record.detail)
+                StepTable.isLeftOut(record) -> NotReached.FAILED_EARLIER to SkipDetail.failedEarlierReason(record.detail).orEmpty()
+                else -> return null
+            }
+        return NotReachedRow(agentId.value, names[agentId] ?: agentId.value, record.scenarioStep, key, reason)
+    }
+
+    /** Testers with an action of their own: a step, a check or an AI call, never the harness's records about them. */
+    private fun actingAgents(
+        steps: List<StepRecord>,
+        assertions: List<AssertionRecord>,
+        usage: List<UsageRecord>,
+    ): Set<AgentId> =
+        (
+            steps.filter { it.kind != StepKind.SYSTEM }.mapNotNull { it.agentId } +
+                assertions.mapNotNull { it.agentId } + usage.map { it.agentId }
+        ).toSet()
 
     /**
      * A finding made from a step's failure names no artifact of its own; it gets that step's last screenshot, so every
@@ -131,16 +222,18 @@ class BuildReportUseCase(
         usage: List<UsageRecord>,
         expected: ExpectedOutcomes,
     ): ReportSummary {
-        val agents = steps.mapNotNull { it.agentId } + assertions.mapNotNull { it.agentId } + usage.map { it.agentId }
+        val agents = actingAgents(steps, assertions, usage)
+        // An expected refusal or a lost race is the outcome the step asked for; the panel counts the same way.
+        val counts = StepTable.counts(tableSteps, expected)
         return ReportSummary(
-            // An expected refusal or a lost race is the outcome the step asked for.
-            stepsPassed = tableSteps.count { it.status == StepStatus.PASSED || expected.isExpected(it) },
-            stepsFailed = tableSteps.count(expected::isFailure),
+            stepsPassed = counts.passed,
+            stepsFailed = counts.failed,
             assertionsPassed = assertions.count { it.verdict == Verdict.PASSED },
             assertionsFailed = assertions.count { it.verdict == Verdict.FAILED },
             assertionsSkipped = assertions.count { it.verdict == Verdict.SKIPPED },
             assertionsNotApplicable = assertions.count { it.verdict == Verdict.NOT_APPLICABLE },
-            agents = agents.distinct().size,
+            assertionsInconclusive = assertions.count { it.verdict == Verdict.INCONCLUSIVE },
+            agents = agents.size,
             durationMs = durationMs(run, steps),
             inputTokens = usage.sumOf { it.inputTokens },
             outputTokens = usage.sumOf { it.outputTokens },
@@ -173,7 +266,8 @@ class BuildReportUseCase(
         expected: ExpectedOutcomes,
     ): List<FailedAgentRow> =
         steps
-            .filter { it.agentId != null && it.kind != StepKind.ASSERT && expected.isFailure(it) }
+            // A step a tester did not get to is the roll call's, never the tester's failure.
+            .filter { it.agentId != null && it.kind != StepKind.ASSERT && it.action != NOT_REACHED_ACTION && expected.isFailure(it) }
             .groupBy { requireNotNull(it.agentId) to it.scenarioStep }
             .map { (key, failures) ->
                 val (agentId, scenarioStep) = key
@@ -209,52 +303,25 @@ class BuildReportUseCase(
     private fun artifactLinks(
         runId: RunId,
         records: List<ArtifactRecord>,
-    ): Map<String, String> {
-        val reportDirectory = ReportLayout.directory(artifacts, runId).normalize()
-        return records
-            .mapNotNull { record -> link(reportDirectory, runId, record)?.let { record.artifactId.value to it } }
+    ): Map<String, String> =
+        records
+            .mapNotNull { record -> ReportLayout.link(artifacts, runId, record)?.let { record.artifactId.value to it } }
             .toMap()
-    }
-
-    /**
-     * Relative from the report directory to the file. When the store cannot resolve the record, or its path cannot
-     * be related to the report directory, the store's layout rule (`<runId>/<owner>/<file>`) is applied to the
-     * recorded path; a recorded path that does not follow it (another run, `..` segments) gets no link at all.
-     */
-    private fun link(
-        reportDirectory: Path,
-        runId: RunId,
-        record: ArtifactRecord,
-    ): String? =
-        try {
-            reportDirectory.relativize(artifacts.resolve(record).normalize()).invariantSeparatorsPathString
-        } catch (_: IllegalArgumentException) {
-            layoutLink(runId, record.relativePath)
-        }
-
-    private fun layoutLink(
-        runId: RunId,
-        relativePath: String,
-    ): String? {
-        val path = relativePath.replace('\\', '/')
-        val prefix = "$runId/"
-        if (!path.startsWith(prefix)) return null
-        val inRun = path.removePrefix(prefix)
-        val segments = inRun.split('/')
-        return if (segments.any { it.isEmpty() || it == "." || it == ".." }) null else "../$inRun"
-    }
 
     /**
      * The screenshot a step row links to: the last one taken in that step record or, for a record without one of its
      * own (the orchestrator's per-actor summary of an action, a wait), the last one the same agent took in the same
-     * scenario step up to that record's end. So every row with an outcome points at evidence (AGENTS.md rule 5).
+     * scenario step up to that record's end. So every row with an outcome points at evidence (AGENTS.md rule 5). A page
+     * look's sub-action links its own main frame ([ArtifactType.VISUAL], recorded first); no other row borrows a look.
      */
     private class Screenshots(
         steps: List<StepRecord>,
         artifacts: List<ArtifactRecord>,
     ) {
         private val shots = artifacts.filter { it.type == ArtifactType.SCREENSHOT }
-        private val lastOfStep = shots.associateBy { it.stepId }
+        private val lastOfStep =
+            artifacts.filter { it.type == ArtifactType.VISUAL }.groupBy { it.stepId }.mapValues { it.value.first() } +
+                shots.associateBy { it.stepId }
         private val takenIn = steps.associateBy { it.stepId }
         private val byActorStep = shots.filter { it.stepId in takenIn }.groupBy { takenIn.getValue(it.stepId).actorStep() }
 
@@ -266,8 +333,6 @@ class BuildReportUseCase(
     }
 
     private companion object {
-        val TABLE_KINDS = setOf(StepKind.DO, StepKind.RUN, StepKind.WAIT)
-
         /** SYSTEM step recorded by the browser feature; its detail lists the transports seen, e.g. `SSE,POLLING`. */
         const val NETWORK_OBSERVATION = "network_observation"
         const val MAX_REASON_LENGTH = 200

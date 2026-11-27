@@ -64,7 +64,7 @@ tasks.withType<Test>().configureEach {
 // The default `test` task stays fast: browser end-to-end and real-LLM tests have their own tasks.
 tasks.named<Test>("test") {
     useJUnitPlatform {
-        excludeTags("e2e", "live")
+        excludeTags("e2e", "live", "scale")
     }
 }
 

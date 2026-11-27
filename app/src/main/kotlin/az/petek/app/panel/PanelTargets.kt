@@ -17,6 +17,7 @@ import az.petek.app.diagnostics.TargetAnswer
 import az.petek.app.diagnostics.TargetReachability
 import az.petek.campaign.domain.Campaign
 import az.petek.campaign.domain.VisitorRun
+import az.petek.campaign.domain.apiOriginInUse
 import az.petek.core.security.TargetPolicy
 import az.petek.core.security.TargetVerdict
 import az.petek.dashboard.domain.FieldProblem
@@ -67,28 +68,12 @@ internal object PanelTargets {
         }
     }
 
-    /**
-     * Refuses a full test on [target] unless its owner proved it is theirs (ADR-0012): a [PanelRequestException] for
-     * [field] telling the owner, in Azerbaijani, which file or DNS record to publish. Nothing is written before.
-     */
-    suspend fun owned(
-        target: URI,
-        ownership: SiteOwnership,
-        field: String,
-    ) {
-        val status = ownership.check(target)
-        if (status is OwnershipStatus.Unverified) {
-            throw PanelRequestException(
-                listOf(
-                    FieldProblem(
-                        field,
-                        "Pətək sayta yalnız sahibliyi təsdiqləndikdən sonra yazır, ona görə ${status.host} üzərində heç nə " +
-                            "test edilmədi. ${proofHowTo(status)} Sonra yenidən başladın.",
-                    ),
-                ),
-            )
-        }
-    }
+    /** A campaign cleared to start ([runnable]), and whether its site's owner proved it is theirs or it is local. */
+    data class Cleared(
+        val campaign: Campaign,
+        /** Only then may its testers go out through the owner's proxies (Faza 21). */
+        val ownSite: Boolean,
+    )
 
     /**
      * The run of [campaign] as it may start: on a site whose owner proved it is theirs (ADR-0012) or a local one any
@@ -100,11 +85,11 @@ internal object PanelTargets {
         campaign: Campaign,
         ownership: SiteOwnership,
         field: String,
-    ): Campaign {
+    ): Cleared {
         val status = ownership.check(campaign.settings.target)
-        if (status !is OwnershipStatus.Unverified) return campaign
+        if (status !is OwnershipStatus.Unverified) return Cleared(campaign, ownSite = true)
         val problems = VisitorRun.findProblems(campaign)
-        if (problems.isEmpty()) return campaign
+        if (problems.isEmpty()) return Cleared(campaign, ownSite = false)
         throw PanelRequestException(
             listOf(
                 FieldProblem(
@@ -117,6 +102,40 @@ internal object PanelTargets {
                 ),
             ),
         )
+    }
+
+    /**
+     * The site's API on its own host (a full `api_prefix`, 2026-09-30), when [campaign]'s `http_status` checks call it:
+     * allowed by [policy] and proved as the owner's, like the target, so no one's verified site can point Pətək's checks
+     * at somebody else's server. Otherwise a [PanelRequestException] for [field], in Azerbaijani; nothing is written.
+     */
+    suspend fun apiHost(
+        campaign: Campaign,
+        policy: TargetPolicy,
+        ownership: SiteOwnership,
+        field: String,
+    ) {
+        val api = campaign.apiOriginInUse ?: return
+        val verdict = policy.verify(api)
+        if (verdict is TargetVerdict.Refused) {
+            val why = refusal(api, policy, verdict)
+            throw PanelRequestException(
+                listOf(FieldProblem(field, "Kampaniyanın http_status yoxlamaları saytın API ünvanına (${api.host}) gedir: $why")),
+            )
+        }
+        val status = ownership.check(api)
+        if (status is OwnershipStatus.Unverified) {
+            throw PanelRequestException(
+                listOf(
+                    FieldProblem(
+                        field,
+                        "Kampaniyanın http_status yoxlamaları saytın API ünvanına (${status.host}) gedir; Pətək ora yalnız onun da " +
+                            "sizin olduğu sübut olunandan sonra sorğu göndərir, ona görə heç nə test edilmədi. " +
+                            "${proofHowTo(status)} Sonra yenidən başladın.",
+                    ),
+                ),
+            )
+        }
     }
 
     /** Why a campaign is not a visitor run, said to the owner. */

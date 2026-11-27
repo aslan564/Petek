@@ -120,6 +120,51 @@ class PanelHttpTest {
             history["scenarioId"]!!.jsonPrimitive.content shouldBe approved
             history["reportUrl"]!!.jsonPrimitive.content shouldBe "/runs/${runId.value}/report/"
             get("/runs/${runId.value}/report/").statusCode() shouldBe 200
+            // The report as a PDF: printed when asked for, from the single-file page, and sent as a download.
+            history["pdfUrl"]!!.jsonPrimitive.content shouldBe "/runs/${runId.value}/report/report.pdf"
+            get("/runs/${runId.value}/report/report.pdf").let {
+                it.statusCode() shouldBe 200
+                it.body() shouldBe "%PDF-fake share.html"
+                it.headers().firstValue("Content-Type").get() shouldBe "application/pdf"
+                it.headers().firstValue("Content-Disposition").get() shouldContain "petek-${runId.value}.pdf"
+            }
+            get("/runs/run_unknown/report/report.pdf").statusCode() shouldBe 404
+            // The first run of the scenario has nothing to be compared with; a second one, of a named release, has.
+            get("/api/runs/${runId.value}/compare").let {
+                it.statusCode() shouldBe 409
+                it.body() shouldContain "əvvəlki, bitmiş run-ı yoxdur"
+            }
+            get("/runs/${runId.value}/report/compare.html").statusCode() shouldBe 409
+            post("/api/runs", """{"scenarioId":"$approved","testers":2,"release":"v 1"}""").statusCode() shouldBe 400
+            val second =
+                RunId(
+                    json(post("/api/runs", """{"scenarioId":"$approved","testers":2,"release":"v1.4.2"}"""))
+                        .jsonObject["runId"]!!
+                        .jsonPrimitive.content,
+                )
+            panel.ended(second)
+            val pairPage = "/runs/${second.value}/report/compare-${runId.value}.html"
+            json(get("/api/runs/${second.value}/compare")).jsonObject.let {
+                it["baseline"]!!.jsonPrimitive.content shouldBe runId.value
+                it["release"]!!.jsonPrimitive.content shouldBe "v1.4.2"
+                it["pageUrl"]!!.jsonPrimitive.content shouldBe pairPage
+            }
+            json(get("/api/runs/${second.value}/compare?visual=fail")).jsonObject["visualGate"]!!.jsonPrimitive.content shouldBe "fail"
+            get("/api/runs/${second.value}/compare?visual=sideways").statusCode() shouldBe 400
+            get("/runs/${second.value}/report/compare.html?visual=sideways").statusCode() shouldBe 400
+            // The entry page compares when asked for and sends the browser to that pair's own page.
+            get("/runs/${second.value}/report/compare.html?baseline=${runId.value}").let {
+                it.statusCode() shouldBe 302
+                it.headers().firstValue("Location").get() shouldBe pairPage
+            }
+            get(pairPage).let {
+                it.statusCode() shouldBe 200
+                it.body() shouldContain "Versiyaların müqayisəsi"
+            }
+            json(get("/api/runs")).jsonArray.first().jsonObject.let {
+                it["release"]!!.jsonPrimitive.content shouldBe "v1.4.2"
+                it["compareUrl"]!!.jsonPrimitive.content shouldBe "/runs/${second.value}/report/compare.html"
+            }
             post("/api/runs", """{"scenarioId":"$approved","target":"portal.example"}""").statusCode() shouldBe 400
             post("/api/runs/cancel").body() shouldBe """{"cancelled":false}"""
         }

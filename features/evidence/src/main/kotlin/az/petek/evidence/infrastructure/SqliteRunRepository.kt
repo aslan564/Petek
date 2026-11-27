@@ -18,10 +18,15 @@ import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.RunRepository
 import az.petek.evidence.domain.RunResource
 import az.petek.evidence.domain.RunResult
+import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -56,6 +61,7 @@ internal class SqliteRunRepository(
                         it[repeatGroup] = run.repeatGroup
                         it[repeatIndex] = run.repeatIndex
                         it[workspaceId] = run.workspaceId.value
+                        it[release] = run.release
                     }.insertedCount
             }
         require(inserted == 1) { "Run ${run.runId} already exists" }
@@ -105,6 +111,32 @@ internal class SqliteRunRepository(
                 .map { it.toRunRecord() }
         }
     }
+
+    override suspend fun latestFinished(
+        campaignName: String,
+        except: RunId,
+        release: String?,
+        startedBefore: Instant?,
+        outsideGroup: String?,
+    ): RunRecord? =
+        db.read {
+            RunTable
+                .selectAll()
+                .where {
+                    var matches: Op<Boolean> =
+                        (RunTable.campaignName eq campaignName) and (RunTable.runId neq except) and
+                            (RunTable.result neq RunResult.RUNNING)
+                    if (release != null) matches = matches and (RunTable.release eq release)
+                    if (startedBefore != null) matches = matches and (RunTable.startedAt less startedBefore)
+                    if (outsideGroup != null) {
+                        matches = matches and (RunTable.repeatGroup.isNull() or (RunTable.repeatGroup neq outsideGroup))
+                    }
+                    matches
+                }.orderBy(RunTable.startedAt to SortOrder.DESC, RunTable.seq to SortOrder.DESC)
+                .limit(1)
+                .firstOrNull()
+                ?.toRunRecord()
+        }
 
     override suspend fun byRepeatGroup(group: String): List<RunRecord> =
         db.read {
@@ -167,6 +199,7 @@ private fun ResultRow.toRunRecord() =
         repeatGroup = this[RunTable.repeatGroup],
         repeatIndex = this[RunTable.repeatIndex],
         workspaceId = WorkspaceId(this[RunTable.workspaceId]),
+        release = this[RunTable.release],
     )
 
 private fun ResultRow.toRunResource() =

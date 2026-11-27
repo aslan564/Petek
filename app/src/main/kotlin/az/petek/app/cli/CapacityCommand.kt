@@ -55,7 +55,7 @@ class CapacityCommand : PetekSubcommand("capacity") {
                 }
             val advice =
                 RecommendCapacityUseCase(
-                    hostProbe = SystemHostResourceProbe(),
+                    hostProbe = session.runtime.hostResources,
                     costProbe = BrowserSessionCostProbe(container.browserEngine, browserConfig),
                 ).execute(contextsPerBrowser = browserConfig.contextsPerBrowser, measurement = measurement)
             if (json) {

@@ -37,7 +37,8 @@ class TestPatternLibraryTest {
     fun `every site gets the blind site-wide checks, even with an empty model, each naming its evidence tier`() {
         val ideas = library.ideas(Models.model(emptyList(), emptyList()))
 
-        ideas.map { it.pattern }.toSet() shouldBe TestPattern.entries.filter { it.siteWide }.toSet()
+        // The empty list check needs a list the visitor saw.
+        ideas.map { it.pattern }.toSet() shouldBe TestPattern.entries.filter { it.siteWide }.toSet() - TestPattern.EMPTY_LISTS
         ideas.all { it.actionId == TestPatternLibrary.SITE } shouldBe true
         ideas.single { it.pattern == TestPattern.CONSOLE_ERRORS }.rationale shouldContain "(ui_network)"
     }
@@ -55,6 +56,18 @@ class TestPatternLibraryTest {
         library.ideas(visitorsOnly).map { it.pattern } shouldNotContain TestPattern.SESSION_EXPIRY
         library.ideas(visitorsOnly).map { it.pattern } shouldContain TestPattern.MOBILE_VIEWPORT
         library.ideas(withLogin).map { it.pattern } shouldContain TestPattern.SESSION_EXPIRY
+    }
+
+    @Test
+    fun `only a site whose visitor saw a list gets the empty list check`() {
+        val blog =
+            Models.model(
+                listOf(Models.page("/blog").copy(lists = mapOf("/posts/{id}" to 12))),
+                emptyList(),
+                roles = listOf("anonymous"),
+            )
+
+        library.ideas(blog).single { it.pattern == TestPattern.EMPTY_LISTS }.rationale shouldContain "must not be empty"
     }
 
     @ParameterizedTest(name = "{0} -> {1}")

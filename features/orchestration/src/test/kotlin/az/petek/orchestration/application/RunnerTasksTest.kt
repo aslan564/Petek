@@ -81,7 +81,7 @@ class RunnerTasksTest {
                     step(
                         "race",
                         managers(),
-                        StepAction.Do("Approve {last_id}"),
+                        StepAction.Do("Approve {event.ticket_created.id}"),
                         parallel = true,
                         assertions = listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))),
                     ),
@@ -123,7 +123,7 @@ class RunnerTasksTest {
             val race = plan.steps.last()
             race.phase shouldBe StepPhase.MAIN
             race.actionKind shouldBe PlannedActionKind.DO
-            race.actionText shouldBe "Approve {last_id}"
+            race.actionText shouldBe "Approve {event.ticket_created.id}"
             race.parallel shouldBe true
             race.assertionTypes shouldContainExactly listOf("only_one_succeeds")
             plan.steps[0].let { join ->

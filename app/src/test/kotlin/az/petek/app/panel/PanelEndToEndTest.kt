@@ -12,6 +12,7 @@
 package az.petek.app.panel
 
 import az.petek.app.config.ConfigLoader
+import az.petek.app.config.EnvFile
 import az.petek.app.config.IdentitySecretSource
 import az.petek.app.di.AppContainer
 import az.petek.app.testing.PanelLlm
@@ -23,10 +24,12 @@ import az.petek.dashboard.domain.PhaseState
 import az.petek.dashboard.domain.RunPhase
 import az.petek.dashboard.domain.ScenarioSource
 import az.petek.dashboard.domain.ScenarioStatus
+import az.petek.dashboard.domain.TestStage
 import az.petek.faketarget.FakeTargetConfig
 import az.petek.faketarget.FakeTargetServer
 import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserContext
+import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.options.AriaRole
@@ -36,8 +39,11 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -94,7 +100,7 @@ class PanelEndToEndTest {
             val page = open()
 
             // Təlimat: the target is filled in from the configuration; allow the trial touch and explore.
-            page.locator("input[type=url]").inputValue() shouldBe target.baseUrl.toString()
+            page.locator("input[aria-label='Hədəf sayt']").inputValue() shouldBe target.baseUrl.toString()
             page.locator("label.check input[type=checkbox]").check()
             page.locator(".tester-row input.num").fill("6")
             page.shoot("e2e-1-telimat")
@@ -110,6 +116,11 @@ class PanelEndToEndTest {
             explored.model.pages
                 .map { it.urlPattern }
                 .shouldNotBeEmpty()
+            // The demo site's own gate shows its companies: a code to join with and an admin who invites (Faza 25.1).
+            val draft = explored.draftYaml.shouldNotBeNull()
+            draft shouldContain "register_owner"
+            // Oracle checks only where the trial touch saw the test API answer with what it created (Faza 25.2).
+            draft shouldContain "/test/announcements/latest?by={self.email}"
             page.waitFor("() => document.body.innerText.includes('Bitdi')")
             page.shoot("e2e-2-kesfiyyat", full = true)
 
@@ -209,7 +220,7 @@ class PanelEndToEndTest {
         }
 
     @Test
-    fun `a fresh browser opens on the setup screen, which checks the site in the page and sets the instructions' tester count`() =
+    fun `the owner tests the demo site with one button, which explores, drafts from what was found, approves and runs it`() =
         runBlocking<Unit> {
             val llm = PanelLlm(failingSteps = emptySet())
             val file = dir.resolve("demo.env").also { Files.writeString(it, environment(target.baseUrl, target.mailpitUrl)) }
@@ -221,7 +232,66 @@ class PanelEndToEndTest {
                     workingDirectory = dir,
                     capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
                     port = 0,
+                )
+            val page = open()
+
+            // "Test et" with the trial touch and 6 testers; the team is left to what the explorer sees (automatic split).
+            page.locator("label.check input[type=checkbox]").check()
+            page.locator(".tester-row input.num").fill("6")
+            page.button("Test et").click()
+            page.waitForURL("**#/kesfiyyat")
+            // The run's start opens the live board by itself.
+            page.waitForURL("**#/agentler", Page.WaitForURLOptions().setTimeout(TEST_MILLIS))
+            val ended =
+                withTimeout(12.minutes) {
+                    var view = panel.backend.testFlow()
+                    while (view == null || !view.stage.isFinal) {
+                        delay(POLL_MILLIS)
+                        view = panel.backend.testFlow()
+                    }
+                    view
+                }
+            page.shoot("e2e-11-test-et")
+
+            ended.stage shouldBe TestStage.FINISHED
+            ended.result.shouldNotBeNull()
+            val explored = ended.explorationId.shouldNotBeNull()
+            // The explorer went on during the run from what it knew and stopped with it (Faza 18).
+            val continued = panel.backend.exploration().shouldNotBeNull()
+            continued.id shouldNotBe explored
+            continued.status shouldNotBe ExplorationStatus.FAILED
+            continued.status shouldNotBe ExplorationStatus.RUNNING
+            val version = panel.backend.scenarios().single { it.id == ended.scenarioId }
+            version.note shouldContain explored
+            version.source shouldBe ScenarioSource.EXPLORER
+            version.status shouldBe ScenarioStatus.APPROVED
+            // Drafted only from what the explorer found on the site: its own way into a company (Faza 25.1).
+            panel.backend
+                .scenario(version.id)
+                .shouldNotBeNull()
+                .yaml shouldContain "register_owner"
+            val run = panel.backend.runs().single { it.runId == ended.runId }
+            run.scenarioId shouldBe version.id
+            run.testers shouldBe 6
+            run.reportAvailable shouldBe true
+            errors.shouldBeEmpty()
+        }
+
+    @Test
+    fun `a fresh browser opens on the setup screen, which checks the site in the page and sets the instructions' tester count`() =
+        runBlocking<Unit> {
+            val llm = PanelLlm(failingSteps = emptySet())
+            val file = dir.resolve("demo.env").also { Files.writeString(it, environment(target.baseUrl, target.mailpitUrl)) }
+            val loader = ConfigLoader(emptyMap(), dir, IdentitySecretSource { error("the demo configuration names its secret") })
+            panel =
+                WebPanel.start(
+                    config = loader.load(file),
+                    containers = { cfg, overrides -> AppContainer(cfg, overrides.copy(llm = llm.client)) },
+                    workingDirectory = dir,
+                    capacityAdvice = RecommendCapacityUseCase(SystemHostResourceProbe()),
+                    port = 0,
                     configurationFile = file,
+                    reloadConfig = { loader.load(file) },
                 )
             val page = open(hash = "", ready = "() => location.hash === '#/qurasdirma'")
 
@@ -231,18 +301,45 @@ class PanelEndToEndTest {
             page.locator("section.screen[aria-label='Quraşdırma'] .tester-row input.num").fill("7")
             page.button("Sına").click()
             page.waitFor("() => document.body.innerText.includes('AI cavab verdi')")
+
+            // Another AI is chosen here: kept in the configuration file, its key only there, shown without a restart.
+            val setup = page.locator("section.screen[aria-label='Quraşdırma']")
+            page.button("Dəyiş").click()
+            setup.locator("select[aria-label='AI']").selectOption("openai-compat")
+            setup.locator("input[aria-label='Model']").fill("e2e-model")
+            setup.locator("input[aria-label='Endpoint']").fill("http://127.0.0.1:9/v1")
+            setup.locator("input[aria-label='API açarı']").fill("sk-e2e-key-0123456789")
+            page.shoot("e2e-0-ai-secimi")
+            page.button("Yadda saxla").click()
+            page.waitFor("() => document.body.innerText.includes('openai-compat · e2e-model')")
+            page.content() shouldNotContain "sk-e2e-key"
+            EnvFile.load(file)["PETEK_LLM_API_KEY"] shouldBe "sk-e2e-key-0123456789"
             page.shoot("e2e-0-qurasdirma")
 
             // Done: the instructions take over, with the tester count chosen here.
-            page.button("Hazırdır: saytı kəşf et").click()
+            page.button("Hazırdır: saytı test et").click()
             page.waitForURL("**#/telimat")
             page.locator("section.screen[aria-label='Təlimat'] .tester-row input.num").inputValue() shouldBe "7"
+
+            // Another site with its own settings: added here, known at once without a restart, chosen as the target.
+            val instructions = page.locator("section.screen[aria-label='Təlimat']")
+            instructions.locator("input[aria-label='Saytın adı']").fill("notes")
+            instructions.locator("input[aria-label='Saytın ünvanı']").fill("https://notes.test")
+            instructions.locator("select[aria-label='Saytın poçtu']").selectOption("manual")
+            page.button("Sayt əlavə et").click()
+            val row = instructions.locator("[data-site='notes']")
+            row.waitFor()
+            row.innerText() shouldContain "poçt: manual"
+            row.getByRole(AriaRole.BUTTON, Locator.GetByRoleOptions().setName("Seç").setExact(true)).click()
+            instructions.locator("input[aria-label='Hədəf sayt']").inputValue() shouldStartWith "https://notes.test"
+            Files.readString(dir.resolve("targets/notes.yaml")) shouldContain "source: manual"
+            page.shoot("e2e-0-saytlar")
             errors.shouldBeEmpty()
         }
 
     private fun open(
         hash: String = "#/telimat",
-        ready: String = "() => document.querySelector('input[type=url]') !== null",
+        ready: String = "() => document.querySelector(\"input[aria-label='Hədəf sayt']\") !== null",
     ): Page {
         playwright = Playwright.create()
         val browser = playwright.chromium().launch()
@@ -296,6 +393,8 @@ class PanelEndToEndTest {
         const val HEIGHT = 1500
         const val WAIT_MILLIS = 60_000.0
         const val TRIAGE_MILLIS = 120_000.0
+        const val TEST_MILLIS = 360_000.0
+        const val POLL_MILLIS = 500L
         const val SETTLE_MILLIS = 600.0
         val SHOTS: Path = Path.of("build", "panel-screenshots")
 

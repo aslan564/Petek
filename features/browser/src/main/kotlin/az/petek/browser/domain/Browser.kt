@@ -102,6 +102,16 @@ data class SessionOptions(
      * preflighted, which a site's CORS must allow.
      */
     val correlationHeader: Boolean = false,
+    /**
+     * Hosts no page of this session may open (top-level page or frame) or write to (`POST`, `PUT`, `PATCH`, `DELETE`):
+     * the owner's production hosts (AGENTS.md rule 8). Other requests there, such as an image a page loads, pass.
+     */
+    val blockedHosts: Set<String> = emptySet(),
+    /**
+     * The site's API on its own host (a full `api_prefix`, 2026-09-30): the credential headers the page sends there are
+     * kept for the session's own probes to it ([BrowserSession.request]), as those it sends [baseUrl]. Null: none.
+     */
+    val apiOrigin: URI? = null,
 )
 
 /** Result of waiting for something to appear. [observedAt] is the harness time it was seen (t1). */
@@ -110,9 +120,35 @@ data class WaitOutcome(
     val observedAt: HarnessTimestamp?,
 )
 
+/**
+ * What a page watching for a text saw ([BrowserSession.watchText]): a receiver starts watching before the change it
+ * waits for is written, so the moment the text appears is timed by the page itself instead of by whenever the
+ * receiver looks next (docs/adr/0006).
+ */
+sealed interface TextWatch {
+    /** The text appeared after the watch began; [at] is the harness time the page saw it. */
+    data class Seen(
+        val at: HarnessTimestamp,
+    ) : TextWatch
+
+    /** Watching; the text has not appeared yet. */
+    data object NotYet : TextWatch
+
+    /** The text was visible already when the watch began, so its appearance cannot be timed or told apart from it. */
+    data object WasThere : TextWatch
+
+    /** No watch: the page it lived in was replaced (a navigation, a reload), or the session cannot watch. */
+    data object Lost : TextWatch
+}
+
 data class HttpProbeResult(
     val status: Int,
     val body: String,
+    /**
+     * The names of the credential headers the page itself had sent to the target and the probe sent again (e.g.
+     * `authorization`); never their values. Empty: only the session's cookies went.
+     */
+    val credentials: Set<String> = emptySet(),
 )
 
 enum class RealtimeTransport { WEBSOCKET, SSE, POLLING }
@@ -191,6 +227,19 @@ data class PageHealth(
 }
 
 /**
+ * How fast the current page became usable, as the browser itself timed it (Navigation Timing and paint entries, read by
+ * code): milliseconds from the start of the navigation to its first byte, DOM ready, load and largest contentful paint,
+ * and the cumulative layout shift while it loaded (unitless). Null where the browser reported nothing.
+ */
+data class PageTiming(
+    val ttfbMs: Long?,
+    val domContentLoadedMs: Long?,
+    val loadMs: Long?,
+    val largestPaintMs: Long?,
+    val layoutShift: Double?,
+)
+
+/**
  * The current page as a visitor sees it, for checks that only read (Faza 19, the showcase cards): its title, main
  * headings, description and language, its images, its visible links with their absolute address, and the in-page
  * anchors (`#id`) that name no element. Texts are redacted like everything else the session reads.
@@ -206,6 +255,14 @@ data class PageFacts(
     val images: List<ImageFact>,
     val links: List<LinkFact>,
     val missingAnchors: List<String>,
+    /** The page's language versions (`<link rel="alternate" hreflang>`), as the page names them. */
+    val alternates: List<AlternateFact> = emptyList(),
+)
+
+/** A language version of a page: its `hreflang` (`az`, `en-GB`, `x-default`) and its absolute address. */
+data class AlternateFact(
+    val language: String,
+    val url: String,
 )
 
 /** An image of the page: [alt] null when the attribute is missing; [loaded] false only for one that finished and failed. */
@@ -289,6 +346,24 @@ interface BrowserSession {
 
     suspend fun isTextVisible(text: String): Boolean
 
+    /**
+     * Starts watching the current page for [text] (matched like [waitForText]) under [key], replacing an earlier watch
+     * with that key. Answers [TextWatch.WasThere] when the text is visible already (nothing to watch for), else
+     * [TextWatch.NotYet]; the page then times the text's first appearance on its own, without further calls, until
+     * [stopTextWatch]. A watch lives in the page: navigating away or reloading ends it. Sessions that cannot watch
+     * keep the default: [TextWatch.Lost].
+     */
+    suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch = TextWatch.Lost
+
+    /**
+     * Ends the watch [key] and says what it saw: [TextWatch.Seen] with the harness time the text appeared,
+     * [TextWatch.NotYet], [TextWatch.WasThere], or [TextWatch.Lost] when there is no such watch in the current page.
+     */
+    suspend fun stopTextWatch(key: String): TextWatch = TextWatch.Lost
+
     suspend fun isSelectorVisible(selector: String): Boolean
 
     suspend fun count(selector: String): Int
@@ -314,7 +389,10 @@ interface BrowserSession {
      */
     suspend fun setCorrelationId(id: String?) = Unit
 
-    /** HTTP call that carries this session's cookies (for `http_status` assertions). */
+    /**
+     * HTTP call that carries this session's cookies and, to the target, the credential headers its page sent there
+     * itself (for `http_status` assertions); see [HttpProbeResult.credentials].
+     */
     suspend fun request(
         method: String,
         path: String,
@@ -382,6 +460,15 @@ interface BrowserSession {
     /** What a visitor can check on the current page without acting on it ([PageFacts]); null when the session cannot read it. */
     suspend fun pageFacts(): PageFacts? = null
 
+    /** How fast the current page became usable, as the browser timed it ([PageTiming]); null when the session cannot read it. */
+    suspend fun pageTiming(): PageTiming? = null
+
+    /**
+     * A look of the current page for comparing releases ([LookRequest], `site_health`'s `look`); null when this session
+     * cannot take one, or the page navigated away during it. The page is left at its top, with nothing added to it.
+     */
+    suspend fun look(request: LookRequest): PageLook? = null
+
     suspend fun close()
 }
 
@@ -426,6 +513,17 @@ data class BrowserEngineConfig(
         /** Twenty contexts keep one Chromium responsive; 100 agents then use five browser servers. */
         const val DEFAULT_CONTEXTS_PER_BROWSER = 20
     }
+}
+
+/**
+ * Prints a self-contained HTML document ([html]: every image inside it) to a PDF file ([pdf]) with the browser's own
+ * print, offline: nothing the document names is fetched.
+ */
+fun interface HtmlPdfPrinter {
+    suspend fun print(
+        html: Path,
+        pdf: Path,
+    )
 }
 
 /** Owns the browser process(es). [start] returns the factory agents use to open their sessions. */

@@ -14,7 +14,12 @@ package az.petek.orchestration.application
 import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.browser.domain.BrowserProxy
+import az.petek.campaign.domain.AssertionSpec
+import az.petek.campaign.domain.RequestPattern
+import az.petek.campaign.domain.StepAction
+import az.petek.campaign.domain.StepPhase
 import az.petek.evidence.domain.StepStatus
+import az.petek.evidence.domain.Verdict
 import az.petek.orchestration.domain.RunOptions
 import az.petek.orchestration.domain.RunOutcome
 import az.petek.orchestration.testing.RunnerFixture
@@ -22,8 +27,14 @@ import az.petek.orchestration.testing.VirtualClock
 import az.petek.orchestration.testing.admin
 import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
+import az.petek.orchestration.testing.managers
+import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThan
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
@@ -31,6 +42,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
 
@@ -38,7 +50,7 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(ExperimentalCoroutinesApi::class)
 class RunnerWavesTest {
     @Test
-    fun `testers run in waves of the given size, never more live browsers than a wave, events only within the wave`() =
+    fun `testers run in waves with the admin in every one, so every wave's readers get their own post`() =
         runTest {
             val f = RunnerFixture(VirtualClock(testScheduler))
             val maxLive = AtomicInteger()
@@ -62,42 +74,364 @@ class RunnerWavesTest {
                             step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
                         ),
                 )
-            val waved = base.copy(settings = base.settings.copy(waveSize = 3))
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
 
             val summary = f.runner().run(waved)
 
-            val waves =
-                f.evidence.stepList
-                    .filter { it.action == "wave" }
-                    .map { it.detail }
-            waves shouldContainExactly listOf("wave 1 of 2: 3 testers (a01..a03)", "wave 2 of 2: 2 testers (a04..a05)")
+            f.evidence.stepList
+                .filter { it.action == "wave" }
+                .map { it.detail } shouldContainExactly
+                listOf(
+                    "wave 1 of 2: 2 testers (a02, a04); in every wave: a01 (admin)",
+                    "wave 2 of 2: 2 testers (a03, a05); in every wave: a01 (admin), set up in wave 1",
+                )
+            // The admin is the only one of its role: live in both waves, its browser opened once and kept.
             maxLive.get() shouldBe 3
-            // The admin (wave 1) posts; wave 1's readers get it, wave 2's readers do not: no event crosses waves.
-            val read = f.evidence.stepList.filter { it.scenarioStep == "read" && it.action.startsWith("wait_for") }
-            read.filter { it.agentId?.value in setOf("a02", "a03") }.map { it.status }.toSet() shouldBe setOf(StepStatus.PASSED)
-            read.filter { it.agentId?.value in setOf("a04", "a05") }.map { it.status }.toSet() shouldBe setOf(StepStatus.FAILED)
-            summary.outcome shouldBe RunOutcome.FAILED
+            f.browser.opened.count { it.label == "a01" } shouldBe 1
+            // It posts in each wave, on that wave's bus; every reader gets its own wave's post, none is skipped.
+            f.evidence.eventList.map { it.name } shouldContainExactly listOf("note_posted", "note_posted")
+            f.evidence.stepList
+                .filter { it.scenarioStep == "read" && it.action.startsWith("wait_for") }
+                .map { it.agentId?.value to it.status } shouldContainExactly
+                listOf("a02", "a04", "a03", "a05").map { it to StepStatus.PASSED }
+            f.evidence.stepList.none { it.action == "coverage" } shouldBe true
+            summary.outcome shouldBe RunOutcome.PASSED
             f.buses.size shouldBe 2
         }
 
     @Test
-    fun `each live tester goes out through its own proxy, tester n of a wave through proxy n`() =
+    fun `every wave writes and reads texts marked with its own pass, and a setup event keeps the pass it was written in`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler)).apply { verify.realScreenChecks = true }
+            // The site keeps what was posted: a page opened later shows it from the start.
+            val posted = CopyOnWriteArraySet<String>()
+            f.browser.configure = { session -> posted.forEach(session::showText) }
+            f.agents.script = { call, _ ->
+                val instruction = (call.action as StepAction.Do).instruction
+                if (instruction.startsWith("Post")) {
+                    val text = instruction.substringAfter("'").substringBefore("'")
+                    posted += text
+                    f.browser.sessions.values
+                        .forEach { it.showText(text) }
+                }
+                ActionOutcome(ActionStatus.SUCCEEDED, "ok")
+            }
+            val base =
+                campaign(
+                    managers = 0,
+                    employees = 4,
+                    setup = listOf(step("welcome", admin(), StepAction.Do("Post 'Welcome {pass}'"), StepPhase.SETUP, emits = "welcomed")),
+                    steps =
+                        listOf(
+                            step("post", admin(), StepAction.Do("Post 'Note {pass}'"), emits = "note_posted"),
+                            step(
+                                "greet",
+                                employees(),
+                                StepAction.Do("Answer 'Welcome {pass}'"),
+                                waitFor = "welcomed",
+                                waitTimeout = 5.seconds,
+                            ),
+                            step(
+                                "read",
+                                employees(),
+                                StepAction.None,
+                                waitFor = "note_posted",
+                                waitTimeout = 5.seconds,
+                                assertions = listOf(AssertionSpec.VisibleText("Note {pass}", 10.seconds)),
+                            ),
+                        ),
+                )
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            f.runner().run(waved)
+
+            val tag =
+                f.evidence.runList
+                    .single()
+                    .runTag.value
+
+            fun said(step: String) = f.agents.callsFor(step).map { it.agentId.value to (it.action as StepAction.Do).instruction }
+            said("welcome") shouldContainExactly listOf("a01" to "Post 'Welcome $tag-1'")
+            said("post") shouldContainExactly listOf("a01" to "Post 'Note $tag-1'", "a01" to "Post 'Note $tag-2'")
+            // The welcome was written once, in the first pass: the second wave looks for that text, not for a new one.
+            said("greet").toSet() shouldBe listOf("a02", "a04", "a03", "a05").map { it to "Answer 'Welcome $tag-1'" }.toSet()
+            // Each wave's note is new on its readers' pages, although the first wave's is still there: no stale_text.
+            f.evidence.assertionList
+                .filter { it.type == "visible_text" && it.scenarioStep == "read" }
+                .map { Triple(it.agentId?.value, it.verdict, it.expected.substringBefore(" visible")) } shouldContainExactly
+                listOf("a02", "a04").map { Triple(it, Verdict.PASSED, "\"Note $tag-1\"") } +
+                listOf("a03", "a05").map { Triple(it, Verdict.PASSED, "\"Note $tag-2\"") }
+        }
+
+    @Test
+    fun `a step the residents do alone is not repeated in later waves unless a wave needs its event`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 1,
+                    employees = 4,
+                    setup = listOf(step("seed", admin(), phase = StepPhase.SETUP, emits = "ticket_ready")),
+                    steps =
+                        listOf(
+                            // The owner and the only manager: both live in every wave, the ticket is the setup's.
+                            step("decide", managers(), StepAction.Do("Approve the ticket the setup prepared")),
+                            step("post", admin(), emits = "note_posted"),
+                            step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
+                        ),
+                )
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            f.runner().run(waved)
+
+            f.agents.callsFor("decide").map { it.agentId.value } shouldContainExactly listOf("a02")
+            f.agents.callsFor("post").map { it.agentId.value } shouldContainExactly listOf("a01", "a01")
+            f.agents
+                .callsFor("read")
+                .map { it.agentId.value }
+                .size shouldBe 4
+            f.evidence.stepList
+                .single { it.action == "wave" && it.status == StepStatus.SKIPPED }
+                .detail!! shouldStartWith "wave 2: decide not repeated"
+        }
+
+    @Test
+    fun `a later wave reads a setup event's text as shown, without timing the first wave's delivery`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler)).apply { verify.realScreenChecks = true }
+            f.browser.configure = { session -> session.showText("Xoş gəldiniz") }
+            val base =
+                campaign(
+                    managers = 0,
+                    employees = 4,
+                    setup = listOf(step("welcome", admin(), phase = StepPhase.SETUP, emits = "welcomed")),
+                    steps =
+                        listOf(
+                            step(
+                                "greet",
+                                employees(),
+                                waitFor = "welcomed",
+                                waitTimeout = 5.seconds,
+                                assertions =
+                                    listOf(
+                                        AssertionSpec.VisibleText("Xoş gəldiniz", 5.seconds),
+                                        AssertionSpec.LatencyMax(2.seconds),
+                                    ),
+                            ),
+                        ),
+                )
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            f.runner().run(waved)
+
+            val checks = f.evidence.assertionList.filter { it.scenarioStep == "greet" }
+            val secondWave = checks.filter { it.agentId?.value in setOf("a03", "a05") }
+            secondWave.filter { it.type == "visible_text" }.map { it.verdict } shouldContainExactly List(2) { Verdict.PASSED }
+            secondWave.filter { it.type == "latency_max" }.map { it.verdict } shouldContainExactly List(2) { Verdict.NOT_APPLICABLE }
+            secondWave.first { it.type == "latency_max" }.note!! shouldContain "was published in pass 1 and is read in pass 2"
+        }
+
+    @Test
+    fun `the admin's setup runs in the first wave only and its setup event serves every wave`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 0,
+                    employees = 4,
+                    setup =
+                        listOf(
+                            step("prepare", admin(), emits = "ready", phase = StepPhase.SETUP),
+                            setupStep("join", employees()),
+                        ),
+                    steps = listOf(step("read", employees(), waitFor = "ready", waitTimeout = 5.seconds)),
+                )
+
+            val summary = f.runner().run(base.copy(settings = base.settings.copy(waveSize = 2)))
+
+            f.agents.callsFor("prepare").map { it.agentId.value } shouldContainExactly listOf("a01")
+            f.agents
+                .callsFor("join")
+                .map { it.agentId.value }
+                .sorted() shouldContainExactly listOf("a02", "a03", "a04", "a05")
+            f.evidence.stepList
+                .filter { it.scenarioStep == "read" && it.action.startsWith("wait_for") }
+                .map { it.status }
+                .toSet() shouldBe setOf(StepStatus.PASSED)
+            // Wave 2's bus starts with the very event of wave 1: the same id, recorded once.
+            val ready = f.buses[0].latest("ready").shouldNotBeNull()
+            f.buses[1].latest("ready")?.eventId shouldBe ready.eventId
+            f.evidence.eventList.map { it.name } shouldContainExactly listOf("ready")
+            summary.outcome shouldBe RunOutcome.PASSED
+        }
+
+    @Test
+    fun `a step some waves can check and others cannot is covered in part, and the run says how far`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 2,
+                    employees = 6,
+                    steps =
+                        listOf(
+                            step("post", managers(), emits = "note_posted"),
+                            step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
+                        ),
+                )
+
+            f.runner().run(base.copy(settings = base.settings.copy(waveSize = 2)))
+
+            val coverage = f.evidence.stepList.single { it.action == "coverage" }
+            coverage.status shouldBe StepStatus.PASSED
+            val counts = Regex("^(\\d+) of (\\d+) receivers could wait for the event of 'read'").find(coverage.detail.orEmpty())
+            val (waited, all) = counts.shouldNotBeNull().destructured
+            waited.toInt() shouldBeGreaterThan 0
+            waited.toInt() shouldBeLessThan all.toInt()
+        }
+
+    @Test
+    fun `a step no wave can check with its emitter is not covered, and the run says so`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 2,
+                    employees = 2,
+                    steps =
+                        listOf(
+                            step("post", managers(), emits = "note_posted"),
+                            step("read", employees(), waitFor = "note_posted", waitTimeout = 5.seconds),
+                        ),
+                )
+
+            // Waves of one: a manager posts alone in its wave, every reader is in a wave without a manager.
+            val summary = f.runner().run(base.copy(settings = base.settings.copy(waveSize = 1)))
+
+            val coverage = f.evidence.stepList.single { it.action == "coverage" }
+            coverage.status shouldBe StepStatus.FAILED
+            coverage.detail.orEmpty() shouldStartWith "not_covered: 0 of 2 receivers could wait for the event of 'read'"
+            summary.outcome shouldBe RunOutcome.FAILED
+        }
+
+    @Test
+    fun `a race whose event has no emitter in the wave is skipped, not failed as a race nobody ran`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val base =
+                campaign(
+                    managers = 2,
+                    employees = 2,
+                    steps =
+                        listOf(
+                            step("ticket", employees(), emits = "ticket_created"),
+                            step(
+                                "race",
+                                managers(),
+                                waitFor = "ticket_created",
+                                parallel = true,
+                                assertions = listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))),
+                            ),
+                        ),
+                )
+
+            // The two racing managers share wave 1, the employees who write the ticket are wave 2.
+            f.runner().run(base.copy(settings = base.settings.copy(waveSize = 2)))
+
+            f.verify.groupCalls.shouldBeEmpty()
+            f.evidence.assertionList
+                .single { it.type == "only_one_succeeds" }
+                .verdict shouldBe Verdict.SKIPPED
+            f.evidence.stepList
+                .single { it.action == "coverage" }
+                .detail
+                .orEmpty() shouldStartWith "not_covered:"
+        }
+
+    @Test
+    fun `a race with more racers than a wave holds is split, and the wave left with one racer never passes`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            f.agents.script = { call, _ ->
+                if (call.scenarioStep == "race") {
+                    val status = if (call.agentId.value == "a03") 409 else 303
+                    f.browser.session(call.agentId.value).mutated("POST", "/tickets/t1/approve", status)
+                }
+                ActionOutcome(ActionStatus.SUCCEEDED, "approved")
+            }
+            val race = AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))
+            val base =
+                campaign(
+                    managers = 3,
+                    employees = 2,
+                    steps = listOf(step("race", managers(), parallel = true, assertions = listOf(race))),
+                )
+            // Three racers, waves of two: a02 and a03 race in wave 1, a04 is alone in wave 2.
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
+
+            val summary = f.runner().run(waved)
+
+            f.verify.groupCalls.map { results -> results.map { it.agentId.value } } shouldContainExactly
+                listOf(listOf("a02", "a03"), listOf("a04"))
+            f.evidence.assertionList
+                .filter { it.type == "only_one_succeeds" }
+                .map { it.verdict to it.note } shouldContainExactly
+                listOf(
+                    Verdict.PASSED to null,
+                    Verdict.INCONCLUSIVE to "a race needs at least 2 racing actors; only a04 raced",
+                )
+            summary.outcome shouldBe RunOutcome.FAILED
+        }
+
+    @Test
+    fun `each live tester goes out through its own proxy, the admin keeping the first in every wave`() =
         runTest {
             val f = RunnerFixture(VirtualClock(testScheduler))
             val proxies = (1..3).map { BrowserProxy("http://10.0.0.$it:3128") }
             val base = campaign(managers = 0, employees = 4, steps = listOf(step("look", employees())))
-            val waved = base.copy(settings = base.settings.copy(waveSize = 3))
+            val waved = base.copy(settings = base.settings.copy(waveSize = 2))
 
-            f.runner(settings = settings(proxies)).run(waved).outcome shouldBe RunOutcome.PASSED
+            f.runner(settings = settings(proxies)).run(waved, OWN_SITE).outcome shouldBe RunOutcome.PASSED
 
-            f.browser.opened.map { it.label to it.proxy?.server } shouldContainExactly
+            f.browser.opened
+                .map { it.label to it.proxy?.server }
+                .sortedBy { it.first } shouldContainExactly
                 listOf(
                     "a01" to "http://10.0.0.1:3128",
                     "a02" to "http://10.0.0.2:3128",
-                    "a03" to "http://10.0.0.3:3128",
-                    "a04" to "http://10.0.0.1:3128",
-                    "a05" to "http://10.0.0.2:3128",
-                ).sortedBy { it.first }
+                    "a03" to "http://10.0.0.2:3128",
+                    "a04" to "http://10.0.0.3:3128",
+                    "a05" to "http://10.0.0.3:3128",
+                )
+        }
+
+    @Test
+    fun `the admin in every wave counts as live when proxies are checked`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val proxies = (1..2).map { BrowserProxy("http://10.0.0.$it:3128") }
+            val base = campaign(managers = 0, employees = 4, steps = listOf(step("look", employees())))
+
+            val summary = f.runner(settings = settings(proxies)).run(base.copy(settings = base.settings.copy(waveSize = 2)), OWN_SITE)
+
+            summary.outcome shouldBe RunOutcome.ABORTED
+            f.evidence.stepList
+                .single { it.action == "abort" }
+                .detail
+                .orEmpty() shouldContain "3 testers are live at once and only 2 proxies are given"
+        }
+
+    @Test
+    fun `a site whose owner did not prove it is theirs gets no proxies, and the board says why`() =
+        runTest {
+            val f = RunnerFixture(VirtualClock(testScheduler))
+            val proxies = (1..3).map { BrowserProxy("http://10.0.0.$it:3128") }
+
+            // One proxy for three testers would stop a run on the owner's own site; here none is used at all.
+            f.runner(settings = settings(proxies.take(1))).run(campaign(managers = 0, employees = 2)).outcome shouldBe RunOutcome.PASSED
+
+            f.browser.opened.map { it.proxy } shouldBe listOf(null, null, null)
+            f.monitor.events.any { "PETEK_PROXIES is not used in this run" in it } shouldBe true
         }
 
     @Test
@@ -109,7 +443,7 @@ class RunnerWavesTest {
                 f
                     .runner(
                         settings = settings(listOf(BrowserProxy("http://10.0.0.1:3128"))),
-                    ).run(campaign(managers = 0, employees = 2))
+                    ).run(campaign(managers = 0, employees = 2), OWN_SITE)
 
             summary.outcome shouldBe RunOutcome.ABORTED
             f.browser.opened shouldBe emptyList()
@@ -174,4 +508,9 @@ class RunnerWavesTest {
 
     private fun settings(proxies: List<BrowserProxy>) =
         RunnerSettings(mailDomain = "test.example.test", storageRoot = Path.of("build", "storage"), proxies = proxies)
+
+    private companion object {
+        /** A run on a site whose owner proved it is theirs: the only kind that uses the owner's proxies (Faza 21). */
+        val OWN_SITE = RunOptions(ownSite = true)
+    }
 }

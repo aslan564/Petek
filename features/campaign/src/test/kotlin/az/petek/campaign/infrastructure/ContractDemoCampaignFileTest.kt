@@ -99,7 +99,8 @@ class ContractDemoCampaignFileTest {
     @Test
     fun `setup and steps keep their order, ids and phases`() {
         campaign.setup.map { it.id } shouldContainExactly listOf("owner_signup", "seed", "join")
-        campaign.steps.map { it.id } shouldContainExactly listOf("announce", "read_announce", "ticket", "ticket_flow", "race", "forbidden")
+        campaign.steps.map { it.id } shouldContainExactly
+            listOf("announce", "read_announce", "ticket", "ticket_flow", "ticket_notified", "race", "forbidden")
         campaign.setup.map { it.phase }.distinct() shouldContainExactly listOf(StepPhase.SETUP)
         campaign.steps.map { it.phase }.distinct() shouldContainExactly listOf(StepPhase.MAIN)
     }
@@ -116,7 +117,7 @@ class ContractDemoCampaignFileTest {
     @Test
     fun `the announcement flow emits, waits and asserts`() {
         val announce = step("announce")
-        announce.emits shouldBe EmitSpec("announcement_created", null)
+        announce.emits shouldBe EmitSpec("announcement_created", null, RequestPattern("POST", "/announcements"))
         announce.assertions shouldContainExactly
             listOf(AssertionSpec.Oracle("/test/announcements/{last_id}", "status", "published", null))
 
@@ -125,7 +126,7 @@ class ContractDemoCampaignFileTest {
         read.waitFor shouldBe WaitForSpec("announcement_created", 30.seconds)
         read.assertions shouldContainExactly
             listOf(
-                AssertionSpec.VisibleText("Sabah 10:00 ümumi iclas", 5.seconds),
+                AssertionSpec.VisibleText("Sabah 10:00 ümumi iclas {pass}", 5.seconds),
                 AssertionSpec.LatencyMax(5000.milliseconds),
                 AssertionSpec.Oracle("/test/announcements/{last_id}/receipts", null, null, "{self.email}"),
             )
@@ -153,7 +154,7 @@ class ContractDemoCampaignFileTest {
         step("forbidden").assertions shouldContainExactly
             listOf(
                 AssertionSpec.NotVisible(null, "[data-testid=\"ticket-approve\"]"),
-                AssertionSpec.HttpStatus("/api/tickets/{last_id}/approve", "POST", 403),
+                AssertionSpec.HttpStatus("/api/tickets/{event.ticket_created.id}/approve", "POST", 403),
             )
     }
 

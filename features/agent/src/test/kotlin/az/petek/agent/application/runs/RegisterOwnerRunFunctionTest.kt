@@ -54,6 +54,21 @@ class RegisterOwnerRunFunctionTest {
         }
 
     @Test
+    fun `a company another owner published first is kept, and the conflict is recorded rather than silent`() =
+        runTest {
+            val fixture = RunFunctionFixture(admin)
+            fixture.shared.put(SharedRunState.COMPANY_ID, "c_other")
+
+            val outcome = fixture.run("register_owner")
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            outcome.summary shouldContain "The run keeps company c_other, published before this one."
+            fixture.shared.get(SharedRunState.COMPANY_ID) shouldBe "c_other"
+            fixture.steps.single { it.action == "register_owner: publish shared.company_id" }.detail!! shouldContain
+                "already published as 'c_other'"
+        }
+
+    @Test
     fun `the company name defaults to the MVP test company`() =
         runTest {
             val fixture = RunFunctionFixture(admin)

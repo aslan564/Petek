@@ -38,15 +38,25 @@ internal inline fun <T> translatingFailures(
 internal object PlaywrightFailures {
     private const val MAX_REASON_CHARS = 400
 
+    /** A header as an HTTP call's log writes it: an RFC 9110 token, a colon and the value. */
+    private val HEADER_LINE = Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+: .*")
+
+    /**
+     * The failure of [action] as a [BrowserActionException]. [typedText] and [secrets] are masked in the reason; the
+     * original exception is kept as the cause only when [keepCause] and its own message contains none of them, since
+     * a logged cause would print them whole.
+     */
     fun describe(
         action: String,
         failure: Exception,
         typedText: String?,
+        secrets: Collection<String> = emptyList(),
+        keepCause: Boolean = true,
     ): BrowserActionException {
         val raw = failure.message.orEmpty()
-        val secret = typedText?.takeIf { it.isNotEmpty() }
-        val reason = reasonOf(raw).let { if (secret == null) it else it.replace(secret, "***") }
-        val cause = if (secret != null && raw.contains(secret)) null else failure
+        val masked = (listOfNotNull(typedText) + secrets).filter { it.isNotEmpty() }.distinct().sortedByDescending { it.length }
+        val reason = masked.fold(reasonOf(raw)) { text, secret -> text.replace(secret, "***") }
+        val cause = if (!keepCause || masked.any { raw.contains(it) }) null else failure
         if (LOST_CONTEXT.any { raw.contains(it, ignoreCase = true) }) return BrowserContextLostException("$action failed: $reason", cause)
         return BrowserActionException("$action failed: $reason", cause)
     }
@@ -58,7 +68,8 @@ internal object PlaywrightFailures {
     /**
      * Playwright Java renders driver errors as `Error { message='…' name='…' stack='…' }` followed by a `Call log:`
      * section. The reason is the message plus the call log (what Playwright was waiting for), on one line, without
-     * the Node.js stack trace.
+     * the Node.js stack trace. The header lines an HTTP call logs (`authorization: Bearer …`, `cookie: …`) are left
+     * out: they carry the session's credentials and say nothing about why the call failed.
      */
     fun reasonOf(raw: String): String {
         val message =
@@ -72,7 +83,7 @@ internal object PlaywrightFailures {
                 .substringAfter("\nCall log:", missingDelimiterValue = "")
                 .lineSequence()
                 .map { it.trim().trimStart('-', ' ') }
-                .filter { it.isNotEmpty() }
+                .filter { it.isNotEmpty() && !HEADER_LINE.matches(it) }
                 .toList()
         val reason =
             buildString {

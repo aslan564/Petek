@@ -16,6 +16,7 @@ import az.petek.agent.domain.ActorShare
 import az.petek.agent.domain.FailureReason
 import az.petek.agent.testing.AgentTestData
 import az.petek.agent.testing.RunFunctionFixture
+import az.petek.browser.domain.AlternateFact
 import az.petek.browser.domain.HttpProbeResult
 import az.petek.browser.domain.ImageFact
 import az.petek.browser.domain.LinkFact
@@ -93,6 +94,85 @@ class PageChecksRunFunctionTest {
             outcome.summary shouldContain "links to https://gone.example/page, which answers 404"
             outcome.summary shouldNotContain "refuses.example/, which"
             outcome.summary shouldContain "1 link(s) to sites that refuse automated visitors were not judged"
+        }
+
+    @Test
+    fun `language versions that answer, say their language and name the page back pass, each asked once`() =
+        runTest {
+            val versions =
+                listOf(AlternateFact("az", "/az/about"), AlternateFact("en", "/en/about"), AlternateFact("x-default", "/en/about/"))
+            browser.pageFactsByUrl["/az/about"] = clean(title = "Haqqımızda").copy(language = "az", alternates = versions)
+            browser.pageFactsByUrl["/en/about"] = clean(title = "About").copy(language = "en-GB", alternates = versions)
+            browser.httpResponses["GET /en/about"] = HttpProbeResult(200, "")
+
+            val outcome = fixture.run("page_checks", mapOf("checks" to "mirrors", "pages" to "/az/about"))
+
+            outcome.status shouldBe ActionStatus.SUCCEEDED
+            browser.actions.filter { it.startsWith("request GET /en/about") } shouldBe listOf("request GET /en/about")
+        }
+
+    @Test
+    fun `a version that is missing, in another language or not naming the page back is reported`() =
+        runTest {
+            browser.pageFactsByUrl["/az/"] =
+                clean(title = "Ana səhifə").copy(
+                    language = "az",
+                    alternates =
+                        listOf(
+                            AlternateFact("en", "/en/"),
+                            AlternateFact("ru", "/ru/"),
+                            AlternateFact("de", "/de/"),
+                            AlternateFact("fr", "https://fr.example.org/"),
+                        ),
+                )
+            browser.pageFactsByUrl["/en/"] = clean(title = "Home").copy(language = "az", alternates = listOf(AlternateFact("az", "/az/")))
+            browser.pageFactsByUrl["/ru/"] = clean(title = "Главная").copy(language = "ru")
+            browser.httpResponses["GET /en/"] = HttpProbeResult(200, "")
+            browser.httpResponses["GET /ru/"] = HttpProbeResult(200, "")
+            browser.httpResponses["GET https://fr.example.org/"] = HttpProbeResult(200, "")
+
+            val outcome = fixture.run("page_checks", mapOf("checks" to "mirrors", "pages" to "/az/"))
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.failureReason shouldBe FailureReason.UNHEALTHY_PAGE
+            outcome.summary shouldContain "/az/ names /en/ as its en version, but it says it is in az"
+            outcome.summary shouldContain "/ru/ does not name /az/ back among its language versions"
+            outcome.summary shouldContain "/az/ names /de/ as its de version, which answers 404"
+            outcome.summary shouldNotContain "fr.example.org"
+            // Another site's version is only asked whether it answers; the tester never leaves the site.
+            visited() shouldContainExactly listOf("/az/", "/en/", "/ru/")
+        }
+
+    @Test
+    fun `a list the visitor saw passes while it shows one object and fails when it shows none`() =
+        runTest {
+            browser.pageFactsByUrl["/blog"] =
+                clean(
+                    title = "Blog",
+                    links = listOf(LinkFact("Post", "https://site.test/posts/17-first-post"), LinkFact("About", "/about")),
+                )
+            // An archive link is no post: the explorer's own rule tells ids from words.
+            browser.pageFactsByUrl["/news"] = clean(title = "News", links = listOf(LinkFact("Archive", "/news/archive")))
+            val lists = "/blog>/posts/*>12,/news>/news/*>5"
+
+            val outcome = fixture.run("page_checks", mapOf("checks" to "lists", "pages" to "/blog,/news", "lists" to lists))
+
+            outcome.status shouldBe ActionStatus.FAILED
+            outcome.summary shouldContain "/news shows no /news/* of its list (the explorer saw 5 there as a visitor)"
+            outcome.summary shouldNotContain "/blog shows"
+        }
+
+    @Test
+    fun `a list is looked at on the desktop only, since a phone layout may fold it away`() =
+        runTest {
+            browser.facts = clean(title = "News")
+
+            val args = mapOf("checks" to "lists", "pages" to "/news", "lists" to "/news>/news/*>5", "share" to "work")
+            val phone = fixture.run("page_checks", args, share = ActorShare(0, 3))
+            val desktop = fixture.run("page_checks", args, share = ActorShare(2, 3))
+
+            phone.status shouldBe ActionStatus.SUCCEEDED
+            desktop.status shouldBe ActionStatus.FAILED
         }
 
     @Test

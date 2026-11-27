@@ -38,6 +38,7 @@ import java.nio.file.Path
  *   url: https://staging.portal.example
  *   api_url: https://api.staging.portal.example
  *   production_hosts: [portal.example, www.portal.example]
+ *   allowed_hosts: [sso.portal.example]   # hosts besides url's own testers may open (sign-in, e-mail links)
  *   mail: {source: test-api, domain: test.portal.example}
  *   test_api: {token: '${PETEK_TEST_TOKEN_PORTAL}'}   # or {mode: none}; paths: {otp: /qa/otp/{phone}, ...}
  *   sign_in: [test_company, own_accounts, self_register, anonymous]
@@ -111,12 +112,8 @@ class YamlTargetSpecSource {
         }
         val url = url(reader, fields, "url", required = true)
         val apiUrl = url(reader, fields, "api_url", required = false)
-        val hosts =
-            fields
-                .textList("production_hosts")
-                .orEmpty()
-                .map { it.trim().lowercase() }
-                .toSet()
+        val hosts = hostList(fields, "production_hosts")
+        val allowedHosts = hostList(fields, "allowed_hosts")
         val mail = mail(fields)
         val testApi = fields.map("test_api", setOf("token", "mode", "paths"))
         val token = testApi?.let { secret(reader, it, "token") }
@@ -155,19 +152,32 @@ class YamlTargetSpecSource {
             }
         if (name == null || url == null || !TargetSpec.NAME.matches(name)) return null
         return TargetSpec(
-            name,
-            url,
-            apiUrl,
-            hosts,
-            mail,
-            token,
-            signIn ?: SignInMethod.DEFAULT_CHAIN,
-            accounts,
-            profile,
-            oracle,
-            oraclePaths,
+            name = name,
+            url = url,
+            apiUrl = apiUrl,
+            productionHosts = hosts,
+            mail = mail,
+            testToken = token,
+            signIn = signIn ?: SignInMethod.DEFAULT_CHAIN,
+            accounts = accounts,
+            profile = profile,
+            oracle = oracle,
+            oraclePaths = oraclePaths,
+            tenant = tenant,
+            allowedHosts = allowedHosts,
         )
     }
+
+    private fun hostList(
+        fields: YamlFields,
+        key: String,
+    ): Set<String> =
+        fields
+            .textList(key)
+            .orEmpty()
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .toSet()
 
     private fun url(
         reader: YamlReader,
@@ -257,6 +267,18 @@ class YamlTargetSpecSource {
         const val ROOT_PATH = ""
         val ORACLE_PATH_KEYS = setOf("otp", "company_by_owner", "company", "seed_company")
         val TARGET_KEYS =
-            setOf("name", "url", "api_url", "production_hosts", "mail", "test_api", "sign_in", "accounts", "profile", "tenant")
+            setOf(
+                "name",
+                "url",
+                "api_url",
+                "production_hosts",
+                "allowed_hosts",
+                "mail",
+                "test_api",
+                "sign_in",
+                "accounts",
+                "profile",
+                "tenant",
+            )
     }
 }

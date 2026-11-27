@@ -15,16 +15,23 @@ import az.petek.browser.domain.BrowserActionException
 import az.petek.browser.domain.BrowserSession
 import az.petek.browser.domain.DialogEvent
 import az.petek.browser.domain.HttpProbeResult
+import az.petek.browser.domain.LookRequest
+import az.petek.browser.domain.LookShot
+import az.petek.browser.domain.LookShotKind
 import az.petek.browser.domain.NetworkObservation
 import az.petek.browser.domain.ObservedMutation
 import az.petek.browser.domain.PageFacts
 import az.petek.browser.domain.PageHealth
+import az.petek.browser.domain.PageLook
 import az.petek.browser.domain.PageSnapshot
+import az.petek.browser.domain.PageTiming
 import az.petek.browser.domain.SessionOptions
+import az.petek.browser.domain.TextWatch
 import az.petek.browser.domain.Viewport
 import az.petek.browser.domain.WaitOutcome
 import az.petek.core.time.HarnessClock
 import az.petek.core.time.HarnessTimestamp
+import com.google.gson.JsonObject
 import com.microsoft.playwright.BrowserContext
 import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
@@ -32,7 +39,12 @@ import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.PlaywrightException
 import com.microsoft.playwright.Route
 import com.microsoft.playwright.TimeoutError
+import com.microsoft.playwright.options.LoadState
 import com.microsoft.playwright.options.RequestOptions
+import com.microsoft.playwright.options.ScreenshotAnimations
+import com.microsoft.playwright.options.ScreenshotCaret
+import com.microsoft.playwright.options.ScreenshotScale
+import com.microsoft.playwright.options.ScreenshotType
 import com.microsoft.playwright.options.SelectOption
 import com.microsoft.playwright.options.WaitForSelectorState
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -40,6 +52,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -51,7 +64,11 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Consumer
 import kotlin.io.path.exists
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 
 private val logger = KotlinLogging.logger {}
 
@@ -73,8 +90,15 @@ private val logger = KotlinLogging.logger {}
  *   Text matching follows `getByText`: case-insensitive, whitespace-normalized substring of the rendered text,
  *   open shadow roots included.
  *   Selectors that are plain CSS are probed the same way; Playwright-only syntax (`text=…`) uses a locator wait.
+ * - [watchText] leaves a watch in the page (`text-watch.js`): the same text match, run on every DOM change (at most every
+ *   [WATCH_GAP_MS] ms) and every [PROBE_POLLING_INTERVAL_MS] ms, timed with the page's monotonic clock. [stopTextWatch]
+ *   turns that time into harness time from the middle of the round trip that started the watch, so t1 is off by at
+ *   most half that round trip plus one check. A navigation or reload ends the watch with the document it lived in.
  * - [navigate] opens web pages only (http(s) URLs, paths against the base URL, `about:blank`); see [requireWebAddress].
- * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status.
+ * - [request] does not follow redirects, so an `http_status` assertion sees the endpoint's own status. It carries the
+ *   session's cookies and, to the target's origin (and the site's API host, [SessionOptions.apiOrigin]) only, the
+ *   credential headers the page itself sent there ([PageCredentials]: a token the page keeps and sends as
+ *   `Authorization`, a CSRF header), so a site that signs its calls with a token answers the probe as it answers the page.
  * - JavaScript dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are accepted as they open and kept until
  *   [drainDialogs] reports them; see [PlaywrightHandles].
  * - Mutating requests the page sends to the target's origin (form posts, `fetch`, XHR) are recorded with their
@@ -82,6 +106,9 @@ private val logger = KotlinLogging.logger {}
  * - Password values never leave the adapter: snapshots show `******`, DOM and ARIA snapshots are redacted, and
  *   text typed with [fill] is masked in error messages. Text typed into a password field is remembered and masked
  *   in every later snapshot, [readText] and [currentUrl], even after the page reveals the field or echoes the value.
+ *   The page's own credentials are masked the same way.
+ * - [look] takes frames of the page by code for comparing releases: it scrolls, moves the pointer, blurs the focus and
+ *   clears the selection, but adds nothing to the page (masks are measured, never painted), and leaves it at its top.
  * - Failures surface as [BrowserActionException] with a short reason. After [close], calls fail the same way.
  */
 internal class PlaywrightBrowserSession private constructor(
@@ -93,6 +120,7 @@ internal class PlaywrightBrowserSession private constructor(
     private val dialogs: DialogRecorder,
     private val mutations: MutationRecorder,
     private val health: HealthRecorder,
+    private val credentials: PageCredentials,
     private val onClosed: (PlaywrightBrowserSession) -> Unit,
 ) : BrowserSession {
     private val closed = AtomicBoolean(false)
@@ -100,6 +128,12 @@ internal class PlaywrightBrowserSession private constructor(
 
     /** Text this session typed into secret fields; masked in everything read back later. Session thread only. */
     private val typedSecrets = LinkedHashSet<String>()
+
+    /** What is masked in everything read back: typed secrets and the page's own credentials. Session thread only. */
+    private fun masked(): Set<String> = typedSecrets + credentials.secrets()
+
+    /** Where each running text watch began, to turn the page's times into harness times. Session thread only. */
+    private val watchOrigins = HashMap<String, WatchOrigin>()
 
     /** The saved state's sessionStorage not put back yet, by origin ([SessionStorageState]). Session thread only. */
     private val pendingSessionStorage: MutableMap<String, List<List<String>>> by lazy(LazyThreadSafetyMode.NONE) {
@@ -156,7 +190,7 @@ internal class PlaywrightBrowserSession private constructor(
                 surviveNavigation {
                     SnapshotParser.parse(page.evaluate(BundledScripts.pageIndexer, SnapshotLimits().asScriptArgument()))
                 }
-            SecretRedactor.redactSnapshot(snapshot, typedSecrets)
+            SecretRedactor.redactSnapshot(snapshot, masked())
         }
 
     override suspend fun click(ref: Int) {
@@ -203,7 +237,7 @@ internal class PlaywrightBrowserSession private constructor(
     override suspend fun readText(selector: String): String? =
         perform("read text of $selector") {
             val matches = page.locator(selector)
-            if (matches.count() == 0) null else SecretRedactor.redactText(matches.first().innerText().trim(), typedSecrets)
+            if (matches.count() == 0) null else SecretRedactor.redactText(matches.first().innerText().trim(), masked())
         }
 
     override suspend fun readAttribute(
@@ -234,12 +268,45 @@ internal class PlaywrightBrowserSession private constructor(
 
     override suspend fun isTextVisible(text: String): Boolean = perform("check text \"$text\"") { probe(mapOf("text" to text)) }
 
+    override suspend fun watchText(
+        key: String,
+        text: String,
+    ): TextWatch =
+        perform("watch for text \"$text\"") {
+            val arguments =
+                mapOf(
+                    "key" to key,
+                    "text" to text,
+                    "gapMs" to WATCH_GAP_MS,
+                    "pollMs" to PROBE_POLLING_INTERVAL_MS,
+                    "maxMs" to WATCH_MAX_MS,
+                )
+            val before = clock.now()
+            val armed = surviveNavigation { page.evaluate(BundledScripts.textWatch, arguments) } as? Map<*, *>
+            val after = clock.now()
+            val armedAt = (armed?.get("armedAt") as? Number)?.toDouble() ?: return@perform TextWatch.Lost
+            // The page took its time somewhere inside this round trip: its middle is the harness time closest to it.
+            watchOrigins[key] = WatchOrigin(armedAt, before + before.elapsedUntil(after) / 2)
+            if (armed["before"] == true) TextWatch.WasThere else TextWatch.NotYet
+        }
+
+    override suspend fun stopTextWatch(key: String): TextWatch =
+        perform("read the text watch") {
+            val origin = watchOrigins.remove(key)
+            val state = surviveNavigation { page.evaluate(BundledScripts.textWatchRead, mapOf("key" to key)) } as? Map<*, *>
+            when {
+                origin == null || state == null -> TextWatch.Lost
+                state["before"] == true -> TextWatch.WasThere
+                else -> (state["seenAt"] as? Number)?.let { TextWatch.Seen(origin.harnessTime(it.toDouble())) } ?: TextWatch.NotYet
+            }
+        }
+
     override suspend fun isSelectorVisible(selector: String): Boolean =
         perform("check $selector") { page.locator(selector).filter(visibleOnly()).count() > 0 }
 
     override suspend fun count(selector: String): Int = perform("count $selector") { page.locator(selector).count() }
 
-    override suspend fun currentUrl(): String = perform("read the URL") { SecretRedactor.redactText(page.url(), typedSecrets) }
+    override suspend fun currentUrl(): String = perform("read the URL") { SecretRedactor.redactText(page.url(), masked()) }
 
     override suspend fun screenshot(): ByteArray = perform("screenshot") { page.screenshot() }
 
@@ -323,9 +390,19 @@ internal class PlaywrightBrowserSession private constructor(
                     request.setHeader("Content-Type", "application/json")
                 }
             }
-            val response = handles.context.request().fetch(path, request)
+            // The page's own token goes with it, as the page sends it (never elsewhere, never written down). An address
+            // the URI parser cannot read gets none; Playwright then says what is wrong with it.
+            val own = runCatching { options.baseUrl.resolve(path.trim()) }.getOrNull()?.let(credentials::headersFor).orEmpty()
+            own.forEach { (name, value) -> request.setHeader(name, value) }
+            val response =
+                try {
+                    handles.context.request().fetch(path, request)
+                } catch (e: PlaywrightException) {
+                    // The call's log names every header it sent: never let the page's own token or the cookies out.
+                    throw PlaywrightFailures.describe("${method.uppercase()} $path", e, null, masked() + own.values, keepCause = false)
+                }
             try {
-                HttpProbeResult(response.status(), response.text())
+                HttpProbeResult(response.status(), SecretRedactor.redactText(response.text(), masked()), own.keys)
             } finally {
                 response.dispose()
             }
@@ -342,7 +419,7 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read dialogs") {
             // As above: the round trip dispatches a dialog event already received, so the handler answers it first.
             runCatching { page.title() }
-            dialogs.drain { message -> SecretRedactor.redactText(message, typedSecrets) }
+            dialogs.drain { message -> SecretRedactor.redactText(message, masked()) }
         }
 
     override suspend fun mutations(since: HarnessTimestamp): List<ObservedMutation> =
@@ -359,7 +436,7 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read the page's health") {
             // As above: the round trip dispatches events already received, so they are recorded first.
             runCatching { page.title() }
-            health.since(since, slowAfter) { SecretRedactor.redactText(it, typedSecrets) }
+            health.since(since, slowAfter) { SecretRedactor.redactText(it, masked()) }
         }
 
     override suspend fun links(): List<String> =
@@ -382,10 +459,264 @@ internal class PlaywrightBrowserSession private constructor(
         perform("read the page's facts") {
             surviveNavigation {
                 (page.evaluate(BundledScripts.pageFacts) as? Map<*, *>)?.let {
-                    PageFactsReading.of(it) { text -> SecretRedactor.redactText(text, typedSecrets) }
+                    PageFactsReading.of(it) { text -> SecretRedactor.redactText(text, masked()) }
                 }
             }
         }
+
+    override suspend fun pageTiming(): PageTiming? =
+        perform("read the page's timing") {
+            surviveNavigation {
+                (page.evaluate(BundledScripts.pageTiming) as? Map<*, *>)?.let { raw ->
+                    fun long(key: String) = (raw[key] as? Number)?.toLong()
+                    PageTiming(
+                        long("ttfb"),
+                        long("domContentLoaded"),
+                        long("load"),
+                        long("largestPaint"),
+                        (raw["layoutShift"] as? Number)?.toDouble(),
+                    )
+                }
+            }
+        }
+
+    /**
+     * A look of the current page ([LookRequest]), one load at a time ([lookOnce]); the second load opens the page's
+     * address again. The look's facts are those read with the first load's final frame ([LookShotKind.MAIN]); it settled
+     * when every load did. Null when the page went to another address during a load, or the second load did not show
+     * the first one's page (it landed elsewhere, or the site answered it with another status): its frame would pass for
+     * the page drawn again. The page is then left where it went.
+     */
+    override suspend fun look(request: LookRequest): PageLook? {
+        val first = lookOnce(request, reload = false) ?: return null
+        val again = if (request.loads > 1) lookOnce(request, reload = true) ?: return null else null
+        if (again != null && !again.showsPageOf(first)) return null
+        val main = first.shot(first.final, LookShotKind.MAIN)
+        val shots =
+            buildList {
+                add(main)
+                first.moved?.let { add(first.shot(it, LookShotKind.MOVED)) }
+                again?.takeUnless { it.final.contentEquals(first.final) }?.let { add(it.shot(it.final, LookShotKind.RELOADED)) }
+            }
+        val loads = listOfNotNull(first, again)
+        return PageLook(
+            shots = shots,
+            viewport = first.viewport,
+            pageHeight = first.facts.pageHeight,
+            landedPath = first.facts.path,
+            status = first.facts.status,
+            renderer = first.renderer,
+            settled = loads.all { it.unsettled.isEmpty() },
+            unsettled = UNSETTLED.filter { what -> loads.any { what in it.unsettled } },
+            fonts = first.facts.fonts,
+            anchors = LookReading.anchors(first.facts, main.width, main.height),
+            rejectedSelectors = loads.flatMap { it.facts.rejectedSelectors }.distinct(),
+        )
+    }
+
+    /**
+     * One load of a look:
+     * 1. (second load: the page's address opened again, [loadAgain]) the network idle for a moment (bounded: a page that
+     *    polls never is), the pointer parked in the corner, the page brought to rest by `look-settle.js`, and then drawn
+     *    as a full-page frame draws it ([drawAsBeyondTheScreen]): after settling, so a document the page went to while
+     *    it settled is drawn so too;
+     * 2. frames [LOOK_FRAME_GAP] apart until two in a row are the same bytes (Chromium encodes the same pixels to the
+     *    same PNG), at most three: the last is the load's frame, and when the third still differs from the second, the
+     *    second is kept as the earlier frame of a page that keeps moving by itself;
+     * 3. the page read by `look-read.js` (facts, areas and anchors) with that frame.
+     * The waits between frames run outside the session thread. Null when the page went to another address meanwhile:
+     * after settling, or (second load) since it was opened again.
+     */
+    private suspend fun lookOnce(
+        request: LookRequest,
+        reload: Boolean,
+    ): LookLoad? {
+        val settled =
+            perform("settle the page for a look") {
+                // A second load that a redirect, or the page itself, takes to another address is no load of this page.
+                val opened = if (reload) withoutQuery(page.url()).also { loadAgain() } else null
+                try {
+                    page.waitForLoadState(LoadState.NETWORKIDLE, Page.WaitForLoadStateOptions().setTimeout(NETWORK_IDLE_WAIT_MS))
+                } catch (_: TimeoutError) {
+                    // A page that polls never goes idle; the settle script's quiet window tells whether it calmed down.
+                }
+                page.mouse().move(0.0, 0.0)
+                val arguments =
+                    mapOf(
+                        "settleMs" to request.settle.inWholeMilliseconds.toDouble(),
+                        "maxHeight" to request.maxHeight,
+                        "fontsMs" to LOOK_FONTS_WAIT_MS,
+                        "quietMs" to LOOK_QUIET_MS,
+                        "stepMs" to LOOK_SCROLL_STEP_MS,
+                    )
+                val raw = surviveNavigation { page.evaluate(BundledScripts.lookSettle, arguments) } as? Map<*, *> ?: emptyMap<String, Any>()
+                // Taken before the drawing below: a document the page goes to from here on is not drawn so, and is found
+                // at another address when the look is read.
+                val address = page.url()
+                if (opened != null && withoutQuery(address) != opened) return@perform null
+                // Only the raster changes, not the layout, so what the settle script measured holds.
+                drawAsBeyondTheScreen()
+
+                fun number(key: String) = (raw[key] as? Number)?.toInt() ?: 0
+                LookSettled(
+                    unsettled =
+                        listOfNotNull(
+                            "network".takeUnless { raw["quiet"] == true },
+                            "fonts".takeUnless { raw["fontsReady"] == true },
+                            "images".takeIf { number("pendingImages") > 0 },
+                        ),
+                    pageHeight = number("pageHeight"),
+                    viewport = page.viewportSize()?.let { Viewport(it.width, it.height) } ?: Viewport(number("width"), number("height")),
+                    address = address,
+                )
+            } ?: return null
+        val options = lookShotOptions(request.maxHeight, settled.viewport, settled.pageHeight)
+        val first = perform("take a look") { page.screenshot(options) }
+        delay(LOOK_FRAME_GAP)
+        var final = perform("take a look") { page.screenshot(options) }
+        var moved: ByteArray? = null
+        if (!final.contentEquals(first)) {
+            delay(LOOK_FRAME_GAP)
+            val third = perform("take a look") { page.screenshot(options) }
+            if (!third.contentEquals(final)) moved = final
+            final = third
+        }
+        val captured = PngSize.of(final) ?: throw BrowserActionException("a look's frame is not a PNG")
+        return perform("read the look") {
+            val arguments = lookReadArguments(request, captured.height)
+            val raw =
+                try {
+                    surviveNavigation { page.evaluate(BundledScripts.lookRead, arguments) }
+                } catch (e: PlaywrightException) {
+                    // The arguments hold the run's own texts: none of them leaves with the failure.
+                    val secrets = request.runTexts.map { it.text } + masked()
+                    throw PlaywrightFailures.describe("read the look", e, null, secrets, keepCause = false)
+                }
+            if (withoutQuery(page.url()) != withoutQuery(settled.address)) return@perform null
+            val facts = LookReading.facts(raw as? Map<*, *> ?: return@perform null) { SecretRedactor.redactText(it, masked()) }
+            LookLoad(final, moved, facts, settled.unsettled, settled.viewport, renderer(facts.userAgent))
+        }
+    }
+
+    /**
+     * Chromium draws a document differently once a frame beyond the screen was taken of it (on macOS, its text: the
+     * layout stays as it was), and keeps drawing it so until another document loads: a full-page frame of a page taller
+     * than the screen would differ from the frame of one that fits it, or of the first screen only. A one-pixel capture
+     * beyond the screen of the document about to be framed draws every look's frames the same way. Its picture is not
+     * kept. Session thread only.
+     */
+    private fun drawAsBeyondTheScreen() {
+        val devtools = handles.context.newCDPSession(page)
+        try {
+            val clip =
+                JsonObject().apply {
+                    addProperty("x", 0)
+                    addProperty("y", 0)
+                    addProperty("width", 1)
+                    addProperty("height", 1)
+                    addProperty("scale", 1)
+                }
+            devtools.send(
+                "Page.captureScreenshot",
+                JsonObject().apply {
+                    addProperty("captureBeyondViewport", true)
+                    add("clip", clip)
+                },
+            )
+        } finally {
+            runCatching { devtools.detach() }
+        }
+    }
+
+    /**
+     * Opens the current page's address again, as a visitor coming back would: a plain GET, so a page that answered a form
+     * post is never posted again (a reload would). An address with a fragment is reloaded instead, since opening it again
+     * would only scroll the same document. Session thread only.
+     */
+    private fun loadAgain() {
+        val address = page.url()
+        val scheme =
+            URL_SCHEME
+                .find(address)
+                ?.groupValues
+                ?.get(1)
+                ?.lowercase()
+        if (scheme !in WEB_SCHEMES) throw BrowserActionException("cannot open the page again for a look: it is not a web page")
+        try {
+            if ('#' in address) {
+                page.reload(Page.ReloadOptions().setTimeout(LOOK_LOAD_TIMEOUT_MS))
+            } else {
+                page.navigate(address, Page.NavigateOptions().setTimeout(LOOK_LOAD_TIMEOUT_MS))
+            }
+        } catch (e: PlaywrightException) {
+            // The failure names the address, which may hold what the tester typed (a form sent by GET).
+            throw PlaywrightFailures.describe("open the page again for a look", e, null, masked(), keepCause = false)
+        }
+    }
+
+    private fun lookReadArguments(
+        request: LookRequest,
+        captureHeight: Int,
+    ): Map<String, Any> =
+        mapOf(
+            "captureHeight" to captureHeight,
+            "selectors" to
+                request.selectors.map {
+                    mapOf("css" to it.css, "source" to it.source, "reason" to LookReading.selectorReason(it.source).name)
+                },
+            "runTexts" to request.runTexts.map { mapOf("kind" to it.kind, "text" to it.text) },
+            "runTag" to request.runTag.orEmpty(),
+            "maxAreas" to LookReading.SCRIPT_MAX_AREAS,
+            "maxPerSelector" to LookReading.MAX_PER_SELECTOR,
+            "maxAnchors" to LookReading.MAX_ANCHORS,
+            "maxFonts" to LookReading.MAX_FONTS,
+        )
+
+    /** Browser, version, system and mode, e.g. `chromium 141.0.7390.37; Mac OS X aarch64; headless`. Session thread only. */
+    private fun renderer(userAgent: String): String {
+        val browser = handles.browser
+        val system = System.getProperty("os.name") + " " + System.getProperty("os.arch")
+        val mode = if (HEADLESS_MARK in userAgent) "headless" else "headed"
+        return "${browser.browserType().name()} ${browser.version()}; $system; $mode"
+    }
+
+    /** [address] without its query and fragment, which a page may change in place (`?slide=2`) and stay itself. */
+    private fun withoutQuery(address: String): String = address.substringBefore('#').substringBefore('?')
+
+    /** What settling one load of a look found. */
+    private class LookSettled(
+        val unsettled: List<String>,
+        val pageHeight: Int,
+        val viewport: Viewport,
+        /** The page's address once it settled: a look whose page then goes to another address is no look of it. */
+        val address: String,
+    )
+
+    /** One load of a look: its frame, the earlier frame when the page kept moving, and what was read with it. */
+    private class LookLoad(
+        val final: ByteArray,
+        val moved: ByteArray?,
+        val facts: LookFacts,
+        val unsettled: List<String>,
+        val viewport: Viewport,
+        val renderer: String,
+    ) {
+        /**
+         * This (second) load showed [first]'s page: it was read on the same path, and the site answered it with the same
+         * status, when the browser reported both.
+         */
+        fun showsPageOf(first: LookLoad): Boolean =
+            facts.path == first.facts.path && (facts.status == null || first.facts.status == null || facts.status == first.facts.status)
+
+        /** [png] as a frame of [kind], with this load's areas fitted to its own size. */
+        fun shot(
+            png: ByteArray,
+            kind: LookShotKind,
+        ): LookShot {
+            val size = PngSize.of(png) ?: throw BrowserActionException("a look's frame is not a PNG")
+            return LookShot(png, kind, size.width, size.height, LookReading.areas(facts.areas, size.width, size.height))
+        }
+    }
 
     override suspend fun clearCookies() {
         perform("clear cookies") { handles.context.clearCookies() }
@@ -497,7 +828,7 @@ internal class PlaywrightBrowserSession private constructor(
             val reason = resolution["error"] as? String
             if (reason != null) throw BrowserActionException("cannot select \"$option\": $reason")
             val available = (resolution["available"] as? List<*>).orEmpty().joinToString(", ") { "\"$it\"" }
-            throw BrowserActionException("option \"$option\" not found; available options: $available")
+            throw BrowserActionException("option \"$option\" not found; available options, those containing it first: $available")
         }
         element.selectOption(SelectOption().setIndex(index))
     }
@@ -565,10 +896,19 @@ internal class PlaywrightBrowserSession private constructor(
     private fun <T> withSecretValues(capture: () -> T): Pair<T, Set<String>> {
         val before = secretValues()
         val captured = capture()
-        return captured to typedSecrets + before + secretValues()
+        return captured to masked() + before + secretValues()
     }
 
     private fun secretValues(): List<String> = (page.evaluate(BundledScripts.secretValues) as? List<*>).orEmpty().filterIsInstance<String>()
+
+    /** A text watch's start: the page's `performance.now()` then ([pageMillis]) and the harness time it matches. */
+    private class WatchOrigin(
+        val pageMillis: Double,
+        val harness: HarnessTimestamp,
+    ) {
+        /** The harness time of a later page time of the same document (both clocks are monotonic). */
+        fun harnessTime(pageTime: Double): HarnessTimestamp = harness + ((pageTime - pageMillis) * NANOS_PER_MILLI).toLong().nanoseconds
+    }
 
     companion object {
         /** Joins a request in the target's own logs to Pətək's evidence (Faza 14). */
@@ -579,6 +919,40 @@ internal class PlaywrightBrowserSession private constructor(
 
         /** How often a wait re-checks the page: the resolution of every measured latency (t1). */
         const val PROBE_POLLING_INTERVAL_MS = 50.0
+
+        /** A text watch checks at most this often after DOM changes, so a busy page cannot keep it probing. */
+        private const val WATCH_GAP_MS = 20.0
+
+        /** A text watch nobody reads stops itself after this long (30 minutes) instead of probing forever. */
+        private const val WATCH_MAX_MS = 1_800_000.0
+        private const val NANOS_PER_MILLI = 1_000_000.0
+
+        /** How long a look waits for the network to go idle before it settles the page; a page that polls never does. */
+        private const val NETWORK_IDLE_WAIT_MS = 2_000.0
+
+        /** The part of a look's settle budget web fonts may take, each time they are waited for. */
+        private const val LOOK_FONTS_WAIT_MS = 3_000
+
+        /** The network is quiet once no resource finished loading for this long. */
+        private const val LOOK_QUIET_MS = 500
+
+        /** The pause at each screen while a look scrolls through the page, after the next frame was drawn. */
+        private const val LOOK_SCROLL_STEP_MS = 100
+
+        /** Between a look's frames: a page that still moves after it shows another frame. */
+        private val LOOK_FRAME_GAP = 500.milliseconds
+
+        /** A look's second load and each of its frames. */
+        private const val LOOK_LOAD_TIMEOUT_MS = 15_000.0
+
+        /** Applied while a look's frame is taken only: no transition halfway, no caret. */
+        private const val LOOK_STYLE = "*,*::before,*::after{transition:none!important;caret-color:transparent!important}"
+
+        /** Chromium's user agent without a window. */
+        private const val HEADLESS_MARK = "HeadlessChrome"
+
+        /** What a look reports as not settled, in this order. */
+        private val UNSETTLED = listOf("network", "fonts", "images")
 
         private const val LINKS_SCRIPT =
             "() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href'))" +
@@ -636,9 +1010,12 @@ internal class PlaywrightBrowserSession private constructor(
             val dialogs = DialogRecorder()
             val mutations = MutationRecorder(options.baseUrl)
             val health = HealthRecorder(options.baseUrl)
+            val credentials = PageCredentials(options.baseUrl, options.apiOrigin)
             val handles =
                 try {
-                    thread.runToCompletion { PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock, health) }
+                    thread.runToCompletion {
+                        PlaywrightHandles.create(options, connector, traffic, dialogs, mutations, clock, health, credentials)
+                    }
                 } catch (e: BrowserActionException) {
                     thread.close()
                     throw e
@@ -647,7 +1024,8 @@ internal class PlaywrightBrowserSession private constructor(
                     val reason = if (e is PlaywrightException) PlaywrightFailures.reasonOf(e.message.orEmpty()) else e.message
                     throw BrowserActionException("could not open browser session '${options.label}': $reason", e)
                 }
-            val session = PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, health, onClosed)
+            val session =
+                PlaywrightBrowserSession(options, thread, clock, handles, traffic, dialogs, mutations, health, credentials, onClosed)
             try {
                 currentCoroutineContext().ensureActive()
             } catch (e: CancellationException) {
@@ -657,6 +1035,33 @@ internal class PlaywrightBrowserSession private constructor(
             logger.debug { "browser session '${options.label}' opened ($connector)" }
             return session
         }
+
+        /**
+         * A look's frame: PNG at CSS scale (one image pixel per CSS pixel, also on a screen with more device pixels), the
+         * whole page down to the capture height (at least the first screen; only the first screen when [maxHeight] is 0),
+         * finite CSS animations finished and infinite ones started over, transitions off and the caret hidden by
+         * [LOOK_STYLE], a style that applies only while the frame is taken. Not Playwright's own caret hiding: it writes
+         * the caret colour into every field's `style` attribute and leaves `style=""` behind on fields that had none.
+         */
+        internal fun lookShotOptions(
+            maxHeight: Int,
+            viewport: Viewport,
+            pageHeight: Int,
+        ): Page.ScreenshotOptions =
+            Page
+                .ScreenshotOptions()
+                .setType(ScreenshotType.PNG)
+                .setAnimations(ScreenshotAnimations.DISABLED)
+                .setCaret(ScreenshotCaret.INITIAL)
+                .setScale(ScreenshotScale.CSS)
+                .setStyle(LOOK_STYLE)
+                .setTimeout(LOOK_LOAD_TIMEOUT_MS)
+                .apply {
+                    if (maxHeight > 0) {
+                        setFullPage(true)
+                        setClip(0.0, 0.0, viewport.width.toDouble(), max(viewport.height, min(pageHeight, maxHeight)).toDouble())
+                    }
+                }
 
         private fun visibleOnly(): Locator.FilterOptions = Locator.FilterOptions().setVisible(true)
     }

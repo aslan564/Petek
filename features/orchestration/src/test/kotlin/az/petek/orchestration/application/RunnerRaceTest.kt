@@ -30,6 +30,7 @@ import az.petek.orchestration.testing.VirtualClock
 import az.petek.orchestration.testing.campaign
 import az.petek.orchestration.testing.employees
 import az.petek.orchestration.testing.managers
+import az.petek.orchestration.testing.setupStep
 import az.petek.orchestration.testing.step
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -117,7 +118,7 @@ class RunnerRaceTest {
         }
 
     @Test
-    fun `run 2 - the loser reports the ticket as already decided and nothing counts as failed`() =
+    fun `run 2 - the loser reports the ticket as already decided, nothing failed and the race is undecided`() =
         runTest {
             val f = fixture()
             val decided =
@@ -126,9 +127,10 @@ class RunnerRaceTest {
 
             val summary = f.runner().run(race())
 
+            // The loser never asked: nobody contested the decision, so the race proves nothing (owner, 2026-09-30).
             f.evidence.assertionList
                 .single { it.type == "only_one_succeeds" }
-                .verdict shouldBe Verdict.PASSED
+                .verdict shouldBe Verdict.INCONCLUSIVE
             val loser = f.actionOf("a03")
             loser.status shouldBe StepStatus.PASSED
             loser.detail shouldBe "lost_race: no matching request; won by a02; agent: Bu müraciət artıq qərarlaşdırılıb"
@@ -136,7 +138,10 @@ class RunnerRaceTest {
                 .single()
                 .last()
                 .lostRace shouldBe true
-            summary.outcome shouldBe RunOutcome.PASSED
+            // Not PASSED, since nothing proved the race, yet nothing failed either (`petek run` exits with 3).
+            summary.outcome shouldBe RunOutcome.FAILED
+            summary.assertionsInconclusive shouldBe 1
+            summary.assertionsFailed shouldBe 0
             summary.stepsFailed shouldBe 0
             summary.failedAgents shouldBe 0
             f.monitor.statesOf("race", "a03").last() shouldBe TaskState.LOST_RACE
@@ -165,7 +170,42 @@ class RunnerRaceTest {
         }
 
     @Test
-    fun `agents that claim success without an accepted request make nobody the winner`() =
+    fun `a race left with one manager after the other failed setup is no race and never passes`() =
+        runTest {
+            val f = fixture()
+            f.agents.script = { call, _ ->
+                when {
+                    call.scenarioStep == "join" && call.agentId == AgentId("a03") -> {
+                        ActionOutcome(ActionStatus.FAILED, "no e-mail", failureReason = FailureReason.MAIL_TIMEOUT)
+                    }
+
+                    call.scenarioStep == "race" -> {
+                        f.browser.session(call.agentId.value).mutated("POST", TICKET, 303)
+                        DONE
+                    }
+
+                    else -> {
+                        DONE
+                    }
+                }
+            }
+
+            val summary = f.runner().run(race().copy(setup = listOf(setupStep("join", managers()))))
+
+            f.verify.groupCalls
+                .single()
+                .map { it.agentId.value } shouldContainExactly listOf("a02")
+            val group = f.evidence.assertionList.single { it.type == "only_one_succeeds" }
+            // No evidence of a race: undecided rather than a defect of the site, and the run is not PASSED (Faza 24.12).
+            group.verdict shouldBe Verdict.INCONCLUSIVE
+            group.note shouldBe "a race needs at least 2 racing actors; only a02 raced"
+            f.actionOf("a02").status shouldBe StepStatus.PASSED
+            summary.assertionsInconclusive shouldBe 1
+            summary.outcome shouldBe RunOutcome.FAILED
+        }
+
+    @Test
+    fun `agents that claim success without sending the request make nobody the winner, and decide nothing`() =
         runTest {
             val f = fixture()
             f.racing(requests = emptyMap())
@@ -177,7 +217,10 @@ class RunnerRaceTest {
                 .map { it.succeeded } shouldBe listOf(false, false)
             f.evidence.assertionList
                 .single { it.type == "only_one_succeeds" }
-                .verdict shouldBe Verdict.FAILED
+                .let {
+                    it.verdict shouldBe Verdict.INCONCLUSIVE
+                    it.note!! shouldStartWith "no_attempt: no racer sent a request matching"
+                }
             f.actionOf("a02").detail shouldBe "ok; request: no matching request"
             summary.outcome shouldBe RunOutcome.FAILED
         }
@@ -422,7 +465,7 @@ class RunnerRaceTest {
         }
 
     @Test
-    fun `an actor whose requests cannot be read neither wins nor loses, and the race fails`() =
+    fun `an actor whose requests cannot be read neither wins nor loses, and the race stays undecided`() =
         runTest {
             val f = fixture()
             f.racing(requests = mapOf("a02" to listOf(TICKET to 303)))
@@ -440,6 +483,10 @@ class RunnerRaceTest {
                 .race!!
                 .unavailable!! shouldContain "BrowserActionException"
             f.actionOf("a03").detail!! shouldContain "request: requests unavailable"
+            // A second winner could hide in a03's unread requests: no proof either way (Faza 24.12).
+            f.evidence.assertionList
+                .single { it.type == "only_one_succeeds" }
+                .verdict shouldBe Verdict.INCONCLUSIVE
         }
 
     @Test

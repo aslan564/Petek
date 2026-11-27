@@ -11,6 +11,7 @@
 
 package az.petek.browser.infrastructure
 
+import az.petek.browser.domain.AlternateFact
 import az.petek.browser.domain.ImageFact
 import az.petek.browser.domain.LinkFact
 import az.petek.browser.domain.PageFacts
@@ -37,5 +38,11 @@ internal object PageFactsReading {
                     LinkFact(redact(link["text"] as? String ?: ""), url)
                 },
             missingAnchors = (raw["missingAnchors"] as? List<*>).orEmpty().filterIsInstance<String>(),
+            alternates =
+                (raw["alternates"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().mapNotNull { alternate ->
+                    val language = alternate["language"] as? String ?: return@mapNotNull null
+                    val url = alternate["url"] as? String ?: return@mapNotNull null
+                    AlternateFact(language, url)
+                },
         )
 }

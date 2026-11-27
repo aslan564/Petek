@@ -18,6 +18,8 @@ import az.petek.evidence.domain.EvidenceSource
 import az.petek.evidence.domain.EvidenceTier
 import az.petek.evidence.domain.FindingClass
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.NOT_REACHED_ACTION
+import az.petek.evidence.domain.RaceNotes
 import az.petek.evidence.domain.RunRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
@@ -26,16 +28,20 @@ import az.petek.evidence.domain.Verdict
 /**
  * The [Judge] of docs/PLAN.md design decision 4: correctness is decided by three sources agreeing, never by an
  * opinion. Per (scenario step, actor) the assertions are folded into A (sender), B (receiver screen; harness checks
- * such as `latency_max` count here) and C (oracle); SKIPPED assertions carry no evidence and count as absent.
+ * such as `latency_max` count here) and C (oracle); SKIPPED, NOT_APPLICABLE and INCONCLUSIVE assertions carry no
+ * evidence and count as absent. A group whose only non-passing checks are INCONCLUSIVE yields one INCONCLUSIVE finding
+ * (the "tool gap" shelf) with what each check lacked (Faza 24.12).
  *
  * Rule order matters and is the contract: a failing oracle with a sender that did its part blames the backend,
- * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human.
+ * an oracle that confirms while receivers did not see blames delivery/UI, everything else needs a human. A race that
+ * several racers won by the site's own answers ([RaceNotes.SEVERAL_WINNERS]) is a SITE_CHECK finding, a defect of the
+ * site (the owner's decision of 2026-09-30); a race nobody won stays with a human, since a scenario can cause it too.
  *
  * The step overload adds one finding per (scenario step, agent, failure key) for agent actions that failed with a
  * key ([FailureKeys.of]): `mail_timeout` is BACKEND (no e-mail was sent), `request_failed` INVESTIGATE (the target
  * turned down a racer's own request although its agent claimed success), a site defect a deterministic check saw
- * ([SITE_DEFECTS]: `unhealthy_page`, `access_not_refused`) a SITE_CHECK finding about the site, with the check's own
- * words, any other key AGENT_FAILURE. An environment
+ * ([SITE_DEFECTS]: `unhealthy_page`, `access_not_refused`, `forbidden_accepted`) a SITE_CHECK finding about the site,
+ * with the check's own words, any other key AGENT_FAILURE. An environment
  * problem such as `mail_unavailable` (the test inbox was unreachable) is an AGENT_FAILURE whose note says so, never a
  * finding about the target. An expected refusal (`permission_denied` in a forbidden-action test) and a lost race
  * (`lost_race`, including the loser agent's own records of that action) are not failures and yield none
@@ -81,42 +87,95 @@ class ThreeSourceJudge(
     override fun findings(
         run: RunRecord,
         assertions: List<AssertionRecord>,
-    ): List<FindingRecord> =
-        assertions
-            .filter { it.runId == run.runId }
-            .groupBy { GroupKey(it.scenarioStep, it.agentId) }
-            .mapNotNull { (key, group) -> judgeGroup(run, key, group) }
+    ): List<FindingRecord> = judgeGroups(run, assertions, actions = emptyMap())
 
     override fun findings(
         run: RunRecord,
         assertions: List<AssertionRecord>,
         steps: List<StepRecord>,
-    ): List<FindingRecord> = findings(run, assertions) + stepFindings(run, steps)
+    ): List<FindingRecord> = judgeGroups(run, assertions, actionsOf(run, steps)) + stepFindings(run, steps)
+
+    private fun judgeGroups(
+        run: RunRecord,
+        assertions: List<AssertionRecord>,
+        actions: Map<GroupKey, String>,
+    ): List<FindingRecord> =
+        assertions
+            .filter { it.runId == run.runId }
+            .groupBy { GroupKey(it.scenarioStep, it.agentId) }
+            .mapNotNull { (key, group) -> judgeGroup(run, key, group, actions[key]) }
+
+    /**
+     * What each actor did in each step as its own record says (`do: <task> -> PASSED: <summary>`, `run <function> ->
+     * …`): A of a finding whose step has no check of the sender's own, so "what the sender did" is never blank
+     * (docs/PLAN.md decision 4: A is the sender's step log). It is shown only; the checks alone classify.
+     */
+    private fun actionsOf(
+        run: RunRecord,
+        steps: List<StepRecord>,
+    ): Map<GroupKey, String> =
+        steps
+            .filter { it.runId == run.runId && it.agentId != null && ExpectedOutcomes.isWholeAction(it) }
+            .associate { step ->
+                GroupKey(step.scenarioStep, step.agentId) to
+                    compact("${step.action} -> ${step.status}" + (step.detail?.let { ": $it" } ?: ""))
+            }
 
     private fun judgeGroup(
         run: RunRecord,
         key: GroupKey,
         group: List<AssertionRecord>,
+        action: String?,
     ): FindingRecord? {
-        val evidence = group.filter { it.verdict != Verdict.SKIPPED && it.verdict != Verdict.NOT_APPLICABLE }
+        val evidence = group.filter { it.verdict !in NO_EVIDENCE }
         val a = observe(SOURCE_A, evidence.filter { it.source == EvidenceSource.SENDER })
         val b = observe(SOURCE_B, evidence.filter { it.source == EvidenceSource.RECEIVER || it.source == EvidenceSource.HARNESS })
         val c = observe(SOURCE_C, evidence.filter { it.source == EvidenceSource.ORACLE })
-        val verdict = classify(a, b, c) as? JudgeVerdict.Finding ?: return null
+        val verdict =
+            classify(a, b, c) as? JudgeVerdict.Finding
+                ?: return inconclusive(run, key, group.filter { it.verdict == Verdict.INCONCLUSIVE })
         val failed = evidence.filter { it.verdict == Verdict.FAILED }
+        // Several racers won by the site's own answers: the site decided twice, whatever the other sources say.
+        val severalWinners = failed.any { it.type == ONLY_ONE_SUCCEEDS && it.note?.startsWith(RaceNotes.SEVERAL_WINNERS) == true }
         return FindingRecord(
             findingId = ids.findingId(),
             runId = run.runId,
             stepId = (failed.firstOrNull() ?: evidence.first()).stepId,
             scenarioStep = key.scenarioStep,
             agentId = key.agentId,
-            findingClass = verdict.findingClass,
-            a = a?.value,
+            findingClass = if (severalWinners) FindingClass.SITE_CHECK else verdict.findingClass,
+            a = a?.value ?: action,
             b = b?.value,
             c = c?.value,
-            note = noteWithDetails(verdict.note, failed.mapNotNull { it.note }),
+            note = noteWithDetails(if (severalWinners) NOTE_SEVERAL_WINNERS else verdict.note, failed.mapNotNull { it.note }),
             artifactIds = evidence.flatMap { it.artifactIds }.distinct(),
             evidenceTier = if (c != null) EvidenceTier.ORACLE_CONFIRMED else EvidenceTier.UI_NETWORK,
+        )
+    }
+
+    /**
+     * Checks that ran but could not decide ([Verdict.INCONCLUSIVE], Faza 24.12) and nothing that failed: one finding on
+     * the "tool gap" shelf with what each check lacked, never a finding about the site.
+     */
+    private fun inconclusive(
+        run: RunRecord,
+        key: GroupKey,
+        records: List<AssertionRecord>,
+    ): FindingRecord? {
+        if (records.isEmpty()) return null
+        return FindingRecord(
+            findingId = ids.findingId(),
+            runId = run.runId,
+            stepId = records.first().stepId,
+            scenarioStep = key.scenarioStep,
+            agentId = key.agentId,
+            findingClass = FindingClass.INCONCLUSIVE,
+            a = observe(SOURCE_A, records.filter { it.source == EvidenceSource.SENDER })?.value,
+            b = observe(SOURCE_B, records.filter { it.source == EvidenceSource.RECEIVER || it.source == EvidenceSource.HARNESS })?.value,
+            c = observe(SOURCE_C, records.filter { it.source == EvidenceSource.ORACLE })?.value,
+            note = noteWithDetails(NOTE_INCONCLUSIVE, records.mapNotNull { it.note }),
+            artifactIds = records.flatMap { it.artifactIds }.distinct(),
+            evidenceTier = EvidenceTier.UI_NETWORK,
         )
     }
 
@@ -127,7 +186,8 @@ class ThreeSourceJudge(
         val expected = ExpectedOutcomes(steps.filter { it.runId == run.runId })
         return steps
             .asSequence()
-            .filter { it.runId == run.runId && it.agentId != null && it.kind !in NOT_AGENT_ACTIONS }
+            // A step a tester did not get to is the roll call's to show, never a finding against the tester.
+            .filter { it.runId == run.runId && it.agentId != null && it.kind !in NOT_AGENT_ACTIONS && it.action != NOT_REACHED_ACTION }
             .mapNotNull { step -> expected.failureKey(step)?.let { key -> step to key } }
             .distinctBy { (step, key) -> Triple(step.scenarioStep, step.agentId, key) }
             .map { (step, key) -> stepFinding(run, step, key) }
@@ -160,8 +220,10 @@ class ThreeSourceJudge(
             c = if (noMail) NO_EMAIL_SENT else null,
             note = if (defect != null) "$SITE_DEFECT_NOTE ($key)." else stepNote(key, noMail),
             artifactIds = emptyList(),
-            // A `do` step failed because the model said so; a deterministic step failed on what the harness saw.
-            evidenceTier = if (step.kind == StepKind.DO && !noMail && !refused) EvidenceTier.LLM_JUDGED else EvidenceTier.UI_NETWORK,
+            // A `do` step failed because the model said so; a deterministic step failed on what the harness saw, and so
+            // did a `do` step whose failure code found in the browser's requests (a site defect such as forbidden_accepted).
+            evidenceTier =
+                if (step.kind == StepKind.DO && !noMail && !refused && defect == null) EvidenceTier.LLM_JUDGED else EvidenceTier.UI_NETWORK,
         )
     }
 
@@ -227,12 +289,16 @@ class ThreeSourceJudge(
 
         /**
          * Failure keys of deterministic checks that saw the site itself go wrong: a blind `site_health` problem (a page
-         * wider than a phone, a script error, a broken link, a slow request, a back button that leads elsewhere) and a
-         * page `direct_url` found open to a role that must not see it. The agent only carried the check, so these are
-         * never a tool gap.
+         * wider than a phone, a script error, a broken link, a slow request, a back button that leads elsewhere), a
+         * page `direct_url` found open to a role that must not see it, and a forbidden action the site accepted from
+         * the tester's own page (`forbidden_accepted`). The agent only carried the check, so these are never a tool gap.
          */
         val SITE_DEFECTS: Map<String, FindingClass> =
-            mapOf("unhealthy_page" to FindingClass.SITE_CHECK, "access_not_refused" to FindingClass.SITE_CHECK)
+            mapOf(
+                FailureKeys.UNHEALTHY_PAGE to FindingClass.SITE_CHECK,
+                FailureKeys.ACCESS_NOT_REFUSED to FindingClass.SITE_CHECK,
+                FailureKeys.FORBIDDEN_ACCEPTED to FindingClass.SITE_CHECK,
+            )
         const val SITE_DEFECT_NOTE = "The site failed a check that code made on what the browser saw"
 
         /**
@@ -248,6 +314,15 @@ class ThreeSourceJudge(
         const val NOTE_SENDER_ONLY = "The sender's check (A) failed and there is no receiver or oracle evidence to attribute it."
         const val NOTE_NO_ORACLE = "The receiver (B) disagrees and there is no oracle evidence (C) to attribute it."
         const val NOTE_DISAGREE = "The sources disagree in a way the three-source rule cannot attribute."
+        const val NOTE_SEVERAL_WINNERS =
+            "The site let more than one racer win the same decision (each got a success answer): a defect of the site."
+        const val ONLY_ONE_SUCCEEDS = "only_one_succeeds"
+        const val NOTE_INCONCLUSIVE =
+            "The check ran but its evidence could not decide it: a gap of the test or its scenario, not a defect of the site."
+
+        /** Verdicts that carry no evidence for the three sources: not run, not applicable, or not decidable. */
+        val NO_EVIDENCE = setOf(Verdict.SKIPPED, Verdict.NOT_APPLICABLE, Verdict.INCONCLUSIVE)
+
         const val NOTE_REQUEST_FAILED =
             "The target turned down the actor's own request (B shows it) although its agent reported success (request_failed)."
     }

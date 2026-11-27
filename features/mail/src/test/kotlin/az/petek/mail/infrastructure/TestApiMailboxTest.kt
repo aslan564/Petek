@@ -18,11 +18,16 @@ import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailboxException
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -35,6 +40,8 @@ import org.junit.jupiter.api.Test
 import java.net.URI
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /** [TestApiMailbox] against an embedded server speaking the target's `/test/emails` API. */
@@ -297,9 +304,43 @@ class TestApiMailboxTest {
         shouldThrow<IllegalArgumentException> { TestApiMailbox(URI("https://x"), Secret("a\nb")) }
     }
 
+    @Test
+    fun `a hundred testers waiting at once are served side by side, not one after another`() {
+        val api = FakeTestApi()
+        val testers = (1..TESTERS).map { "tester.a%03d@test.portal.example".format(it) }
+        testers.forEachIndexed { index, tester -> api.add("e$index", to = tester, text = "Təsdiq kodu: ${100_000 + index}") }
+        val inFlight = AtomicInteger()
+        val most = AtomicInteger()
+        // Every answer takes 0.3 s: one tester after another, a single poll round would take a minute.
+        val server =
+            StubHttpServer { request ->
+                most.accumulateAndGet(inFlight.incrementAndGet()) { a, b -> maxOf(a, b) }
+                try {
+                    delay(300.milliseconds)
+                    api.handle(request)
+                } finally {
+                    inFlight.decrementAndGet()
+                }
+            }.closing()
+        val verification = DefaultAwaitVerificationUseCase(mailboxFor(server), DefaultVerificationExtractor())
+
+        val codes =
+            runBlocking {
+                testers
+                    .map { async(Dispatchers.Default) { verification.await(it, SINCE, MailPurpose.CODE, 30.seconds, 1.seconds).code } }
+                    .awaitAll()
+            }
+
+        codes shouldContainExactly testers.indices.map { "${100_000 + it}" }
+        most.get() shouldBeGreaterThan TESTERS / 2
+    }
+
     private companion object {
         const val ELI = "eli.k7x2.a07@test.portal.example"
         const val TOKEN = "secret-test-token-1"
         val SINCE: Instant = Instant.parse("2026-09-25T10:00:00Z")
+
+        /** The most testers a run has. */
+        const val TESTERS = 100
     }
 }

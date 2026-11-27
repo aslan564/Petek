@@ -43,9 +43,9 @@ code checks assertions, the AI only picks whitelisted actions.
   localised.
 
 ## Action Items
-1. [x] Tool surface over `PanelBackend` (`features/dashboard/infrastructure/mcp`, 25 tools; `findings` and `teardown`
-   added to `PanelRuns`); [ ] `FindingBundle` as one object in the reporting domain (today: `get_findings` +
-   `get_evidence`).
+1. [x] Tool surface over `PanelBackend` (`features/dashboard/infrastructure/mcp`, 25 tools at first, 29 since `get_finding_bundle` and Faza 25.3's `test_site`, `get_test`, `cancel_test`; `findings` and `teardown`
+   added to `PanelRuns`); [x] `FindingBundle` as one object in the reporting domain (`BuildFindingBundlesUseCase`,
+   `get_finding_bundle`, `petek findings --json`).
 2. [x] `petek mcp` (thin stdio JSON-RPC, no SDK — decided 2026-09-26) and `--json` on `doctor`, `init`, `plan`, `run`,
-   `report`, `teardown`; contract tests over byte streams (`McpServerTest`, `McpCommandTest`).
+   `report`, `teardown` (later also `verify`, `test`, `findings`, `capacity`, `probe`, `smoke`); contract tests over byte streams (`McpServerTest`, `McpCommandTest`).
 3. [x] `petek init` skill pack; role instructions (`.petek/SKILL.md`); MCP entry per agent.

@@ -13,6 +13,12 @@ package az.petek.agent.application
 
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.StepContext
+import az.petek.browser.domain.LookArea
+import az.petek.browser.domain.LookAreaReason
+import az.petek.browser.domain.LookShotKind
+import az.petek.browser.domain.PageAnchor
+import az.petek.browser.domain.PageLook
+import az.petek.browser.domain.PageTiming
 import az.petek.core.ids.IdGenerator
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessClock
@@ -20,6 +26,14 @@ import az.petek.core.time.HarnessTimestamp
 import az.petek.evidence.domain.ArtifactStore
 import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.EvidenceRecorder
+import az.petek.evidence.domain.LookAnchor
+import az.petek.evidence.domain.LookBox
+import az.petek.evidence.domain.LookFrame
+import az.petek.evidence.domain.LookFrameKind
+import az.petek.evidence.domain.LookMask
+import az.petek.evidence.domain.LookMaskReason
+import az.petek.evidence.domain.PageLookRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.StepStatus
@@ -76,6 +90,94 @@ internal class StepEvidence(
     }
 
     /**
+     * Records how fast [page] became usable for [runtime]'s tester on [device], as the browser timed it ([timing]), with
+     * the sub-action [stepId] that read it.
+     */
+    suspend fun pageTiming(
+        runtime: AgentRuntime,
+        step: StepContext,
+        stepId: StepId,
+        page: String,
+        device: String?,
+        timing: PageTiming,
+    ) {
+        recorder.pageTiming(
+            PageTimingRecord(
+                runId = runtime.runId,
+                stepId = stepId,
+                agentId = runtime.identity.agentId,
+                scenarioStep = step.scenarioStep,
+                page = page,
+                device = device,
+                ttfbMs = timing.ttfbMs,
+                domContentLoadedMs = timing.domContentLoadedMs,
+                loadMs = timing.loadMs,
+                largestPaintMs = timing.largestPaintMs,
+                layoutShift = timing.layoutShift,
+                recordedAt = clock.now().wall,
+            ),
+        )
+    }
+
+    /**
+     * Keeps [look], the look of [page] for [runtime]'s tester on [device] taken by the sub-action [stepId] with the height
+     * cap [maxHeight]: every frame, the main one first, as a [ArtifactType.VISUAL] artifact of [stepId], then the
+     * [PageLookRecord] naming them. When a frame cannot be written no record is written either (AGENTS.md rule 5: no
+     * look without its picture); the failure is logged, and the step it documents goes on. Returns null when the look
+     * was kept, else why it was not (redacted), so the look is not counted as kept.
+     */
+    suspend fun pageLook(
+        runtime: AgentRuntime,
+        step: StepContext,
+        stepId: StepId,
+        page: String,
+        device: String?,
+        look: PageLook,
+        maxHeight: Int,
+    ): String? {
+        val agentId = runtime.identity.agentId
+        return try {
+            val frames =
+                look.shots.sortedBy { it.kind.ordinal }.map { shot ->
+                    val artifact = artifacts.write(runtime.runId, stepId, agentId.value, ArtifactType.VISUAL, shot.png)
+                    recorder.artifact(artifact)
+                    LookFrame(artifact.artifactId, frameKind(shot.kind), shot.width, shot.height, shot.areas.map(::mask))
+                }
+            recorder.pageLook(
+                PageLookRecord(
+                    runId = runtime.runId,
+                    stepId = stepId,
+                    agentId = agentId,
+                    scenarioStep = step.scenarioStep,
+                    page = page,
+                    device = device,
+                    landedPath = look.landedPath,
+                    status = look.status,
+                    viewportWidth = look.viewport.width,
+                    viewportHeight = look.viewport.height,
+                    pageHeight = look.pageHeight,
+                    maxHeight = maxHeight,
+                    testers = step.share.of,
+                    renderer = look.renderer,
+                    settled = look.settled,
+                    unsettled = look.unsettled,
+                    fonts = look.fonts,
+                    frames = frames,
+                    anchors = look.anchors.map(::anchor),
+                    recordedAt = clock.now().wall,
+                ),
+            )
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val why = runtime.redact(e.message.orEmpty()).ifBlank { e::class.simpleName.orEmpty() }
+            logger.warn { "$agentId: could not keep the look of $page for $stepId: $why" }
+            why
+        }
+    }
+
+    /**
      * Captures the page after [stepId]: a screenshot when [screenshot], the accessibility tree when [accessibility].
      * Bounded in time so a hung browser cannot stall the run while evidence is collected.
      */
@@ -109,6 +211,30 @@ internal class StepEvidence(
             logger.warn { "${runtime.identity.agentId}: could not capture $type for $stepId: ${runtime.redact(e.message.orEmpty())}" }
         }
     }
+
+    private fun frameKind(kind: LookShotKind): LookFrameKind =
+        when (kind) {
+            LookShotKind.MAIN -> LookFrameKind.MAIN
+            LookShotKind.MOVED -> LookFrameKind.MOVED
+            LookShotKind.RELOADED -> LookFrameKind.RELOADED
+        }
+
+    private fun mask(area: LookArea): LookMask =
+        LookMask(
+            LookBox(area.x, area.y, area.width, area.height),
+            when (area.reason) {
+                LookAreaReason.PROFILE -> LookMaskReason.PROFILE
+                LookAreaReason.STEP -> LookMaskReason.STEP
+                LookAreaReason.MARKUP -> LookMaskReason.MARKUP
+                LookAreaReason.RUN_TEXT -> LookMaskReason.RUN_TEXT
+                LookAreaReason.TIME_TEXT -> LookMaskReason.TIME_TEXT
+                LookAreaReason.EMBED -> LookMaskReason.EMBED
+            },
+            area.source,
+        )
+
+    private fun anchor(anchor: PageAnchor): LookAnchor =
+        LookAnchor(anchor.selector, LookBox(anchor.x, anchor.y, anchor.width, anchor.height))
 
     companion object {
         val CAPTURE_TIMEOUT = 10.seconds

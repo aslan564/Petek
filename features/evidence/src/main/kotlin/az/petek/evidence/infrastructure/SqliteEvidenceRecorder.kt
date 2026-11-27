@@ -18,6 +18,8 @@ import az.petek.evidence.domain.EventReceipt
 import az.petek.evidence.domain.EventRecord
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.FindingRecord
+import az.petek.evidence.domain.PageLookRecord
+import az.petek.evidence.domain.PageTimingRecord
 import az.petek.evidence.domain.StepRecord
 import az.petek.evidence.domain.UsageRecord
 import org.jetbrains.exposed.v1.core.coalesce
@@ -168,6 +170,52 @@ internal class SqliteEvidenceRecorder(
                 it[cacheReadTokens] = record.cacheReadTokens
                 it[costUsd] = record.costUsd
                 it[calls] = record.calls
+            }
+        }
+    }
+
+    override suspend fun pageTiming(record: PageTimingRecord) {
+        db.write {
+            PageTimingTable.insert {
+                it[runId] = record.runId
+                it[stepId] = record.stepId
+                it[agentId] = record.agentId
+                it[scenarioStep] = record.scenarioStep
+                it[page] = record.page
+                it[device] = record.device
+                it[ttfbMs] = record.ttfbMs
+                it[domContentLoadedMs] = record.domContentLoadedMs
+                it[loadMs] = record.loadMs
+                it[largestPaintMs] = record.largestPaintMs
+                it[layoutShift] = record.layoutShift
+                it[recordedAt] = record.recordedAt
+            }
+        }
+    }
+
+    override suspend fun pageLook(record: PageLookRecord) {
+        db.write {
+            PageLookTable.insert {
+                it[runId] = record.runId
+                it[stepId] = record.stepId
+                it[agentId] = record.agentId
+                it[scenarioStep] = record.scenarioStep
+                it[page] = record.page
+                it[device] = record.device
+                it[landedPath] = record.landedPath
+                it[status] = record.status
+                it[viewportWidth] = record.viewportWidth
+                it[viewportHeight] = record.viewportHeight
+                it[pageHeight] = record.pageHeight
+                it[maxHeight] = record.maxHeight
+                it[testers] = record.testers
+                it[renderer] = record.renderer
+                it[settled] = record.settled
+                it[unsettled] = LookJson.strings(record.unsettled)
+                it[fonts] = LookJson.strings(record.fonts)
+                it[frames] = LookJson.frames(record.frames)
+                it[anchors] = LookJson.anchors(record.anchors)
+                it[recordedAt] = record.recordedAt
             }
         }
     }

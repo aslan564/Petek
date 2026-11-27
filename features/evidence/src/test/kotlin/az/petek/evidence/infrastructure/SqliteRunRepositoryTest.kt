@@ -152,6 +152,36 @@ class SqliteRunRepositoryTest {
         }
 
     @Test
+    fun `the baseline is the newest finished run of the scenario that fits, however many runs came after it`() =
+        withStore(dir) { store, _ ->
+            suspend fun finished(
+                id: String,
+                second: Long,
+                release: String? = null,
+                group: String? = null,
+                name: String? = null,
+            ) {
+                val record = run(RunId(id), startedAt = at(second), repeatGroup = group)
+                store.create(record.copy(release = release, campaignName = name ?: record.campaignName))
+                store.finish(RunId(id), RunResult.PASSED, at(second + 1))
+            }
+            finished("run_old", 1, release = "v1.0")
+            finished("run_group_a", 10, group = "grp_1")
+            finished("run_other", 20, release = "v1.0", name = "another scenario")
+            repeat(600) { finished("run_later_$it", 100L + it, release = "v2.0") }
+            store.create(run(RunId("run_going"), startedAt = at(900)))
+            finished("run_group_b", 1_000, group = "grp_1")
+            val current = RunId("run_group_b")
+            val name = run().campaignName
+
+            store.latestFinished(name, current, release = "v1.0")?.runId shouldBe RunId("run_old")
+            store.latestFinished(name, current)?.runId shouldBe RunId("run_later_599")
+            store.latestFinished(name, current, startedBefore = at(100), outsideGroup = "grp_1")?.runId shouldBe RunId("run_old")
+            store.latestFinished(name, current, startedBefore = at(100))?.runId shouldBe RunId("run_group_a")
+            store.latestFinished(name, current, release = "v9") shouldBe null
+        }
+
+    @Test
     fun `a repeat group lists its runs by repeat index and nothing else`() =
         withStore(dir) { store, _ ->
             store.create(run(RunId("run_3"), startedAt = at(3), repeatGroup = "grp_1", repeatIndex = 3))

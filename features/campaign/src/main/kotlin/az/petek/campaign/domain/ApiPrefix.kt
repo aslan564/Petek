@@ -11,6 +11,8 @@
 
 package az.petek.campaign.domain
 
+import java.net.URI
+
 /**
  * The campaign with `{api}` ([Placeholder.API_PREFIX]) replaced by [TargetProfile.apiPrefix] wherever a path is sent to
  * the target: `http_status` and `oracle` paths, id sources read from the test API, `run` arguments and flow `goto`s.
@@ -59,3 +61,51 @@ private fun FlowStep.withPaths(transform: (String) -> String): FlowStep =
         is FlowStep.Journey -> copy(pages = pages.map { page -> page.copy(steps = page.steps.map { it.withPaths(transform) }) })
         else -> this
     }
+
+/**
+ * Where the site's API lives when `target_profile.api_prefix` is the full address of an API on its own host
+ * (`https://api.example.com/v1`; the owner's decision of 2026-09-30): that host's origin, `https://api.example.com`.
+ * Null when the API is a path on the target (`/api/v1`, the usual case). Only `http_status` checks go there, and a run
+ * that sends them must first find the host allowed by the production-host policy and proved as the owner's own (the
+ * app checks both before a tester starts).
+ */
+val TargetProfile.apiOrigin: URI? get() = ApiAddress.originOf(apiPrefix)
+
+/** The API origin this campaign's `http_status` checks call; null when none of them goes to an API on its own host. */
+val Campaign.apiOriginInUse: URI?
+    get() {
+        val origin = target.apiOrigin ?: return null
+        val used =
+            (setup + steps).any { step ->
+                step.assertions.any {
+                    it is AssertionSpec.HttpStatus &&
+                        ApiAddress.onOrigin(it.path, origin)
+                }
+            }
+        return origin.takeIf { used }
+    }
+
+/** A full address of an API on its own host, as `api_prefix` may give it. */
+object ApiAddress {
+    /** `http(s)://host[:port][/segment…]`: no credentials, no trailing '/', no query or fragment. */
+    private val FULL =
+        Regex("""https?://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::\d{1,5})?(?:/[A-Za-z0-9._~\-]+)*""", RegexOption.IGNORE_CASE)
+
+    /** The origin of [prefix] (scheme and host in lower case, the port as written); null when it is not a full address. */
+    fun originOf(prefix: String): URI? {
+        if (!FULL.matches(prefix)) return null
+        val uri = URI(prefix)
+        val port = if (uri.port == -1) "" else ":${uri.port}"
+        return URI("${uri.scheme.lowercase()}://${uri.host.lowercase()}$port")
+    }
+
+    /** Whether [path] is an address on [origin] (a `/` right after it), however the scheme and host are cased. */
+    fun onOrigin(
+        path: String,
+        origin: URI,
+    ): Boolean {
+        val prefix = origin.toString()
+        return path.length > prefix.length && path.regionMatches(0, prefix, 0, prefix.length, ignoreCase = true) &&
+            path[prefix.length] == '/'
+    }
+}

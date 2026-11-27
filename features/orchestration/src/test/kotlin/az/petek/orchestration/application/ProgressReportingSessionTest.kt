@@ -12,6 +12,10 @@
 package az.petek.orchestration.application
 
 import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.BrowserSession
+import az.petek.browser.domain.LookRequest
+import az.petek.browser.domain.PageLook
+import az.petek.browser.domain.Viewport
 import az.petek.browser.testing.FakeBrowserSession
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
@@ -66,6 +70,41 @@ class ProgressReportingSessionTest {
                     "saveStorageState a07.json",
                     "request POST /api/tickets/1/approve",
                 )
+        }
+
+    @Test
+    fun `a look reports progress when it starts and ends`() =
+        runTest {
+            val look =
+                PageLook(
+                    shots = emptyList(),
+                    viewport = Viewport(1366, 768),
+                    pageHeight = 768,
+                    landedPath = "/",
+                    status = 200,
+                    renderer = "chromium 153.0; Linux amd64; headless",
+                    settled = false,
+                    unsettled = listOf("network"),
+                    fonts = emptyList(),
+                    anchors = emptyList(),
+                    rejectedSelectors = emptyList(),
+                )
+            fake.pageLook = look
+            var signalsDuringLook = -1
+            val watched =
+                object : BrowserSession by fake {
+                    override suspend fun look(request: LookRequest): PageLook? = fake.look(request).also { signalsDuringLook = signals }
+                }
+            val request = LookRequest(maxHeight = 0)
+
+            ProgressReportingSession(watched) { signals++ }.look(request) shouldBe look
+
+            signalsDuringLook shouldBe 1
+            signals shouldBe 2
+            fake.lookRequests shouldContainExactly listOf(request)
+            fake.lookFailure = BrowserActionException("look failed: page crashed")
+            shouldThrow<BrowserActionException> { session.look(request) }.message shouldBe "look failed: page crashed"
+            signals shouldBe 4
         }
 
     @Test

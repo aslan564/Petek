@@ -18,9 +18,24 @@ package az.petek.campaign.domain
 sealed interface Placeholder {
     val name: String
 
-    /** `{last_id}`: id of the most recently emitted object, as supplied in [TemplateContext.lastId]. */
+    /**
+     * `{last_id}`: id of the object of the step's own event, as supplied in [TemplateContext.lastId]: the event the step
+     * waits for and, in its checks, the one it emits. Never "whatever happened last" (Faza 24.6); another step's object
+     * is `{event.<name>.id}`.
+     */
     data object LastId : Placeholder {
         override val name: String = LAST_ID
+    }
+
+    /**
+     * `{pass}`: which execution of the steps a text belongs to, as `<run tag>-<n>` from [TemplateContext.pass], so a
+     * text a step publishes differs in every execution and in every run: n is 1 in the first pass, the wave's number in
+     * later waves and the next number in the account swap. Like [LastId] it follows the step's own event: in a step that
+     * emits, the pass now running; in one that waits, the pass its event was published in (a setup event of the first
+     * wave read in a later one); else the pass now running.
+     */
+    data object Pass : Placeholder {
+        override val name: String = PASS
     }
 
     /** `{self.<field>}`: a field of the acting tester's identity, read from [TemplateContext.self]. */
@@ -65,6 +80,12 @@ sealed interface Placeholder {
         val CAMPAIGN_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "department", "role", "phone")
 
         /**
+         * `self` fields that tell one tester from every other (each tester's own e-mail, name, agent id and phone), so an
+         * oracle path naming one finds that tester's objects only; a department or role is shared with colleagues.
+         */
+        val TESTER_SCOPED_SELF_FIELDS: Set<String> = linkedSetOf("email", "name", "agent_id", "phone")
+
+        /**
          * `self` fields flows may use (see [Flow]): the campaign's, the display name split for sign-up forms that ask
          * for first and last name separately, and the password, which only the harness types (flows never reach the LLM).
          */
@@ -77,6 +98,7 @@ sealed interface Placeholder {
         val TESTER_FIELDS: Set<String> = linkedSetOf("name", "email")
 
         private const val LAST_ID = "last_id"
+        private const val PASS = "pass"
         private const val TESTER_PREFIX = "tester."
         private const val SELF_PREFIX = "self."
         private const val EVENT_PREFIX = "event."
@@ -87,6 +109,10 @@ sealed interface Placeholder {
             when {
                 name == LAST_ID -> {
                     LastId
+                }
+
+                name == PASS -> {
+                    Pass
                 }
 
                 name.startsWith(SELF_PREFIX) && name.length > SELF_PREFIX.length -> {
@@ -117,7 +143,7 @@ sealed interface Placeholder {
         /** Human-readable list of the forms a campaign may use, for error messages. */
         val SUPPORTED_FORMS: String =
             (
-                listOf("{$LAST_ID}") + CAMPAIGN_SELF_FIELDS.map { "{$SELF_PREFIX$it}" } + "{event.<event>.id}" +
+                listOf("{$LAST_ID}", "{$PASS}") + CAMPAIGN_SELF_FIELDS.map { "{$SELF_PREFIX$it}" } + "{event.<event>.id}" +
                     "{tester.<role>.<n>.name|email}"
             ).joinToString(", ")
     }

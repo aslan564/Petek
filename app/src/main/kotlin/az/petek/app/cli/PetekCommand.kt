@@ -34,9 +34,11 @@ class PetekCommand(
     init {
         subcommands(
             InitCommand(),
+            TestCommand(),
             PlanCommand(),
             RunCommand(),
             ReportCommand(),
+            CompareCommand(),
             FindingsCommand(),
             DevCommand(),
             TeardownCommand(),

@@ -189,7 +189,7 @@ class SessionRunFunctionsTest {
     }
 
     @Test
-    fun `read_email_code stores the newest code for the agent`() =
+    fun `read_email_code stores the newest code for the agent and keeps which e-mail it came from`() =
         runTest {
             fixture.verification.sendCode(identity.email, "777111")
 
@@ -198,6 +198,9 @@ class SessionRunFunctionsTest {
             outcome.status shouldBe ActionStatus.SUCCEEDED
             fixture.runtime.variables[AgentVariableKeys.EMAIL_CODE] shouldBe "777111"
             fixture.verification.calls.single() shouldBe (identity.email to MailPurpose.CODE)
+            // The message's id, never the code, is kept with the step: the report can point at that very e-mail.
+            val await = fixture.steps.single { it.action == "read_email_code: await e-mail code for ${identity.email}" }
+            await.detail shouldBe "message msg-1"
         }
 
     @Test

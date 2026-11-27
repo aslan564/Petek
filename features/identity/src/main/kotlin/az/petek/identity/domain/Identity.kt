@@ -37,9 +37,32 @@ data class Identity(
     val registration: RegistrationMode,
     val status: IdentityStatus = IdentityStatus.PLANNED,
     val storageStatePath: String? = null,
-)
+) {
+    /**
+     * Whether this tester signs in with an account the owner gave ([GivenAccount], [RegistrationMode.LOGIN]) instead of
+     * one Pətək generates for its run: its e-mail is the account's, the same in every run that uses it, and its
+     * [password] is the owner's own.
+     */
+    val ownAccount: Boolean get() = registration == RegistrationMode.LOGIN
 
-enum class IdentityStatus { PLANNED, REGISTERED, ACTIVE, FAILED }
+    /**
+     * This identity as an [IdentityRepository] keeps it: the owner's password of an [ownAccount] is never stored
+     * (AGENTS.md rule 10), it lives in the target profile and in the run's plan only, so the stored tester has an empty
+     * password. A generated tester is kept as it is.
+     */
+    fun asStored(): Identity = if (ownAccount) copy(password = NOT_STORED) else this
+
+    companion object {
+        /** The password a stored [ownAccount] comes back with: none, the owner's stays in the target profile. */
+        val NOT_STORED: Secret = Secret("")
+    }
+}
+
+/**
+ * Where a tester stands in its run: planned, active once its setup (sign-up, verification, sign-in) passed, or failed
+ * with the reason. An account the site created before a later failure is named in that step's detail.
+ */
+enum class IdentityStatus { PLANNED, ACTIVE, FAILED }
 
 /** Input for the registry generator, mapped from the campaign by the orchestrator. */
 data class IdentitySpec(
@@ -91,7 +114,36 @@ data class IdentityPlan(
     val identities: List<Identity>,
     /** Always [WorkspaceId.LOCAL] on the owner's machine (ADR-0011). */
     val workspaceId: WorkspaceId = WorkspaceId.LOCAL,
-)
+) {
+    /**
+     * This plan with only the identities Pətək generated: without the [RegistrationMode.LOGIN] testers, which sign in
+     * with the owner's own accounts ([GivenAccount]), their e-mails and passwords.
+     */
+    fun withoutOwnAccounts(): IdentityPlan = copy(identities = identities.filterNot { it.ownAccount })
+
+    /**
+     * What this plan holds more than once that a run's registry holds once, as `duplicate <what> <value> (<agents>)`:
+     * an agent id, an e-mail (compared without regard to letter case, as mail servers compare them) or a display name.
+     * Empty for a registry a run can store; the whole plan is checked, so a part of it stored alone (a plan's
+     * [withoutOwnAccounts]) never hides what the run would refuse.
+     */
+    fun duplicates(): List<String> =
+        repeated("agent id", listHolders = false) { it.agentId.value } +
+            repeated("e-mail") { it.email.lowercase() } +
+            repeated("display name") { it.displayName }
+
+    private fun repeated(
+        label: String,
+        listHolders: Boolean = true,
+        key: (Identity) -> String,
+    ): List<String> =
+        identities
+            .groupBy(key)
+            .filterValues { it.size > 1 }
+            .map { (value, holders) ->
+                "duplicate $label $value" + if (listHolders) " (${holders.joinToString { it.agentId.value }})" else ""
+            }
+}
 
 /** A registry that cannot be built (duplicate names, impossible quotas). The run must not start. */
 class IdentityConflictException(
@@ -105,6 +157,10 @@ class IdentityConflictException(
  * unique. Managers always join by invitation (a company-code sign-up becomes an employee on the target), the other
  * invitations go to employees with a seeded, department-stratified shuffle, so each department gets a mix of invite
  * and company code, and company-code identities are employees only.
+ *
+ * A registry that cannot be built is an [IdentityConflictException], also one that would repeat a name or an e-mail
+ * ([IdentityPlan.duplicates]: a `login` tester keeps its account's), so every caller that generates one (`petek plan`,
+ * the previews before a run, the run itself) refuses what the run's registry could not hold.
  */
 interface IdentityRegistryGenerator {
     fun generate(
@@ -154,14 +210,25 @@ interface NameCatalog {
     ): String = fatherName
 }
 
-/** Port: identities persisted per run (UNIQUE(email), UNIQUE(run_id, display_name)). */
+/**
+ * Port: identities persisted per run. Within a run every agent id, e-mail and display name is unique; across runs the
+ * e-mail of a tester Pətək generated is too (no other run ever used it), while the e-mail of an [Identity.ownAccount]
+ * is the owner's account and repeats in every run that signs in with it.
+ */
 interface IdentityRepository {
-    /** Replaces any identities already stored for [runId] in one transaction (so `petek plan` is repeatable). */
+    /**
+     * Replaces any identities already stored for [runId] in one transaction (so `petek plan` is repeatable), each
+     * [Identity.asStored]: the owner's passwords are never kept.
+     */
     suspend fun replaceAll(
         runId: RunId,
         plan: IdentityPlan,
     )
 
+    /**
+     * The identities of [runId] as they were stored ([Identity.asStored]): an [Identity.ownAccount] comes back with an
+     * empty password; the owner's own is in the target profile, and in the run's plan while the run goes on.
+     */
     suspend fun findByRun(runId: RunId): List<Identity>
 
     suspend fun updateStatus(

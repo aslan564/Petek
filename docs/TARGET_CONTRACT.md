@@ -5,6 +5,14 @@ What a target site offers so Pətək can test it deterministically. The fake tar
 (`scenarios/contract-demo.yaml`). Every path and selector can be overridden per campaign under `target_profile:`
 (`paths`, `selectors`); the defaults below come from `TargetProfile.DEFAULT_PATHS` / `DEFAULT_SELECTORS`.
 
+The company model below (an owner who creates a company, managers and employees who join by invitation or company
+code, departments) is this contract's own model, not what Pətək assumes of a site (Faza 25.1): a campaign or draft uses
+it only when the target profile says `tenant: company`, or when the explorer saw the site's own way into a company, a
+form to join with an invitation or code and a signed-in role that hands them out, and the test API can seed the test
+company. A test API alone means oracle checks and teardown, nothing about the site's gate. Nor is any resource assumed
+of it (Faza 25.2): a draft checks `/test/<resource>/...` only for a resource whose `latest?by=` answered the explorer's
+trial touch with the object it had just created; the announcements and tickets below are this contract's resources.
+
 The contract is the default, not a requirement: a site whose flows differ describes them under
 `target_profile.flows` (sign-up, join by invitation or company code, login, identity check; docs/ARCHITECTURE.md
 "Target flows"), with `local_storage`, `dismiss` for overlays and `api_prefix` for its regular API. The flows of §2
@@ -37,6 +45,10 @@ Selectors are `[data-testid="<id>"]`. Elements that show an object carry `data-i
 | Announcements | `/announcements` | `announcement-create` (admin only), `announcement-title`, `announcement-body`, `announcement-submit`, `announcement-item` (+`data-id`), `announcement-body-text` | — |
 | Tickets | `/tickets` | `ticket-create`, `ticket-title`, `ticket-description`, `ticket-department` (select), `ticket-submit`, `ticket-item` (+`data-id`) | — |
 | Ticket detail | `/tickets/{id}` | `ticket-status`, `ticket-set-in-progress`, `ticket-assignee` (select), `ticket-assign`, `ticket-approve`, `ticket-reject`, `ticket-error` | action buttons appear only for users allowed to use them |
+
+Page looks (ADR-0014): an element that changes by itself on every visit (a clock, a rotating banner, an advert) may
+carry `data-petek-mask` (optionally with a name, `data-petek-mask="banner"`); its area is not compared between
+releases. The owner can name the same elements in the target profile instead (`target_profile.visual.mask`).
 
 Real-time: the target may use WebSocket, SSE or polling. Pətək does not need to be told. It measures when a text
 appears in each receiver's DOM (t1) against the harness emit time (t0). It detects the transport from network traffic
@@ -75,10 +87,17 @@ pattern (`set-password\?token=`) when it does not contain one of the hints above
 
 ## 5. Regular API used by assertions
 
-`http_status` assertions call the target's normal API with the agent's own session cookies. Example:
+`http_status` assertions call the target's normal API with the agent's own session cookies and, where the site signs
+its calls with a token its page keeps (`Authorization: Bearer …`, a CSRF header), with the headers the agent's page itself
+sent the target: Pətək never reads the page's storage, sends them only to the target's own origin and masks them in
+everything it records (2026-09-30). Example:
 `POST /api/tickets/{id}/approve` returns `200` for a manager and `403` for an employee. Approving an already decided
 ticket returns `409`. Only one of two concurrent approvals may succeed. The prefix `/api` is
 `target_profile.api_prefix` (e.g. `/api/v1`); campaign paths may write it as `{api}` (`{api}/tickets/{last_id}/approve`).
+A site whose API lives on its own host gives the full address instead (`https://api.example.com/v1`, 2026-09-30): only
+`http_status` checks go there, never the test API; before a run that calls it, that host passes the production-host
+policy and proves its own ownership like the target (`petek verify --url https://api.example.com`), and the token the
+agent's page sent that host goes back to it alone.
 
 ## 6. A site that differs from the contract
 

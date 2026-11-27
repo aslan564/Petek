@@ -15,6 +15,7 @@ import az.petek.campaign.testing.KNOWN_RUN_FUNCTIONS
 import az.petek.campaign.testing.campaign
 import az.petek.campaign.testing.settings
 import az.petek.campaign.testing.step
+import az.petek.core.model.Role
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -26,6 +27,9 @@ import java.net.URI
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+
+/** The request an approval race is decided by. */
+private val APPROVE = RequestPattern("POST", ".+/approve")
 
 class DefaultCampaignValidatorTest {
     private val validator = DefaultCampaignValidator()
@@ -436,6 +440,46 @@ class DefaultCampaignValidatorTest {
             issue(campaign(step("s", actor = "manager"), settings = noManagers), "can never match a tester")
             issues(campaign(step("s", actor = "manager | employee"), settings = noManagers)).shouldBeEmpty()
         }
+
+        @Test
+        fun `a department holds only the testers the registry deals to it in turn`() {
+            // Three managers over five departments sit in IT, HR and Satış; the six employees continue the rotation at
+            // Maliyyə: Maliyyə, Əməliyyat, IT, HR, Satış, Maliyyə.
+            val five = settings(departments = listOf("IT", "HR", "Satış", "Maliyyə", "Əməliyyat"))
+            issues(campaign(step("s", actor = "manager[Satış]"), settings = five)).shouldBeEmpty()
+            val finance = issue(campaign(step("s", actor = "manager[Maliyyə]", line = 9), settings = five), "can never match a tester")
+            finance.line shouldBe 9
+            finance.message shouldContain
+                "(the testers are dealt to the departments in turn, so department 'Maliyyə' gets 0 of the 3 'manager' testers)"
+            issues(campaign(step("s", actor = "employee[dept=Maliyyə, n=2]"), settings = five)).shouldBeEmpty()
+            issue(campaign(step("s", actor = "employee[dept=Maliyyə, n=3]"), settings = five), "can never match a tester")
+                .message shouldContain "department 'Maliyyə' gets 2 of the 6 'employee' testers"
+            issues(campaign(step("s", actor = "manager[Maliyyə] | manager[IT]"), settings = five)).shouldBeEmpty()
+            // Over IT and HR the three managers are IT, HR, IT.
+            issues(campaign(step("s", actor = "manager[dept=IT, n=2]"))).shouldBeEmpty()
+            issue(campaign(step("s", actor = "manager[dept=HR, n=2]")), "department 'HR' gets 1 of the 3 'manager' testers")
+        }
+
+        @Test
+        fun `without companies every tester is dealt a department in turn, role after role`() {
+            val editor = checkNotNull(Role.fromKey("editor"))
+            val reader = checkNotNull(Role.fromKey("reader"))
+            val site =
+                settings(
+                    testers = 5,
+                    roles = RoleQuota.of(linkedMapOf(editor to 2, reader to 3)),
+                    registration = RegistrationQuota.selfSignUp(5),
+                    departments = listOf("A", "B"),
+                ).copy(tenant = Tenant.NONE)
+
+            fun on(actor: String) = campaign(step("s", actor = actor), settings = site)
+
+            // a01 editor A, a02 editor B, a03 reader A, a04 reader B, a05 reader A.
+            issues(on("editor[B]")).shouldBeEmpty()
+            issue(on("editor[dept=B, n=2]"), "department 'B' gets 1 of the 2 'editor' testers")
+            issues(on("reader[dept=A, n=2]")).shouldBeEmpty()
+            issue(on("reader[dept=B, n=2]"), "department 'B' gets 1 of the 3 'reader' testers")
+        }
     }
 
     @Nested
@@ -493,6 +537,15 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `only_one_succeeds needs the request that decides the race`() {
+            val bare = issue(race(AssertionSpec.OnlyOneSucceeds()), "needs the request that decides the race")
+
+            bare.message shouldContain "step 'check', only_one_succeeds"
+            bare.message shouldContain "e.g. {request: \"POST .*/approve\"}"
+            issues(race(AssertionSpec.OnlyOneSucceeds(APPROVE))).shouldBeEmpty()
+        }
+
+        @Test
         fun `only_one_succeeds needs parallel actors`() {
             val issue = issue(asserting(AssertionSpec.OnlyOneSucceeds(), actor = "manager[IT] | manager[HR]"), "needs parallel: true")
             issue.message shouldContain "step 'check', only_one_succeeds"
@@ -500,7 +553,7 @@ class DefaultCampaignValidatorTest {
 
         @Test
         fun `only_one_succeeds needs actors that can match two testers`() {
-            fun racing(actor: String) = asserting(AssertionSpec.OnlyOneSucceeds(), actor = actor, parallel = true)
+            fun racing(actor: String) = asserting(AssertionSpec.OnlyOneSucceeds(APPROVE), actor = actor, parallel = true)
 
             issues(racing("manager[IT] | manager[HR]")).shouldBeEmpty()
             issues(racing("employee[n=1] | employee[n=2]")).shouldBeEmpty()
@@ -523,7 +576,7 @@ class DefaultCampaignValidatorTest {
             issue(waiting, "needs a do or run").message shouldContain "step 'check', only_one_succeeds"
             val running =
                 asserting(
-                    AssertionSpec.OnlyOneSucceeds(),
+                    AssertionSpec.OnlyOneSucceeds(APPROVE),
                     actor = "manager[IT] | manager[HR]",
                     parallel = true,
                     action = StepAction.Run("login"),
@@ -532,7 +585,13 @@ class DefaultCampaignValidatorTest {
         }
 
         private fun race(spec: AssertionSpec.OnlyOneSucceeds) =
-            asserting(spec, actor = "manager[IT] | manager[HR]", parallel = true, action = StepAction.Do("Approve {last_id}"))
+            asserting(
+                spec,
+                actor = "manager[IT] | manager[HR]",
+                parallel = true,
+                waitFor = "announcement_created",
+                action = StepAction.Do("Approve {last_id}"),
+            )
 
         @Test
         fun `only_one_succeeds accepts a request of any mutating method and a path regex`() {
@@ -553,7 +612,7 @@ class DefaultCampaignValidatorTest {
 
         @Test
         fun `only_one_succeeds checks its oracle path and templates`() {
-            val oracle = { path: String -> AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition(path, "status", "approved")) }
+            val oracle = { path: String -> AssertionSpec.OnlyOneSucceeds(APPROVE, OracleCondition(path, "status", "approved")) }
 
             issues(race(oracle("/test/tickets/{last_id}"))).shouldBeEmpty()
             issue(race(oracle("https://evil.example/steal")), "oracle path must be a path on the target")
@@ -578,7 +637,7 @@ class DefaultCampaignValidatorTest {
                 race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "assignee", "{self.name}"))),
                 "{self.name} has no actor to refer to",
             )
-            issues(race(AssertionSpec.OnlyOneSucceeds(oracle = OracleCondition("/test/tickets/{last_id}", "status", "approved"))))
+            issues(race(AssertionSpec.OnlyOneSucceeds(APPROVE, OracleCondition("/test/tickets/{last_id}", "status", "approved"))))
                 .shouldBeEmpty()
         }
 
@@ -628,6 +687,19 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
+        fun `with the API on its own host, only http_status checks may call it, and no other host`() {
+            val api = TargetProfile.DEFAULT.copy(apiPrefix = "https://api.portal.test/v1")
+
+            fun checking(vararg assertions: AssertionSpec) =
+                campaign(announce, step("check", actor = "employee", assertions = assertions.toList(), line = 70), target = api)
+
+            issues(checking(AssertionSpec.HttpStatus("https://api.portal.test/v1/tickets/1/approve", "POST", 403))).shouldBeEmpty()
+            issue(checking(AssertionSpec.Oracle("https://api.portal.test/v1/x", "id", "1", null)), "only http_status checks go there")
+            issue(checking(AssertionSpec.HttpStatus("https://elsewhere.test/x", "GET", 403)), "starting with a single '/'")
+            issue(asserting(AssertionSpec.HttpStatus("https://api.portal.test/v1/x", "GET", 403)), "starting with a single '/'")
+        }
+
+        @Test
         fun `http_status needs a known method and a real status`() {
             issue(asserting(AssertionSpec.HttpStatus("/api/x", "FETCH", 200)), "method 'FETCH'")
             issue(asserting(AssertionSpec.HttpStatus("/api/x", "POST", 42)), "must be an HTTP status")
@@ -660,7 +732,27 @@ class DefaultCampaignValidatorTest {
         fun `unknown placeholders are rejected`() {
             val issue = issue(campaign(step("s", action = StepAction.Do("Open {page}"), line = 5)), "unknown placeholder {page}")
             issue.line shouldBe 5
-            issue.message shouldContain "{last_id}, {self.email}, {self.name}"
+            issue.message shouldContain "{last_id}, {pass}, {self.email}, {self.name}"
+        }
+
+        @Test
+        fun `every step may mark its texts with the pass it runs in`() {
+            val posting =
+                campaign(
+                    step("post", action = StepAction.Do("Post the note 'Hello {pass}'"), emits = "note_posted"),
+                    step(
+                        "read",
+                        actor = "employee[*]",
+                        waitFor = "note_posted",
+                        assertions =
+                            listOf(
+                                AssertionSpec.VisibleText("Hello {pass}", 5.seconds),
+                                AssertionSpec.Count("li:has-text(\"Hello {pass}\")", 1),
+                            ),
+                    ),
+                )
+
+            issues(posting).shouldBeEmpty()
         }
 
         @Test
@@ -694,12 +786,19 @@ class DefaultCampaignValidatorTest {
         }
 
         @Test
-        fun `last_id in an action needs an event from an earlier step`() {
+        fun `last_id in an action is the event the step waits for, never whatever came last`() {
+            // The step's own emit comes only after its action.
             issue(
                 campaign(step("s", action = StepAction.Do("Open ticket {last_id}"), emits = "ticket_created")),
-                "{last_id} needs an event",
+                "{last_id} has no event of its own here",
             )
-            issues(campaign(announce, step("s", action = StepAction.Do("Open {last_id}")))).shouldBeEmpty()
+            issue(
+                campaign(announce, step("s", action = StepAction.Do("Open {last_id}"))),
+                "name another step's object with {event.<name>.id}",
+            )
+            issues(campaign(announce, step("s", action = StepAction.Do("Open {last_id}"), waitFor = "announcement_created")))
+                .shouldBeEmpty()
+            issues(campaign(announce, step("s", action = StepAction.Do("Open {event.announcement_created.id}")))).shouldBeEmpty()
         }
 
         @Test
@@ -707,7 +806,30 @@ class DefaultCampaignValidatorTest {
             val oracle = AssertionSpec.Oracle("/test/announcements/{last_id}", "status", "published", null)
             val own = step("announce", emits = "announcement_created", assertions = listOf(oracle))
             issues(campaign(own)).shouldBeEmpty()
-            issue(campaign(step("s", assertions = listOf(oracle))), "{last_id} needs an event emitted by this or an earlier step")
+            issue(campaign(step("s", assertions = listOf(oracle))), "{last_id} has no event of its own here")
+            issue(campaign(announce, step("s", assertions = listOf(oracle))), "{last_id} has no event of its own here")
+            issues(campaign(announce, step("s", waitFor = "announcement_created", assertions = listOf(oracle)))).shouldBeEmpty()
+        }
+
+        @Test
+        fun `an event other steps depend on has one emitter or a race`() {
+            val everyone = step("post", actor = "employee", emits = "posted")
+            val reader = step("read", actor = "manager", waitFor = "posted")
+
+            issue(campaign(everyone, reader), "who finished last").message shouldContain "step 'post'"
+            issue(campaign(everyone, step("use", action = StepAction.Do("Open {event.posted.id}"))), "who finished last")
+            issues(campaign(step("post", actor = "employee[n=1]", emits = "posted"), reader)).shouldBeEmpty()
+            // Nobody depends on it: every tester may emit it, each checking its own object with {last_id}.
+            issues(campaign(everyone)).shouldBeEmpty()
+            val race =
+                step(
+                    "post",
+                    actor = "manager[IT] | manager[HR]",
+                    emits = "posted",
+                    parallel = true,
+                    assertions = listOf(AssertionSpec.OnlyOneSucceeds(APPROVE)),
+                )
+            issues(campaign(race, reader)).shouldBeEmpty()
         }
 
         @Test
@@ -721,7 +843,7 @@ class DefaultCampaignValidatorTest {
         @Test
         fun `run arguments are templates too`() {
             val run = StepAction.Run("login", mapOf("as" to "{self.email}", "ticket" to "{last_id}"))
-            issue(campaign(step("s", action = run)), "run argument 'ticket': {last_id} needs an event")
+            issue(campaign(step("s", action = run)), "run argument 'ticket': {last_id} has no event of its own here")
         }
 
         @Test
@@ -736,6 +858,43 @@ class DefaultCampaignValidatorTest {
                 )
             val found = issues(campaign(step("s", assertions = assertions))).filter { "unknown placeholder" in it.message }
             found shouldHaveSize 7
+        }
+
+        @Test
+        fun `a race with more racers than the pacing limit is warned about, never refused`() {
+            val race =
+                step(
+                    "race",
+                    actor = "manager",
+                    parallel = true,
+                    assertions = listOf(AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/approve"))),
+                    line = 70,
+                )
+            val crowd = step("read", actor = "employee", line = 80)
+            val paced = campaign(race, crowd, settings = settings().copy(pacing = Pacing(maxParallelActors = 2)))
+
+            issues(paced).shouldBeEmpty()
+            val warning = validator.warnings(paced).single()
+            warning.line shouldBe 70
+            warning.message shouldContain "race 'race' starts up to 3 testers at the same instant"
+            warning.message shouldContain "campaign.pacing.max_parallel_actors (2)"
+            // Without a limit, or with one the race fits into, there is nothing to say.
+            validator.warnings(campaign(race, crowd)).shouldBeEmpty()
+            validator.warnings(campaign(race, crowd, settings = settings().copy(pacing = Pacing(maxParallelActors = 3)))).shouldBeEmpty()
+        }
+
+        @Test
+        fun `the request an event is written by follows the form of a race request`() {
+            val written = { request: RequestPattern ->
+                step("announce", emits = "announcement_created").let { it.copy(emits = it.emits!!.copy(request = request)) }
+            }
+
+            issues(campaign(written(RequestPattern("POST", "/api/announcements")))).shouldBeEmpty()
+            issues(campaign(written(RequestPattern(null, "/api/.*")))).shouldBeEmpty()
+            val read = issue(campaign(written(RequestPattern("GET", "/api/announcements"))), "request method 'GET'")
+            read.message shouldContain "step 'announce', emits"
+            read.message shouldContain "only requests that change something mark when the change reached the target"
+            issue(campaign(written(RequestPattern("POST", "/api/(unclosed"))), "is not a valid regular expression")
         }
 
         @Test
@@ -806,6 +965,74 @@ class DefaultCampaignValidatorTest {
             issue(campaign(announce, target = profile("announcement_created" to oracle)), "{self.password} is not available")
             val fine = IdSource.OracleField("/test/announcements/latest?by={self.email}", "id")
             issues(campaign(announce, target = profile("announcement_created" to fine))).shouldBeEmpty()
+        }
+
+        /** The ticket each employee creates, checked through `{last_id}` (Faza 24.6). */
+        private val ownTicket = listOf(AssertionSpec.Oracle("/test/tickets/{last_id}", "created_by", "{self.email}", null))
+
+        private fun tickets(
+            source: IdSource?,
+            actor: String = "employee[*]",
+            assertions: List<AssertionSpec> = ownTicket,
+        ) = step("ticket", actor = actor, emits = "ticket_created", idSource = source, assertions = assertions, line = 40)
+
+        @Test
+        fun `last_id read from the page or from an oracle path that does not name the tester is warned about when many emit`() {
+            val firstItem = IdSource.DomAttribute("[data-testid=ticket-item]:first-child", "data-id")
+            val campaign = campaign(tickets(firstItem))
+
+            issues(campaign).shouldBeEmpty()
+            val warning = validator.warnings(campaign).single()
+            warning.line shouldBe 40
+            warning.message shouldContain
+                "step 'ticket': {last_id} in its checks is the id of each tester's 'ticket_created' object, read from " +
+                "dom '[data-testid=ticket-item]:first-child' (data-id) (emits.id_from), but up to 6 testers emit it here"
+            warning.message shouldContain "a tester can read a colleague's object made at the same moment"
+            warning.message shouldContain "url_regex on the page it lands on, or an oracle path naming the tester"
+            warning.message shouldContain "?by={self.email}"
+            warning.message shouldNotContain "dom selector naming"
+            // The target profile's source for the event counts the same, and so does a department, shared by colleagues.
+            val latest = IdSource.OracleField("/test/tickets/latest", "id")
+            validator.warnings(campaign(tickets(null), target = profile("ticket_created" to latest))).single().message shouldContain
+                "read from oracle '/test/tickets/latest' (id) (target_profile.id_sources.ticket_created)"
+            val sameDepartment = IdSource.OracleField("/test/tickets/latest?dept={self.department}", "id")
+            validator.warnings(campaign(tickets(sameDepartment))) shouldHaveSize 1
+        }
+
+        @Test
+        fun `a dom selector naming the tester is warned about too, since the harness reads it as written`() {
+            val mine = IdSource.DomAttribute("[data-owner='{self.email}'] [data-testid=ticket-item]", "data-id")
+
+            // ObjectIdReader passes a dom selector to the page unrendered: `{self.email}` there names nobody, so the read
+            // finds no element and the id falls back to the agent's report.
+            val warning = validator.warnings(campaign(tickets(mine))).single()
+
+            warning.message shouldContain "read from dom '[data-owner='{self.email}'] [data-testid=ticket-item]' (data-id)"
+            warning.message shouldContain
+                "the harness reads a dom selector as written, so {self.email} in it is not filled in and names nobody"
+        }
+
+        @Test
+        fun `last_id from a source scoped to the tester, one emitter, a race or checks without last_id say nothing`() {
+            listOf(
+                IdSource.OracleField("/test/tickets/latest?by={self.email}", "id"),
+                IdSource.UrlRegex("/tickets/([0-9]+)"),
+                IdSource.AgentReport,
+                null,
+            ).forEach { source -> validator.warnings(campaign(tickets(source))).shouldBeEmpty() }
+            val firstItem = IdSource.DomAttribute("[data-testid=ticket-item]:first-child", "data-id")
+            validator.warnings(campaign(tickets(firstItem, actor = "employee[dept=IT, n=1]"))).shouldBeEmpty()
+            validator
+                .warnings(
+                    campaign(tickets(firstItem, assertions = listOf(AssertionSpec.VisibleText("OK", 5.seconds)))),
+                ).shouldBeEmpty()
+            val race =
+                tickets(
+                    firstItem,
+                    actor = "manager[*]",
+                    assertions = ownTicket + AssertionSpec.OnlyOneSucceeds(RequestPattern("POST", ".*/tickets")),
+                ).copy(parallel = true)
+            validator.warnings(campaign(race)).shouldBeEmpty()
         }
     }
 

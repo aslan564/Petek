@@ -202,12 +202,31 @@ class Doctor(
                 "PETEK_TEST_TOKEN is empty: oracle assertions are skipped and teardown cannot run",
             )
         }
+        // The site's own OTP path (the contract's, or the profile's `test_api.paths`) for a number nobody has.
+        val probe = container.oraclePaths.otp.replace("{phone}", PROBE_PHONE)
         return try {
-            val status = oracle.get(PROBE_PATH).status
-            when (status) {
-                OK_STATUS, NOT_FOUND -> CheckResult(TEST_API, CheckStatus.OK, "token accepted (HTTP $status for GET $PROBE_PATH)")
-                UNAUTHORIZED -> CheckResult(TEST_API, CheckStatus.FAILED, "HTTP 401: the target rejects PETEK_TEST_TOKEN")
-                else -> CheckResult(TEST_API, CheckStatus.FAILED, "HTTP $status for GET $PROBE_PATH (expected 200 or 404)")
+            val answer = oracle.get(probe)
+            when {
+                answer.status == OK_STATUS || (answer.status == NOT_FOUND && answer.body != null) -> {
+                    CheckResult(TEST_API, CheckStatus.OK, "token accepted (HTTP ${answer.status} for GET $probe)")
+                }
+
+                answer.status == UNAUTHORIZED -> {
+                    CheckResult(TEST_API, CheckStatus.FAILED, "HTTP 401: the target rejects PETEK_TEST_TOKEN")
+                }
+
+                // A page, not the test API's JSON: the path leads nowhere on this site.
+                answer.status == NOT_FOUND -> {
+                    CheckResult(
+                        TEST_API,
+                        CheckStatus.FAILED,
+                        "HTTP 404 with a page for GET $probe: no test API there (docs/TARGET_CONTRACT.md, or the profile's test_api.paths)",
+                    )
+                }
+
+                else -> {
+                    CheckResult(TEST_API, CheckStatus.FAILED, "HTTP ${answer.status} for GET $probe (expected 200 or 404)")
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -289,8 +308,8 @@ class Doctor(
         const val OWNERSHIP = "Site ownership"
         const val LLM = "LLM provider"
 
-        /** A fake number: a 404 (no OTP) or 200 proves the token is accepted without touching real data. */
-        const val PROBE_PATH = "/test/otp/%2B994500000000"
+        /** A fake number: the test API's 404 (no OTP) or 200 proves the token is accepted without touching real data. */
+        const val PROBE_PHONE = "%2B994500000000"
 
         /** A fake recipient on the test domain: an empty list (200) proves the mail endpoint answers. */
         private const val MAIL_PROBE_PATH = "/test/emails?to=petek-doctor"

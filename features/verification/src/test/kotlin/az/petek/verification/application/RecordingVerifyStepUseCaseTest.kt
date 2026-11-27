@@ -139,7 +139,7 @@ class RecordingVerifyStepUseCaseTest {
             val records =
                 useCase().verifyActor(
                     listOf(VisibleText("Sabah 10:00 ümumi iclas", 5.seconds), LatencyMax(1.seconds)),
-                    assertionInput(session, eventEmittedAt = t0),
+                    assertionInput(session, t0 = t0),
                 )
 
             evidence.assertionList shouldContainExactly records
@@ -270,8 +270,24 @@ class RecordingVerifyStepUseCaseTest {
             val record = useCase().verifyActor(listOf(Oracle("/test/tickets/42", "status", "open", null)), assertionInput(session)).single()
 
             record.verdict shouldBe Verdict.FAILED
-            artifact(record.artifactIds.single()).type shouldBe ArtifactType.LOG
-            content(record.artifactIds.single()) shouldContain "observed: HTTP 404"
+            record.artifactIds.map { artifact(it).type } shouldBe listOf(ArtifactType.LOG, ArtifactType.SCREENSHOT)
+            content(record.artifactIds.first()) shouldContain "observed: HTTP 404"
+        }
+
+    @Test
+    fun `a failed oracle check shows the actor's page next to the target's answer, a passed one only the answer`() =
+        runTest {
+            oracle.respond("/test/tickets/42", """{"status": "open"}""")
+
+            val (failed, passed) =
+                useCase().verifyActor(
+                    listOf(Oracle("/test/tickets/42", "status", "in_progress", null), Oracle("/test/tickets/42", "status", "open", null)),
+                    assertionInput(session),
+                )
+
+            failed.verdict shouldBe Verdict.FAILED
+            failed.artifactIds.map { artifact(it).type } shouldBe listOf(ArtifactType.ORACLE, ArtifactType.SCREENSHOT)
+            passed.artifactIds.map { artifact(it).type } shouldBe listOf(ArtifactType.ORACLE)
         }
 
     @Test
@@ -327,7 +343,7 @@ class RecordingVerifyStepUseCaseTest {
                     HttpStatus("/api/x", "GET", 200),
                 )
 
-            val withSession = useCase().verifyActor(specs, assertionInput(session, eventEmittedAt = t0))
+            val withSession = useCase().verifyActor(specs, assertionInput(session, t0 = t0))
             val withoutSession = useCase().verifyActor(specs, assertionInput(session = null, agentId = AgentId("a02")))
             val skipped = useCase(target = FakeTargetOracle(isAvailable = false)).verifyActor(specs, assertionInput(session))
 
@@ -423,10 +439,12 @@ class RecordingVerifyStepUseCaseTest {
     @Test
     fun `verifyGroup judges only_one_succeeds once and keeps every actor outcome as evidence`() =
         runTest {
+            val approve = RequestPattern("POST", ".*/approve")
+            val won = { RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 303))) }
             val results =
                 listOf(
-                    ActorResult(AgentId("a02"), succeeded = true, summary = "approved"),
-                    ActorResult(AgentId("a03"), succeeded = true, summary = "approved"),
+                    ActorResult(AgentId("a02"), succeeded = true, summary = "approved", race = won()),
+                    ActorResult(AgentId("a03"), succeeded = true, summary = "approved", race = won()),
                 )
 
             val records =
@@ -440,7 +458,7 @@ class RecordingVerifyStepUseCaseTest {
             record.type shouldBe "only_one_succeeds"
             record.source shouldBe EvidenceSource.SENDER
             record.verdict shouldBe Verdict.FAILED
-            record.observed shouldBe "a02 succeeded; a03 succeeded"
+            record.observed shouldBe "a02 POST /tickets/42/approve -> 303; a03 POST /tickets/42/approve -> 303"
             record.agentId.shouldBeNull()
             record.scenarioStep shouldBe "race_approve"
             val stored = artifact(record.artifactIds.single())
@@ -454,13 +472,42 @@ class RecordingVerifyStepUseCaseTest {
         }
 
     @Test
+    fun `a race with two winners shows every racer's page next to their requests`() =
+        runTest {
+            val approve = RequestPattern("POST", ".*/approve")
+            val racers = listOf("a02", "a03").map { ScriptedSession(clock, FakeBrowserSession(it, clock)) }
+            val results =
+                racers.mapIndexed { i, racer ->
+                    val won = RaceEvidence.of(approve, listOf(racer.fake.mutated("POST", "/tickets/42/approve", 303)))
+                    ActorResult(AgentId("a0${i + 2}"), succeeded = true, summary = "approved", race = won, session = racer)
+                }
+
+            val record =
+                useCase()
+                    .verifyGroup(listOf(OnlyOneSucceeds()), assertionInput(session = null, agentId = null, scenarioStep = "race"), results)
+                    .single()
+
+            record.verdict shouldBe Verdict.FAILED
+            val stored = record.artifactIds.map(::artifact)
+            stored.map { it.type } shouldContainExactly listOf(ArtifactType.LOG, ArtifactType.SCREENSHOT, ArtifactType.SCREENSHOT)
+            stored[1].relativePath shouldContain "/a02/"
+            stored[2].relativePath shouldContain "/a03/"
+        }
+
+    @Test
     fun `verifyGroup with a single winner passes`() =
         runTest {
+            val approve = RequestPattern("POST", ".*/approve")
+            val won = RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 303)))
+            val lost = RaceEvidence.of(approve, listOf(session.fake.mutated("POST", "/tickets/42/approve", 409)))
             val records =
                 useCase().verifyGroup(
                     listOf(OnlyOneSucceeds()),
                     assertionInput(session = null, agentId = null),
-                    listOf(ActorResult(AgentId("a02"), true, "approved"), ActorResult(AgentId("a03"), false, "409")),
+                    listOf(
+                        ActorResult(AgentId("a02"), won.succeeded, "approved", won),
+                        ActorResult(AgentId("a03"), lost.succeeded, "409", lost),
+                    ),
                 )
 
             records.single().verdict shouldBe Verdict.PASSED

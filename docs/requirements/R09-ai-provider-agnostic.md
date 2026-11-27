@@ -37,15 +37,22 @@ is also what keeps the model cost off Pətək (R15).
   endpoint) → known agent CLIs on `PATH`, then Ollama. The other agent CLIs found become fallbacks
   (`FallbackLlmClient`: an unavailable provider is passed over once, later calls start with the one that works).
   Nothing found is the `none` provider (`UnavailableLlmClient`), whose every call says how to set one up; Pətək never
-  picks a vendor for the owner.
+  picks a vendor for the owner. A provider `auto` found by a key or a local server but without `PETEK_LLM_MODEL` stops
+  nothing that needs no AI: an AI CLI on `PATH` is used instead, else `none`, and the reason says so; a provider the
+  owner named without its model stays a configuration error.
 - `doctor` shows the provider, why it was chosen, the fallbacks, which one answered and which were passed over.
+- The panel's setup screen chooses the provider too (Faza 23): the choice goes to the configuration file, never only
+  to memory, and the next calls use it without a restart (`AppContainer.refresh`, `SwitchableLlmClient`); a key typed
+  there is written only to that file, a blank one keeps the file's, and an environment variable that would override
+  the file makes the choice refused rather than silently ignored.
 
 ## Modules and key types
 
 `llm`: `LlmClient`, `LlmProviderKey`, `LlmRequest`, `LlmResponse`, `LlmException`, `CliAgentLlmClient`,
 `GenericCliProfile`, `CliArguments`, `CodexCliProfile`, `GeminiCliProfile`, `OpenCodeCliProfile`,
 `OpenAiCompatibleLlmClient`, `AnthropicApiLlmClient`, `FallbackLlmClient`, `UnavailableLlmClient`, `StructuredJson`,
-decorators. `app`: `LlmProviders`, `LlmProviderResolver`, `ConfigLoader`, `Doctor`.
+decorators. `app`: `LlmProviders`, `LlmProviderResolver`, `ConfigLoader`, `Doctor`, `SwitchableLlmClient`,
+`PanelReadinessAdapter` (the panel's choice).
 
 ## Verification
 
@@ -53,7 +60,9 @@ decorators. `app`: `LlmProviders`, `LlmProviderResolver`, `ConfigLoader`, `Docto
   process), `CliArgumentsTest`, `CliAgentProfilesTest`, `FallbackLlmClientTest`, `OpenAiCompatibleLlmClientTest`,
   `AnthropicApiLlmClientTest`, decorator tests.
 - `app`: `LlmProviderResolverTest` (order, fallbacks, Grok and OpenRouter keys, `none`), `ConfigLoaderTest`,
-  `AppContainerTest` (every registered provider builds; fallbacks wrap the chosen one), `DoctorCommandTest`.
+  `AppContainerTest` (every registered provider builds; fallbacks wrap the chosen one; a refreshed configuration
+  switches the AI of the next calls), `PanelAiChoiceTest` (the panel's choice: file, refresh, refusals),
+  `DoctorCommandTest`.
 
 ## Open items
 

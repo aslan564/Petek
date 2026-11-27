@@ -36,6 +36,6 @@ internal object DraftSettings {
                 names.map(String::lowercase).toSet().size == names.size
         val frame = if (usable) ScenarioSettings(departments = names) else ScenarioSettings()
         val owners = team?.takeIf { it.admins == 1 && it.managers >= 0 && it.employees >= 0 } ?: return frame
-        return frame.copy(team = RoleQuota(admin = 1, manager = owners.managers, employee = owners.employees))
+        return frame.copy(team = RoleQuota(admin = 1, manager = owners.managers, employee = owners.employees), teamGiven = true)
     }
 }

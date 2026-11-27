@@ -22,6 +22,12 @@ object ExitCodes {
     /** Nothing could be done: wrong command line, invalid configuration, refused target, or a run that was ABORTED. */
     const val CONFIG_OR_ABORTED = 2
 
+    /**
+     * The run did not pass only because some checks could not be decided (INCONCLUSIVE, Faza 24.12): no step and no check
+     * failed. CI can tell a gap of the test from a defect of the site (the owner's decision of 2026-09-30).
+     */
+    const val INCONCLUSIVE = 3
+
     /** Interrupted (Ctrl+C); the run was still torn down and reported. */
     const val INTERRUPTED = 130
 }

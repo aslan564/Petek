@@ -109,6 +109,13 @@ data class AgentRuntime(
     val runStartedAt: Instant,
     /** Where this agent's storage state is saved after login. */
     val storageStatePath: Path,
+    /** The test team's address space: what the agent may type besides its own and its colleagues' addresses. */
+    val testMail: TestMail = TestMail.NONE,
+    /**
+     * The hosts this agent may be on (Faza 24.9): the target's own and the ones the owner allowed (a sign-in service,
+     * the host of an e-mail link). A path always resolves against the target; empty allows paths only.
+     */
+    val siteHosts: Set<String> = emptySet(),
 )
 
 /** The scenario step an agent is working on. */
@@ -181,6 +188,19 @@ enum class FailureReason(
 
     /** `direct_url`: a page of someone else's object opened for a tester who must not see it. */
     ACCESS_NOT_REFUSED("access_not_refused"),
+
+    /**
+     * A forbidden-action step: the tester's own page sent the very request the step expects the site to refuse, and
+     * the site accepted it (status < 400). Decided by code from the browser's requests, whatever the agent said.
+     */
+    FORBIDDEN_ACCEPTED("forbidden_accepted"),
+
+    /**
+     * The page kept leaving the site under test for a host that is neither the target's nor one the owner allowed: it
+     * was brought back and left again (Faza 24.9). When that host is the site's own sign-in or mail, it belongs in
+     * `allowed_hosts` of the target profile.
+     */
+    OFF_SITE("off_site"),
     ;
 
     companion object {
@@ -188,7 +208,7 @@ enum class FailureReason(
          * Keys of failures that are a defect of the site a check found, not a tester that could not go on: a setup
          * step that fails with one of them (the pages checked before signing in) leaves its tester in the run.
          */
-        val SITE_DEFECT_KEYS: Set<String> = setOf(UNHEALTHY_PAGE.key, ACCESS_NOT_REFUSED.key)
+        val SITE_DEFECT_KEYS: Set<String> = setOf(UNHEALTHY_PAGE.key, ACCESS_NOT_REFUSED.key, FORBIDDEN_ACCEPTED.key)
     }
 }
 

@@ -55,6 +55,8 @@ class JUnitReportWriter : ReportWriter {
             property("workspace_id", model.workspaceId.value)
             property("result", model.run.result.name)
             property("findings", model.findings.size.toString())
+            // Checks whose evidence could not decide them (Faza 24.12): the run is not PASSED because of them.
+            property("inconclusive", model.summary.assertionsInconclusive.toString())
             append("    </properties>\n")
             rows.forEach { row -> testCase(model, row) }
             append("  </testsuite>\n</testsuites>\n")

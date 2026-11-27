@@ -42,7 +42,19 @@ internal object CampaignYamlWriter {
         val stepLines = LinkedHashMap<String, Int>()
         steps(out, "setup", campaign.setup, stepLines)
         steps(out, "steps", campaign.steps, stepLines)
+        coverage(out, campaign)
         return WrittenCampaign(out.text(), stepLines)
+    }
+
+    /** `coverage:`: what the scenario leaves unchecked, one quoted line each, which the run's report names. */
+    private fun coverage(
+        out: Lines,
+        campaign: Campaign,
+    ) {
+        if (campaign.coverage.isEmpty()) return
+        out.add("")
+        out.add("coverage:")
+        campaign.coverage.forEach { out.add("  - ${quote(it)}") }
     }
 
     private fun settings(
@@ -113,11 +125,13 @@ internal object CampaignYamlWriter {
                 StepAction.None -> Unit
             }
             step.emits?.let { emits ->
-                val source = emits.idSource
-                out.add(
-                    "    emits: " +
-                        if (source == null) quote(emits.event) else "{event: ${quote(emits.event)}, id_from: ${idSource(source)}}",
-                )
+                val long =
+                    listOfNotNull(
+                        emits.idSource?.let { "id_from: ${idSource(it)}" },
+                        emits.request?.let { "request: ${quote(it.describe())}" },
+                    )
+                val event = quote(emits.event)
+                out.add("    emits: " + if (long.isEmpty()) event else "{event: $event, ${long.joinToString(", ")}}")
             }
             step.waitFor?.let { out.add("    wait_for: {event: ${quote(it.event)}, timeout_s: ${seconds(it.timeout)}}") }
             if (step.parallel) out.add("    parallel: true")

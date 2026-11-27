@@ -19,6 +19,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import org.junit.jupiter.api.Test
 import java.io.IOException
@@ -39,6 +40,41 @@ class PlaywrightFailuresTest {
     @Test
     fun `a driver error becomes its message and call log on one line`() {
         PlaywrightFailures.reasonOf(driverError) shouldBe "Timeout 300ms exceeded. (waiting for locator(\"#missing\"))"
+    }
+
+    /** An HTTP call that timed out, as the driver logs it: every header it sent, the session's credentials included. */
+    private val httpError =
+        """
+        Error {
+          message='Timeout 30000ms exceeded.
+          name='TimeoutError
+          stack='TimeoutError: Timeout 30000ms exceeded.
+            at APIRequestContext._sendRequest (/tmp/playwright-java-1/package/lib/coreBundle.js:9000:15)
+        }
+        Call log:
+        -   - → POST https://app.example.test/api/leave/1/approve
+        -     user-agent: Mozilla/5.0 HeadlessChrome
+        -     accept: */*
+        -     authorization: Bearer opaque-token-4711
+        -     x-csrf-token: csrf-4711-abc
+        -     cookie: session=cookie-4711
+        """.trimIndent()
+
+    @Test
+    fun `the header lines of an HTTP call never reach the reason, and the call's secrets are masked without the cause`() {
+        val reason = PlaywrightFailures.reasonOf(httpError)
+        val failure =
+            PlaywrightFailures.describe(
+                "POST /api/leave/1/approve",
+                TimeoutError(httpError),
+                null,
+                listOf("Bearer opaque-token-4711", "opaque-token-4711"),
+                keepCause = false,
+            )
+
+        reason shouldBe "Timeout 30000ms exceeded. (→ POST https://app.example.test/api/leave/1/approve)"
+        listOf("opaque-token-4711", "csrf-4711", "cookie-4711", "authorization").forEach { failure.message!! shouldNotContain it }
+        failure.cause.shouldBeNull()
     }
 
     @Test

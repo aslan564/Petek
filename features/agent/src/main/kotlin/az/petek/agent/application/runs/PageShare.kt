@@ -25,6 +25,10 @@ import az.petek.agent.domain.ActorShare
  *   out, so each link is asked about by one tester only and N testers do not ask the site N times.
  *
  * Without `share` every actor does all of the step's work.
+ *
+ * A job's [Job.lookRound] says how many testers had the same job before this one; at most [MAX_LOOKS_PER_JOB] of
+ * them take a look of it (`site_health`'s `look`): enough samples of one page on one screen to tell a change from
+ * noise, without N copies of the same picture.
  */
 internal object PageShare {
     const val ARG = "share"
@@ -33,11 +37,18 @@ internal object PageShare {
     const val LINKS = "links"
     const val DEVICES = "devices"
 
-    /** One page on one device (null: the session's own screen) a tester checks, and whether it asks about the links. */
+    /** At most this many testers take a look of the same page on the same screen in one step. */
+    const val MAX_LOOKS_PER_JOB = 3
+
+    /**
+     * One page on one device (null: the session's own screen) a tester checks, whether it asks about the links, and
+     * how many testers of the step had the same job before (0: the first).
+     */
     data class Job(
         val page: String,
         val device: Device?,
         val asksLinks: Boolean,
+        val lookRound: Int = 0,
     ) {
         /** How problems name the job: the page, and the device when there is one. */
         fun where(path: String): String = device?.let { "$path (${it.key})" } ?: path
@@ -49,12 +60,23 @@ internal object PageShare {
         args: Map<String, String>,
         share: ActorShare,
     ): List<Job> {
-        if (mode(args) != WORK) return pages(pages, args, share).map { Job(it, null, asksLinks = true) }
+        val mode = mode(args)
+        if (mode != WORK) {
+            // `pages` deals each page to one tester, and round again when there are more testers than pages; otherwise
+            // every tester checks every page.
+            val round =
+                when {
+                    mode != PAGES -> share.position
+                    share.of > 1 && pages.isNotEmpty() && pages.size <= share.of -> share.position / pages.size
+                    else -> 0
+                }
+            return pages(pages, args, share).map { Job(it, null, asksLinks = true, lookRound = round) }
+        }
         val devices = Device.parse(args[DEVICES])
         val jobs = pages.flatMap { page -> devices.mapIndexed { index, device -> Job(page, device, asksLinks = index == 0) } }
         if (jobs.isEmpty()) return emptyList()
         if (jobs.size <= share.of) {
-            val job = jobs[share.position % jobs.size]
+            val job = jobs[share.position % jobs.size].copy(lookRound = share.position / jobs.size)
             // A tester dealt a job a second time looks again, but the links were asked about already.
             return listOf(if (share.position < jobs.size) job else job.copy(asksLinks = false))
         }

@@ -27,6 +27,8 @@ import az.petek.explorer.domain.ExplorationStatus
 import az.petek.explorer.domain.FindingKind
 import az.petek.explorer.domain.Provenance
 import az.petek.explorer.domain.Severity
+import az.petek.explorer.domain.SiteModel
+import az.petek.explorer.domain.TestApiProbe
 import az.petek.explorer.domain.TestTargetCheck
 import az.petek.explorer.domain.TestTargetVerdict
 import az.petek.explorer.domain.TrialOutcome
@@ -80,7 +82,8 @@ class ExploreSiteUseCaseTest {
         llm: LlmClient = this.llm,
         check: TestTargetCheck = TestTargetCheck.REFUSE_ALL,
         settings: ExplorerSettings = ExplorerSettings(),
-    ) = ExploreSiteUseCase(site.factory(), llm, artifacts, repository, site.clock, ids, policy, check, settings)
+        testApi: TestApiProbe = TestApiProbe.NONE,
+    ) = ExploreSiteUseCase(site.factory(), llm, artifacts, repository, site.clock, ids, policy, check, settings, testApi)
 
     private fun request(
         phases: Set<ExplorationPhase> = setOf(ExplorationPhase.ANONYMOUS),
@@ -219,6 +222,53 @@ class ExploreSiteUseCaseTest {
             session.navigations.none { "logout" in it || "delete" in it || ".pdf" in it || "/api/" in it } shouldBe true
             session.requests.none { "logout" in it || "delete" in it || "/api/" in it } shouldBe true
             session.recorder.closed shouldBe true
+        }
+
+    @Test
+    fun `the lists a visitor sees are learned with how many objects they show, a single link is no list`() =
+        runTest {
+            site.page("/", "Home") {
+                link("Blog", "/blog")
+                link("Featured", "/stories/7")
+            }
+            site.page("/blog", "Blog") {
+                link("First", "/posts/1")
+                link("Second", "/posts/2")
+                link("First again", "/posts/1/")
+                link("Archive", "/posts/archive")
+            }
+            listOf(1, 2, 7).forEach { site.page(if (it == 7) "/stories/7" else "/posts/$it", "Item $it") }
+
+            val result = useCase().execute(request())
+
+            result.model.pageByPattern("/blog")!!.lists shouldBe mapOf("/posts/{id}" to 2)
+            result.model.pageByPattern("/")!!.lists shouldBe emptyMap()
+        }
+
+    @Test
+    fun `an exploration that goes on from a model asks about new pages only, and its page budget counts only them`() =
+        runTest {
+            site.page("/", "Home") {
+                link("A", "/a")
+                link("B", "/b")
+            }
+            site.page("/a", "A")
+            site.page("/b", "B") { link("C", "/c") }
+            site.page("/c", "C") { link("D", "/d") }
+            site.page("/d", "D")
+            val first = useCase().execute(request(budget = ExplorationBudget(maxPages = 3)))
+            first.model.pages.map { it.urlPattern } shouldContainExactly listOf("/", "/a", "/b")
+            val asked = llm.requests.size
+
+            val continued =
+                useCase().execute(request(budget = ExplorationBudget(maxPages = 1)).copy(seed = first.model))
+
+            // Only /c was new and asked about; the budget of one new page left /d for later.
+            llm.requests.drop(asked).map { Regex("URL: (\\S+)").find(prompt(it))?.groupValues?.get(1) } shouldContainExactly listOf("/c")
+            continued.model.version shouldBe 2
+            continued.model.pages.map { it.urlPattern } shouldContainExactly listOf("/", "/a", "/b", "/c")
+            continued.model.pageByPattern("/a")!!.purpose shouldBe "Page /a"
+            continued.model.pageByPattern("/c")!!.purpose shouldBe "Page /c"
         }
 
     @Test
@@ -362,7 +412,7 @@ class ExploreSiteUseCaseTest {
             loggedInSite()
             val sessions = mapOf("employee" to site.session("employee"), "admin" to site.session("admin"))
 
-            val result = useCase().execute(request(phases = setOf(ExplorationPhase.ROLE_BASED)), sessions, observer)
+            val result = useCase().execute(request(phases = setOf(ExplorationPhase.ROLE_BASED)), sessions, observer = observer)
 
             val model = result.model
             val announce = model.action("announcement-submit").shouldNotBeNull()
@@ -579,6 +629,40 @@ class ExploreSiteUseCaseTest {
         }
 
     @Test
+    fun `the logged-in side opens once, after the visitor's walk, with the pages that walk found`() =
+        runTest {
+            loggedInSite()
+            val asked = CopyOnWriteArrayList<SiteModel>()
+            val roles =
+                RoleWalkSource { seen ->
+                    asked += seen
+                    RoleWalk(mapOf("admin" to site.session("admin")))
+                }
+
+            val result =
+                useCase().execute(request(phases = setOf(ExplorationPhase.ANONYMOUS, ExplorationPhase.ROLE_BASED)), roles, observer)
+
+            // What a visitor sees, and nothing only the admin reaches.
+            val seen = asked.single()
+            seen.pages.map { it.urlPattern } shouldContain "/"
+            seen.pages.map { it.urlPattern } shouldNotContain "/company"
+            seen.roles.map { it.name } shouldContainExactly listOf("anonymous")
+            result.model.roles
+                .map { it.name }
+                .toSet() shouldBe setOf("anonymous", "admin")
+        }
+
+    @Test
+    fun `an exploration without a logged-in phase never opens the logged-in side`() =
+        runTest {
+            publicSite()
+
+            useCase().execute(request(), RoleWalkSource { error("the logged-in side must not be opened") }, observer)
+
+            repository.records.single().status shouldBe ExplorationStatus.COMPLETED
+        }
+
+    @Test
     fun `role names are checked before anything starts`() =
         runTest {
             shouldThrow<IllegalArgumentException> { useCase().execute(request(), mapOf("anonymous" to site.session())) }
@@ -644,7 +728,7 @@ class ExploreSiteUseCaseTest {
                 useCase(check = confirmed).execute(
                     request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
                     mapOf("admin" to admin, "employee" to employee),
-                    observer,
+                    observer = observer,
                 )
 
             val clicks = admin.actions.filter { it.startsWith("clickSelector ") }
@@ -680,6 +764,67 @@ class ExploreSiteUseCaseTest {
         }
 
     @Test
+    fun `the trial touch asks the test API about what it created, as the role that created it`() =
+        runTest {
+            loggedInSite()
+            site.creates["[data-testid=\"announcement-submit\"]"] = "/announcements/a1" to true
+            site.creates["[data-testid=\"ticket-submit\"]"] = "/tickets/t9" to false
+            val asked = mutableListOf<Triple<String, String, String>>()
+            // The test API serves announcements only; tickets it does not know (Faza 25.2).
+            val probe =
+                TestApiProbe { resource, by, marker ->
+                    asked += Triple(resource, by, marker)
+                    resource == "announcements"
+                }
+            val confirmed = TestTargetCheck { TestTargetVerdict.Confirmed("company c1 is_test=true") }
+
+            val result =
+                useCase(check = confirmed, testApi = probe).execute(
+                    request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
+                    mapOf("admin" to site.session("admin"), "employee" to site.session("employee")),
+                    accounts = mapOf("admin" to "owner@test.portal.example"),
+                )
+
+            asked.map { it.first to it.second } shouldContainExactlyInAnyOrder
+                listOf("announcements" to "owner@test.portal.example", "tickets" to "owner@test.portal.example")
+            asked.forEach { it.third shouldStartWith "Pətək sınaq" }
+            result.model
+                .action("announcement-submit")!!
+                .trial!!
+                .testApi shouldBe true
+            result.model
+                .action("ticket-submit")!!
+                .trial!!
+                .testApi shouldBe false
+            // Not accepted: nothing was created, so nothing is asked.
+            result.model
+                .action("company-department-submit")!!
+                .trial!!
+                .testApi
+                .shouldBeNull()
+        }
+
+    @Test
+    fun `an object the trial touch left without a page of its own is named in the notes, not forgotten`() =
+        runTest {
+            loggedInSite()
+            // The announcement lands on the list: there is no page of its own to delete it from.
+            site.creates["[data-testid=\"announcement-submit\"]"] = "/announcements" to false
+            val confirmed = TestTargetCheck { TestTargetVerdict.Confirmed("company c1 is_test=true") }
+
+            val result =
+                useCase(check = confirmed).execute(
+                    request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
+                    mapOf("admin" to site.session("admin")),
+                    observer = observer,
+                )
+
+            result.record.summary!!.notes.any {
+                it.startsWith("Trial touch left 'Pətək sınaq") && "opened no page of its own" in it
+            } shouldBe true
+        }
+
+    @Test
     fun `what the trial touch created is deleted again through the site's delete action, only while it shows the marker`() =
         runTest {
             loggedInSite()
@@ -698,21 +843,14 @@ class ExploreSiteUseCaseTest {
                 useCase(check = confirmed).execute(
                     request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
                     mapOf("admin" to admin, "employee" to site.session("employee")),
-                    observer,
+                    observer = observer,
                 )
 
             // The object page was never walked, so its one delete button is found on the page itself and clicked by ref.
-            println("ACTIONS=" + admin.actions.joinToString("\n"))
-            println(
-                "NOTES=" +
-                    result.record.summary!!
-                        .notes
-                        .joinToString("\n"),
-            )
             val opened = admin.actions.lastIndexOf("navigate https://portal.test/announcements/a1")
             admin.actions.drop(opened + 1).first { !it.startsWith("request") } shouldStartWith "click "
             admin.actions shouldNotContain "clickSelector [data-testid=\"announcement-delete\"]"
-            val notes = result.record.summary.notes
+            val notes = result.record.summary!!.notes
             notes.single { it.startsWith("Trial touch deleted its object") } shouldContain "/announcements/{id}"
             // The ticket page shows no delete button: the ticket is not deleted, and the notes say what stays.
             notes.none { "deleted its object 'Pətək sınaq exp_1-2'" in it } shouldBe true
@@ -811,7 +949,7 @@ class ExploreSiteUseCaseTest {
                 useCase(check = confirmed).execute(
                     request(phases = setOf(ExplorationPhase.ROLE_BASED, ExplorationPhase.TRIAL_TOUCH), allowWrites = true),
                     mapOf("admin" to admin),
-                    redirectWhenTouching,
+                    observer = redirectWhenTouching,
                 )
 
             admin.actions.none { "company-department" in it && (it.startsWith("fill") || it.startsWith("click")) } shouldBe true

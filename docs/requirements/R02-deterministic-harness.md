@@ -24,7 +24,9 @@ model's mood or vendor. It is also the precondition for bring-your-own-AI (R09).
   (rule 3). New operations are code changes, never prompt changes.
 - **`run` vs `do`.** `RunFunction`s (`register_owner`, `seed_company`, `register_and_login`, …) execute the target's
   flows as data (`TargetProfile.flows`, `FlowRunner`) with no model involved (rule 6); `do` steps go through
-  `AgentLoop` with a numbered page snapshot and a loop detector.
+  `AgentLoop` with a numbered page snapshot and a loop detector that keys each action by the page it was chosen on
+  (`RepeatedStateLoopDetector`: the same action on an unchanged page three times within six decisions is a loop, the
+  same click on pages that change is progress; Faza 24.8).
 - **Structured output.** `LlmClient` (`features/llm`) requires a response schema on every call; parsers validate in
   code, so a weaker or different model cannot widen what an agent may do.
 

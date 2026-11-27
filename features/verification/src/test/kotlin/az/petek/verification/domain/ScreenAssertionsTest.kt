@@ -33,6 +33,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -191,14 +192,15 @@ class ScreenAssertionsTest {
         }
 
     @Test
-    fun `an unresolved last_id fails instead of probing a wrong URL`() =
+    fun `an object no event carried leaves the check undecided instead of probing a wrong URL`() =
         runTest {
             val input = assertionInput(session, templates = TemplateContext(null, emptyMap(), emptyMap()))
 
             val result = evaluator.evaluate(listOf(HttpStatus("/api/tickets/{last_id}/approve", "POST", 403)), input).single()
 
-            result.verdict shouldBe Verdict.FAILED
-            result.note!! shouldContain "template error"
+            // Nothing proves or disproves the site here: the step's event carried no id (its emitter failed, or none came back).
+            result.verdict shouldBe Verdict.INCONCLUSIVE
+            result.note!! shouldStartWith "id_unavailable: "
             session.fake.actions.none { it.startsWith("request") } shouldBe true
         }
 

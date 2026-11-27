@@ -24,6 +24,7 @@ import az.petek.campaign.domain.RequestPattern
 import az.petek.campaign.domain.StepAction
 import az.petek.campaign.domain.TargetProfile
 import az.petek.campaign.domain.ValidationIssue
+import az.petek.campaign.domain.VisualProfile
 import az.petek.campaign.domain.WaitForSpec
 import az.petek.core.model.RegistrationMode
 import az.petek.core.model.Role
@@ -31,6 +32,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Nested
@@ -85,6 +87,49 @@ class YamlCampaignSourceTest {
         """.trimIndent()
 
     private fun withSteps(steps: String): String = header + "\n" + steps.trimIndent()
+
+    @Test
+    fun `coverage lines are kept as written, and one that spans lines or runs too long is refused`() {
+        val steps =
+            """
+            steps:
+              - actor: admin
+                do: "Elan yarat"
+            """
+        val lines = listOf("The explorer never saw the site as manager.", "BOUNDARY of 'Göndər' was not written: no rules.")
+
+        fun coverage(vararg line: String) = "\ncoverage:\n" + line.joinToString("\n") { "  - \"$it\"" }
+
+        val campaign = load(withSteps(steps) + coverage(*lines.toTypedArray()))
+
+        campaign.coverage shouldBe lines
+        load(withSteps(steps)).coverage shouldBe emptyList()
+        issue(withSteps(steps) + coverage("x".repeat(Campaign.MAX_COVERAGE_CHARS + 1)), "'coverage' lines are 1 to")
+        issue(withSteps(steps) + coverage("two\\nlines"), "'coverage' lines are 1 to")
+    }
+
+    @Test
+    fun `target_profile visual mask is read as selector references`() {
+        val yaml =
+            withSteps(
+                """
+                target_profile:
+                  selectors:
+                    visual.clock: '[data-testid="server-clock"]'
+                  visual:
+                    mask:
+                      - visual.clock
+                      - '.news-ticker'
+                steps: []
+                """,
+            )
+
+        val target = load(yaml).target
+
+        target.visual shouldBe VisualProfile(listOf("visual.clock", ".news-ticker"))
+        target.resolveSelector(target.visual.mask.first()) shouldBe "[data-testid=\"server-clock\"]"
+        load(withSteps("steps: []")).target.visual shouldBe VisualProfile.NONE
+    }
 
     @Nested
     inner class Defaults {
@@ -288,6 +333,25 @@ class YamlCampaignSourceTest {
         }
 
         @Test
+        fun `emits names the request that writes its change`() {
+            val campaign =
+                load(
+                    withSteps(
+                        """
+                        steps:
+                          - id: make
+                            actor: admin
+                            do: x
+                            emits: {event: made, request: "post /api/items", id_from: {url_regex: "/items/(\\d+)"}}
+                        """,
+                    ),
+                )
+
+            campaign.steps.single().emits shouldBe
+                EmitSpec("made", IdSource.UrlRegex("/items/(\\d+)"), RequestPattern("POST", "/api/items"))
+        }
+
+        @Test
         fun `only_one_succeeds takes a request pattern and an oracle condition`() {
             val campaign =
                 load(
@@ -433,6 +497,26 @@ class YamlCampaignSourceTest {
         }
 
         @Test
+        fun `an unknown key under target_profile visual is a problem with its line`() {
+            val yaml =
+                withSteps(
+                    """
+                    target_profile:
+                      visual:
+                        mask: ['.ticker']
+                        ignore: ['.clock']
+                    steps: []
+                    """,
+                )
+
+            val issue = issue(yaml, "unknown key 'ignore'")
+
+            issue.line shouldBe 11
+            issue.message shouldContain "unknown key 'ignore' in 'target_profile.visual' (allowed: mask)"
+            issue(withSteps("target_profile:\n  visual: ['.ticker']\nsteps: []"), "'target_profile.visual' must be a map").line shouldBe 9
+        }
+
+        @Test
         fun `wrong types are errors on their lines`() {
             val yaml =
                 """
@@ -529,6 +613,10 @@ class YamlCampaignSourceTest {
             issue(assertion("only_one_succeeds: [a]"), "must be a single value")
             issue(assertion("only_one_succeeds: {request: approve}"), "must be \"<METHOD> <path regex>\"")
                 .message shouldContain "was 'approve'"
+            issue(
+                withSteps("steps:\n  - actor: admin\n    do: x\n    emits: {event: e, request: post}"),
+                "'steps[0].emits.request' must be",
+            ).message shouldContain "e.g. \"POST .*/announcements\""
             issue(assertion("only_one_succeeds: {request: }"), "'steps[0].assert[0].only_one_succeeds.request' has no value")
             issue(assertion("only_one_succeeds: {request: [POST, /x]}"), "must be a single value")
             issue(assertion("only_one_succeeds: {oracle: {field: status}}"), "missing required key 'path'")
@@ -673,5 +761,15 @@ class YamlCampaignSourceTest {
             shouldThrow<CampaignValidationException> { YamlCampaignSource().load(file) }.issues.single().message shouldContain
                 "not valid UTF-8"
         }
+    }
+
+    @Test
+    fun `the site a stored text names itself is read as written, whatever the override would make of it`() {
+        val source = YamlCampaignSource(targetOverride = URI("https://configured.test"))
+
+        source.writtenTarget("campaign:\n  name: x\n  target: https://stage.shop.example\n") shouldBe URI("https://stage.shop.example")
+        source.writtenTarget("campaign:\n  name: x\n").shouldBeNull()
+        source.writtenTarget("campaign: [not, a, map").shouldBeNull()
+        source.writtenTarget("campaign:\n  target: 'http://exa mple.com'\n").shouldBeNull()
     }
 }

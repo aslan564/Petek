@@ -31,6 +31,10 @@ interface EvidenceRecorder {
     suspend fun finding(record: FindingRecord)
 
     suspend fun usage(record: UsageRecord)
+
+    suspend fun pageTiming(record: PageTimingRecord)
+
+    suspend fun pageLook(record: PageLookRecord)
 }
 
 /** Read side, used by the judge and the report. Results are ordered by time. */
@@ -48,6 +52,12 @@ interface EvidenceQuery {
     suspend fun findings(runId: RunId): List<FindingRecord>
 
     suspend fun usage(runId: RunId): List<UsageRecord>
+
+    /** The pages' own timings the run recorded, in recording order. */
+    suspend fun pageTimings(runId: RunId): List<PageTimingRecord>
+
+    /** The page looks the run recorded, in recording order. */
+    suspend fun pageLooks(runId: RunId): List<PageLookRecord>
 }
 
 interface RunRepository {
@@ -70,6 +80,19 @@ interface RunRepository {
     suspend fun list(limit: Int): List<RunRecord>
 
     suspend fun byRepeatGroup(group: String): List<RunRecord>
+
+    /**
+     * The newest finished run (as [list] orders them) of the campaign named [campaignName] other than [except]: the
+     * regression baseline, however many runs the scenario has had since. With [release], only a run that tested it; with
+     * [startedBefore], only one started before it; with [outsideGroup], none of that `--repeat` group.
+     */
+    suspend fun latestFinished(
+        campaignName: String,
+        except: RunId,
+        release: String? = null,
+        startedBefore: Instant? = null,
+        outsideGroup: String? = null,
+    ): RunRecord?
 
     suspend fun addResource(resource: RunResource)
 

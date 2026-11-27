@@ -11,10 +11,14 @@
 
 package az.petek.mail.infrastructure
 
+import az.petek.mail.application.DefaultAwaitVerificationUseCase
+import az.petek.mail.domain.DefaultVerificationExtractor
 import az.petek.mail.domain.MailMessage
+import az.petek.mail.domain.MailPurpose
 import az.petek.mail.domain.MailboxException
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -25,6 +29,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -35,7 +43,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import java.net.URI
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class MailpitMailboxTest {
     private val closeables = mutableListOf<AutoCloseable>()
@@ -422,9 +432,43 @@ class MailpitMailboxTest {
         return json.getValue("IDs").jsonArray.map { it.jsonPrimitive.content } to json.getValue("Read").jsonPrimitive.boolean
     }
 
+    @Test
+    fun `a hundred testers waiting at once are served side by side, not one after another`() {
+        val mailpit = FakeMailpit()
+        val testers = (1..TESTERS).map { "tester.a%03d@test.portal.example".format(it) }
+        testers.forEachIndexed { index, tester -> mailpit.add(stored("m$index", to = listOf(tester), text = "Kod: ${100_000 + index}")) }
+        val inFlight = AtomicInteger()
+        val most = AtomicInteger()
+        // Every answer takes 0.3 s: one tester after another, a single poll round would take two minutes.
+        val server =
+            StubHttpServer { request ->
+                most.accumulateAndGet(inFlight.incrementAndGet()) { a, b -> maxOf(a, b) }
+                try {
+                    delay(300.milliseconds)
+                    mailpit.handle(request)
+                } finally {
+                    inFlight.decrementAndGet()
+                }
+            }.closing()
+        val verification = DefaultAwaitVerificationUseCase(mailboxFor(server), DefaultVerificationExtractor())
+
+        val codes =
+            runBlocking {
+                testers
+                    .map { async(Dispatchers.Default) { verification.await(it, SINCE, MailPurpose.CODE, 30.seconds, 1.seconds).code } }
+                    .awaitAll()
+            }
+
+        codes shouldContainExactly testers.indices.map { "${100_000 + it}" }
+        most.get() shouldBeGreaterThan TESTERS / 2
+    }
+
     private companion object {
         const val ELI = "eli.k7x2.a07@test.portal.example"
         val SINCE: Instant = Instant.parse("2026-09-25T10:00:00Z")
+
+        /** The most testers a run has. */
+        const val TESTERS = 100
 
         fun stored(
             id: String,

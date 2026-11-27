@@ -27,8 +27,10 @@ import az.petek.core.model.Role
 import az.petek.explorer.domain.ActionKind
 import az.petek.explorer.domain.ActionModel
 import az.petek.explorer.domain.CoveredIdea
+import az.petek.explorer.domain.Drafts
 import az.petek.explorer.domain.Keywords
 import az.petek.explorer.domain.PageModel
+import az.petek.explorer.domain.Resources
 import az.petek.explorer.domain.Selectors
 import az.petek.explorer.domain.SiteModel
 import az.petek.explorer.domain.SkippedIdea
@@ -169,18 +171,36 @@ internal class ScenarioComposer(
      * The site-wide checks (Faza 13, 19) of [ideas], done by code: `site_health` for what a visitor meets while a page
      * loads (console and failed requests, slow requests, the back button, the phone layout, an expired session, the
      * site's own links) and `page_checks` for what is on it (in-page links, images, alt texts, titles and headings,
-     * links to other sites). Every tester of a group works at once on a job of its own (`share: work`): each page on a
+     * links to other sites, language versions). Every tester of a group works at once on a job of its own (`share: work`): each page on a
      * phone, a tablet and a desktop, dealt out among them, and dealt round again as a second look when there are more
      * testers than jobs; the links of a page are asked about once.
      *
      * Where people sign in (a site with companies, or roles seen signed in), the pages a visitor may see are checked in
      * setup, before the testers sign in, and then each role checks the pages only it saw after the scenario; the expired
      * session is checked there. A site without sign-in has one group, checked by everyone in the main steps.
+     *
+     * Whatever the ideas, the visitor's pages also get a look on every screen (`site_health`'s `look`, compared between
+     * releases by `petek compare`): one setup step of its own, `public-look` (or `site-look` on a site without
+     * sign-in), first of all. The testers are fresh visitors then: nobody has signed in, the run has written nothing a
+     * page could show, and no other step has visited links yet. On a site without sign-in the site's own group runs in
+     * the main steps after the scenario's writes, so its looks would show them. Pages only a role sees get no look (they
+     * show what the run wrote), and a draft names no masks and no `look_*` arguments: those are the owner's to add.
+     *
+     * A look loads each page twice and scrolls through it, so every later visit of the tester's browser finds its
+     * scripts, styles, fonts and images cached. What times a page's load ([FIRST_VISIT_CHECKS]: slow requests, the
+     * page's timing) is therefore checked in the look's own step, which reads it on the first visit before the look
+     * loads the page again; the visitor's pages step checks the rest.
      */
     private fun siteChecks(ideas: List<TestIdea>): List<Pair<TestIdea, Outcome>> {
         if (ideas.isEmpty()) return emptyList()
         val patterns = ideas.map { it.pattern }.toSet()
-        val health = patterns.mapNotNull { HEALTH_CHECKS[it] }.filter { it != SESSION }.sortedBy { CHECK_ORDER.indexOf(it) }
+        // Where requests are timed, the pages are too: `perf` records how fast each became usable, for comparing releases.
+        val health =
+            patterns
+                .mapNotNull { HEALTH_CHECKS[it] }
+                .filter { it != SESSION }
+                .flatMap { if (it == SLOW) listOf(it, PERF) else listOf(it) }
+                .sortedBy { CHECK_ORDER.indexOf(it) }
         val content = patterns.mapNotNull { PAGE_CHECKS[it] }.sortedBy { CHECK_ORDER.indexOf(it) }
         val signIn = settings.tenant == Tenant.COMPANY || settings.team.roles.any { it != ScenarioSettings.VISITOR }
         val stepsOf = mutableMapOf<String, MutableList<String>>()
@@ -198,19 +218,29 @@ internal class ScenarioComposer(
                 if (phase == StepPhase.SETUP) beforeSignIn += step else steps += step
                 healthChecks.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
             }
-            if (content.isNotEmpty()) {
+            // A group checks lists only where its pages have some (the visitor's).
+            val lists = listsOf(pages)
+            val checks = if (lists.isEmpty()) content - LISTS else content
+            if (checks.isNotEmpty()) {
                 val id = Slugs.firstFree("$prefix-content") { it !in stepIds }
-                val step = checkStep(id, phase, actor, settings.setup.pageChecks, content, pages)
+                val step = checkStep(id, phase, actor, settings.setup.pageChecks, checks, pages, lists)
                 if (phase == StepPhase.SETUP) beforeSignIn += step else steps += step
-                content.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
+                checks.forEach { stepsOf.getOrPut(it) { mutableListOf() } += id }
             }
         }
 
         val public = pagesSeenBy { ScenarioSettings.VISITOR.key in it.reachableBy }
+        val firstVisit = health.filter { it in FIRST_VISIT_CHECKS }
+        val look = Slugs.firstFree(if (signIn) "public-look" else "site-look") { it !in stepIds }
+        val lookChecks = (firstVisit + LOOK).sortedBy { CHECK_ORDER.indexOf(it) }
+        beforeSignIn +=
+            checkStep(look, StepPhase.SETUP, everybody(), settings.setup.siteHealth, lookChecks, public.ifEmpty { listOf("home") })
+        firstVisit.forEach { stepsOf.getOrPut(it) { mutableListOf() } += look }
+        val visitorHealth = health - firstVisit.toSet()
         if (!signIn) {
-            group("site", StepPhase.MAIN, everybody(), public.ifEmpty { listOf("home") }, health)
+            group("site", StepPhase.MAIN, everybody(), public.ifEmpty { listOf("home") }, visitorHealth)
         } else {
-            group("public", StepPhase.SETUP, everybody(), public.ifEmpty { listOf("home") }, health)
+            group("public", StepPhase.SETUP, everybody(), public.ifEmpty { listOf("home") }, visitorHealth)
             val session = if (TestPattern.SESSION_EXPIRY in patterns) listOf(SESSION) else emptyList()
             settings.team.roles.filter { it != ScenarioSettings.VISITOR }.forEach { role ->
                 val own = pagesSeenBy { role.key in it.reachableBy && ScenarioSettings.VISITOR.key !in it.reachableBy }
@@ -233,6 +263,7 @@ internal class ScenarioComposer(
         function: String,
         checks: List<String>,
         pages: List<String>,
+        lists: String = "",
     ): ScenarioStep =
         step(
             id = id,
@@ -246,9 +277,22 @@ internal class ScenarioComposer(
                         "pages" to pages.joinToString(","),
                         SHARE to SHARE_WORK,
                         DEVICES to ALL_DEVICES,
-                    ),
+                    ) + (if (lists.isEmpty()) emptyMap() else mapOf(LISTS to lists)),
                 ),
         )
+
+    /**
+     * The `lists` argument of `page_checks` for [pages]: `page>objects>seen` per list the visitor saw, with the object
+     * page's id segment written as an asterisk (braces would be read as a placeholder).
+     */
+    private fun listsOf(pages: List<String>): String =
+        pages
+            .flatMap { page ->
+                model.pageByPattern(page)?.lists.orEmpty().toSortedMap().map { (objects, seen) ->
+                    "$page>${objects.replace(UrlPatterns.ID, "*")}>$seen"
+                }
+            }.filter { literal(it.substringBefore('>')) }
+            .joinToString(",")
 
     /** The site's own pages (no object id) seen by whom [seen] accepts, at most [MAX_SITE_PAGES]. */
     private fun pagesSeenBy(seen: (PageModel) -> Boolean): List<String> =
@@ -265,19 +309,24 @@ internal class ScenarioComposer(
     /**
      * What [action] creates, opened by its address by a second tester who did not create it: the same role's second
      * tester when there is one, else another role's. Needs the object's own page (`/notes/{id}`) in the model or seen
-     * after the trial touch.
+     * after the trial touch. Not written for objects whose pages the visitor saw (an article, a public post: the site
+     * shows them to everyone), except a draft, which must not open for anyone else ([Drafts], Faza 19).
      */
     private fun directUrl(
         action: ActionModel,
         page: PageModel,
     ): Outcome {
         val role = actorRole(action) ?: return noRole(action)
-        val resource = createdResource(action, page)
+        val resource = Resources.created(action, page)
         val objectPattern =
             model.pages.map { it.urlPattern }.firstOrNull { pattern ->
-                pattern.split('/').count { it == UrlPatterns.ID } == 1 && objectOf(pattern) == resource
+                pattern.split('/').count { it == UrlPatterns.ID } == 1 && Resources.objectOf(pattern) == resource
             } ?: action.trial?.urlPatternAfter?.takeIf { pattern -> pattern.split('/').count { it == UrlPatterns.ID } == 1 }
                 ?: return Outcome.Skipped("no page of one ${site(resource)} object was seen, so there is no address to type")
+        // What a visitor sees is the site's to show to everyone; a draft must not open for anyone else all the same.
+        if (Drafts.public(model, objectPattern) && !Drafts.saves(action)) {
+            return Outcome.Skipped("visitors see ${site(resource)} pages ($objectPattern): the site shows them to everyone")
+        }
         val other =
             when {
                 settings.team.count(role) >= 2 -> {
@@ -400,6 +449,9 @@ internal class ScenarioComposer(
             }
                 ?: return Outcome.Skipped("a race needs two testers of a role that was offered '$name' (seen: $seen)")
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
+        val request =
+            requestOf(action)
+                ?: return Outcome.Skipped("the request '$name' sends was not seen, so code could not decide who won a race")
         val id = stepId(action, "race")
         steps +=
             step(
@@ -408,7 +460,7 @@ internal class ScenarioComposer(
                 actor = actors.parseList(listOf("${role.key}[n=1]", "${role.key}[n=2]")),
                 action = StepAction.Do("$open səhifəsini aç və '${site(action.name)}' et"),
                 parallel = true,
-                assertions = listOf(AssertionSpec.OnlyOneSucceeds(raceRequest(action))),
+                assertions = listOf(AssertionSpec.OnlyOneSucceeds(request)),
             )
         return Outcome.Covered(prerequisites + id)
     }
@@ -421,7 +473,8 @@ internal class ScenarioComposer(
             return Outcome.Skipped("deleting steps are never generated from an exploration; add them to the draft by hand if wanted")
         }
         val role = actorRole(action) ?: return noRole(action)
-        val resource = UrlPatterns.resource(page.urlPattern).orEmpty()
+        // What the form creates, not what the page shows: a comment form on a post's page makes comments.
+        val resource = Resources.created(action, page)
         val item =
             page.testIds.firstOrNull { testId ->
                 testId.endsWith(ITEM_SUFFIX) &&
@@ -432,7 +485,8 @@ internal class ScenarioComposer(
                 )
         if (!literal(item)) return braces(Selectors.testId(item))
         val (open, prerequisites) = objectPage(page) ?: return noCreator(action, page)
-        val marker = "Pətək təkrar ${Slugs.of(action.id)}"
+        // `{pass}`: every wave and the account swap submit their own text, so each count sees only its own pass.
+        val marker = "Pətək təkrar ${Slugs.of(action.id)} {pass}"
         val id = stepId(action, "idempotency")
         steps +=
             step(
@@ -471,12 +525,13 @@ internal class ScenarioComposer(
         if (!composing.add(action.id)) return null
         try {
             val (open, prerequisites) = objectPage(page) ?: return null
-            val resource = createdResource(action, page)
+            val resource = Resources.created(action, page)
             val event = Slugs.firstFree(Slugs.identifier(resource, "item") + "_created", "_") { it !in idSources && it !in usedEvents() }
-            val marker = "Pətək yoxlaması ${Slugs.of(action.id)}"
+            // `{pass}`: a later wave or the account swap creates a new text, never one the pages show already.
+            val marker = "Pətək yoxlaması ${Slugs.of(action.id)} {pass}"
             val assertions = mutableListOf<AssertionSpec>(AssertionSpec.VisibleText(marker, settings.visibleWithin))
             val idSource =
-                if (testApi && resource in settings.oracleResources) {
+                if (testApi && servedByTestApi(action, resource)) {
                     idSources[event] = IdSource.OracleField("/test/$resource/latest?by={self.email}", "id")
                     assertions += AssertionSpec.Oracle("/test/$resource/{last_id}", field = null, equals = null, contains = marker)
                     null
@@ -496,7 +551,8 @@ internal class ScenarioComposer(
                         StepAction.Do(
                             "$open səhifəsini aç və '${site(action.name)}' ilə yeni qeyd yarat; mətn sahələrinə '$marker' yaz",
                         ),
-                    emits = EmitSpec(event, idSource),
+                    // The form's request is the write the receivers' delivery latency is measured from (Faza 24.10).
+                    emits = EmitSpec(event, idSource, requestOf(action)),
                     assertions = assertions,
                 )
             return Creator(id, event, marker, prerequisites, open).also {
@@ -509,6 +565,15 @@ internal class ScenarioComposer(
     }
 
     /**
+     * Whether the site's test API serves [resource] (Faza 25.2): the trial touch of [action] saw it answer with the object
+     * it created, or the frame names the resource ([ScenarioSettings.oracleResources]); never a list assumed of a site.
+     */
+    private fun servedByTestApi(
+        action: ActionModel,
+        resource: String,
+    ): Boolean = action.trial?.testApi == true || resource in settings.oracleResources
+
+    /**
      * Where a step about [page] opens it: the page itself, or, when the page shows one object (`/tickets/{id}`), that
      * object created earlier in the draft, e.g. `/tickets/{event.tickets_created.id}`, after the steps creating it.
      * Null when the page needs an object that no observed action creates, or more than one object (only one can be
@@ -517,7 +582,7 @@ internal class ScenarioComposer(
     private fun objectPage(page: PageModel): Pair<String, List<String>>? =
         when (page.urlPattern.split('/').count { it == UrlPatterns.ID }) {
             0 -> page.urlPattern to emptyList()
-            1 -> creatorFor(objectOf(page.urlPattern))?.let { withObject(page.urlPattern, it.event) to it.steps }
+            1 -> creatorFor(Resources.objectOf(page.urlPattern))?.let { withObject(page.urlPattern, it.event) to it.steps }
             else -> null
         }
 
@@ -527,17 +592,11 @@ internal class ScenarioComposer(
             if (candidate.kind != ActionKind.CREATE) continue
             val role = actorRole(candidate) ?: continue
             val page = model.page(candidate.pageId) ?: continue
-            if (createdResource(candidate, page) != resource) continue
+            if (Resources.created(candidate, page) != resource) continue
             creator(candidate, page, role)?.let { return it }
         }
         return null
     }
-
-    /** What [action] creates: named by its form's action path when it has one, else by its page. */
-    private fun createdResource(
-        action: ActionModel,
-        page: PageModel,
-    ): String = collectionOf(action.httpPath ?: page.urlPattern)
 
     /** `http_status` for a role that must be refused: the action's form path, with the created object when it needs one. */
     private fun httpCheck(
@@ -549,17 +608,18 @@ internal class ScenarioComposer(
         val resolved =
             when (path.split('/').count { it == UrlPatterns.ID }) {
                 0 -> path
-                1 -> creatorFor(objectOf(path))?.let { withObject(path, it.event) } ?: return null
+                1 -> creatorFor(Resources.objectOf(path))?.let { withObject(path, it.event) } ?: return null
                 else -> return null
             }
         return AssertionSpec.HttpStatus(resolved, method, settings.forbiddenStatus)
     }
 
     /**
-     * The requests that decide a race: the action's form, any object id in its path (`POST /tickets/[^/]+/approve`).
-     * Null (every mutating request) when the action submits no form the explorer saw.
+     * The request an action sends, as its form showed it, any object id in its path (`POST /tickets/[^/]+/approve`): it
+     * decides a race and marks when a created object reached the target. Null when the action submits no form the
+     * explorer saw.
      */
-    private fun raceRequest(action: ActionModel): RequestPattern? {
+    private fun requestOf(action: ActionModel): RequestPattern? {
         val path = action.httpPath ?: return null
         val method = action.httpMethod?.uppercase()?.takeIf { it in RequestPattern.MUTATING_METHODS } ?: return null
         return RequestPattern(method, path.split('/').joinToString("/") { if (it == UrlPatterns.ID) "[^/]+" else escapeRegex(it) })
@@ -578,23 +638,6 @@ internal class ScenarioComposer(
     }
 
     private fun escapeRegex(text: String): String = text.map { if (it in REGEX_META) "\\$it" else "$it" }.joinToString("")
-
-    /** The collection a pattern lists or posts to: its last segment that is neither an id nor a verb. */
-    private fun collectionOf(pattern: String): String =
-        pattern
-            .split('/')
-            .lastOrNull { it.isNotEmpty() && it != UrlPatterns.ID && Keywords.fold(it) !in VERB_SEGMENTS }
-            .let(::resourceName)
-
-    /** The object a pattern with ids shows or acts on: the segment right before its last id (`/tickets/{id}/approve`). */
-    private fun objectOf(pattern: String): String {
-        val segments = pattern.split('/').filter { it.isNotEmpty() }
-        val lastId = segments.lastIndexOf(UrlPatterns.ID)
-        if (lastId < 0) return collectionOf(pattern)
-        return resourceName(segments.take(lastId).lastOrNull { it != UrlPatterns.ID })
-    }
-
-    private fun resourceName(segment: String?): String = segment?.let { Slugs.of(it) }?.ifEmpty { null } ?: "items"
 
     /** Campaign templates read braces as placeholders: a selector with braces would make the whole draft invalid. */
     private fun literal(selector: String): Boolean = '{' !in selector && '}' !in selector
@@ -698,6 +741,18 @@ internal class ScenarioComposer(
         /** The most pages one group of site-wide checks visits. */
         const val MAX_SITE_PAGES = 20
         const val SESSION = "session"
+        const val SLOW = "slow"
+
+        /** `site_health`'s page timing: never fails a step, compared between releases (Faza 14). */
+        const val PERF = "perf"
+
+        /** `site_health`'s look of a page on a screen: never fails a step, compared between releases (Faza 14). */
+        const val LOOK = "look"
+
+        /** The `site_health` checks that time a page's load, read on the first visit: a look leaves the page cached. */
+        val FIRST_VISIT_CHECKS = setOf(SLOW, PERF)
+
+        const val LISTS = "lists"
         const val SHARE = "share"
         const val SHARE_WORK = "work"
         const val DEVICES = "devices"
@@ -708,7 +763,7 @@ internal class ScenarioComposer(
             mapOf(
                 TestPattern.BROKEN_LINKS to "links",
                 TestPattern.CONSOLE_ERRORS to "console",
-                TestPattern.SLOW_ENDPOINTS to "slow",
+                TestPattern.SLOW_ENDPOINTS to SLOW,
                 TestPattern.BACK_BUTTON to "back",
                 TestPattern.MOBILE_VIEWPORT to "mobile",
                 TestPattern.SESSION_EXPIRY to SESSION,
@@ -722,14 +777,30 @@ internal class ScenarioComposer(
                 TestPattern.IMAGE_ALT to "alt",
                 TestPattern.PAGE_META to "meta",
                 TestPattern.OUTBOUND_LINKS to "outbound",
+                TestPattern.LANGUAGE_MIRRORS to "mirrors",
+                TestPattern.EMPTY_LISTS to LISTS,
             )
 
         /** The order checks are written in, so a draft reads the same whatever the ideas' order. */
-        val CHECK_ORDER = listOf("console", "slow", "links", "back", "mobile", SESSION, "anchors", "images", "alt", "meta", "outbound")
+        val CHECK_ORDER =
+            listOf(
+                "console",
+                SLOW,
+                PERF,
+                LOOK,
+                "links",
+                "back",
+                "mobile",
+                SESSION,
+                "anchors",
+                "images",
+                "alt",
+                "meta",
+                "outbound",
+                "mirrors",
+                LISTS,
+            )
         const val MAX_SITE_TEXT = 60
         const val REGEX_META = ".[]{}()*+?^$|\\"
-
-        /** Path segments that name what is done, not what it is done to (`/tickets/new`, `/tickets/{id}/edit`). */
-        val VERB_SEGMENTS = setOf("new", "create", "add", "edit", "update", "yeni", "yarat", "elave", "redakte")
     }
 }

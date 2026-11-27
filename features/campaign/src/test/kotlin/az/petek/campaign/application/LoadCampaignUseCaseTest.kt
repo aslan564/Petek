@@ -74,7 +74,7 @@ class LoadCampaignUseCaseTest {
     fun `the contract demo campaign loads and validates`() {
         val campaign = useCase().execute(contractDemoScenario(), KNOWN_RUN_FUNCTIONS)
         campaign.settings.name shouldBe "contract-demo"
-        campaign.allSteps.size shouldBe 9
+        campaign.allSteps.size shouldBe 10
     }
 
     @Test
@@ -102,6 +102,9 @@ class LoadCampaignUseCaseTest {
                     emits: created
                   - id: idle
                     actor: manager[HR]
+                  - id: look
+                    actor: employee
+                    do: "Bax {last_id}"
                 """,
             )
         val issues = shouldThrow<CampaignValidationException> { useCase().execute(file, KNOWN_RUN_FUNCTIONS) }.issues
@@ -110,7 +113,8 @@ class LoadCampaignUseCaseTest {
 
         lineOf("roles add up to 3") shouldBe 5
         lineOf("waits for 'created'") shouldBe 11
-        lineOf("{last_id} needs an event") shouldBe 12
+        // `read` waits for its event, so its {last_id} is that event's object; `look` has no event of its own.
+        lineOf("{last_id} has no event of its own") shouldBe 23
         lineOf("must come after a visible_text") shouldBe 14
         lineOf("unknown run function 'make_things'") shouldBe 17
         lineOf("names department 'HR'") shouldBe 20

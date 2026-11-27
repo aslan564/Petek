@@ -10,7 +10,8 @@
  */
 
 // Finds the <option> the caller means: exact label first, then exact value, then a case-insensitive label.
-// Returns its index, or the labels that exist when nothing matches.
+// Returns its index, or the labels that exist when nothing matches: those containing the wanted text first, so a long
+// list (every person of a company) still shows the likely ones within what the caller keeps of the answer.
 (select, wanted) => {
   if (!(select instanceof HTMLSelectElement)) return { error: 'not a <select> element' };
   const options = Array.from(select.options);
@@ -19,5 +20,8 @@
   let index = options.findIndex((option) => label(option) === needle);
   if (index < 0) index = options.findIndex((option) => option.value === String(wanted));
   if (index < 0) index = options.findIndex((option) => label(option).toLowerCase() === needle.toLowerCase());
-  return index >= 0 ? { index } : { available: options.map(label) };
+  if (index >= 0) return { index };
+  const labels = options.map(label);
+  const near = labels.filter((text) => needle && text.toLowerCase().includes(needle.toLowerCase()));
+  return { available: near.concat(labels.filter((text) => !near.includes(text))) };
 }

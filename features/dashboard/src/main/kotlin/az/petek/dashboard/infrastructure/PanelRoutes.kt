@@ -45,12 +45,26 @@ private val logger = KotlinLogging.logger {}
  * `{"error": "...", "problems": [{"field", "message"}]}` with 400 (invalid), 404, 409 (not now) or 503 (not wired).
  */
 internal fun Route.panelRoutes(backend: PanelBackend) {
+    testRoutes(backend)
     explorationRoutes(backend)
     scenarioRoutes(backend)
     runRoutes(backend)
     manualCodeRoutes(backend)
     accountRoutes(backend)
     readinessRoutes(backend)
+}
+
+/** "Test et" (Faza 25.3): explore, draft, approve and run in one go, from the instruction form. */
+private fun Route.testRoutes(backend: PanelBackend) {
+    get("/api/test") { call.answer { PanelJson.testFlow(backend.testFlow()) } }
+    post("/api/test") {
+        call.answer(HttpStatusCode.Accepted) {
+            val instructions = PanelJson.instructions(call.jsonBody())
+            instructions.problems().takeIf { it.isNotEmpty() }?.let { throw PanelRequestException(it) }
+            PanelJson.testFlow(backend.startTest(instructions))
+        }
+    }
+    post("/api/test/cancel") { call.answer { cancelled(backend.cancelTest()) } }
 }
 
 /** The setup screen: what is configured, and the checks the page runs one by one (each contacts something). */
@@ -62,6 +76,8 @@ private fun Route.readinessRoutes(backend: PanelBackend) {
         call.answer { PanelJson.ownership(backend.checkOwnership(fresh)) }
     }
     post("/api/readiness/ai") { call.answer { PanelJson.aiCheck(backend.testAi()) } }
+    get("/api/readiness/ai-options") { call.answer { PanelJson.aiOptions(backend.aiOptions()) } }
+    post("/api/readiness/ai-choice") { call.answer { PanelJson.readiness(backend.chooseAi(PanelJson.aiChoice(call.jsonBody()))) } }
 }
 
 private fun Route.accountRoutes(backend: PanelBackend) {
@@ -69,6 +85,8 @@ private fun Route.accountRoutes(backend: PanelBackend) {
     post("/api/accounts") {
         call.answer(HttpStatusCode.Created) { PanelJson.accounts(backend.addAccount(PanelJson.accountRequest(call.jsonBody()))) }
     }
+    get("/api/sites") { call.answer { PanelJson.sites(backend.sites()) } }
+    post("/api/sites") { call.answer(HttpStatusCode.Created) { PanelJson.sites(backend.addSite(PanelJson.siteRequest(call.jsonBody()))) } }
 }
 
 private fun Route.manualCodeRoutes(backend: PanelBackend) {
@@ -144,6 +162,18 @@ private fun Route.runRoutes(backend: PanelBackend) {
     post("/api/runs/cancel") { call.answer { cancelled(backend.cancelRun()) } }
     get("/api/runs/{runId}/triage") { call.answer { PanelJson.triage(backend.triage(RunId(call.id("runId")))) } }
     post("/api/runs/{runId}/triage") { call.answer { PanelJson.triage(backend.runTriage(RunId(call.id("runId")))) } }
+    // Against an earlier run of the scenario (`?baseline=previous|<run id>|<release>`), written beside its report.
+    get("/api/runs/{runId}/compare") {
+        call.answer {
+            PanelJson.comparison(
+                backend.compare(
+                    RunId(call.id("runId")),
+                    call.request.queryParameters["baseline"]?.trim(),
+                    call.request.queryParameters["visual"]?.trim(),
+                ),
+            )
+        }
+    }
     get("/api/stability") {
         call.answer {
             val group = call.request.queryParameters["group"]?.takeIf(ID::matches) ?: throw invalid("group", "Təkrar qrupu seçin.")

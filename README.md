@@ -70,7 +70,10 @@ evidence a developer can act on.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-A run (`petek run scenarios/<campaign>.yaml`):
+A test (the panel's **Test et**, `petek test`, or `test_site` over MCP) starts with the explorer: it learns the site's
+pages, forms, operations and ways in (sign-up, login, invitation, company code or guest), and the campaign is drafted
+only from what it found, so no tester waits for something the site does not have. The draft is approved and run; a
+campaign you write yourself runs the same way (`petek run scenarios/<campaign>.yaml`). A run:
 
 1. **Identities.** The orchestrator derives N deterministic testers (names, e-mails on your test domain, passwords via
    HMAC of a secret, phones, roles, departments, registration mode). Agents only read their identity.
@@ -91,7 +94,7 @@ A run (`petek run scenarios/<campaign>.yaml`):
 
 | Area | Today |
 |---|---|
-| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts`, `report`, `findings`, `teardown`, `probe`, `mcp` |
+| CLI | `panel` (default), `init`, `verify`, `doctor`, `dev`, `capacity`, `plan`, `smoke`, `run --repeat N --testers N --ci --swap-accounts --release`, `report`, `compare`, `findings`, `teardown`, `probe`, `mcp` |
 | Web panel | Instructions, Explorer, Scenarios (draft → approve → freeze, diff, triage), Orchestrator task matrix, live Agents board with screenshots, Reports and stability |
 | Explorer | Learns a site model (pages, forms, actions, roles, realtime, unknowns) in three phases, asks the owner about unknowns, derives test ideas, drafts a campaign |
 | Triage | Sorts a run's surprises into system bug / model gap / scenario bug and proposes scenario v2 as a reviewable diff |
@@ -108,8 +111,11 @@ A run (`petek run scenarios/<campaign>.yaml`):
 anywhere. The first time, the browser asks which site to test and keeps the answer in your own workspace
 (`~/.petek/workspace/.env`), so later a bare `petek` in any directory opens the panel for it. The panel opens on
 **Quraşdırma** (setup): the site answers, its ownership (with the proof line to copy and a "check" button), the AI
-(a one-click test) and how many testers; then "explore". A project's own `.env` (or `--env-file`, or `PETEK_TARGET`
-in the environment, as CI sets it) always comes first, exactly as before.
+(a one-click test, and which AI to use) and how many testers; then **Test et** on the instruction screen: the explorer learns the site, the
+scenario is drafted only from what it found there, approved and run by the testers, and you write no scenario file.
+While the testers run, the explorer goes on from what it knew; what it finds new becomes the next run's scenario, a
+draft waiting for your approval. A project's own `.env` (or `--env-file`, or `PETEK_TARGET` in the environment, as CI sets it) always comes first,
+exactly as before.
 
 **In five minutes, next to your app.** With Node.js: `npx petek init --target https://staging.example.com` (writes
 `.env`, `.petek/`, the skill pack and your AI's MCP entry), `npx petek verify` (proves the staging site is yours), then
@@ -185,13 +191,19 @@ Command line, end to end:
 
 ```bash
 ./gradlew :app:run --args="capacity"                   # how many testers this machine can take (advice, not a limit)
-./gradlew :app:run --args="plan scenarios/my-site.yaml"      # the identities a run would create, nothing executed
-./gradlew :app:run --args="run scenarios/my-site.yaml --repeat 3"
+./gradlew :app:run --args="test --testers 6"           # the main path: explore, draft from what was found, approve, run
 ./gradlew :app:run --args="report latest"
 ./gradlew :app:run --args="teardown --run <run_id>"    # remove the test company (also done at the end of every run)
 ```
 
-Exit codes: `0` success, `1` failures found, `2` configuration error or aborted run, `130` interrupted.
+`petek test` is the panel's "Test et" without the panel (`--target`, `--instructions`, `--allow-writes` for the
+explorer's trial touch, `--max-pages`, `--max-minutes`; `--json` prints its end as one document). A campaign you write
+yourself, when you want to decide every step, is planned with `plan scenarios/my-site.yaml` and run with
+`run scenarios/my-site.yaml --repeat 3`.
+
+Exit codes: `0` success, `1` failures found, `2` configuration error or aborted run, `3` the run did not pass only
+because some checks could not be decided (nothing failed; the report's "tool gap" shelf says what was missing), `130`
+interrupted.
 
 ## Use it on your own site
 
@@ -228,9 +240,10 @@ are two hosts, each with its own proof; the file must be served from that origin
 A proof is remembered for 30 days; `petek verify` checks it again. `petek verify` exits with 1 while the proof is
 missing, `petek run` with 2 when it refuses an unproved site.
 
-Then the loop is the same for every site: `doctor` → `panel` → explore → answer the explorer's questions → send the
-draft to scenarios → approve → run → report → let your AI read the findings' evidence (`FindingBundle`, Faza 11) and
-fix the cause in your code.
+Then the loop is the same for every site: `doctor` → `panel` → **Test et** (or `petek test`) → report → let your AI
+read the findings' evidence (`FindingBundle`, Faza 11) and fix the cause in your code. Who want to read the draft
+before anything runs take the same parts one by one: explore → answer the explorer's questions → send the draft to
+scenarios → approve → run.
 
 ## Configuration
 
@@ -245,22 +258,24 @@ question writes and whose `evidence/`, `scenarios/` and `targets/` then live nex
 | `PETEK_TARGET` | — | The system under test; replaces `campaign.target` of every campaign |
 | `PETEK_TARGETS_DIR` | `targets` | Target profiles, one `targets/<name>.yaml` per site (URL, `api_url`, production hosts, mail, `${VAR}` token and account references, sign-in order, campaign profile); `PETEK_TARGET` may name one, and the panel runs any site that has one (see `docs/examples/target-profile.yaml`) |
 | `PETEK_PRODUCTION_HOSTS` | — (none) | Hosts refused as a target unless … |
-| `PETEK_ALLOW_PRODUCTION` | `false` | … this is `true` (rule 8) |
+| `PETEK_ALLOW_PRODUCTION` | `false` | … this is `true` (rule 8); no tester page ever opens another production host or writes to it |
+| `PETEK_ALLOWED_HOSTS` | — (none) | Hosts besides the target's own that testers may open (a sign-in service, the host of an e-mail link); a page that leads to any other host is brought back. A target profile adds its own `allowed_hosts` |
 | `PETEK_TEST_TOKEN` | — | `X-Test-Token` for the target's `/test/...` API; empty disables oracle checks and teardown |
 | `PETEK_TEST_API_URL` | the target | Base address of the `/test/...` API when it is not on the target's origin |
-| `PETEK_MAIL_SOURCE` | `mailpit` | `mailpit`, `test-api` (`GET /test/emails`, needs the token), `imap` (your own inbox) or `manual` (you type each code into the panel's "Kodu daxil et" box; for the explorer's 1–3 sessions) |
+| `PETEK_MAIL_SOURCE` | `mailpit` (a fresh `.env` from `petek init` or the setup screen says `manual`) | `mailpit`, `test-api` (`GET /test/emails`, needs the token), `imap` (your own inbox) or `manual` (you type each code into the panel's "Kodu daxil et" box; for the explorer's 1–3 sessions; a run with more testers is warned about) |
+| `PETEK_ORACLE` | `test-api` (a fresh `.env` says `none`) | `none` makes every oracle check "N/A (no oracle)" for a site without a test API |
 | `PETEK_MAIL_INBOX` | — | Your own box (`test@company.example`): each tester registers with `test+<run>-<agent>@company.example`; replaces `PETEK_MAIL_DOMAIN`; a site that refuses `+` is named in the report |
 | `PETEK_IMAP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TLS` / `_FOLDER` | — / 993 / the box / — / `true` / `INBOX` | How `imap` reads that box (Jakarta Mail/Angus); the password is a `Secret` |
 | `PETEK_MAILPIT_URL` | `http://localhost:8025` | Mailpit API |
 | `PETEK_MAIL_DOMAIN` | `petek.test` | E-mail domain of the test identities |
-| `PETEK_IDENTITY_SECRET` | `~/.petek/identity.secret` | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
+| `PETEK_IDENTITY_SECRET` | `$PETEK_HOME/identity.secret` (`~/.petek`) | Key of the test-password derivation **and** of the ownership code `petek verify` prints (≥ 16 chars). Keep it the same on every machine that tests the same site: another secret gives another code, and the published proof no longer matches |
 | `PETEK_LLM_PROVIDER` | `auto` | `auto`, `cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic-api`, `openai-compat`, `none`; `auto` picks by settings and keys in the environment, your project's AI marker (`AGENTS.md`, `GEMINI.md`) and the agent CLIs on `PATH`, keeps the others as fallbacks, picks no vendor for you when nothing is found, and `doctor` says why |
 | `PETEK_LLM_MODEL` | the tool's own | The model; empty keeps the one the tool or provider is configured for; required for `anthropic-api` and `openai-compat` |
 | `PETEK_LLM_BIN` | — | The AI command-line tool to run (`cli`), or another binary for `codex-cli`, `gemini-cli`, `opencode-cli` |
 | `PETEK_LLM_ARGS` | — | `cli` only: its arguments, with `{model}`, `{effort}`, `{system}`, `{schema}`, `{schema_file}`; the conversation goes to STDIN |
 | `PETEK_LLM_ENV_UNSET` | — | Variables removed from the AI tool's environment, `NAME` or `PREFIX*` |
 | `PETEK_LLM_BASE_URL` | — | An OpenAI-compatible endpoint: OpenAI, Ollama (`http://localhost:11434/v1`), Groq, Mistral, OpenRouter, LM Studio |
-| `PETEK_LLM_API_KEY` | — | Key of `anthropic-api` / `openai-compat`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` are aliases |
+| `PETEK_LLM_API_KEY` | — | Key of `anthropic-api` / `openai-compat`; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` are aliases |
 | `PETEK_LLM_STRUCTURED` | `schema` | `schema`, `json_object`, `prompt`; a rejected mode steps down by itself |
 | `PETEK_LLM_EFFORT` | `low` where supported | Reasoning effort (Codex CLI, `{effort}` of `cli`; `reasoning_effort` on `openai-compat`) |
 | `PETEK_LLM_CONCURRENCY` | `6` | AI calls in flight across all agents (1–64) |
@@ -320,8 +335,12 @@ what its proof rests on (evidence tier: oracle-confirmed, screen/network, or a m
 
 `petek` with no arguments (or `petek panel`) starts a loopback-only Ktor server and opens the browser. Screens:
 **Quraşdırma** (setup, the first screen until it is done once: the site answering, its ownership proof with a copy and a
-check button, the AI with a one-click test, the tester count with this machine's capacity advice),
-**Təlimat** (target, plain-language instructions, team, budget, "explore"), **Kəşfiyyat** (the explorer live: phases,
+check button, the AI with a one-click test and a choice of provider, kept in the configuration file and used
+without a restart, the tester count with this machine's capacity advice),
+**Təlimat** (target, plain-language instructions, tester count, budget; **Saytlar**: every site you test, each with its
+own settings, added and chosen here without a restart; **Test et**, which explores, drafts from what
+was found, approves and runs in one go, or the same parts one by one; the roles and ways in are the explorer's to find
+unless you switch the automatic split off), **Kəşfiyyat** (the explorer live: phases,
 site model, findings, questions to answer), **Ssenarilər** (versions, YAML, diff, approve/freeze, triage),
 **Orkestrator** (step lanes × agents task matrix, timeline), **Agentlər** (live board with screenshots),
 **Hesabatlar** (history, cost, stability). Non-GET requests need the per-start `X-Petek-Token`; foreign `Host`/`Origin`
@@ -333,8 +352,19 @@ Every run writes into `evidence/<run>/report/`: `index.html` and `report.md` (th
 latency, cost), `summary.html` (the customer layer: one page of short sentences on three shelves, *to fix on the site*,
 *Pətək could not do it*, *a person should look*), `share.html` (one file with the screenshots inside, the AI provider and
 model, and the evidence tiers, to send around), `junit.xml` (steps as test cases) and `findings.sarif` (findings for code
-scanning). `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
-templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek findings <run|latest> --json` (and MCP
+scanning). The report as a PDF (`report.pdf`) is printed when you ask for it, by the same Chromium the testers use (no
+extra library): **PDF** on the panel's Reports screen or **PDF yüklə** in `index.html` (the panel prints it on the spot;
+a report opened from the disk has it once `petek report <run|latest> --pdf` printed it). Releases are compared too:
+name the site's release when a run starts (`petek run --release v1.4.2`, or the panel's "Saytın versiyası"), then
+`petek compare <run|latest>` (or **Müqayisə** on the Reports screen) sets the run against the previous run of its
+scenario, a named run or a release (`--baseline`) and writes `compare-<baseline run>.html` and `.md`: what the site broke, fixed
+and still fails, and what it made slower (real-time delivery and the deterministic `run` steps; an AI step's time is
+mostly the AI's). Where the scenario took page looks (`site_health` with `checks: look`; drafts take them of the
+visitor's pages on every screen), its **Görünüş** section shows which pages look different on which screen, with
+before, now and difference pictures; dates, times, the run's own texts and what moves by itself are not compared, and
+`target_profile.visual.mask` (or `data-petek-mask` on the site) hides more. A changed look is shown but counts as worse
+only with `--visual fail` (docs/adr/0014). Exit code 1 when something got worse, for CI. `petek run --ci` prints the JUnit and SARIF paths and adds the Markdown report to the GitHub job summary;
+templates: `docs/ci/github-actions.yml`, `docs/ci/gitlab-ci.yml`. `petek --json findings <run|latest>` (and MCP
 `get_finding_bundle`) gives your coding AI each finding with its step, request and response, oracle answer and screenshot
 path, so it can look for the cause in your code.
 
@@ -342,18 +372,23 @@ path, so it can look for the cause in your code.
 
 The same use cases have two more faces for a host AI (ADR-0009, R10). `petek mcp` is a Model Context Protocol server
 over stdio (hand-rolled JSON-RPC, no extra dependency; `initialize`, `ping`, `tools/list`, `tools/call`), which
-`petek init` registers as the `petek` server in the project's MCP file. Tools: `list_targets`, `get_capacity`,
-`explore_site` (with `wait`), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
+`petek init` registers as the `petek` server in the project's MCP file, started the way Pətək was (`petek` on PATH,
+`npx -y petek@<version> mcp` after `npx petek init`, else the bundle's own launcher). Tools: `list_targets`, `get_capacity`,
+`test_site` (the main path, with `wait`: explore, draft from what was found, approve and run), `get_test`,
+`cancel_test`, `explore_site` (with `wait`), `get_exploration`, `cancel_exploration`, `list_unknowns`, `answer_unknown`,
 `compare_explorations`, `generate_scenario`, `list_scenarios`, `get_scenario`, `diff_scenarios`, `get_run_plan`,
 `approve_scenario`, `freeze_scenario`, `run_campaign` (with `wait`), `cancel_run`, `list_runs`, `get_run_status`,
-`get_findings` (A/B/C sources and evidence ids), `get_evidence` (absolute path of a screenshot or capture), `get_triage`,
-`run_triage`, `get_stability`, `teardown`. A session is read-only unless started with `petek mcp --allow-writes`:
-runs, approvals, teardown and exploration with writes are refused otherwise, and the target policy applies as
+`get_findings` (A/B/C sources and evidence ids), `get_finding_bundle` (a finding with its step, request, answer and screenshot, for root cause), `get_evidence` (absolute path of a screenshot or capture), `get_triage`,
+`run_triage`, `get_stability`, `compare_runs` (a run against an earlier run or release of its scenario), `teardown`. A session is
+read-only unless started with `petek mcp --allow-writes`:
+tests, runs, approvals, teardown and exploration with writes are refused otherwise, and the target policy applies as
 everywhere. Every result carries the panel's JSON as text and structured content; a failure is an `isError` result with
-the panel's message. Without `.env` the server uses the local fake target, like the panel.
+the panel's message. Without a configuration the server still answers the handshake, and every tool tells the host AI
+to ask you which site to test.
 
-`petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `plan`, `run`, `report` and
-`teardown` (logs stay on stderr; a failure is `{"error": ...}` with the usual exit code), for scripts and CI.
+`petek --json <command>` prints one JSON document on stdout for `doctor`, `init`, `verify`, `test`, `plan`, `run`,
+`report`, `compare`, `findings`, `teardown`, `capacity`, `probe` and `smoke` (logs stay on stderr; a failure is `{"error": ...}`
+with the usual exit code), for scripts and CI.
 
 ## Architecture
 
@@ -413,7 +448,7 @@ Phases 0–7 (MVP, explorer, triage, web panel) are implemented. The "Pətək 2"
 
 | Document | What it holds |
 |---|---|
-| [docs/PLAN.md](docs/PLAN.md) | The plan: goals, scope, design decisions, scenario format, phases 0–14, success criteria (Azerbaijani) |
+| [docs/PLAN.md](docs/PLAN.md) | The plan: goals, scope, design decisions, scenario format, phases, success criteria (universal, and the contract site's e2e criteria; Azerbaijani) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, dependency rules, run lifecycle, agent loop, target flows, explorer, panel, security notes |
 | [docs/requirements](docs/requirements) | One architecture document per requirement with traceability to modules, tests and ADRs |
 | [docs/adr](docs/adr) | Architecture decision records 0001–0011 |
@@ -425,7 +460,7 @@ Phases 0–7 (MVP, explorer, triage, web panel) are implemented. The "Pətək 2"
 ```bash
 ./gradlew build                 # compile, unit tests, ktlint, licence headers, architecture tests, coverage
 ./gradlew spotlessApply         # format and add the licence header to new files
-./gradlew e2eTest               # fake target + real Chromium: panel end to end, e2e module, 30-session isolation proof
+./gradlew e2eTest               # fake target + real Chromium: panel end to end, the contract demo with 30 testers, e2e module, 30-session isolation proof
 ./gradlew :e2e:liveTest         # real AI provider (uses your plan or key)
 ```
 

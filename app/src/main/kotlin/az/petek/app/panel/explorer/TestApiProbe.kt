@@ -11,6 +11,7 @@
 
 package az.petek.app.panel.explorer
 
+import az.petek.oracle.domain.OraclePaths
 import az.petek.oracle.domain.TargetOracle
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
@@ -32,12 +33,14 @@ internal fun interface TestApiProbe {
 internal class OracleTestApiProbe(
     private val oracle: TargetOracle,
     private val mailDomain: String,
+    /** The test API's paths: the contract's, or the site profile's `test_api.paths`. */
+    private val paths: OraclePaths = OraclePaths.CONTRACT,
 ) : TestApiProbe {
     override suspend fun refusal(): String? {
         val owner = URLEncoder.encode("petek-probe@$mailDomain", Charsets.UTF_8)
         val answer =
             try {
-                oracle.get("/test/companies?owner=$owner")
+                oracle.get(paths.companyByOwner.replace("{owner}", owner))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -12,6 +12,7 @@
 package az.petek.dashboard.domain
 
 import az.petek.core.ids.RunId
+import az.petek.evidence.domain.ReleaseNames
 import az.petek.evidence.domain.RunResult
 import java.net.URI
 import java.net.URISyntaxException
@@ -42,6 +43,10 @@ data class RunSummaryView(
     val reportAvailable: Boolean,
     val triaged: Boolean,
     val scenarioId: String?,
+    /** Checks whose evidence could not decide them (Faza 24.12). */
+    val assertionsInconclusive: Int = 0,
+    /** The site's release the run tested, as the owner named it; runs of a scenario are compared by it. */
+    val release: String? = null,
 )
 
 /** How the steps of a `--repeat` group behaved across its runs. */
@@ -55,9 +60,16 @@ data class StepStabilityView(
     val scenarioStep: String,
     val runs: Int,
     val passed: Int,
+    /** Runs the site failed the step in; the others did not pass for the testers' agents or surroundings (Faza 24.13). */
+    val siteFailures: Int = runs - passed,
+    val agentFailures: Int = 0,
+    val environmentFailures: Int = 0,
 ) {
-    /** Passed in some runs and failed in others. */
-    val flaky: Boolean get() = passed in 1 until runs
+    /** Passed in some runs and the site failed it in others. */
+    val flaky: Boolean get() = passed > 0 && siteFailures > 0
+
+    /** Passed in some runs and not in others, never because of the site (agents, surroundings, runs that did not check it). */
+    val unsteady: Boolean get() = passed in 1 until runs && siteFailures == 0
 }
 
 /**
@@ -76,6 +88,8 @@ data class RunRequest(
      * it were `PETEK_TARGET`, still subject to the backend's target policy.
      */
     val target: String? = null,
+    /** The site's release this run tests (e.g. `v1.4.2`), for comparing releases; null or blank: not named. */
+    val release: String? = null,
 ) {
     fun problems(): List<FieldProblem> =
         buildList {
@@ -87,6 +101,15 @@ data class RunRequest(
             }
             if (!target.isNullOrBlank() && !isWebUrl(target.trim())) {
                 add(FieldProblem(PanelInstructions.TARGET, "Hədəf http:// və ya https:// ilə başlayan tam ünvan olmalıdır."))
+            }
+            if (!release.isNullOrBlank() && !ReleaseNames.isValid(release.trim())) {
+                add(
+                    FieldProblem(
+                        RELEASE_FIELD,
+                        "Versiya adı 1–${ReleaseNames.MAX} simvoldur: hərf, rəqəm və . _ - + kimi işarələr, boşluqsuz; " +
+                            "\"${ReleaseNames.PREVIOUS}\" və run id-si kimi (run_…) ad müqayisədə başqa şey deməkdir.",
+                    ),
+                )
             }
         }
 
@@ -102,14 +125,48 @@ data class RunRequest(
 
     companion object {
         const val SCENARIO = "scenario"
+        const val RELEASE_FIELD = "release"
     }
 }
+
+/**
+ * A run against an earlier run of its scenario (the regression baseline, Faza 14): what the site broke, fixed and made
+ * slower, by step and real-time event id; [pageUrl] is the written comparison page.
+ */
+data class ComparisonView(
+    val runId: RunId,
+    val release: String?,
+    val baseline: RunId,
+    val baselineRelease: String?,
+    val scenario: String,
+    val scenarioChanged: Boolean,
+    val regressed: Boolean,
+    val newFailures: List<String>,
+    val fixed: List<String>,
+    val stillFailing: List<String>,
+    /** `join 1000 ms → 1400 ms`, `announcement_created p95 700 ms → 2100 ms`. */
+    val slower: List<String>,
+    val notComparable: List<String>,
+    val pageUrl: String,
+    /** Pages that look different on a screen (docs/adr/0014), one line each. */
+    val looksChanged: List<String> = emptyList(),
+    /** Page looks that could not be compared, with why. */
+    val looksNotComparable: List<String> = emptyList(),
+    /** `report` (a changed look is shown, not worse) or `fail` (it is worse). */
+    val visualGate: String = "report",
+)
 
 /** A run the backend accepted; it goes on in the background and shows up on the live board. */
 data class RunStartView(
     val runId: RunId,
     val scenarioId: String?,
     val testers: Int,
+    /**
+     * What the run's composition leaves undone, told before it starts (Faza 24.1, 24.7): steps nobody can run with this
+     * tester count, receivers a wave leaves without an emitter, races a wave leaves a single racer, manual codes for many
+     * testers. Never blocks; the board shows the same lines.
+     */
+    val warnings: List<String> = emptyList(),
 )
 
 /** What a teardown removed from the target and what it could not; both empty when nothing was left. */

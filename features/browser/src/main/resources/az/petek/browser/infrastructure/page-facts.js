@@ -10,7 +10,8 @@
  */
 
 // What a visitor can check on the page without acting on it: title, main headings, description, language, images,
-// visible links with their absolute address, and in-page anchors that name no element. Reads only.
+// visible links with their absolute address, in-page anchors that name no element, and the page's language versions
+// (`hreflang`). Reads only.
 () => {
   const visible = (el) => {
     const box = el.getBoundingClientRect();
@@ -44,5 +45,8 @@
     images,
     links,
     missingAnchors: Array.from(missing),
+    alternates: Array.from(document.querySelectorAll('link[rel~="alternate" i][hreflang]')).slice(0, 60)
+      .map((l) => ({ language: (l.getAttribute('hreflang') || '').trim(), url: l.href }))
+      .filter((a) => a.language && a.url),
   };
 }

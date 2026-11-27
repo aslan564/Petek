@@ -36,8 +36,10 @@ import java.nio.file.Path
  * (so CI can inject secrets without a file), then every value is parsed and validated. All problems are collected
  * and thrown together as one [ConfigException]; no message contains a value, only variable names.
  *
- * Defaults (when a key is missing or blank) follow `.env.example`, except `PETEK_TARGET`, which is required: running
- * tests against an unintended system is the one mistake a default must not make. Relative paths are resolved
+ * Defaults (when a key is missing or blank) are the code's own, and `PETEK_TARGET` has none: running tests against an
+ * unintended system is the one mistake a default must not make. `.env.example`, which `petek init` and the setup
+ * screen write, differs where a fresh project knows less: `PETEK_MAIL_SOURCE=manual` and `PETEK_ORACLE=none` (the code
+ * defaults are `mailpit` and `test-api`). Relative paths are resolved
  * against [workingDirectory]; URLs are stored in their canonical spelling ([WebUrls.canonical]), so the production
  * guard sees the host it compares. A blank `PETEK_IDENTITY_SECRET` falls back to [identitySecrets] (by default the file
  * `~/.petek/identity.secret`), which is only consulted when no explicit secret is configured.
@@ -72,7 +74,8 @@ class ConfigLoader(
             val named = namedProfile?.first
             val target = if (named != null) WebUrls.canonical(named.spec.url) else url(Keys.TARGET, default = null)
             if (target == null && text(Keys.TARGET) == null) problems += "${Keys.TARGET} is required (the URL of the system under test)"
-            val productionHosts = hosts(Keys.PRODUCTION_HOSTS)
+            val productionHosts = hosts(Keys.PRODUCTION_HOSTS, PetekConfig.DEFAULT_PRODUCTION_HOSTS)
+            val allowedHosts = hosts(Keys.ALLOWED_HOSTS, emptySet())
             val allowProduction = flag(Keys.ALLOW_PRODUCTION, default = false)
             val testToken = token(Keys.TEST_TOKEN)
             val testApiUrl = url(Keys.TEST_API_URL, default = null)
@@ -89,9 +92,10 @@ class ConfigLoader(
             val mailInbox = mailInbox()
             val mailDomain = mailInbox?.substringAfter('@') ?: mailDomain()
             val imap = if (mailSource == MailSource.IMAP) imap(mailInbox) else null
-            val resolution = provider()
-            val provider = resolution?.provider
             val model = text(Keys.LLM_MODEL)
+            val auto = text(Keys.LLM_PROVIDER)?.lowercase().let { it == null || it == AUTO }
+            val resolution = provider()?.let { if (auto) usable(it, model) else it }
+            val provider = resolution?.provider
             val bin = text(Keys.LLM_BIN)
             val llmArgs = llmArgs()
             val llmEnvUnset =
@@ -146,6 +150,7 @@ class ConfigLoader(
                     target = checkNotNull(target),
                     productionHosts = productionHosts,
                     allowProduction = allowProduction,
+                    allowedHosts = allowedHosts,
                     testToken = testToken,
                     testApiUrl = testApiUrl,
                     mailSource = checkNotNull(mailSource),
@@ -213,8 +218,11 @@ class ConfigLoader(
             return WebUrls.canonical(url)
         }
 
-        private fun hosts(key: String): Set<String> {
-            val raw = text(key) ?: return PetekConfig.DEFAULT_PRODUCTION_HOSTS
+        private fun hosts(
+            key: String,
+            default: Set<String>,
+        ): Set<String> {
+            val raw = text(key) ?: return default
             val hosts =
                 raw
                     .split(',')
@@ -332,6 +340,26 @@ class ConfigLoader(
                     key
                 }
             return LlmProviderResolver(workingDirectory, onPath).resolve(explicit, values)
+        }
+
+        /**
+         * An AI `auto` found by an API key or a local server (R09) is used only with what calling it needs: without
+         * `PETEK_LLM_MODEL` it would stop every command, also those that need no AI (`plan`, a run of `run` steps,
+         * `doctor`). Then an AI command-line tool on PATH is used instead, else none, and the reason says so (the doctor
+         * shows it). A provider the owner named stays a configuration error.
+         */
+        private fun usable(
+            resolution: LlmProviderResolver.Resolution,
+            model: String?,
+        ): LlmProviderResolver.Resolution {
+            if (resolution.provider !in NEEDS_MODEL || model != null) return resolution
+            val why = "${resolution.reason}, but ${Keys.LLM_MODEL} is not set"
+            val cli = resolution.fallbacks.firstOrNull()
+            return if (cli != null) {
+                LlmProviderResolver.Resolution(cli, "$why; $cli on PATH is used instead", fallbacks = resolution.fallbacks - cli)
+            } else {
+                LlmProviderResolver.Resolution(LlmProviderKey.NONE, "$why, so no AI provider is used")
+            }
         }
 
         /** `PETEK_LLM_API_KEY`, else the variable auto-detection went by, else the provider's usual ones (never echoed). */
@@ -478,6 +506,7 @@ class ConfigLoader(
     object Keys {
         const val TARGET = "PETEK_TARGET"
         const val PRODUCTION_HOSTS = "PETEK_PRODUCTION_HOSTS"
+        const val ALLOWED_HOSTS = "PETEK_ALLOWED_HOSTS"
         const val ALLOW_PRODUCTION = "PETEK_ALLOW_PRODUCTION"
         const val TEST_TOKEN = "PETEK_TEST_TOKEN"
         const val TEST_API_URL = "PETEK_TEST_API_URL"
@@ -529,6 +558,9 @@ class ConfigLoader(
         const val DEFAULT_TARGETS_DIR = "targets"
         val MAILBOX = Regex("[a-z0-9._-]{1,48}@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+")
         const val AUTO = "auto"
+
+        /** Providers that cannot be called without a model name. */
+        val NEEDS_MODEL = setOf(LlmProviderKey.OPENAI_COMPAT, LlmProviderKey.ANTHROPIC_API)
         const val MIN_SECRET_LENGTH = 16
         val WEB_SCHEMES = setOf("http", "https")
         val TRUE = setOf("true", "yes", "on", "1")

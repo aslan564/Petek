@@ -12,8 +12,12 @@
 package az.petek.identity
 
 import az.petek.core.ids.RunTag
+import az.petek.core.model.RegistrationMode
+import az.petek.core.model.Role
+import az.petek.core.security.Secret
 import az.petek.identity.domain.AzerbaijaniNameCatalog
 import az.petek.identity.domain.DefaultIdentityRegistryGenerator
+import az.petek.identity.domain.GivenAccount
 import az.petek.identity.domain.HmacPasswordDeriver
 import az.petek.identity.domain.IdentitySpec
 import az.petek.identity.domain.NameCatalog
@@ -52,6 +56,23 @@ object IdentityTestData {
         companyCodeCount = companyCodeCount,
         mailDomain = mailDomain,
     )
+
+    const val OWNER_EMAIL = "owner-reader@example.com"
+    const val OWNER_PASSWORD = "owner-given-password"
+    val READER: Role = checkNotNull(Role.fromKey("reader"))
+
+    /**
+     * Four testers of a site without companies: an editor and three readers, one of whom signs in with the owner's
+     * reader account ([OWNER_EMAIL]); the others sign up with e-mails of their run.
+     */
+    fun ownAccountSpec(): IdentitySpec =
+        spec(testers = 4, names = emptyList(), admins = 0, managers = 0, employees = 0, departments = emptyList(), inviteCount = 0)
+            .copy(
+                companies = false,
+                ownRoles = linkedMapOf(checkNotNull(Role.fromKey("editor")) to 1, READER to 3),
+                gates = mapOf(RegistrationMode.SELF to 3, RegistrationMode.LOGIN to 1),
+                accounts = listOf(GivenAccount(READER, OWNER_EMAIL, Secret(OWNER_PASSWORD), "Reader One")),
+            )
 
     fun generator(
         catalog: NameCatalog = AzerbaijaniNameCatalog,

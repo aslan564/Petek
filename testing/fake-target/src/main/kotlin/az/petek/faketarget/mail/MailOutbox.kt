@@ -13,6 +13,7 @@ package az.petek.faketarget.mail
 
 import java.time.Clock
 import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** A mailbox with its display name, as Mailpit reports `From`/`To`. */
 data class MailAddress(
@@ -47,6 +48,16 @@ class MailOutbox internal constructor(
     /** Oldest first. */
     private val messages = ArrayList<SentMail>()
 
+    private val listeners = CopyOnWriteArrayList<(SentMail) -> Unit>()
+
+    /**
+     * Calls [listener] with every mail sent from now on, once it is kept, on the thread that sent it: a test relays the
+     * site's mail to a real mail server this way (an IMAP inbox, Faza 16).
+     */
+    fun onSent(listener: (SentMail) -> Unit) {
+        listeners += listener
+    }
+
     /** Newest first, like Mailpit lists them. */
     fun messages(): List<SentMail> = synchronized(lock) { messages.asReversed().toList() }
 
@@ -70,6 +81,7 @@ class MailOutbox internal constructor(
                 read = false,
             )
         synchronized(lock) { messages += mail }
+        listeners.forEach { it(mail) }
         return mail
     }
 

@@ -64,6 +64,7 @@ internal class PanelCore private constructor(
             capacityAdvice: RecommendCapacityUseCase,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
             configurationFile: Path? = null,
+            reloadConfig: (() -> PetekConfig)? = null,
         ): PanelCore {
             val dashboard = LiveDashboard(SystemHarnessClock())
             val tasks = DerivedTaskStates(dashboard)
@@ -91,6 +92,7 @@ internal class PanelCore private constructor(
                         derive = { other -> containers(other, overrides.copy(database = container.database)) },
                         roleSessions = roleSessions,
                         configurationFile = configurationFile,
+                        reloadConfig = reloadConfig,
                     )
                 return PanelCore(dashboard, container, backend)
             } catch (e: Exception) {
@@ -136,8 +138,10 @@ internal class WebPanel private constructor(
             port: Int,
             roleSessions: ((SetupRuns) -> RoleSessionSource)? = null,
             configurationFile: Path? = null,
+            /** Reads the configuration again (Faza 23: the AI and the sites change without a restart); null: they do not. */
+            reloadConfig: (() -> PetekConfig)? = null,
         ): WebPanel {
-            val core = PanelCore.start(config, containers, workingDirectory, capacityAdvice, roleSessions, configurationFile)
+            val core = PanelCore.start(config, containers, workingDirectory, capacityAdvice, roleSessions, configurationFile, reloadConfig)
             try {
                 val (server, url) = bind(core.dashboard, core.container, core.backend, port)
                 return WebPanel(core, server, url)

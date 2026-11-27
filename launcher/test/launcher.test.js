@@ -28,12 +28,12 @@ const VERSION = '9.9.9-test';
 const PLATFORM = process.platform === 'darwin' ? (process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64') : process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
 const ARCHIVE = `petek-${VERSION}-${PLATFORM}.tar.gz`;
 
-/** A bundle whose launcher prints its arguments and exits with the code given as PETEK_TEST_EXIT. */
+/** A bundle whose launcher prints its arguments and PETEK_LAUNCHER, and exits with the code given as PETEK_TEST_EXIT. */
 function fakeBundle(dir) {
   const root = path.join(dir, `petek-${VERSION}-${PLATFORM}`);
   fs.mkdirSync(path.join(root, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(root, 'runtime'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'bin', 'petek'), '#!/bin/sh\necho "fake petek: $*"\nexit "${PETEK_TEST_EXIT:-0}"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(root, 'bin', 'petek'), '#!/bin/sh\necho "fake petek: $* [$PETEK_LAUNCHER]"\nexit "${PETEK_TEST_EXIT:-0}"\n', { mode: 0o755 });
   const archive = path.join(dir, ARCHIVE);
   execFileSync('tar', ['-czf', archive, '-C', dir, path.basename(root)]);
   return fs.readFileSync(archive);
@@ -78,7 +78,7 @@ test('the launcher downloads, verifies and extracts the bundle once, then runs i
   try {
     const first = await run(['doctor', '--verbose'], env);
     assert.equal(first.status, 0, first.stderr);
-    assert.equal(first.stdout, 'fake petek: doctor --verbose\n');
+    assert.equal(first.stdout, `fake petek: doctor --verbose [npm@${VERSION}]\n`);
     assert.match(first.stderr, /downloading petek-9\.9\.9-test-.*\.tar\.gz/);
     assert.ok(fs.existsSync(path.join(home, 'versions', VERSION, `petek-${VERSION}-${PLATFORM}`, 'bin', 'petek')));
     assert.equal(fs.readdirSync(path.join(home, 'downloads')).length, 0, 'the archive is removed after extraction');
@@ -86,7 +86,7 @@ test('the launcher downloads, verifies and extracts the bundle once, then runs i
 
     const second = await run(['panel'], { ...env, PETEK_TEST_EXIT: '3' });
     assert.equal(second.status, 3);
-    assert.equal(second.stdout, 'fake petek: panel\n');
+    assert.equal(second.stdout, `fake petek: panel [npm@${VERSION}]\n`);
     assert.equal(second.stderr, '');
     assert.equal(hits.length, 2, 'the second run does not download again');
   } finally {

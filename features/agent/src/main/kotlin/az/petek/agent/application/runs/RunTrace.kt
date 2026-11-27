@@ -21,12 +21,20 @@ import az.petek.agent.domain.ActionOutcome
 import az.petek.agent.domain.ActionStatus
 import az.petek.agent.domain.AgentRuntime
 import az.petek.agent.domain.StepContext
+import az.petek.browser.domain.BrowserActionException
+import az.petek.browser.domain.LookRequest
+import az.petek.browser.domain.LookShotKind
+import az.petek.browser.domain.PageLook
+import az.petek.browser.domain.PageTiming
 import az.petek.core.ids.StepId
 import az.petek.core.time.HarnessTimestamp
+import az.petek.evidence.domain.LOOK_ACTION
 import az.petek.evidence.domain.StepKind
 import az.petek.evidence.domain.StepStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * One execution of a run function: the browser primitives it may use, each recorded as a RUN step
@@ -61,12 +69,19 @@ internal class RunTrace(
         block: suspend () -> T,
     ): T = probe(description, block) { true }
 
+    /** Like [act], with [detail] of the result kept in the step's detail (e.g. which e-mail a code came from). */
+    suspend fun <T> act(
+        description: String,
+        detail: (T) -> String?,
+        block: suspend () -> T,
+    ): T = probeDescribed(block, { description }, detail) { true }
+
     /** Like [act], but the step is FAILED when the returned value does not satisfy [passed]. */
     suspend fun <T> probe(
         description: String,
         block: suspend () -> T,
         passed: (T) -> Boolean,
-    ): T = probeDescribed(block, { description }, passed)
+    ): T = probeDescribed(block, { description }, passed = passed)
 
     /**
      * Like [probe], for a sub-action best described by what it found (`wait for session.user_name`). [describe] gets
@@ -75,6 +90,7 @@ internal class RunTrace(
     suspend fun <T> probeDescribed(
         block: suspend () -> T,
         describe: (T?) -> String,
+        detail: (T) -> String? = { null },
         passed: (T) -> Boolean,
     ): T {
         val started = evidence.now()
@@ -89,7 +105,8 @@ internal class RunTrace(
                 record(describe(null), started, StepStatus.ERROR, withNote(reason, session.dialogNote()))
                 throw e
             }
-        record(describe(result), started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, session.dialogNote())
+        val noted = listOfNotNull(detail(result), session.dialogNote()).joinToString(" ").ifEmpty { null }
+        record(describe(result), started, if (passed(result)) StepStatus.PASSED else StepStatus.FAILED, noted)
         return result
     }
 
@@ -107,6 +124,25 @@ internal class RunTrace(
     ) {
         subActions++
         record(description, evidence.now(), status, detail)
+    }
+
+    /**
+     * Publishes [value] as the run's shared [key] for the other testers. Shared values are write-once: when another
+     * tester published a different one first, that one is kept, the conflict is recorded as a sub-action, and the kept
+     * value is returned, so nothing is changed silently under the others.
+     */
+    suspend fun publish(
+        key: String,
+        value: String,
+    ): String {
+        if (runtime.shared.put(key, value)) return value
+        val kept = runtime.shared.get(key) ?: value
+        if (kept !=
+            value
+        ) {
+            note("publish shared.$key", StepStatus.PASSED, "already published as '$kept'; kept (write-once), this step said '$value'")
+        }
+        return kept
     }
 
     /** Opens a page by path key (`login`) or path (`/login`). */
@@ -145,6 +181,61 @@ internal class RunTrace(
     suspend fun readText(ref: String): String? = lookup("read ${describe(ref)}") { session.readText(selector(ref)) }
 
     suspend fun saveStorageState() = act("save storage state") { session.saveStorageState(runtime.storageStatePath) }
+
+    /**
+     * Reads how fast the current page ([page], on [device]) became usable, as the browser timed it, and records it as the
+     * page's timing (`site_health`'s `perf`); null when the session cannot read it.
+     */
+    suspend fun timing(
+        page: String,
+        device: String?,
+    ): PageTiming? {
+        val timing = act("read the timing of $page") { session.pageTiming() } ?: return null
+        lastStepId?.let { evidence.pageTiming(runtime, step, it, page, device, timing) }
+        return timing
+    }
+
+    /**
+     * Takes a look of the current page ([page], on [device]) for comparing releases (`site_health`'s `look`) and keeps
+     * it: its frames as visual artifacts of this sub-action, then the page look record ([StepEvidence.pageLook]). A
+     * look never fails the step: one the session cannot take, that the browser refuses or that takes longer than
+     * [lookTimeout] is a SKIPPED sub-action saying why, and null is returned. So is one taken but not kept (its frames or
+     * record could not be written): a SKIPPED sub-action after it says so, since the look has no evidence to compare.
+     */
+    suspend fun look(
+        page: String,
+        device: String?,
+        request: LookRequest,
+    ): PageLook? {
+        val on = device?.let { " ($it)" } ?: ""
+        val description = "$LOOK_ACTION$page$on"
+        val started = evidence.now()
+        subActions++
+
+        suspend fun notCaptured(why: String): PageLook? {
+            record(description, started, StepStatus.SKIPPED, withNote("not captured: $why", session.dialogNote()))
+            return null
+        }
+
+        val timeout = lookTimeout(request)
+        val taken =
+            try {
+                // Wrapped, so a session that cannot take a look (null) is told apart from the time running out (null).
+                withTimeoutOrNull(timeout) { Taken(session.look(request)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BrowserActionException) {
+                return notCaptured(errorDetail(e) ?: e::class.simpleName.orEmpty())
+            } ?: return notCaptured("timed out after $timeout")
+        val look = taken.look ?: return notCaptured(NO_LOOK)
+        if (look.shots.none { it.kind == LookShotKind.MAIN }) return notCaptured("the browser gave no main frame")
+        val stepId = record(description, started, StepStatus.PASSED, withNote(LookNotes.of(look, page), session.dialogNote()))
+        evidence.pageLook(runtime, step, stepId, page, device, look, request.maxHeight)?.let { problem ->
+            note("keep the look of $page$on", StepStatus.SKIPPED, "not kept: $problem")
+            return null
+        }
+        return look
+    }
 
     /** Unrecorded visibility check, for polling loops that would otherwise flood the evidence. */
     suspend fun isVisible(ref: String): Boolean = session.isSelectorVisible(selector(ref))
@@ -192,11 +283,42 @@ internal class RunTrace(
         started: HarnessTimestamp,
         status: StepStatus,
         detail: String?,
-    ) {
-        lastStepId = evidence.record(runtime, step, StepKind.RUN, "$function: $description", null, started, status, detail)
+    ): StepId {
+        val stepId = evidence.record(runtime, step, StepKind.RUN, "$function: $description", null, started, status, detail)
+        lastStepId = stepId
+        return stepId
     }
 
-    private companion object {
-        const val MAX_SELECTOR_CHARS = 80
+    /** What [BrowserSession.look][az.petek.browser.domain.BrowserSession.look] gave, null included. */
+    private class Taken(
+        val look: PageLook?,
+    )
+
+    companion object {
+        /** Why the session gave no look: it cannot take one, or the page went elsewhere or answered otherwise meanwhile. */
+        const val NO_LOOK =
+            "this session cannot take looks, or the page did not stay the same during the look (another address or answer)"
+
+        private const val MAX_SELECTOR_CHARS = 80
+
+        /** The least time a look is given, whatever it asks for: a default look's two loads take well under it. */
+        val MIN_LOOK_TIMEOUT = 30.seconds
+
+        /** The most time a look is given, below the agent's inactivity watchdog (120 s by default). */
+        val MAX_LOOK_TIMEOUT = 60.seconds
+
+        /**
+         * Besides its settle budget, what one load of a look may take: opening the page again, waiting for the network
+         * to go idle, its frames half a second apart and reading the page.
+         */
+        val LOOK_LOAD_ALLOWANCE = 12.seconds
+
+        /**
+         * The longest [request] may take: each load's settle budget, which a page that never calms down uses up, plus
+         * [LOOK_LOAD_ALLOWANCE], within [MIN_LOOK_TIMEOUT] and [MAX_LOOK_TIMEOUT] (30 s for the default look, 54 s for
+         * two loads of 15 s each). A look given less than its own settings ask for could never be kept.
+         */
+        fun lookTimeout(request: LookRequest): Duration =
+            ((request.settle + LOOK_LOAD_ALLOWANCE) * request.loads).coerceIn(MIN_LOOK_TIMEOUT, MAX_LOOK_TIMEOUT)
     }
 }

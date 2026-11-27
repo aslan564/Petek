@@ -11,11 +11,16 @@
 
 package az.petek.app.panel
 
+import az.petek.app.config.ResolvedAccount
+import az.petek.app.config.ResolvedTarget
 import az.petek.app.testing.PanelHarness
 import az.petek.app.testing.PanelHarness.Companion.tinyCampaign
 import az.petek.app.testing.PanelWaits
 import az.petek.app.testing.PanelWaits.exploration
 import az.petek.app.testing.PanelWaits.explored
+import az.petek.campaign.domain.TargetSpec
+import az.petek.campaign.domain.Tenant
+import az.petek.core.security.Secret
 import az.petek.dashboard.domain.DiffLineKind
 import az.petek.dashboard.domain.PanelConflictException
 import az.petek.dashboard.domain.PanelNotFoundException
@@ -27,12 +32,14 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -46,8 +53,20 @@ class PanelScenariosTest {
     @AfterEach
     fun close() = open.forEach { it.close() }
 
-    private fun harness(scenarios: Map<String, String> = emptyMap()): PanelHarness =
-        PanelHarness(dir, site = PanelWaits.site(), scenarios = scenarios).also { open += it }
+    private fun harness(
+        scenarios: Map<String, String> = emptyMap(),
+        targets: List<ResolvedTarget> = emptyList(),
+    ): PanelHarness = PanelHarness(dir, site = PanelWaits.site(), scenarios = scenarios, targets = targets).also { open += it }
+
+    /** The owner's word that the harness's site has companies: its target profile's `tenant` (Faza 25.1). */
+    private val companies =
+        listOf(
+            ResolvedTarget(
+                TargetSpec("demo", URI("http://127.0.0.1:9"), tenant = Tenant.COMPANY),
+                testToken = Secret("dev-token"),
+                accounts = emptyList(),
+            ),
+        )
 
     private fun restart(scenarios: Map<String, String> = emptyMap()): PanelHarness {
         open.removeAt(open.lastIndex).close()
@@ -143,7 +162,7 @@ class PanelScenariosTest {
     @Test
     fun `a draft is generated from the latest exploration as an explorer version, once per text`() =
         runBlocking<Unit> {
-            val panel = harness()
+            val panel = harness(targets = companies)
             shouldThrow<PanelConflictException> { panel.backend.generateScenario() }.message shouldStartWith "Əvvəlcə saytı kəşf edin"
             val explored = panel.explored(PanelHarness.instructions(panel.site.base.toString()).copy(departments = listOf("Satış", "IT")))
 
@@ -168,6 +187,31 @@ class PanelScenariosTest {
                 .scenarios()
                 .single()
                 .status shouldBe ScenarioStatus.APPROVED
+        }
+
+    @Test
+    fun `a draft whose text was superseded comes back as a new version that can be approved again`() =
+        runBlocking<Unit> {
+            val panel = harness()
+            panel.explored()
+            val first = panel.backend.generateScenario()
+            panel.backend.approve(first.version.id)
+            val edited =
+                panel.panel.container.scenarioCatalog.createDraft(
+                    first.yaml + "# the owner's edit\n",
+                    az.petek.scenarios.domain.ScenarioSource.USER,
+                    az.petek.scenarios.domain
+                        .ScenarioVersionId(first.version.id),
+                )
+            panel.backend.approve(edited.id.value)
+
+            val again = panel.backend.generateScenario()
+
+            again.yaml shouldBe first.yaml
+            again.version.id shouldNotBe first.version.id
+            again.version.status shouldBe ScenarioStatus.DRAFT
+            // The superseded copy could never be approved again; the new one can ("Test et" approves it at once).
+            panel.backend.approve(again.version.id).status shouldBe ScenarioStatus.APPROVED
         }
 
     @Test
@@ -200,6 +244,47 @@ class PanelScenariosTest {
                 .single { it.id == "read_announce" }
                 .agentIds.size shouldBe 24
             plan.steps.single { it.id == "leave_race" }.parallel shouldBe true
+        }
+
+    @Test
+    fun `a scenario whose testers sign in with the owner's accounts is planned with them`() =
+        runBlocking<Unit> {
+            val login =
+                """
+                campaign:
+                  name: notes-login
+                  tenant: none
+                  testers: 3
+                  seed: 12
+                  roles: {writer: 2, reader: 1}
+                  registration: {self: 2, login: 1}
+                  budget: {max_steps_per_agent: 5, max_minutes: 2}
+                steps:
+                  - id: write
+                    actor: writer[*]
+                    do: "Write a note"
+                """.trimIndent() + "\n"
+            val owner = ResolvedAccount("writer", "writer@owner.example", Secret("owner-writer-pass"), null, "Sahibin Yazarı")
+            val panel =
+                harness(
+                    mapOf("login.yaml" to login),
+                    targets = listOf(ResolvedTarget(TargetSpec("notes", URI("http://127.0.0.1:9")), null, listOf(owner))),
+                )
+
+            val plan =
+                panel.backend
+                    .runPlan(
+                        panel.backend
+                            .scenarios()
+                            .single()
+                            .id,
+                    ).shouldNotBeNull()
+
+            // Without the owner's account a registry with a `login` tester cannot be built, and the plan had nobody.
+            plan.steps
+                .single { it.id == "write" }
+                .agentIds
+                .map { it.value } shouldContainExactly listOf("a01", "a02")
         }
 
     @Test

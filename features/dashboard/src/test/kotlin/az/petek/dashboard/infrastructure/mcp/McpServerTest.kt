@@ -11,11 +11,19 @@
 
 package az.petek.dashboard.infrastructure.mcp
 
+import az.petek.core.ids.RunId
 import az.petek.core.testing.FakeHarnessClock
 import az.petek.core.testing.SequentialIdGenerator
 import az.petek.dashboard.demo.DemoPanelBackend
+import az.petek.dashboard.domain.ComparisonView
 import az.petek.dashboard.domain.PanelBackend
+import az.petek.dashboard.domain.PanelInstructions
+import az.petek.dashboard.domain.RunRequest
+import az.petek.dashboard.domain.RunStartView
+import az.petek.dashboard.domain.TestFlowView
+import az.petek.dashboard.domain.TestStage
 import az.petek.dashboard.testing.TempDirArtifactStore
+import az.petek.evidence.domain.RunResult
 import az.petek.orchestration.domain.RunOutcome
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldContain
@@ -45,6 +53,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
+import java.time.Instant
 
 /** The MCP contract over stdio: handshake, tool listing, tool calls, refusals and protocol errors, on the demo backend. */
 class McpServerTest {
@@ -146,6 +155,9 @@ class McpServerTest {
             names shouldContainAll
                 listOf(
                     "list_targets",
+                    "test_site",
+                    "get_test",
+                    "cancel_test",
                     "explore_site",
                     "get_exploration",
                     "list_unknowns",
@@ -167,6 +179,112 @@ class McpServerTest {
             answer["inputSchema"]!!.jsonObject["properties"]!!.jsonObject.keys shouldBe setOf("unknownId", "answer")
             tools.single { it["name"]!!.jsonPrimitive.content == "run_campaign" }["description"]!!.jsonPrimitive.content shouldContain
                 "Changes state"
+            tools.single { it["name"]!!.jsonPrimitive.content == "test_site" }["description"]!!.jsonPrimitive.content shouldContain
+                "Changes state"
+        }
+
+    @Test
+    fun `run_campaign without a release and compare_runs without a baseline reach the backend with none`() =
+        runBlocking<Unit> {
+            val demo = backend()
+            val asked = mutableListOf<RunRequest>()
+            val compared = mutableListOf<Pair<RunId, String?>>()
+            val backend =
+                object : PanelBackend by demo {
+                    override suspend fun startRun(request: RunRequest): RunStartView {
+                        asked += request
+                        return RunStartView(RunId("run_new"), request.scenarioId, 3)
+                    }
+
+                    override suspend fun compare(
+                        runId: RunId,
+                        baseline: String?,
+                        visual: String?,
+                    ): ComparisonView {
+                        compared += runId to baseline
+                        return ComparisonView(
+                            runId,
+                            null,
+                            RunId("run_old"),
+                            null,
+                            "tiny",
+                            false,
+                            false,
+                            emptyList(),
+                            emptyList(),
+                            emptyList(),
+                            emptyList(),
+                            emptyList(),
+                            "/runs/${runId.value}/report/compare.html",
+                        )
+                    }
+                }
+
+            val answers =
+                exchange(
+                    call(1, "run_campaign", """{"scenarioId":"scn_1"}"""),
+                    call(2, "compare_runs", """{"runId":"run_new"}"""),
+                    call(3, "run_campaign", """{"scenarioId":"scn_1","release":"v 1"}"""),
+                    allowWrites = true,
+                    backend = backend,
+                )
+
+            answers["1"]!!.result()["isError"]!!.jsonPrimitive.boolean shouldBe false
+            asked.map { it.release } shouldBe listOf(null)
+            compared shouldBe listOf(RunId("run_new") to null)
+            answers["2"]!!.text() shouldContain "run_old"
+            answers["3"]!!.result()["isError"]!!.jsonPrimitive.boolean shouldBe true
+        }
+
+    @Test
+    fun `test_site starts the one-go test with no team of its own, and get_test follows it`() =
+        runBlocking<Unit> {
+            val demo = backend()
+            val asked = mutableListOf<PanelInstructions>()
+            var shown: TestFlowView? = null
+            val backend =
+                object : PanelBackend by demo {
+                    override suspend fun startTest(instructions: PanelInstructions): TestFlowView {
+                        asked += instructions
+                        return TestFlowView(
+                            target = instructions.target,
+                            stage = TestStage.FINISHED,
+                            startedAt = Instant.EPOCH,
+                            explorationId = "exp_1",
+                            scenarioId = "scn_1",
+                            runId = RunId("run_1"),
+                            result = RunResult.PASSED,
+                            note = "Test bitdi: run keçdi.",
+                        ).also { shown = it }
+                    }
+
+                    override fun testFlow(): TestFlowView? = shown
+                }
+
+            val refused = exchange(call(1, "test_site"), backend = backend)["1"]!!
+            refused
+                .result()["isError"]!!
+                .jsonPrimitive.boolean
+                .shouldBeTrue()
+            asked shouldBe emptyList()
+
+            val started = exchange(call(1, "test_site", """{"testers":4,"wait":true}"""), allowWrites = true, backend = backend)["1"]!!
+            val view = Json.parseToJsonElement(started.text()).jsonObject
+            view["stage"]!!.jsonPrimitive.content shouldBe "FINISHED"
+            view["result"]!!.jsonPrimitive.content shouldBe "PASSED"
+            view["waitedToEnd"]!!.jsonPrimitive.boolean shouldBe true
+            val form = asked.single()
+            form.target shouldBe "https://staging.portal.test"
+            form.testers shouldBe 4
+            // The team is the explorer's to find: no contract roles, ways in or departments are made up (Faza 25).
+            form.roles shouldBe null
+            form.registration shouldBe null
+            form.departments shouldBe emptyList()
+            val followed = exchange(call(1, "get_test"), backend = backend)["1"]!!
+            Json
+                .parseToJsonElement(followed.text())
+                .jsonObject["runId"]!!
+                .jsonPrimitive.content shouldBe "run_1"
         }
 
     @Test

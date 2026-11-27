@@ -28,6 +28,8 @@ data class PageObservation(
     val linkCount: Int,
     val loadMs: Long?,
     val evidence: List<ArtifactId>,
+    /** Object pages the page lists, with how many objects: recorded for the anonymous viewpoint only ([PageModel.lists]). */
+    val lists: Map<String, Int> = emptyMap(),
 )
 
 /**
@@ -47,6 +49,55 @@ class SiteModelAccumulator(
     private val realtime = LinkedHashMap<RealtimeTransport, RealtimeBuilder>()
     private val unknowns = mutableListOf<Unknown>()
     private val examples = LinkedHashMap<Pair<String, String>, URI>()
+
+    /** Patterns of the pages a seed brought ([seed]). */
+    private val seededPatterns = HashSet<String>()
+
+    /**
+     * Starts from [model] (Faza 18: the explorer goes on while a run goes): its roles, pages, actions, live updates and
+     * questions are known before anything is loaded, and what this exploration sees is merged into them.
+     */
+    fun seed(model: SiteModel) {
+        require(pages.isEmpty() && actions.isEmpty() && roles.isEmpty()) { "A model is seeded before anything is recorded" }
+        model.roles.forEach { role ->
+            roles[role.name] =
+                RoleBuilder(role.name, role.anonymous).apply {
+                    pageIds += role.pageIds
+                    deniedPatterns += role.deniedPatterns
+                    evidence.addCapped(role.evidence)
+                }
+        }
+        model.pages.forEach { page ->
+            pages[page.urlPattern] = PageBuilder(page.id, page.urlPattern).apply { load(page) }
+            seededPatterns += page.urlPattern
+        }
+        model.actions.forEach { action ->
+            val candidate =
+                ActionCandidate(action.name, action.kind, action.selector, action.httpMethod, action.httpPath, action.provenance)
+            val identity = Selectors.testIdOf(action.selector)?.let { "testid:$it" } ?: "${action.pageId}|${action.selector}"
+            actionIdsByIdentity[identity] = action.id
+            actions[action.id] =
+                ActionBuilder(action.id, action.pageId, candidate, action.allowedRoles.firstOrNull() ?: ANONYMOUS, action.evidence).apply {
+                    allowedRoles.clear()
+                    allowedRoles += action.allowedRoles
+                    triggersRealtime = action.triggersRealtime
+                    trial = action.trial
+                }
+        }
+        model.realtime.forEach { observation ->
+            realtime[observation.transport] =
+                RealtimeBuilder(observation.transport).apply {
+                    details += observation.detail.split("; ").filter { it.isNotBlank() }
+                    pages += observation.pages
+                    roles += observation.roles
+                    evidence.addCapped(observation.evidence)
+                }
+        }
+        unknowns += model.unknowns
+    }
+
+    /** Whether the page with [urlPattern] came with the seed ([seed]): known, not to be learned again. */
+    fun seeded(urlPattern: String): Boolean = urlPattern in seededPatterns
 
     fun role(
         name: String,
@@ -236,8 +287,22 @@ class SiteModelAccumulator(
         private var linkCount = 0
         private var loadMs: Long? = null
         private val evidence = LinkedHashSet<ArtifactId>()
+        private val lists = LinkedHashMap<String, Int>()
 
         val formCount: Int get() = forms.size
+
+        /** Takes [page] as the model it comes from knows it (a seed). */
+        fun load(page: PageModel) {
+            title = page.title
+            purpose = page.purpose
+            reachableBy += page.reachableBy
+            page.forms.forEach { forms[it.key] = it }
+            testIds += page.testIds
+            linkCount = page.linkCount
+            loadMs = page.loadMs
+            evidence.addCapped(page.evidence)
+            lists.putAll(page.lists)
+        }
 
         fun merge(observation: PageObservation) {
             if (title.isBlank()) title = observation.title
@@ -256,6 +321,7 @@ class SiteModelAccumulator(
             linkCount = maxOf(linkCount, observation.linkCount)
             if (loadMs == null) loadMs = observation.loadMs
             evidence.addCapped(observation.evidence)
+            observation.lists.forEach { (pattern, count) -> lists.merge(pattern, count, ::maxOf) }
         }
 
         fun build() =
@@ -271,6 +337,7 @@ class SiteModelAccumulator(
                 loadMs = loadMs,
                 provenance = Provenance.OBSERVED,
                 evidence = evidence.toList(),
+                lists = lists.toMap(),
             )
     }
 

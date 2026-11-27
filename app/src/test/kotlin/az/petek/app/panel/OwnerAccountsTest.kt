@@ -47,7 +47,7 @@ class OwnerAccountsTest {
     @Test
     fun `an account's password goes to env and the account to the site's profile, loadable next time`() {
         Files.writeString(env, "PETEK_TARGET=https://stage.shop.example\n# keep me\n")
-        val accounts = OwnerAccounts(config, env, targets)
+        val accounts = OwnerAccounts({ config }, env, targets)
 
         val views = accounts.add(AccountRequest("https://stage.shop.example/app", "Admin", "owner@shop.example", "p#ss \"word\""))
 
@@ -64,7 +64,7 @@ class OwnerAccountsTest {
 
     @Test
     fun `giving a role again replaces its password and its profile line, another role is added`() {
-        val accounts = OwnerAccounts(config, env, targets)
+        val accounts = OwnerAccounts({ config }, env, targets)
 
         accounts.add(AccountRequest("https://stage.shop.example", "admin", "a@shop.example", "one"))
         accounts.add(AccountRequest("https://stage.shop.example", "admin", "b@shop.example", "two"))
@@ -91,7 +91,7 @@ class OwnerAccountsTest {
                 - {role: admin, email: 'a@shop.example', password: '${'$'}{PETEK_OLD}', fields: {company_code: ACME-42}}
             """.trimIndent(),
         )
-        val accounts = OwnerAccounts(config, env, targets)
+        val accounts = OwnerAccounts({ config }, env, targets)
 
         accounts.add(AccountRequest("https://stage.shop.example", "admin", "b@shop.example", "two"))
 
@@ -103,7 +103,7 @@ class OwnerAccountsTest {
 
     @Test
     fun `a bad role, e-mail or password is refused by field and nothing is written`() {
-        val accounts = OwnerAccounts(config, env, targets)
+        val accounts = OwnerAccounts({ config }, env, targets)
 
         val refused =
             shouldThrow<PanelRequestException> {
@@ -117,7 +117,7 @@ class OwnerAccountsTest {
 
     @Test
     fun `a production site is refused before anything is written`() {
-        val accounts = OwnerAccounts(config, env, targets)
+        val accounts = OwnerAccounts({ config }, env, targets)
 
         shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://portal.example", "admin", "a@b.example", "x")) }
         Files.exists(env) shouldBe false
@@ -129,7 +129,7 @@ class OwnerAccountsTest {
         val broken =
             "target:\n  name: stage-shop-example\n  url: https://stage.shop.example\n  accounts: [{role: admin, email: 'a@b.example'"
         Files.writeString(targets.resolve("shop.yaml"), broken)
-        val accounts = OwnerAccounts(config, env, targets)
+        val accounts = OwnerAccounts({ config }, env, targets)
 
         shouldThrow<PanelRequestException> { accounts.add(AccountRequest("https://stage.shop.example", "editor", "e@b.example", "pw-1")) }
 

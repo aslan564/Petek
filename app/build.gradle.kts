@@ -51,6 +51,11 @@ dependencies {
     testImplementation(project(":testing:fake-target"))
     // The panel end-to-end test drives the real page in Chromium and takes screenshots (tag "e2e").
     testImplementation(libs.playwright)
+    // A real IMAP inbox for the e2e test of sign-up codes read over IMAP (test only; see features/mail).
+    testImplementation(libs.greenmail) {
+        exclude(group = "junit", module = "junit")
+        exclude(group = "org.eclipse.angus", module = "jakarta.mail")
+    }
 }
 
 application {
@@ -281,10 +286,10 @@ tasks.named<JavaExec>("run") {
     standardInput = System.`in`
 }
 
-// The panel end to end in real Chromium against the in-process fake target, with screenshots of every screen in
-// build/panel-screenshots/ (tag "e2e", kept out of the fast build): ./gradlew :app:e2eTest
+// The panel and the contract demo end to end in real Chromium against the in-process fake target, with screenshots of
+// every panel screen in build/panel-screenshots/ (tag "e2e", kept out of the fast build): ./gradlew :app:e2eTest
 tasks.register<Test>("e2eTest") {
-    description = "The web panel end to end against the fake target in real Chromium, with screenshots."
+    description = "The web panel and the contract demo end to end against the fake target in real Chromium."
     group = "verification"
     testClassesDirs =
         sourceSets.test
@@ -294,6 +299,27 @@ tasks.register<Test>("e2eTest") {
     useJUnitPlatform { includeTags("e2e") }
     maxHeapSize = "3g"
     shouldRunAfter(tasks.test)
+    // The contract demo end to end runs the repository's own campaign file.
+    inputs.file(rootDir.resolve("scenarios/contract-demo.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// The owner's guarantee at any size (2026-10-01): the contract demo with N testers in real Chromium, every tester × step
+// accounted for and every finding reported (tag "scale", heavy, never part of build or e2eTest):
+// ./gradlew :app:scaleTest -Ppetek.scale.testers=30,50,100
+tasks.register<Test>("scaleTest") {
+    description = "Every tester of an N-tester run gets to every step and every finding is reported (real Chromium)."
+    group = "verification"
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("scale") }
+    maxHeapSize = "6g"
+    systemProperty("petek.scale.testers", providers.gradleProperty("petek.scale.testers").getOrElse("30,50,100"))
+    inputs.property("petek.scale.testers", providers.gradleProperty("petek.scale.testers").getOrElse("30,50,100"))
+    inputs.file(rootDir.resolve("scenarios/contract-demo.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
+    testLogging { events("passed", "failed") }
 }
 
 // Kover instruments every Test task and its verification (part of `check`) runs them all; without this `build` would
@@ -302,6 +328,7 @@ kover {
     currentProject {
         instrumentation {
             disabledForTestTasks.add("e2eTest")
+            disabledForTestTasks.add("scaleTest")
         }
     }
 }

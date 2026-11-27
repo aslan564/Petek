@@ -20,6 +20,7 @@ import az.petek.evidence.domain.ArtifactType
 import az.petek.evidence.domain.AssertionRecord
 import az.petek.evidence.domain.EvidenceRecorder
 import az.petek.evidence.domain.EvidenceSource
+import az.petek.evidence.domain.Verdict
 import az.petek.verification.domain.ActorResult
 import az.petek.verification.domain.AssertionEvaluator
 import az.petek.verification.domain.AssertionInput
@@ -34,7 +35,9 @@ import kotlin.coroutines.cancellation.CancellationException
 /**
  * Evaluates assertions with an [AssertionEvaluator] and records every result linked to evidence (AGENTS.md rule 5):
  * - RECEIVER and HARNESS results share one SCREENSHOT of the actor's session per call, taken after the checks ran
- *   (`latency_max` is backed by the same screen as the `visible_text` it measures).
+ *   (`latency_max` is backed by the same screen as the `visible_text` it measures). A FAILED result of any source gets
+ *   it too, so every failure shows the page as the check left it (an `oracle` that found the ticket unchanged, next to
+ *   the ticket page); a FAILED group check, which has no page of its own, gets every actor's ([ActorResult.session]).
  * - A result carrying the target's raw answer stores it: `oracle` as ORACLE, `http_status` as HTTP, others as LOG;
  *   a result that also carries an oracle answer ([AssertionResult.oracleEvidence], the oracle condition of
  *   `only_one_succeeds`) stores that as a second, ORACLE artifact.
@@ -69,7 +72,7 @@ class RecordingVerifyStepUseCase(
     ): List<AssertionRecord> {
         val groupLevel = specs.filter { it.isGroupLevel }
         if (groupLevel.isEmpty()) return emptyList()
-        return record(groupLevel.map { evaluateGroupLevel(it, results, input) }, input)
+        return record(groupLevel.map { evaluateGroupLevel(it, results, input) }, input, results)
     }
 
     private suspend fun evaluateGroupLevel(
@@ -85,13 +88,24 @@ class RecordingVerifyStepUseCase(
     private suspend fun record(
         results: List<AssertionResult>,
         input: AssertionInput,
+        actors: List<ActorResult> = emptyList(),
     ): List<AssertionRecord> {
         if (results.isEmpty()) return emptyList()
         val verificationId = ids.correlationId()
         val owner = input.agentId?.value ?: HARNESS_OWNER
         logger.debug { "verification $verificationId: ${results.size} result(s) for $owner at ${input.scenarioStep}" }
 
-        val screenshot = if (results.any { it.wantsScreenshot }) captureScreenshot(input, owner) else Screenshot.NOT_TAKEN
+        val failed = results.any { it.verdict == Verdict.FAILED }
+        val screenshot = if (results.any { it.wantsScreenshot } || failed) captureScreenshot(input, owner) else Screenshot.NOT_TAKEN
+        // A failed group check (a race) is on no single page: every actor's screen as the step left it.
+        val actorScreens =
+            if (!failed || input.session != null) {
+                emptyList()
+            } else {
+                actors.mapNotNull { actor ->
+                    actor.session?.let { captureScreenshot(input.copy(session = it), actor.agentId.value).artifactId }
+                }
+            }
         val direct = results.map { directEvidence(it, screenshot, input, owner) }
         val unbacked = results.filterIndexed { i, _ -> direct[i].isEmpty() }
         val harnessLog =
@@ -115,7 +129,7 @@ class RecordingVerifyStepUseCase(
                     verdict = result.verdict,
                     latencyMs = result.latency?.inWholeMilliseconds,
                     note = noteFor(result, screenshot),
-                    artifactIds = direct[i].ifEmpty { listOfNotNull(harnessLog) },
+                    artifactIds = direct[i].ifEmpty { listOfNotNull(harnessLog) } + context(result, screenshot, actorScreens),
                 )
             recorder.assertion(record)
             record
@@ -136,6 +150,23 @@ class RecordingVerifyStepUseCase(
             result.oracleEvidence
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add(store(input, owner, ArtifactType.ORACLE, it.toByteArray())) }
+        }
+
+    /**
+     * The pages shown next to a FAILED result's own evidence: the actor's screen for a check of another source (the
+     * target's answer, a request), every actor's for a group check. Context, never the evidence the result stands on.
+     */
+    private fun context(
+        result: AssertionResult,
+        screenshot: Screenshot,
+        actorScreens: List<ArtifactId>,
+    ): List<ArtifactId> =
+        if (result.verdict !=
+            Verdict.FAILED
+        ) {
+            emptyList()
+        } else {
+            listOfNotNull(screenshot.artifactId.takeUnless { result.wantsScreenshot }) + actorScreens
         }
 
     /** Result of trying to capture the actor's screen once for this call. */

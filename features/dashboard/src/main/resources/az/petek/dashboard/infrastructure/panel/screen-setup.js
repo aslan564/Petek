@@ -103,12 +103,60 @@
       ai.reason ? h('span', { class: 'faint', text: ai.reason }) : null,
       ai.fallbacks.length ? h('span', { class: 'faint', text: 'sonra: ' + ai.fallbacks.join(', ') }) : null);
     const help = ai.configured
-      ? 'Sınaq AI-a bir kiçik sorğu göndərir (AI planınızdan bir sorğu).'
-      : 'Kod yoxlamaları AI-sız işləyir. Kəşfiyyatçının səhifə analizi, `do` addımları və tirajın bir hissəsi üçün AI lazımdır: konfiqurasiya faylında PETEK_LLM_PROVIDER=auto yazın (kompüterdəki AI-ı özü tapır) və paneli yenidən başladın.';
-    P.fill(ui.ai.body, facts, h('div', { class: 'help', text: help }));
+      ? 'Sınaq AI-a bir kiçik sorğu göndərir (AI planınızdan bir sorğu). "Dəyiş" ilə başqa AI seçə bilərsiniz.'
+      : 'Kod yoxlamaları AI-sız işləyir. Kəşfiyyatçının səhifə analizi, `do` addımları və tirajın bir hissəsi üçün AI lazımdır: "Dəyiş" ilə seçin ("Avtomatik" kompüterdəki AI-ı özü tapır).';
+    P.fill(ui.ai.body, facts, h('div', { class: 'help', text: help }), ui.aiChooser);
     state(ui.ai.status, ai.configured ? 'slate' : 'amber', ai.configured ? 'Sınanmayıb' : 'AI yoxdur');
     ui.aiBtn.hidden = !ai.configured;
   }
+  // The AI chosen here (Faza 23): kept in the configuration file, used from the next test on, without a restart.
+  async function openAiChooser(button) {
+    const res = await P.busy(button, () => P.api.get('/api/readiness/ai-options'));
+    if (!res.ok) { P.toast(res.error, 'error'); return; }
+    const o = res.data;
+    ui.aiChooser.hidden = false;
+    if (o.unavailable) { P.fill(ui.aiChooser, h('div', { class: 'help', text: o.unavailable })); return; }
+    const select = h('select', { class: 'select', attrs: { 'aria-label': 'AI' } },
+      ...o.options.map((x) => h('option', { text: x.label + (x.available ? '' : ' (bu kompüterdə tapılmadı)'), attrs: { value: x.provider } })));
+    select.value = o.chosen;
+    const model = h('input', { class: 'input', attrs: { type: 'text', placeholder: 'Model (boş: alətin öz modeli)', autocomplete: 'off', 'aria-label': 'Model' } });
+    model.value = o.model || '';
+    const endpoint = h('input', { class: 'input', attrs: { type: 'url', placeholder: 'http://localhost:11434/v1', autocomplete: 'off', 'aria-label': 'Endpoint' } });
+    endpoint.value = o.endpoint || '';
+    const key = h('input', { class: 'input', attrs: { type: 'password', autocomplete: 'new-password', placeholder: o.keySet ? 'Açar var (boş qalsa saxlanır)' : 'API açarı', 'aria-label': 'API açarı' } });
+    const needs = () => (o.options.find((x) => x.provider === select.value) || { needs: [] }).needs;
+    const sync = () => {
+      const n = needs();
+      model.hidden = !n.includes('model');
+      endpoint.hidden = !n.includes('endpoint');
+      key.hidden = !n.includes('key');
+    };
+    select.addEventListener('change', sync);
+    sync();
+    async function choose(b) {
+      const n = needs();
+      const body = {
+        provider: select.value,
+        model: n.includes('model') ? model.value : '',
+        endpoint: n.includes('endpoint') ? endpoint.value : '',
+        key: n.includes('key') ? key.value : '',
+      };
+      const r = await P.busy(b, () => P.api.post('/api/readiness/ai-choice', body));
+      key.value = '';
+      if (!r.ok) { P.toast((r.problems && r.problems[0] && r.problems[0].message) || r.error, 'error'); return; }
+      P.fill(ui.aiChooser);
+      ui.aiChooser.hidden = true;
+      renderAi(r.data.ai);
+      P.toast('AI dəyişdi: növbəti testdən işlənir və konfiqurasiya faylında saxlanıldı.', 'ok');
+    }
+    P.fill(ui.aiChooser, h('div', 'form-grid',
+      select,
+      h('div', 'form-grid cols-3', model, endpoint, key),
+      h('div', 'row wrap',
+        P.button('Yadda saxla', { kind: 'small primary', icon: 'check', on: (e) => choose(e.currentTarget) }),
+        h('span', { class: 'faint', text: 'Açar yalnız konfiqurasiya faylına yazılır və bir daha göstərilmir.' }))));
+  }
+
   async function testAi(button) {
     state(ui.ai.status, 'slate', 'AI-dan cavab gözlənilir…');
     const res = await P.busy(button, () => P.api.post('/api/readiness/ai'));
@@ -162,7 +210,9 @@
     ui.owner = step(2, 'Sahiblik', 'Yazan testlər üçün saytın sizin olduğunun sübutu', 'lock');
     ui.ai = step(3, 'AI', 'Kəşfiyyatçı və testerlərin ağlı', 'sparkles');
     ui.aiBtn = P.button('Sına', { kind: 'small', icon: 'zap', on: (e) => testAi(e.currentTarget) });
-    ui.ai.actions.append(ui.aiBtn);
+    ui.aiChooser = h('div', 'stack');
+    ui.aiChooser.hidden = true;
+    ui.ai.actions.append(P.button('Dəyiş', { kind: 'small', icon: 'sparkles', on: (e) => openAiChooser(e.currentTarget) }), ui.aiBtn);
     ui.testers = step(4, 'Testerlər', 'Eyni anda neçə tester işləsin', 'team');
     ui.count = h('input', { class: 'input num', attrs: { type: 'number', min: 1, max: 999, step: 1, inputmode: 'numeric', 'aria-label': 'Tester sayı' } });
     ui.count.addEventListener('input', () => setTesters(parseInt(ui.count.value, 10)));
@@ -174,9 +224,9 @@
       h('div', 'tester-row', ui.count, ui.range),
       ui.capacity,
       h('div', { class: 'help', text: 'Bu say "Təlimat" ekranında və run-larda istifadə olunur. Limit yoxdur: tövsiyə yalnız kompüterin rahat işlədə biləcəyi saydır.' }));
-    const ready = P.button('Hazırdır: saytı kəşf et', { kind: 'primary', icon: 'arrowRight', on: () => { markDone(); P.go('telimat'); } });
+    const ready = P.button('Hazırdır: saytı test et', { kind: 'primary', icon: 'arrowRight', on: () => { markDone(); P.go('telimat'); } });
     P.append(el, h('div', 'stack',
-      h('div', { class: 'help', text: 'Bir dəfə baxın: sayt cavab verirsə, AI və tester sayı seçilibsə, "Kəşf et" ilə başlayın. Hər şeyi sonra da buradan dəyişə bilərsiniz.' }),
+      h('div', { class: 'help', text: 'Bir dəfə baxın: sayt cavab verirsə, AI və tester sayı seçilibsə, "Təlimat" ekranında "Test et" ilə başlayın. Hər şeyi sonra da buradan dəyişə bilərsiniz.' }),
       ui.site.el, ui.owner.el, ui.ai.el, ui.testers.el,
       h('div', 'row', h('span', 'spacer'), ready)));
     const n = P.testers.get();

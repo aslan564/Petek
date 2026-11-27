@@ -19,6 +19,7 @@ import az.petek.identity.domain.IdentityRepository
 import az.petek.identity.domain.IdentityStatus
 import java.util.concurrent.ConcurrentHashMap
 
+/** Keeps what the SQLite repository keeps: each identity [Identity.asStored], never the owner's passwords. */
 class InMemoryIdentityRepository : IdentityRepository {
     private val byRun = ConcurrentHashMap<RunId, MutableList<Identity>>()
     val statusReasons = ConcurrentHashMap<Pair<RunId, AgentId>, String>()
@@ -27,7 +28,7 @@ class InMemoryIdentityRepository : IdentityRepository {
         runId: RunId,
         plan: IdentityPlan,
     ) {
-        byRun[runId] = plan.identities.toMutableList()
+        byRun[runId] = plan.identities.map { it.asStored() }.toMutableList()
     }
 
     override suspend fun findByRun(runId: RunId): List<Identity> = byRun[runId].orEmpty().toList()

@@ -12,11 +12,12 @@ page content or the model steer the tool.
 
 | Threat | Control | Where |
 |---|---|---|
-| Secret in a log, report or prompt | `Secret` wrapper; configs print set/unset; redactors for triage and explorer prompts; `{self.password}` placeholder; secret-field masking in DOM snapshots and dialog text | `core/security`, `scenarios` `TextRedactor`/`SecretRedactor`, `explorer` `PromptRedaction`, `browser` JS probes |
+| Secret in a log, report or prompt | `Secret` wrapper; configs print set/unset; redactors for triage and explorer prompts; `{self.password}` placeholder; secret-field masking in DOM snapshots and dialog text; the token a page signs its calls with (`PageCredentials`) is learned only from the page's own calls to the target (or to the site's API host a full `api_prefix` names), sent back only to the origin it went to and masked like a typed password | `core/security`, `scenarios` `TextRedactor`/`SecretRedactor`, `explorer` `PromptRedaction`, `browser` JS probes |
 | Writing to somebody else's site | Site ownership proved by a `/.well-known/petek-verification.txt` file or a `_petek-verification.<host>` DNS TXT record (HMAC of the host with `PETEK_IDENTITY_SECRET`), remembered 30 days; loopback and private addresses exempt; unproved sites are only read; teardown outside the gate by design (ADR-0012) | `features/ownership`, `app` (`RunCommand`, `PanelTargets.owned`, explorer) |
-| Wrong target / production | `TargetPolicy` + `PETEK_ALLOW_PRODUCTION`; `PETEK_TARGET` overrides scenario targets; same policy in CLI, doctor, panel | `core/security`, `app` |
-| Destructive writes on real data | Oracle and teardown only on `is_test=true`; trial touch needs permission and a confirmed test target; token only to the configured API base, no redirects | `oracle`, `explorer`, `app` |
+| Wrong target / production | `TargetPolicy` + `PETEK_ALLOW_PRODUCTION`; `PETEK_TARGET` overrides scenario targets; same policy in CLI, doctor, panel; during a run testers stay on the target's and the allowed hosts (`allowed_hosts`), a page that leaves is brought back, and no browser context opens a production host or writes to one (Faza 24.9) | `core/security`, `app`, `agent`, `browser` |
+| Destructive writes on real data | Oracle and teardown only on `is_test=true`; trial touch needs permission and a confirmed test target (the test company, or on a site without companies the explorer's own new account on a proved or local site); token only to the configured API base, no redirects | `oracle`, `explorer`, `app` |
 | Prompt injection from pages | One structured decision validated against the action whitelist; the harness executes; page text is data | `agent`, `llm` |
+| AI contacting real people | A typed e-mail address must be the tester's own, a colleague's or in the test mail space (the catch-all domain, or the `+` addresses of the owner's inbox); a typed international phone number (`+` and digits) must be the tester's own (the roster carries no colleague's phone). Anything else is refused before it reaches the page, so no task makes the site write to or text a third party (`ContactPolicy`, Faza 24.3). A number written without `+` (local format) is not recognised as a phone | `agent` |
 | AI process escaping | An AI command-line tool runs with the owner's arguments only (no vendor flags in the code), the known agent CLIs read-only; `ProcessBuilder` without a shell; `PETEK_LLM_ENV_UNSET` removes variables; fresh empty temp dir; kill tree on timeout | `llm/infrastructure/cli` |
 | Panel abuse from another site | Loopback bind; local `Host`/`Origin` only; per-start `X-Petek-Token` on non-GET; script nonce; masked tester e-mails | `dashboard/infrastructure` |
 | Cross-session leakage | One browser context and one Playwright per session on its own dispatcher; colleagues known without secrets (`Colleague`); shared values write-once; `{last_id}` never a concurrent colleague's id; admin-only company setup; storage states `rw-------` (see R01 "Isolation guarantees", proven at 5 000 fake and 60 real sessions) | `browser`, `agent`, `orchestration`, `campaign` |
@@ -27,7 +28,8 @@ page content or the model steer the tool.
 - `core`: `Secret` and `TargetPolicy` tests. `app`: `ConfigLoaderTest` ("the printed configuration never shows a
   secret"), `TargetGuardTest`, `DoctorCommandTest` (token never echoed). `llm`: `GenericCliProfileTest` (argument
   list, environment removal). `dashboard`: `DashboardServerTest`/`PanelHttpTest` (origin and token checks).
-  `browser`: secret-field and dialog masking tests. `scenarios`: redactor tests.
+  `browser`: secret-field and dialog masking tests; `PageCredentialsTest` (only the page's own calls to the target
+  teach, nothing goes to another site) and the real-browser token probe (`PlaywrightBrowserSessionTest`). `scenarios`: redactor tests.
 
 ## Hardening roadmap
 

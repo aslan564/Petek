@@ -117,7 +117,7 @@ internal class OwnAccountRoleSessions(
                 ?.spec
                 ?.name
                 ?: PanelTargets.site(request.target).substringAfter("://").replace(Regex("[^A-Za-z0-9]+"), "-")
-        val profile = profiles.profile().profile
+        val profile = profiles.profile(request.target).profile
         val opened = LinkedHashMap<String, BrowserSession>()
         val failures = mutableListOf<String>()
         for (account in accounts.distinctBy { it.role }) {

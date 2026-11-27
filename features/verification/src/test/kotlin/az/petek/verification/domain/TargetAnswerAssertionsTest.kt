@@ -32,10 +32,12 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.net.URI
 import java.util.concurrent.CopyOnWriteArrayList
 
 class TargetAnswerAssertionsTest {
@@ -305,6 +307,40 @@ class TargetAnswerAssertionsTest {
             result.observed shouldBe "200"
             result.note shouldBe "target answered 200, expected 403"
             result.rawEvidence shouldBe """200 {"status":"approved"}"""
+        }
+
+    @Test
+    fun `http_status calls the site's API on its own host only when the campaign names that host`() =
+        runTest {
+            val url = "https://api.portal.example/v1/tickets/42/approve"
+            session.fake.httpResponses["POST $url"] = HttpProbeResult(403, "forbidden")
+            val spec = HttpStatus("https://api.portal.example/v1/tickets/{last_id}/approve", "POST", 403)
+
+            val named =
+                evaluator(oracle)
+                    .evaluate(listOf(spec), assertionInput(session).copy(apiOrigin = URI("https://api.portal.example")))
+                    .single()
+            val unnamed = evaluateOne(spec)
+
+            named.verdict shouldBe Verdict.PASSED
+            session.fake.actions.filter { it.startsWith("request") } shouldContainExactly listOf("request POST $url")
+            unnamed.verdict shouldNotBe Verdict.PASSED
+            unnamed.note.orEmpty() shouldContain "absolute URLs are not allowed"
+        }
+
+    @Test
+    fun `a failed http_status says whether the probe carried the page's own token or only the session's cookies`() =
+        runTest {
+            session.fake.httpResponses["POST /api/tickets/42/approve"] =
+                HttpProbeResult(200, "approved", credentials = setOf("x-csrf-token", "authorization"))
+            session.fake.httpResponses["DELETE /api/tickets/42"] = HttpProbeResult(401, "")
+
+            val signed = evaluateOne(HttpStatus("/api/tickets/{last_id}/approve", "POST", 403))
+            val unsigned = evaluateOne(HttpStatus("/api/tickets/{last_id}", "DELETE", 403))
+
+            signed.note shouldBe "target answered 200, expected 403; sent with the page's own authorization, x-csrf-token header"
+            unsigned.note shouldBe
+                "target answered 401, expected 403; only the session's cookies went: the page had sent the target no token of its own"
         }
 
     @Test

@@ -29,6 +29,8 @@ import az.petek.dashboard.domain.SiteModelDiffView
 import az.petek.evidence.domain.ArtifactRecord
 import az.petek.explorer.application.ExploreSiteUseCase
 import az.petek.explorer.application.ExplorerSettings
+import az.petek.explorer.application.RoleWalk
+import az.petek.explorer.application.RoleWalkSource
 import az.petek.explorer.application.ScenarioRequest
 import az.petek.explorer.domain.ExplorationBudget
 import az.petek.explorer.domain.ExplorationEvent
@@ -38,6 +40,9 @@ import az.petek.explorer.domain.ExplorationPhase
 import az.petek.explorer.domain.ExplorationRecord
 import az.petek.explorer.domain.ExplorationRequest
 import az.petek.explorer.domain.ExplorationStatus
+import az.petek.explorer.domain.GateMaps
+import az.petek.explorer.domain.SiteModel
+import az.petek.explorer.domain.TestApiProbe
 import az.petek.ownership.domain.OwnershipStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
@@ -88,6 +93,8 @@ internal class PanelExplorerAdapter(
         val instructions: PanelInstructions?,
         val budget: ExplorationBudget,
         val tracker: ExplorationTracker,
+        /** The model this exploration goes on from (Faza 18), or null for a fresh one. */
+        val seed: SiteModel? = null,
     )
 
     /** What a scenario draft is generated from: the latest exploration with a stored site model. */
@@ -114,7 +121,28 @@ internal class PanelExplorerAdapter(
 
     override fun exploration(): ExplorationView? = synchronized(lock) { current?.tracker?.view(now()) }
 
-    override suspend fun startExploration(instructions: PanelInstructions): ExplorationView {
+    override suspend fun startExploration(instructions: PanelInstructions): ExplorationView = begin(instructions).view()
+
+    /**
+     * An exploration [begin] started: its [job], which completes once the exploration let go of its sessions and
+     * browser and its draft preview is on the screen, and its own [view] at any time (also after another one started).
+     */
+    class StartedExploration internal constructor(
+        val job: Job,
+        private val read: () -> ExplorationView,
+    ) {
+        fun view(): ExplorationView = read()
+    }
+
+    /**
+     * [startExploration] for "Test et", which waits for the exploration it started (Faza 25.3). With [continueFrom] the
+     * exploration goes on from that exploration's model (Faza 18, while a run goes): its known pages are not asked about
+     * again, the page budget counts only new ones, and nothing is submitted (no trial touch).
+     */
+    suspend fun begin(
+        instructions: PanelInstructions,
+        continueFrom: ExplorationId? = null,
+    ): StartedExploration {
         val problems = instructions.problems()
         if (problems.isNotEmpty()) throw PanelRequestException(problems)
         val target = PanelTargets.allowed(instructions.target, container.config.targetPolicy, PanelInstructions.TARGET)
@@ -137,14 +165,16 @@ internal class PanelExplorerAdapter(
                 maxMinutes = instructions.budget.maxMinutes.coerceIn(1, ExplorationBudget.MAX_MINUTES),
             )
         val previous = container.explorations.latestVersion(target).takeIf { it > 0 }
+        val seed = continueFrom?.let { container.explorations.model(it) }?.takeIf { PanelTargets.sameSite(it.target, target) }
         return synchronized(lock) {
             if (job?.isActive == true) throw PanelConflictException("Artıq bir kəşfiyyat gedir. Bitməsini gözləyin və ya dayandırın.")
             val tracker = ExplorationTracker(target.toString(), grounding, instructions.budget, now(), previous)
-            val started = Current(target, instructions, budget, tracker)
+            val started = Current(target, instructions, budget, tracker, seed)
             current = started
             publish()
-            job = scope.launch { explore(started) }
-            tracker.view(now())
+            val launched = scope.launch { explore(started) }
+            job = launched
+            StartedExploration(launched) { synchronized(lock) { tracker.view(now()) } }
         }
     }
 
@@ -167,6 +197,9 @@ internal class PanelExplorerAdapter(
             shown.tracker.view(now())
         }
     }
+
+    /** Whether an exploration is going. */
+    fun busy(): Boolean = synchronized(lock) { job?.isActive == true }
 
     override suspend fun cancelExploration(): Boolean {
         val running = synchronized(lock) { job?.takeIf { it.isActive } } ?: return false
@@ -231,18 +264,40 @@ internal class PanelExplorerAdapter(
         publish()
     }
 
+    /**
+     * Ends [started], the exploration that went on during a run, now that the run ended (Faza 18): its screen says why it
+     * stopped, and it keeps what it learned.
+     */
+    suspend fun endWithRun(started: StartedExploration) {
+        synchronized(lock) { current }?.takeIf { synchronized(lock) { it.tracker.running } }?.let {
+            note(it, ExplorationTracker.NOTE, "Run bitdi; kəşfiyyatçı da dayandı. Tapdıqları növbəti run-ın ssenarisinə gedir.")
+        }
+        started.job.cancel()
+        started.job.join()
+    }
+
+    /** The site model exploration [id] saved, or null. */
+    suspend fun model(id: ExplorationId): SiteModel? = container.explorations.model(id)
+
     /** Whether drafts for [target] may use the target's test API (ids and oracle checks). */
     fun testApi(target: URI): Boolean = container.oracle.isAvailable && PanelTargets.sameSite(target, container.config.target)
 
     /**
-     * Whether drafts for [target] are for a site with companies: its profile's `tenant`, else companies when the test
-     * API can seed one (the contract's shape), else none (Faza 13).
+     * Whether drafts for [target] are for a site with companies (Faza 25.1): its profile's `tenant`, else companies only
+     * when the explorer saw the site's own way into one in [model] and the test API can seed it ([GateMaps.tenantFor]).
      */
-    fun tenant(target: URI): Tenant =
-        container.config
-            .profileFor(target)
-            ?.spec
-            ?.tenant ?: if (testApi(target)) Tenant.COMPANY else Tenant.NONE
+    fun tenant(
+        target: URI,
+        model: SiteModel,
+    ): Tenant =
+        GateMaps.tenantFor(
+            model,
+            container.config
+                .profileFor(target)
+                ?.spec
+                ?.tenant,
+            testApi(target),
+        )
 
     // --- the exploration ------------------------------------------------------------------------------------------
 
@@ -255,16 +310,23 @@ internal class PanelExplorerAdapter(
             // Logged-in sessions and trial touches write to the site: only on one whose owner proved it (ADR-0012).
             val ownership = container.ownership.check(run.target)
             val writable = ownership.allowsWrites
-            sessions =
-                if (ownership is OwnershipStatus.Unverified) {
-                    RoleSessions.none(PanelTargets.readOnlyExploration(ownership))
-                } else {
-                    roleSessions.open(
-                        RoleSessionRequest(run.target, request?.allowWrites == true, request?.departments.orEmpty()),
-                        factory,
-                    ) { line -> note(run, ExplorationTracker.SESSIONS, line) }
+            // The logged-in side opens once the visitor's walk is done: what the site showed decides the way in
+            // (Faza 25.1), e.g. a test company only where the site has a way to join one.
+            val walk =
+                RoleWalkSource { seen ->
+                    val opened =
+                        if (ownership is OwnershipStatus.Unverified) {
+                            RoleSessions.none(PanelTargets.readOnlyExploration(ownership))
+                        } else {
+                            roleSessions.open(
+                                RoleSessionRequest(run.target, request?.allowWrites == true, request?.departments.orEmpty(), seen),
+                                factory,
+                            ) { line -> note(run, ExplorationTracker.SESSIONS, line) }
+                        }
+                    sessions = opened
+                    opened.note?.let { note(run, ExplorationTracker.SESSIONS, it) }
+                    RoleWalk(opened.sessions, opened.accounts, opened.testCheck)
                 }
-            sessions.note?.let { note(run, ExplorationTracker.SESSIONS, it) }
             val explorer =
                 ExploreSiteUseCase(
                     sessions = factory,
@@ -274,8 +336,8 @@ internal class PanelExplorerAdapter(
                     clock = container.clock,
                     ids = container.ids,
                     targetPolicy = container.config.targetPolicy,
-                    testTargetCheck = sessions.testCheck,
                     settings = settings,
+                    testApi = if (testApi(run.target)) OracleResourceProbe(container.oracle) else TestApiProbe.NONE,
                 )
             val grounding = synchronized(lock) { run.tracker.grounding }
             val result =
@@ -284,10 +346,12 @@ internal class PanelExplorerAdapter(
                         run.target,
                         grounding,
                         run.budget,
-                        ExplorationPhase.entries.toSet(),
+                        // Going on during a run, the explorer submits nothing: the testers are writing to the site.
+                        if (run.seed == null) ExplorationPhase.entries.toSet() else CONTINUING_PHASES,
                         request?.allowWrites == true && writable,
+                        run.seed,
                     ),
-                    sessions.sessions,
+                    walk,
                 ) { event -> onEvent(run, event) }
             conclude(run, result.record.id)
         } catch (e: CancellationException) {
@@ -365,7 +429,7 @@ internal class PanelExplorerAdapter(
                                 id,
                                 grounding.ifBlank { null },
                                 testApi = testApi(run.target),
-                                tenant = tenant(run.target),
+                                tenant = tenant(run.target, it),
                                 testers = run.instructions?.testers?.takeIf { count -> count in 1..ScenarioRequest.MAX_TESTERS },
                             ),
                         ).yaml
@@ -466,5 +530,8 @@ internal class PanelExplorerAdapter(
         const val LOOKBACK = 20
         const val DEFAULT_STEPS_PER_AGENT = 40
         const val NANOS_PER_MILLI = 1_000_000L
+
+        /** What an exploration going on during a run does: it looks, as a visitor and signed in, and submits nothing. */
+        val CONTINUING_PHASES = setOf(ExplorationPhase.ANONYMOUS, ExplorationPhase.ROLE_BASED)
     }
 }

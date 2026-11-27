@@ -27,18 +27,28 @@ import kotlin.time.Duration
  *   non-empty, unique and addressable by the actor grammar, names are unique, the budget is positive, the target is
  *   an absolute http(s) URL without credentials (messages mask them);
  * - actors: named departments exist and every expression can match at least one tester under the quotas (a manager
- *   is never a company-code joiner, and employees get the invitations left after the managers);
+ *   is never a company-code joiner, employees get the invitations left after the managers, and a department holds
+ *   only the testers the registry deals to it in turn, [DepartmentDealing]);
  * - steps: ids are unique, `do` is not blank, a step without `do`/`run` waits or asserts, `wait_for` names an event
  *   emitted by an earlier step, timeouts are positive and finite, `latency_max` follows a `visible_text` of the same
  *   step that waits for an event (t0), `only_one_succeeds` (once per step) needs a `do`/`run`, `parallel: true` and
- *   actors that can match two or more testers; its `request` names a mutating method (or `*`) and a regex that
- *   compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder;
+ *   actors that can match two or more testers; its `request` is required and names a mutating method (or `*`) and a
+ *   regex that compiles, and its `oracle` (checked once for the group) uses no `{self.*}` placeholder; an `emits`
+ *   `request` (the write its receivers' latency is measured from) follows the same form;
  * - paths: oracle (also the `only_one_succeeds` oracle), `http_status` and `target_profile.paths` values are `/...`
  *   paths on the target, never other hosts;
  * - id sources: every `target_profile.id_sources` event is emitted by some step, `url_regex` compiles and has a group;
- * - templates use only [Placeholder.SUPPORTED_FORMS]; `{tester.<role>.<n>.<field>}` names a tester the quotas have. In `do`/`run` text and a step's own id source, `{last_id}` and
- *   `{event.<e>.id}` need an event emitted by an earlier step; assertions run after the step, so its own `emits` counts;
+ * - templates use only [Placeholder.SUPPORTED_FORMS]; `{tester.<role>.<n>.<field>}` names a tester the quotas have. In `do`/`run` text and a step's own id source,
+ *   `{event.<e>.id}` needs an event emitted by an earlier step; assertions run after the step, so its own `emits` counts.
+ *   `{last_id}` is the step's own event only (Faza 24.6): the one it waits for, and in its checks also the one it emits;
+ *   a step without either names another step's object with `{event.<e>.id}` (a target profile's id sources too);
+ *   `{pass}` is allowed in every campaign template (see [Placeholder.Pass]);
+ * - an event other steps wait for or name, emitted by a step up to several testers run, needs one emitter or a race;
  * - flows, `local_storage`, `dismiss`, `api_prefix` and `campaign.pacing` follow [TargetProfileRules].
+ *
+ * [warnings] (never blocking): a `parallel` step with more actors than `campaign.pacing.max_parallel_actors`, and
+ * `{last_id}` in the checks of a step several testers emit whose id source can read a colleague's object (`dom`, or an
+ * oracle path that does not name the tester).
  *
  * Issue lines come from [Campaign.sourceLines], falling back to [ScenarioStep.line].
  */
@@ -49,6 +59,8 @@ class DefaultCampaignValidator(
         campaign: Campaign,
         knownRunFunctions: Set<String>,
     ): List<ValidationIssue> = Rules(campaign, knownRunFunctions, templates).check()
+
+    override fun warnings(campaign: Campaign): List<ValidationIssue> = Rules(campaign, emptySet(), templates).warnings()
 
     /** One validation pass; holds the issues found so far. */
     private class Rules(
@@ -67,12 +79,120 @@ class DefaultCampaignValidator(
                 .eachCount()
         private val emittedAnywhere: Set<String> get() = emittingSteps.keys
 
+        /** Events other steps depend on: waited for, or named by `{event.<name>.id}` in any template. */
+        private val consumedEvents: Set<String> by lazy {
+            campaign.allSteps.mapNotNull { it.waitFor?.event }.toSet() +
+                campaign.allSteps
+                    .flatMap(::stepTemplates)
+                    .flatMap { templates.placeholders(it) }
+                    .mapNotNull { (Placeholder.parse(it) as? Placeholder.EventId)?.event }
+        }
+
         fun check(): List<ValidationIssue> {
             checkSettings()
             checkTargetProfile()
             checkSteps()
             return issues.toList()
         }
+
+        /** Every step with its YAML path (`setup[0]`, `steps[3]`), in the order the run performs them. */
+        private val located: List<Pair<String, ScenarioStep>> =
+            campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
+                campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
+
+        /** Valid, but likely not what the owner meant (Faza 24.15), step by step: never blocks a run. */
+        fun warnings(): List<ValidationIssue> =
+            located.flatMap { (path, step) -> listOfNotNull(pacingWarning(path, step), sharedIdSourceWarning(path, step)) }
+
+        /**
+         * A `parallel` step (every race) starts all its actors at the same instant and so ignores
+         * `campaign.pacing.max_parallel_actors`: with more actors than the limit, the site may turn the extra ones away
+         * (429) exactly where the race needs every racer.
+         */
+        private fun pacingWarning(
+            path: String,
+            step: ScenarioStep,
+        ): ValidationIssue? {
+            val limit = settings.pacing.maxParallelActors ?: return null
+            val actors = maxMatches(step.actors)
+            if (!step.parallel || actors <= limit) return null
+            val what = if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) "race" else "parallel step"
+            return ValidationIssue(
+                campaign.sourceLines.lineOf("$path.parallel") ?: step.line,
+                "$what '${step.id}' starts up to $actors testers at the same instant, more than " +
+                    "campaign.pacing.max_parallel_actors ($limit): a parallel step ignores the limit so its actors start " +
+                    "together, and the site may refuse the extra ones (429); give it fewer actors or raise the limit",
+            )
+        }
+
+        /**
+         * `{last_id}` in the checks of a step that several testers emit is meant to be each tester's own object (Faza
+         * 24.6), but an id read from the tester's page (`dom`, e.g. the first item of a list) or from an oracle path
+         * that does not name the tester (`/test/tickets/latest`) can be a colleague's object made at the same moment:
+         * the check then tests the colleague's object twice and the tester's own never. Only a source scoped to the
+         * tester is safe: the URL the tester's own write led to (`url_regex`), an oracle path with a placeholder naming
+         * the tester ([Placeholder.TESTER_SCOPED_SELF_FIELDS]), which the harness fills in before it asks, or the agent's
+         * own report. A `dom` selector never is: the harness reads it as written, so a placeholder in it is not filled in
+         * and names nobody. A race is left out: only its winner emits. An event other steps consume from several
+         * emitters is an error already.
+         */
+        private fun sharedIdSourceWarning(
+            path: String,
+            step: ScenarioStep,
+        ): ValidationIssue? {
+            val emits = step.emits ?: return null
+            if (step.assertions.any { it is AssertionSpec.OnlyOneSucceeds }) return null
+            val emitters = maxMatches(step.actors)
+            if (emitters < 2 || !usesLastIdInChecks(step)) return null
+            val own = emits.idSource
+            val source = own ?: campaign.target.idSource(emits.event) ?: return null
+            val read = sharedSourceText(source) ?: return null
+            val declared = if (own != null) "emits.id_from" else "target_profile.id_sources.${emits.event}"
+            val unfilled =
+                (source as? IdSource.DomAttribute)
+                    ?.let { templates.placeholders(it.selector) }
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { names ->
+                        "; the harness reads a dom selector as written, so ${names.joinToString { "{$it}" }} in it is not " +
+                            "filled in and names nobody"
+                    }.orEmpty()
+            return ValidationIssue(
+                campaign.sourceLines.lineOf(if (own != null) "$path.emits.id_from" else "$path.emits") ?: step.line,
+                "step '${step.id}': {last_id} in its checks is the id of each tester's '${emits.event}' object, read from " +
+                    "$read ($declared), but up to $emitters testers emit it here, so a tester can read a colleague's object " +
+                    "made at the same moment and check it instead of its own; read the id from the tester's own write: " +
+                    "url_regex on the page it lands on, or an oracle path naming the tester, e.g. " +
+                    "/test/<objects>/latest?by={self.email}$unfilled",
+            )
+        }
+
+        private fun usesLastIdInChecks(step: ScenarioStep): Boolean =
+            step.assertions
+                .flatMap(::assertionTemplates)
+                .flatMap { templates.placeholders(it) }
+                .any { Placeholder.parse(it) == Placeholder.LastId }
+
+        /** How [source] reads an id that need not be the tester's own (`dom '<selector>'`), or null when it is scoped to the tester. */
+        private fun sharedSourceText(source: IdSource): String? =
+            when (source) {
+                is IdSource.DomAttribute -> {
+                    "dom '${source.selector}' (${source.attribute})"
+                }
+
+                is IdSource.OracleField -> {
+                    "oracle '${source.path}' (${source.field})".takeUnless { namesTester(source.path) }
+                }
+
+                is IdSource.UrlRegex, IdSource.AgentReport -> {
+                    null
+                }
+            }
+
+        /** Whether an oracle [path] names one tester: the harness renders it for each tester before it asks. */
+        private fun namesTester(path: String): Boolean =
+            templates.placeholders(path).any {
+                (Placeholder.parse(it) as? Placeholder.Self)?.field in Placeholder.TESTER_SCOPED_SELF_FIELDS
+            }
 
         private fun report(
             path: String,
@@ -242,7 +362,8 @@ class DefaultCampaignValidator(
         // ---- target profile ----
 
         private fun checkTargetProfile() {
-            val anyStep = EventScope(emittedAnywhere, "any step")
+            // The profile's templates run inside the step that uses them, so `{last_id}` is that step's own event there.
+            val anyStep = EventScope(emittedAnywhere, "any step", lastIdEvent = USING_STEP)
             campaign.target.paths.forEach { (key, value) ->
                 val path = "target_profile.paths.$key"
                 relativePathProblem(value)?.let { report(path, "$path $it") }
@@ -261,6 +382,17 @@ class DefaultCampaignValidator(
             TargetProfileRules(campaign.target, settings.pacing) { path, message -> report(path, message) }.check()
         }
 
+        /**
+         * An oracle path that `{api}` put on the site's API host (a full `api_prefix`, 2026-09-30): only `http_status`
+         * checks go there; the test API is always on the target, where the test token belongs.
+         */
+        private fun apiHostProblem(path: String): String? {
+            val origin = campaign.target.apiOrigin ?: return null
+            if (!ApiAddress.onOrigin(path, origin)) return null
+            return "is on the site's API host $origin ('{api}' with a full api_prefix): only http_status checks go there; " +
+                "oracle paths go to the test API on the target"
+        }
+
         private fun checkIdSource(
             source: IdSource,
             path: String,
@@ -274,7 +406,9 @@ class DefaultCampaignValidator(
                 }
 
                 is IdSource.OracleField -> {
-                    relativePathProblem(source.path)?.let { report(path, "$context: oracle path $it", fallbackLine) }
+                    (apiHostProblem(source.path) ?: relativePathProblem(source.path))?.let {
+                        report(path, "$context: oracle path $it", fallbackLine)
+                    }
                     if (source.field.isBlank()) report(path, "$context: oracle field must not be blank", fallbackLine)
                     checkTemplate(source.path, path, context, scope, fallbackLine)
                 }
@@ -313,9 +447,6 @@ class DefaultCampaignValidator(
             if (campaign.allSteps.isEmpty()) report("steps", "the campaign has no setup or steps")
             val emittedBefore = LinkedHashSet<String>()
             val firstLineOfId = mutableMapOf<String, Int?>()
-            val located =
-                campaign.setup.mapIndexed { i, step -> "setup[$i]" to step } +
-                    campaign.steps.mapIndexed { i, step -> "steps[$i]" to step }
             located.forEach { (path, step) ->
                 StepRules(path, step, emittedBefore.toSet()).check(firstLineOfId)
                 step.emits?.let { emittedBefore += it.event }
@@ -328,9 +459,13 @@ class DefaultCampaignValidator(
             emittedBefore: Set<String>,
         ) {
             private val name = "step '${step.id}'"
-            private val beforeScope = EventScope(emittedBefore, "an earlier step")
+            private val beforeScope = EventScope(emittedBefore, "an earlier step", lastIdEvent = step.waitFor?.event)
             private val throughScope =
-                EventScope(emittedBefore + listOfNotNull(step.emits?.event), "this or an earlier step")
+                EventScope(
+                    emittedBefore + listOfNotNull(step.emits?.event),
+                    "this or an earlier step",
+                    lastIdEvent = step.emits?.event ?: step.waitFor?.event,
+                )
 
             fun check(firstLineOfId: MutableMap<String, Int?>) {
                 checkId(firstLineOfId)
@@ -383,7 +518,11 @@ class DefaultCampaignValidator(
                     )
                 }
                 if (unknown.isEmpty() && maxMatches(expression) == 0) {
-                    report("actor", "$name: actor '${expression.raw}' can never match a tester with the campaign's role quotas")
+                    report(
+                        "actor",
+                        "$name: actor '${expression.raw}' can never match a tester with the campaign's role quotas" +
+                            dealingHint(expression),
+                    )
                 }
             }
 
@@ -451,8 +590,20 @@ class DefaultCampaignValidator(
                             "step so wait_for and {last_id} cannot pick up an older step's object",
                     )
                 }
+                val emitters = maxMatches(step.actors)
+                if (emits.event in consumedEvents && emitters > 1 && step.assertions.none { it is AssertionSpec.OnlyOneSucceeds }) {
+                    report(
+                        "emits",
+                        "$name: '${emits.event}' is waited for or named by other steps, but up to $emitters testers emit it here, so " +
+                            "which object they get would depend on who finished last; let one tester emit it (e.g. [n=1]) or " +
+                            "make the step a race (only_one_succeeds)",
+                    )
+                }
                 emits.idSource?.let {
                     checkIdSource(it, "$path.emits.id_from", "$name, emits.id_from", beforeScope, step.line)
+                }
+                requestProblems(emits.request, "mark when the change reached the target").forEach {
+                    report("emits", "$name, emits: $it")
                 }
             }
 
@@ -494,12 +645,12 @@ class DefaultCampaignValidator(
                     }
 
                     is AssertionSpec.Oracle -> {
-                        listOfNotNull(relativePathProblem(assertion.path)?.let { "path $it" })
+                        listOfNotNull((apiHostProblem(assertion.path) ?: relativePathProblem(assertion.path))?.let { "path $it" })
                     }
 
                     is AssertionSpec.HttpStatus -> {
                         listOfNotNull(
-                            relativePathProblem(assertion.path)?.let { "path $it" },
+                            httpPathProblem(assertion.path, campaign.target.apiOrigin)?.let { "path $it" },
                             "method '${assertion.method}' is not one of $HTTP_METHODS".takeIf { assertion.method !in HTTP_METHODS },
                             "equals must be an HTTP status (100-599), was ${assertion.equals}".takeIf { assertion.equals !in 100..599 },
                         )
@@ -524,6 +675,10 @@ class DefaultCampaignValidator(
 
                     is AssertionSpec.OnlyOneSucceeds -> {
                         listOfNotNull(
+                            (
+                                "needs the request that decides the race, e.g. {request: \"POST .*/approve\"}: without it any " +
+                                    "mutating request counts, and an unrelated one (a notification marked read) makes a second winner"
+                            ).takeIf { assertion.request == null },
                             "needs parallel: true so the actors start at the same instant".takeUnless { step.parallel },
                             "needs a do or run whose outcomes are compared".takeIf { step.action == StepAction.None },
                             maxMatches(step.actors).takeIf { it < 2 }?.let {
@@ -532,16 +687,20 @@ class DefaultCampaignValidator(
                             "may appear only once per step".takeIf {
                                 step.assertions.take(index).any { it is AssertionSpec.OnlyOneSucceeds }
                             },
-                        ) + requestProblems(assertion.request) + raceOracleProblems(assertion.oracle)
+                        ) + requestProblems(assertion.request, "decide a race") + raceOracleProblems(assertion.oracle)
                     }
                 }
 
-            private fun requestProblems(request: RequestPattern?): List<String> {
+            /** What is wrong with [request]; only requests that change something can [purpose]. */
+            private fun requestProblems(
+                request: RequestPattern?,
+                purpose: String,
+            ): List<String> {
                 request ?: return emptyList()
                 val method =
                     request.method?.takeIf { it !in RequestPattern.MUTATING_METHODS }?.let {
                         "request method '$it' is not one of ${RequestPattern.MUTATING_METHODS.joinToString(", ")} " +
-                            "(or ${RequestPattern.ANY_METHOD} for any of them): only requests that change something decide a race"
+                            "(or ${RequestPattern.ANY_METHOD} for any of them): only requests that change something $purpose"
                     }
                 val regex =
                     try {
@@ -568,18 +727,26 @@ class DefaultCampaignValidator(
                     "oracle field must not be blank".takeIf { oracle.field?.isBlank() == true },
                 ) + actorBound
             }
-
-            private fun assertionTemplates(assertion: AssertionSpec): List<String> =
-                when (assertion) {
-                    is AssertionSpec.VisibleText -> listOf(assertion.text)
-                    is AssertionSpec.NotVisible -> listOfNotNull(assertion.text, assertion.selector)
-                    is AssertionSpec.Oracle -> listOfNotNull(assertion.path, assertion.equals, assertion.contains)
-                    is AssertionSpec.HttpStatus -> listOf(assertion.path)
-                    is AssertionSpec.Count -> listOf(assertion.selector)
-                    is AssertionSpec.LatencyMax -> emptyList()
-                    is AssertionSpec.OnlyOneSucceeds -> listOfNotNull(assertion.oracle?.path, assertion.oracle?.equals)
-                }
         }
+
+        private fun assertionTemplates(assertion: AssertionSpec): List<String> =
+            when (assertion) {
+                is AssertionSpec.VisibleText -> listOf(assertion.text)
+                is AssertionSpec.NotVisible -> listOfNotNull(assertion.text, assertion.selector)
+                is AssertionSpec.Oracle -> listOfNotNull(assertion.path, assertion.equals, assertion.contains)
+                is AssertionSpec.HttpStatus -> listOf(assertion.path)
+                is AssertionSpec.Count -> listOf(assertion.selector)
+                is AssertionSpec.LatencyMax -> emptyList()
+                is AssertionSpec.OnlyOneSucceeds -> listOfNotNull(assertion.oracle?.path, assertion.oracle?.equals)
+            }
+
+        /** Every template of [step]: its `do` text, `run` arguments, own id source and checks. */
+        private fun stepTemplates(step: ScenarioStep): List<String> =
+            when (val action = step.action) {
+                is StepAction.Do -> listOf(action.instruction)
+                is StepAction.Run -> action.args.values.toList()
+                StepAction.None -> emptyList()
+            } + listOfNotNull((step.emits?.idSource as? IdSource.OracleField)?.path) + step.assertions.flatMap(::assertionTemplates)
 
         // ---- templates ----
 
@@ -623,7 +790,15 @@ class DefaultCampaignValidator(
                 }
 
                 Placeholder.LastId -> {
-                    "{$name} needs an event emitted by ${scope.description}".takeIf { scope.events.isEmpty() }
+                    (
+                        "{$name} has no event of its own here: it stands for the event this step waits for (wait_for) and, " +
+                            "in its checks, the one it emits; name another step's object with {event.<name>.id}"
+                    ).takeIf { scope.lastIdEvent == null }
+                }
+
+                // Every step runs in some pass, so the harness always has one to write in.
+                Placeholder.Pass -> {
+                    null
                 }
 
                 is Placeholder.EventId -> {
@@ -665,19 +840,41 @@ class DefaultCampaignValidator(
 
         private fun maxSelectorMatches(selector: ActorSelector): Int {
             val role = selector.role
-            if (selector.department != null && (role == Role.ADMIN || selector.department !in settings.departments)) return 0
-            if (settings.tenant == Tenant.NONE) {
-                val bound =
-                    minOf(
-                        settings.roles.count(role).coerceAtLeast(0),
-                        selector.registration?.let(settings.registration::count) ?: Int.MAX_VALUE,
-                    )
-                return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
+            var bound = inDepartment(selector) ?: return 0
+            selector.registration?.let { mode ->
+                val joiners = if (settings.tenant == Tenant.NONE) settings.registration.count(mode) else joinersOf(role, mode)
+                bound = minOf(bound, joiners.coerceAtLeast(0))
             }
-            var bound = settings.roles.count(role).coerceAtLeast(0)
-            selector.registration?.let { mode -> bound = minOf(bound, joinersOf(role, mode)) }
             return selector.nth?.let { if (it <= bound) 1 else 0 } ?: bound
         }
+
+        /**
+         * Testers of the selector's role in its department as the registry deals them ([DepartmentDealing]), all of the
+         * role without a department; null for a department the campaign does not list.
+         */
+        private fun inDepartment(selector: ActorSelector): Int? {
+            val department = selector.department ?: return settings.roles.count(selector.role).coerceAtLeast(0)
+            if (department !in settings.departments) return null
+            return DepartmentDealing.testers(settings, selector.role, department)
+        }
+
+        /**
+         * Why an expression that can never match does so when one of its selectors names a department the registry
+         * deals too few of the role to, although the role alone has enough: ` (the testers are dealt ...)`; else empty.
+         */
+        private fun dealingHint(expression: ActorExpression): String =
+            expression.selectors
+                .distinct()
+                .mapNotNull { selector ->
+                    val department = selector.department ?: return@mapNotNull null
+                    val dealt = DepartmentDealing.testers(settings, selector.role, department)
+                    val needed = selector.nth ?: 1
+                    val total = settings.roles.count(selector.role)
+                    if (dealt >= needed || total < needed) return@mapNotNull null
+                    "department '$department' gets $dealt of the $total '${selector.role.key}' testers"
+                }.takeIf { it.isNotEmpty() }
+                ?.joinToString("; ", prefix = " (the testers are dealt to the departments in turn, so ", postfix = ")")
+                .orEmpty()
 
         /**
          * Upper bound of testers of [role] joining by [mode]: the admin owns the company, managers are always invited
@@ -719,9 +916,13 @@ class DefaultCampaignValidator(
     private data class EventScope(
         val events: Set<String>,
         val description: String,
+        /** The event `{last_id}` stands for here: the step's own (awaited; in its checks also emitted); null: none. */
+        val lastIdEvent: String? = null,
     )
 
     private companion object {
+        /** `{last_id}` of a target profile template: the event of the step that uses it, known only at run time. */
+        const val USING_STEP = "(the step that uses it)"
         val WEB_SCHEMES = setOf("http", "https")
 
         /**
@@ -744,6 +945,20 @@ class DefaultCampaignValidator(
                 !duration.isPositive() -> "must be positive, was $duration"
                 !duration.isFinite() -> "must be finite, was $duration"
                 else -> null
+            }
+
+        /**
+         * An `http_status` path: a path on the target, or an address on the site's API host when `api_prefix` gives one
+         * ([apiOrigin]; that host is checked like the target before a run starts). Any other host is refused.
+         */
+        fun httpPathProblem(
+            path: String,
+            apiOrigin: URI?,
+        ): String? =
+            if (apiOrigin != null && ApiAddress.onOrigin(path, apiOrigin)) {
+                relativePathProblem(path.substring(apiOrigin.toString().length))
+            } else {
+                relativePathProblem(path)
             }
 
         /**

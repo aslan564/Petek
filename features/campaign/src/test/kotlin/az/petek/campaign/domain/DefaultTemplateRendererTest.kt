@@ -35,6 +35,7 @@ class DefaultTemplateRendererTest {
                 ),
             eventIds = mapOf("announcement_created" to "17", "ticket_created" to "99"),
             testers = mapOf("manager.1" to mapOf("name" to "Sahil Quliyev", "email" to "sahil.k7x2.a02@test.portal.example")),
+            pass = "k7x2-2",
         )
 
     @Test
@@ -61,6 +62,22 @@ class DefaultTemplateRendererTest {
         shouldThrow<TemplateException> { renderer.render("{tester.manager.2.email}", context) }.message shouldContain
             "there is no tester 2 of role 'manager'"
         shouldThrow<TemplateException> { renderer.render("{tester.manager.1.password}", context) }
+    }
+
+    @Test
+    fun `pass marks a text with the execution it belongs to, and only a run has one`() {
+        renderer.render("Həftəlik xəbər {pass}", context) shouldBe "Həftəlik xəbər k7x2-2"
+        shouldThrow<TemplateException> { renderer.render("Həftəlik xəbər {pass}", context.copy(pass = null)) }.message shouldContain
+            "not rendered within a run"
+    }
+
+    @Test
+    fun `a missing object is told apart from a template written wrong`() {
+        val empty = TemplateContext(null, emptyMap(), emptyMap())
+
+        shouldThrow<TemplateException> { renderer.render("/t/{last_id}/{event.ticket_created.id}", empty) }.missingObject shouldBe true
+        shouldThrow<TemplateException> { renderer.render("/t/{last_id}/{self.email}", empty) }.missingObject shouldBe false
+        shouldThrow<TemplateException> { renderer.render("{nickname}", context) }.missingObject shouldBe false
     }
 
     @Test
@@ -105,7 +122,7 @@ class DefaultTemplateRendererTest {
     fun `a missing last id fails instead of producing a wrong URL`() {
         val error = shouldThrow<TemplateException> { renderer.render("/t/{last_id}", context.copy(lastId = null)) }
         error.message shouldContain "{last_id}"
-        error.message shouldContain "no object id has been emitted yet"
+        error.message shouldContain "this step's own event carried no object id"
     }
 
     @Test

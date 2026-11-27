@@ -80,9 +80,11 @@ internal class RegisterOwnerRunFunction(
             } catch (e: OracleException) {
                 return Publication(null, " The company was not published: the test API failed (${e.message}).")
             } ?: return Publication(null, " The company was not published: the test API does not know it yet.")
-        runtime.shared.put(SharedRunState.COMPANY_ID, company.id)
-        company.code?.let { runtime.shared.put(SharedRunState.COMPANY_CODE, it) }
-        return Publication(company, " Company id ${company.id}.")
+        // Write-once: a company another owner published first stays the run's, and the summary says this one differs.
+        val published = publish(SharedRunState.COMPANY_ID, company.id)
+        company.code?.let { publish(SharedRunState.COMPANY_CODE, it) }
+        val kept = if (published == company.id) "" else " The run keeps company $published, published before this one."
+        return Publication(company, " Company id ${company.id}.$kept")
     }
 
     companion object {

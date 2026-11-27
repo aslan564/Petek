@@ -293,7 +293,9 @@ class MordantMonitorView(
 
     private fun summaryLine(summary: RunSummary): String =
         "Run ${summary.runId}: ${summary.outcome} · steps passed ${summary.stepsPassed}, failed ${summary.stepsFailed}" +
-            " · assertions failed ${summary.assertionsFailed} · failed agents ${summary.failedAgents}" +
+            " · assertions failed ${summary.assertionsFailed}" +
+            (if (summary.assertionsInconclusive > 0) " · inconclusive ${summary.assertionsInconclusive}" else "") +
+            " · failed agents ${summary.failedAgents}" +
             " · ${summary.durationMs / MILLIS_PER_SECOND} s"
 
     private fun styleOf(state: AgentState): TextStyle =

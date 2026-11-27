@@ -137,6 +137,24 @@ fun interface TestTargetCheck {
     }
 }
 
+/**
+ * Asks the site's test API about an object the trial touch has just created (Faza 25.2): whether it serves [resource]
+ * (`GET /test/<resource>/latest?by=`, docs/TARGET_CONTRACT.md) and answers with the newest one [by] created, carrying
+ * [marker]. A draft writes oracle checks only for resources proven so, never from a fixed list. Null when it cannot
+ * say (no test API, an error); [NONE] never asks.
+ */
+fun interface TestApiProbe {
+    suspend fun serves(
+        resource: String,
+        by: String,
+        marker: String,
+    ): Boolean?
+
+    companion object {
+        val NONE: TestApiProbe = TestApiProbe { _, _, _ -> null }
+    }
+}
+
 sealed interface TestTargetVerdict {
     /** [evidence] says how the target was confirmed, e.g. `company c1 is_test=true`. */
     data class Confirmed(

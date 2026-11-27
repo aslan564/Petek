@@ -20,15 +20,46 @@ import az.petek.core.time.HarnessTimestamp
 import az.petek.identity.domain.Identity
 import kotlin.time.Duration
 
-/** An event published by an actor (`emits`). [t0] is taken by the harness at publish time. */
+/**
+ * An event published by an actor (`emits`). [publishedAt] is taken by the harness when the event is published, after
+ * the emitter's whole action; [origin] says when the change it stands for reached the target, so a delivery latency is
+ * measured from the write instead of from the publish (Faza 24.10, docs/adr/0006).
+ */
 data class PublishedEvent(
     val eventId: EventId,
     val name: String,
     val objectId: String?,
     val emitter: AgentId,
-    val t0: HarnessTimestamp,
+    val publishedAt: HarnessTimestamp,
     /** Monotonic publish order within the run. */
     val sequence: Long,
+    val origin: EventOrigin? = null,
+    /** The execution of the steps the emitter ran in (`{pass}`): 1 in the first pass, the wave's number, the swap's. */
+    val pass: Int = 1,
+) {
+    /** t0 of a delivery latency: the write when the emitter's page showed it, else the publish. */
+    val t0: HarnessTimestamp get() = origin?.write?.at ?: publishedAt
+}
+
+/**
+ * How the change behind an event reached the target, as the emitter's own page saw it: its action began at
+ * [actionStartedAt] (the write cannot be earlier), and [write] is the accepted request that made the change, null when
+ * the page showed none (another origin's API, a WebSocket message, a session that could not be read).
+ */
+data class EventOrigin(
+    val actionStartedAt: HarnessTimestamp,
+    val write: EventWrite?,
+)
+
+/**
+ * The accepted request behind an event: [request] as `POST /api/announcements -> 201`, answered at harness time [at].
+ * [exact] is false when the step named no request (`emits.request`) and its action sent several: [at] is then the first
+ * of them, and the real write may be a later one.
+ */
+data class EventWrite(
+    val request: String,
+    val at: HarnessTimestamp,
+    val exact: Boolean,
 )
 
 /**
@@ -36,11 +67,23 @@ data class PublishedEvent(
  * Events are retained for the whole run, so a waiter that arrives late still sees an event emitted earlier.
  */
 interface EventBus {
+    /**
+     * Publishes an event now; [origin] is when its change reached the target, when the emitter's page showed it, and
+     * [pass] the execution of the steps it was published in.
+     */
     suspend fun publish(
         name: String,
         objectId: String?,
         emitter: AgentId,
+        origin: EventOrigin? = null,
+        pass: Int = 1,
     ): PublishedEvent
+
+    /**
+     * Makes [event], published on an earlier bus of the same run, available on this one as it was (same id, object and
+     * times) with this bus's next sequence: a setup event goes on serving the waves after its own (Faza 24.11).
+     */
+    suspend fun carry(event: PublishedEvent): PublishedEvent
 
     /** Latest event named [name] with sequence > [afterSequence], waiting up to [timeout]; null on timeout. */
     suspend fun await(
@@ -105,7 +148,7 @@ interface MonitorView {
     /** One step × agent task changed its state; sent for every transition, in the order they happened per task. */
     fun taskUpdated(update: TaskUpdate) = Unit
 
-    /** An actor's `emits` published [event]; its t0 is the harness time of publishing. */
+    /** An actor's `emits` published [event]; its t0 is the write it stands for, or the publish when that was not seen. */
     fun eventPublished(event: PublishedEvent) = Unit
 
     /**
@@ -191,6 +234,20 @@ data class RunOptions(
      * eyes. An account is only ever in one browser at a time; the evidence records which tester holds which account.
      */
     val swapAccounts: Boolean = false,
+    /**
+     * The site's owner proved it is theirs, or it is local (ADR-0012): only then do testers go out through the owner's
+     * proxies (`PETEK_PROXIES`, Faza 21). A visitor run on an unproved site runs from the machine's own IP, so no one
+     * spreads load on a site that is not theirs over many addresses. Off unless the caller checked the proof.
+     */
+    val ownSite: Boolean = false,
+    /** The site's release this run tests, as the owner names it (`--release`); stored with the run for comparing releases. */
+    val release: String? = null,
+    /**
+     * How many testers this machine is advised to carry at once (`petek capacity`), when the caller knows it. Recorded
+     * as evidence at the run's start next to the run's own count (`capacity`), so a run over it is never silent; it
+     * changes no verdict. Null: the runner asks its own settings (the app probes this machine), else nothing is recorded.
+     */
+    val capacityAdvice: Int? = null,
 )
 
 enum class RunOutcome { PASSED, FAILED, ABORTED }
@@ -204,4 +261,10 @@ data class RunSummary(
     val failedAgents: Int,
     val reportDirectory: String?,
     val durationMs: Long,
-)
+    /** Checks whose evidence could not decide them (Faza 24.12); a run with any is not PASSED. */
+    val assertionsInconclusive: Int = 0,
+) {
+    /** Not PASSED only because checks could not be decided: no step and no check failed ([assertionsInconclusive] > 0). */
+    val undecidedOnly: Boolean
+        get() = outcome == RunOutcome.FAILED && stepsFailed == 0 && assertionsFailed == 0 && assertionsInconclusive > 0
+}

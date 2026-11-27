@@ -17,7 +17,6 @@ import az.petek.ownership.domain.OwnershipChallenge
 import az.petek.ownership.domain.OwnershipLedger
 import az.petek.ownership.domain.OwnershipProbe
 import az.petek.ownership.domain.OwnershipRecord
-import az.petek.ownership.domain.OwnershipRequiredException
 import az.petek.ownership.domain.OwnershipStatus
 import az.petek.ownership.domain.OwnershipTokens
 import az.petek.ownership.domain.ProofLook
@@ -78,13 +77,6 @@ class SiteOwnership(
             is ProofLook.Found -> OwnershipStatus.Verified(OwnershipRecord(host, found.method, clock.now().wall))
             is ProofLook.Missing -> OwnershipStatus.Unverified(challenge, found.looked)
         }
-    }
-
-    /** [check], or [OwnershipRequiredException] when the site is not proved to be the caller's. */
-    suspend fun requireFullTest(target: URI): OwnershipStatus {
-        val status = check(target)
-        if (status is OwnershipStatus.Unverified) throw OwnershipRequiredException(status)
-        return status
     }
 
     private suspend fun isExempt(host: String): Boolean = SiteHosts.isLocalName(host) || locality.isLocal(host)

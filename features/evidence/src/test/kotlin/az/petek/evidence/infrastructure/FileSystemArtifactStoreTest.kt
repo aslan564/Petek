@@ -106,6 +106,7 @@ class FileSystemArtifactStoreTest {
                     "run_1/a07/0006-oracle.json",
                     "run_1/a07/0007-prompt.txt",
                     "run_1/a07/0008-log.txt",
+                    "run_1/a07/0009-visual.png",
                 )
         }
 

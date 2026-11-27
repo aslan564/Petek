@@ -33,11 +33,14 @@ class InitTemplates internal constructor(
 
     fun skill(): String = read("SKILL.md")
 
-    /** The fragment for [ai]'s instruction file; Cursor's rules file needs its front matter. */
-    fun fragment(ai: HostAi): String {
-        val body = read("fragment.md").trimEnd()
-        return if (ai == HostAi.CURSOR) "$CURSOR_FRONT_MATTER\n$body" else body
-    }
+    /** The fragment of every agent's instruction file, written between the markers. */
+    fun fragment(): String = read("fragment.md").trimEnd()
+
+    /**
+     * What [ai]'s instruction file must start with, above the markers: Cursor reads a rule's front matter only at the
+     * top of the file. Null for the others.
+     */
+    fun frontMatter(ai: HostAi): String? = CURSOR_FRONT_MATTER.takeIf { ai == HostAi.CURSOR }
 
     companion object {
         private const val TARGET_PLACEHOLDER = "{target}"

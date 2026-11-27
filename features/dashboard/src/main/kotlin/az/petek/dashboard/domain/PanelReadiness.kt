@@ -32,6 +32,17 @@ interface PanelReadiness {
     /** Sends the configured AI one tiny structured request and says how it went. */
     suspend fun testAi(): AiCheckView = throw PanelUnavailableException(UNAVAILABLE)
 
+    /** The AIs the owner may choose on this screen and what each needs; contacts nothing. */
+    suspend fun aiOptions(): AiOptionsView = throw PanelUnavailableException(UNAVAILABLE)
+
+    /**
+     * Uses [choice] from the next exploration, test or run on (Faza 23), without restarting the panel, and writes it to
+     * the configuration file so the next start uses it too; a key goes to that file only, never to the database or a
+     * view. Fails with [PanelRequestException] naming the field, or [PanelConflictException] while a test, an
+     * exploration or a run is going.
+     */
+    suspend fun chooseAi(choice: AiChoice): ReadinessView = throw PanelUnavailableException(UNAVAILABLE)
+
     private companion object {
         const val UNAVAILABLE = "Quraşdırma yoxlaması bu paneldə mümkün deyil."
     }
@@ -55,6 +66,39 @@ data class AiView(
     /** False when no AI is configured: code checks still run, `do` steps and the AI's help do not. */
     val configured: Boolean,
 )
+
+/** One AI the owner may choose; [needs] what it takes besides its name: `model`, `endpoint`, `key`. */
+data class AiOptionView(
+    val provider: String,
+    /** What it is, in the owner's words. */
+    val label: String,
+    /** Whether it can be used on this computer now: its program is on PATH, or it is reached over the network. */
+    val available: Boolean,
+    val needs: List<String>,
+)
+
+data class AiOptionsView(
+    val options: List<AiOptionView>,
+    /** The provider as the configuration file names it (`auto` included); what it resolved to is in [ReadinessView.ai]. */
+    val chosen: String,
+    val model: String?,
+    val endpoint: String?,
+    /** Whether a key is configured; the key itself never leaves the configuration file. */
+    val keySet: Boolean,
+    /** Why the AI cannot be chosen here (no configuration file to keep it in), or null when it can. */
+    val unavailable: String?,
+)
+
+/** What the owner chose; a null or blank [key] keeps the configured one. */
+data class AiChoice(
+    val provider: String,
+    val model: String? = null,
+    val endpoint: String? = null,
+    val key: String? = null,
+) {
+    override fun toString(): String =
+        "AiChoice($provider, model=$model, endpoint=$endpoint, key=${if (key.isNullOrBlank()) "kept" else "***"})"
+}
 
 data class SiteCheckView(
     val reachable: Boolean,

@@ -243,7 +243,7 @@ internal class FlowRunner(
                 }
             val link =
                 known ?: trace
-                    .act("await the $kind e-mail for ${identity.email}") { awaitLinkMail(step.pattern) }
+                    .act("await the $kind e-mail for ${identity.email}", { "message ${it.messageId}" }) { awaitLinkMail(step.pattern) }
                     .link
                     ?.toString()
                     ?: throw RunFailure(defaultReason, "The $kind e-mail for ${identity.email} contains no link.")

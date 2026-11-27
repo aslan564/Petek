@@ -90,7 +90,9 @@ object TargetProfileConfig {
         profile: ResolvedTarget,
     ): PetekConfig {
         val spec = profile.spec
-        val token = profile.testToken ?: base.testToken.takeIf { spec.testToken == null }
+        // `PETEK_TEST_TOKEN` belongs to the base's own site: a profile of another site that names no token gets none,
+        // or the base's token would go to that site's test API (rule 10).
+        val token = profile.testToken ?: base.testToken.takeIf { spec.testToken == null && origin(spec.url) == origin(base.target) }
         // The base's test-API inbox needs a token this site may not have; its own Mailpit is the neutral fallback.
         val mailSource =
             spec.mail.source?.let(MailSource::fromKey)
@@ -101,6 +103,7 @@ object TargetProfileConfig {
             target = WebUrls.canonical(spec.url),
             testApiUrl = spec.apiUrl?.let(WebUrls::canonical),
             productionHosts = base.productionHosts + spec.productionHosts,
+            allowedHosts = base.allowedHosts + spec.allowedHosts,
             testToken = token,
             mailSource = mailSource,
             mailDomain = inbox?.substringAfter('@') ?: spec.mail.domain ?: base.mailDomain,

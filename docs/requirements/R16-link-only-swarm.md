@@ -1,6 +1,6 @@
 # R16 — Link-only swarm: a link in, a tested site out
 
-**Status:** Partial — Faza 15, 16, 20, 21 done; 17–19 largely done (see `docs/PLAN.md`); 22 open (owner's servers) · **Plan:** Faza 15–22 · **ADRs:** 0012, 0007, 0010
+**Status:** Partial — Faza 15, 16, 20, 21 done; 17–19 largely done (19: the catalogue, showcase and news cards; the shop cards wait for Faza 22, see `docs/PLAN.md`); 22 open (owner's servers) · **Plan:** Faza 15–22 · **ADRs:** 0012, 0007, 0010
 
 ## Requirement
 
@@ -32,11 +32,16 @@ account between concurrent testers, and never lets testers see each other.
 
 ## Modules and key types
 
-To be filled per phase.
+- Faza 19: `explorer` `SmallBugCard`, `SmallBugCatalog` (the cards, each tied to the patterns that check it or saying
+  why code does not yet), `Drafts`, `TestPattern.LANGUAGE_MIRRORS`, `TestPattern.EMPTY_LISTS`, `PageModel.lists`;
+  `agent` `PageChecksRunFunction` (`mirrors`, `lists`); `browser` `PageFacts.alternates`; `core` `PathSegments`.
 
 ## Verification
 
-To be filled per phase.
+- Faza 19: `GenerateScenarioUseCaseTest` (a showcase and a news draft name every card of their kind with its state; a
+  public object is no leak, a draft is; a comment form counts its own items), `PageChecksRunFunctionTest` (language
+  versions, lists), `ExploreSiteUseCaseTest` (the visitor's lists), `TestPatternLibraryTest`,
+  `PlaywrightBrowserSessionTest` (`hreflang` read in Chromium).
 
 ## Open items
 

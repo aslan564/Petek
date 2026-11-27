@@ -108,10 +108,12 @@ object Models {
         evidence = listOf(ArtifactId("art_$id")),
     )
 
+    /** An accepted trial touch; [testApi] whether the site's test API answered with the object it created. */
     fun trial(
         seenLiveBy: Set<String>,
         urlPatternAfter: String? = null,
         role: String = "employee",
+        testApi: Boolean? = null,
     ) = TrialTouch(
         role,
         TrialOutcome.ACCEPTED,
@@ -120,6 +122,7 @@ object Models {
         urlPatternAfter,
         seenLiveBy,
         listOf(ArtifactId("art_trial")),
+        testApi,
     )
 
     fun model(
@@ -182,7 +185,7 @@ object Models {
                     name = "Göndər",
                     allowed = loggedIn,
                     httpPath = "/tickets",
-                    trial = trial(setOf("manager"), urlPatternAfter = "/tickets/{id}"),
+                    trial = trial(setOf("manager"), urlPatternAfter = "/tickets/{id}", testApi = true),
                     realtime = true,
                 ),
                 action(
@@ -210,7 +213,7 @@ object Models {
                     allowed = setOf("admin"),
                     forbidden = setOf("manager", "employee"),
                     httpPath = "/announcements",
-                    trial = trial(setOf("employee", "manager"), role = "admin"),
+                    trial = trial(setOf("employee", "manager"), role = "admin", testApi = true),
                     realtime = true,
                 ),
             )

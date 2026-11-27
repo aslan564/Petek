@@ -35,8 +35,9 @@ setup:
 steps:
   - id: announce
     actor: admin
-    do: "Elan yarat: 'Sabah 10:00 ümumi iclas'"
-    emits: announcement_created
+    do: "Elan yarat: 'Sabah 10:00 ümumi iclas {pass}'"
+    # The form's post is when the announcement reached the site: the readers' latency is measured from its answer.
+    emits: {event: announcement_created, request: "POST /announcements"}
     assert:
       - oracle: {path: "/test/announcements/{last_id}", field: status, equals: published}
 
@@ -45,7 +46,7 @@ steps:
     wait_for: announcement_created
     do: "Bildirişləri aç və yeni elanı oxu"
     assert:
-      - visible_text: {text: "Sabah 10:00 ümumi iclas", within_s: 5}
+      - visible_text: {text: "Sabah 10:00 ümumi iclas {pass}", within_s: 5}
       - latency_max: {ms: 5000}
       - oracle: {path: "/test/announcements/{last_id}/receipts", contains: "{self.email}"}
 
@@ -61,6 +62,12 @@ steps:
     assert:
       - oracle: {path: "/test/tickets/{last_id}", field: status, equals: in_progress}
 
+  - id: ticket_notified
+    actor: employee[dept=IT, n=1]
+    # The ticket's author is told when someone else changes its status: the notification the site stored for them.
+    assert:
+      - oracle: {path: "/test/notifications?user={self.email}", contains: "/tickets/{event.ticket_created.id}"}
+
   - id: race
     actor: ["manager[IT]", "manager[HR]"]   # quoted: [ and ] are YAML syntax inside a list
     parallel: true
@@ -74,4 +81,4 @@ steps:
     do: "Ticketi approve etməyə çalış"
     assert:
       - not_visible: {selector: "[data-testid=\"ticket-approve\"]"}
-      - http_status: {path: "/api/tickets/{last_id}/approve", method: POST, equals: 403}
+      - http_status: {path: "/api/tickets/{event.ticket_created.id}/approve", method: POST, equals: 403}
