@@ -24,7 +24,7 @@ Status: **Implemented** (in `develop`, covered by tests), **Partial** (core exis
 | [R14](R14-licensing-and-intellectual-property.md) | Open source under Apache 2.0: headers on every file, DCO sign-off, trademark, protected branches | Implemented | build-logic, all | 0013, 0011 | Faza 8 |
 | [R15](R15-distribution-and-monetization.md) | Installable in any project, runs beside it and in CI; paid editions possible | Partial (distribution done) | app, build-logic | 0009, 0011 | Faza 12, 14 |
 | [R16](R16-link-only-swarm.md) | A link in, a tested site out: verified ownership, explorer, gates, isolated cards, two-layer report | Partial | ownership, explorer, orchestration, agent, mail, reporting, app | 0012 | Faza 15–22 |
-| [R17](R17-mobile-apps.md) | Android and iOS testers beside web testers: same agent, clock, assertions, evidence; cross-platform scenarios | Planned | browser, device, agent, campaign, llm, app | 0015 | Faza 26–32 |
+| [R17](R17-mobile-apps.md) | Android and iOS testers beside web testers: same agent, clock, assertions, evidence; cross-platform scenarios | Planned | browser, device, agent, campaign, llm, app | 0015 | Faza 26.0–32 |
 
 Traceability is kept in three places: this table, the `## Verification` section of each document (test classes), and
 the PR template. The Konsist test in `e2e/` is the executable form of R13 and of the layer rules that R01–R12 rely on.

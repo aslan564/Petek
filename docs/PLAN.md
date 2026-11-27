@@ -1745,6 +1745,24 @@ testerlər eyni agent, harness saatı, assertlər, sübut bazası və hesabatla 
 (qayda 11). Ən böyük qazanc platformalar arası ssenaridir: admin vebdə elan verir, işçi telefonda görür, gecikməni
 harness ölçür.
 
+Sahibin PRFAQ baxışından sonrakı qərarları (2026-11-27): mobil hissə tam pulsuzdur (açıq nüvə); telefon qatını
+Pətək özü yazır (`adb`, `simctl`, AXe; Maestro və Appium yox); sıra plan üzrədir (əvvəl port, sonra Android);
+ASCII olmayan mətnin yazılması mobil versiyanın buraxılışı üçün şərtdir. Cavablanan suallar bölmənin sonundadır.
+
+### Faza 26.0 — ASCII olmayan mətn sınağı (bir gün, Faza 26-dan əvvəl)
+
+Mobil versiya Azərbaycan, türk və digər ASCII olmayan hərfləri yaza bilmədən çıxmır (sahibin qərarı), həll yolu isə
+bilinmir. Ona görə ən böyük naməlum ən əvvəl yoxlanır: plan ona söykənir.
+
+- [ ] Android 14 (API 34) emulyatorunda "Şəfəq İsmayılova — Ağdaş, ü ö ç" mətnini mətn sahəsinə iki yolla yazmaq:
+  (a) test klaviaturası (broadcast ilə mətn qəbul edən IME, ayrıca APK — qayda 11), (b) clipboard + yapışdırma.
+- [ ] Hər yol üçün: mətn sahədə hərfi-hərfinə eynidirmi, emulyatorun yenidən açılışından sonra işləyirmi, CI-da
+  (2 nüvəli Linux runner) işləyirmi, nə qədər vaxt aparır.
+- [ ] Nəticə bu bölməyə yazılır, seçilən yol Faza 27-yə köçür; heç biri işləmirsə plan sahibə qaytarılır.
+
+Hazır sayılır: ən azı bir yol hər üç yoxlamadan keçib və sahib onu seçib, və ya ikisi də uğursuzdur və sahib yeni yolu
+qərarlaşdırıb.
+
 ### Faza 26 — Ortaq sessiya portu (`UiSession`)
 
 - [ ] `BrowserSession`-un hər ekranda olan hissəsi (`snapshot`, `click`, `fill`, `select`, `readText`, `waitForText`,
@@ -1765,8 +1783,8 @@ Hazır sayılır: davranış dəyişmir, bütün mövcud testlər (e2e daxil) d�
   təmizləmək; persona ayarları (dil, şrift ölçüsü, tema, yer).
 - [ ] Sübut: video (`screenrecord`, 180 s hissələr), `logcat`-dan çökmələr tətbiq rəfinə tapıntı kimi, əlçatanlıq
   yoxlaması (adsız idarəetmə elementi, 48 dp-dən kiçik toxunuş sahəsi).
-- [ ] Mətn yazmaq: `adb input text` ASCII olmayan hərfləri (ə, ş, ğ, ç, ö, ü, ı, İ) yaza bilmir; həll yolu sahibin
-  qərarıdır (aşağıdakı suallar).
+- [ ] Mətn yazmaq: `adb input text` ASCII olmayan hərfləri (ə, ş, ğ, ç, ö, ü, ı, İ) yaza bilmir; Faza 26.0-da seçilən
+  yol burada qurulur. Bu bənd bitmədən mobil versiya buraxılmır.
 - [ ] `doctor` və `capacity`: `adb`, emulyator, KVM, nüvə və yaddaşa görə neçə emulyator.
 - [ ] Neytral saxta tətbiq (`testing/fake-app`, qayda 12): fake target-in kontraktına qoşulan kiçik Android tətbiqi,
   Pətəkin öz e2e testləri üçün. Onun build-i Android Gradle plugin-i istəyir (qayda 11, sual aşağıda).
@@ -1822,19 +1840,29 @@ Hazır sayılır: CI nümunəsi saxta tətbiqlə yaşıl keçir; paneldə emulya
 
 Hazır sayılır: bələdçi ilə çevrilmiş nümunə eyni tapıntıları kod hökmü ilə verir.
 
+### Cavablanan suallar (Pətək 4, sahib 2026-11-27)
+
+- **ASCII olmayan mətn:** buraxılış üçün şərtdir. Yol (test klaviaturası və ya clipboard) Faza 26.0-ın sınağı ilə
+  seçilir.
+- **Real cihazlar:** ilk versiyada yoxdur, yalnız emulyator və simulyator; real cihaz sonrakı işdir.
+- **Ekran şəkli AI-a gedir:** ekranda görünən hər şey (adlar, məbləğlər) şəkillə AI-a gedə bilər. Ayrıca ayar yoxdur;
+  sənəd və `doctor` cihaz run-ından əvvəl bunu xəbərdar edir və yalnız test datası olan backend tövsiyə edir.
+- **Test API olmayan backend:** cihaz run-ı icazəlidir; hökmlər yalnız ekrana söykənir və hesabat bunu "zəif sübut"
+  kimi açıq yazır.
+- **Telefon qatı:** Pətək özü yazır (`adb`, `simctl`, AXe), Maestro və Appium istifadə olunmur.
+- **Sıra:** plan üzrə — Faza 26.0, sonra Faza 26 (port), sonra Android.
+- **Qiymət:** mobil hissə tam pulsuzdur, açıq nüvədədir.
+
 ### Qərar gözləyən suallar (Pətək 4)
 
-- **ASCII olmayan mətn (Faza 27):** test klaviaturası (cihaza ayrıca APK quraşdırmaq, qayda 11-ə yaxın) və ya
-  clipboard ilə yapışdırma (Android versiyasına görə məhdud). Hansı?
 - **Production backend:** pinning olan tətbiqin yazısını şəbəkədə saxlamaq olmur, ona görə production backend-də cihaz
   yalnız oxuyur və bu kodla yox, whitelist və missiya ilə təmin olunur. Bu kifayətdirmi, yoxsa production backend-də
   cihaz ümumiyyətlə başlamasın?
-- **Test API olmayan backend:** oracle və teardown olmadan cihaz hökmləri yalnız ekrana söykənir. Belə hədəfdə
-  cihaz run-ı icazəlidirmi, yoxsa test API məcburidir?
 - **Saxta tətbiqin build-i (Faza 27):** `testing/fake-app` Android Gradle plugin-i və Android SDK istəyir; bu,
-  build-ə yeni asılılıqdır. Repoda ayrıca, `./gradlew build`-dən kənar bir build kimi qalsınmı?
-- **Bir neçə maşın:** hər emulyator ayrı CI maşınındadırsa hadisə şini maşınlar arası olmalıdır (ödənişli nəşr,
-  ADR-0011). Açıq nüvədə platformalar arası run bir maşınla məhdudlaşsınmı?
+  build-ə yeni asılılıqdır. Təklif: repoda ayrıca, `./gradlew build`-dən kənar bir build kimi qalsın.
+- **Bir neçə maşın:** sahib mobili tam pulsuz seçib, amma maşınlar arası hadisə şini ADR-0011-də (veb üçün də)
+  ödənişli moduldur. Telefonlar ayrı maşınlarda olanda platformalar arası run açıq nüvədə işləsinmi (ADR-0011-ə
+  istisna), yoxsa açıq nüvə bir maşınla qalsın?
 
 ## Sübut bazası və hesabat
 
