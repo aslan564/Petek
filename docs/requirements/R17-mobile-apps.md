@@ -1,6 +1,6 @@
 # R17 — Mobile apps: Android and iOS testers beside web testers
 
-**Status:** Planned · **Plan:** Faza 26–32 ("Pətək 4" in `docs/PLAN.md`) · **ADRs:** 0015, 0003, 0006, 0007, 0008
+**Status:** Planned · **Plan:** Faza 26.0–32 ("Pətək 4" in `docs/PLAN.md`) · **ADRs:** 0015, 0003, 0006, 0007, 0008
 
 ## Requirement
 
@@ -19,6 +19,8 @@ crashes, unnamed controls) are not seen in a browser. The owner approved the pla
 
 ## Architecture (by phase)
 
+- **Faza 26.0 — non-ASCII typing experiment** (one day, first): a test keyboard or the clipboard on an Android 14
+  emulator, locally and in CI; the owner picks the way. The mobile version does not ship without it.
 - **Faza 26 — the shared session port:** `UiSession` split out of `BrowserSession`; the agent depends on it. No
   behaviour change.
 - **Faza 27 — Android:** `features/device`, `adb`-driven `DeviceSession`, emulator pool, persona settings, video,
@@ -35,6 +37,9 @@ crashes, unnamed controls) are not seen in a browser. The owner approved the pla
 - A device starts only after its backend host passes `TargetPolicy` and the ownership gate (R06).
 - A device never writes to a production backend; with `PETEK_ALLOW_PRODUCTION=true` it only visits, read-only.
 - Test accounts reach the device through the harness (`{self.password}`), never through the AI.
+- Screenshots sent to the AI show whatever the screen shows: `doctor` and the documentation warn before a device run
+  and recommend a backend that holds only test data.
+- Without a test API, device verdicts rest on the screen alone and the report marks them as weak evidence.
 
 ## Verification
 

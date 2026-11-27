@@ -1,6 +1,6 @@
 # ADR-0015: Mobile apps as a second kind of session behind the same agent, harness and report
 
-**Status:** Proposed (the owner approved the plan on 2026-11-27; the open questions are in `docs/PLAN.md`,
+**Status:** Accepted (the owner reviewed the plan on 2026-11-27; remaining questions are in `docs/PLAN.md`,
 "Pətək 4", "Qərar gözləyən suallar (Pətək 4)")
 **Date:** 2026-11-27
 **Deciders:** Aslan (owner)
@@ -58,6 +58,15 @@ emulator needs about two CPU cores and 2–3 GB of memory; iOS simulators exist 
 - **Capacity is counted per device.** `capacity` counts emulators by cores, memory and KVM, and simulators on macOS
   only. A run mixes many web actors with few device actors on one machine; a swarm over several machines stays in the
   paid edition (ADR-0011).
+
+**Owner's decisions after review (2026-11-27):**
+- Typing non-ASCII text on Android is a release condition: the mobile version does not ship without it. A one-day
+  experiment (Faza 26.0) picks the way (a test keyboard or the clipboard) before any other work.
+- The first version runs on emulators and simulators only; real devices come later.
+- Screenshots may carry what the screen shows to the AI; there is no switch for it, `doctor` and the documentation
+  warn and recommend backends that hold only test data.
+- Without a test API, device runs are allowed and the report marks their verdicts as weak evidence.
+- The mobile part is free, in the open core.
 
 ## Consequences
 + One scenario can cover web and both apps, with the same clock, assertions, evidence and report.
